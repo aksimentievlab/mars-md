@@ -1,0 +1,5 @@
+BrownDyn.out*
+BrownDyn.log
+rho.dat
+__pycache__
+*.pdf

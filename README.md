@@ -53,6 +53,7 @@ ARBD2 is being developed by the Aksimentiev group
 (http://bionano.physics.illinois.edu).
 
   - Christopher Maffeo <mailto:cmaffeo2@illinois.edu>
-  - Han-yi Chao
+  - Han-yi Chou
+  - Pin-Yi Li <mailto:pinyili2@illinois.edu>
 
 Please direct questions, problems or suggestions to Chris.

@@ -40,7 +40,12 @@ struct has_send_children : std::false_type {};
 template <typename T>
 struct has_send_children<T, decltype(std::declval<T>().send_children(Resource{Resource::CPU,0}), void())> : std::true_type {};
 
-// template <type_name T, typename = void>
+template <typename T, typename = void>
+struct has_no_send : std::false_type {};
+template <typename T>
+struct has_no_send<T, decltype(std::declval<T>().no_send, void())> : std::true_type {};
+
+// template <typename T, typename = void>
 // struct has_metadata : std::false_type {};
 // template <type_name _tT>
 // struct has_metadata<T, decltype(std::declval<T>()::Metadata, void())> : std::true_type {};
@@ -143,7 +148,6 @@ struct Proxy {
     /**
      * @brief Default constructor initializes the location to a default CPU resource and the address to nullptr.
      */
-	// Prevent Proxy of Proxy
     static_assert(!std::is_same<T, Proxy>::value, "Cannot make a Proxy of a Proxy object");
 
     Proxy() : location(Resource{Resource::CPU,0}), addr(nullptr), metadata(nullptr) {
@@ -158,64 +162,34 @@ struct Proxy {
 	LOGINFO("Constructing Proxy<{}> @{} wrapping @{} with metadata @{}",
 		type_name<T>().c_str(), fmt::ptr(this), fmt::ptr(&obj), fmt::ptr(metadata));
     };
-    // Copy constructor
-    //Proxy(const Proxy<T>& other) : location(other.location), addr(other.addr), metadata(nullptr) {
-	//LOGINFO(Copy Constructing Proxy<{}> @{}, type_name<T>().c_str(), fmt::ptr(this));
-	//if (other.metadata != nullptr) {
-	//    const Metadata_t<T>& tmp = *(other.metadata);
-	//    metadata = new Metadata_t<T>(tmp);
-	//}
-    //};
-	//Copy2 
-	Proxy(const Proxy<T>& other) 
-        : location(other.location), addr(nullptr), metadata(nullptr) {
+        // Copy constructor
+    Proxy(const Proxy<T>& other) : location(other.location), addr(other.addr), metadata(nullptr) {
         LOGINFO("Copy Constructing Proxy<{}> @{}", type_name<T>().c_str(), fmt::ptr(this));
-        
-        if (other.addr != nullptr) {
-            // Deep copy the data based on resource type
-            switch (location.type) {
-                case Resource::CPU:
-                    addr = new T(*other.addr);
-                    break;
-                case Resource::GPU:
-                #ifdef USE_CUDA
-                    if (cudaMalloc(&addr, sizeof(T)) == cudaSuccess) {
-                        cudaMemcpy(addr, other.addr, sizeof(T), cudaMemcpyDeviceToDevice);
-                    }
-                #endif
-                    break;
-                default:
-                    LOGERROR("Unsupported resource type in copy constructor");
-            }
-        }
-
         if (other.metadata != nullptr) {
-            metadata = new Metadata_t<T>(*other.metadata);
+            const Metadata_t<T>& tmp = *(other.metadata);
+            metadata = new Metadata_t<T>(tmp);
         }
-    }
-
+    };
     Proxy<T>& operator=(const Proxy<T>& other) {
-	if (this != &other) {
-	    // Free existing resources.
-	    if (metadata != nullptr) delete metadata;
-	    location = other.location;
-	    addr = other.addr;
-	    const Metadata_t<T>& tmp = *(other.metadata);
-	    metadata = new Metadata_t<T>(tmp); // copy construct!
-	    // std::copy(other.metadata, other.metadata + sizeof(Metadata_t<T>), metadata);
+        if (this != &other) {
+            // Free existing resources.
+            if (metadata != nullptr) delete metadata;
+            location = other.location;
+            addr = other.addr;
+            const Metadata_t<T>& tmp = *(other.metadata);
+            metadata = new Metadata_t<T>(tmp); // copy construct!
+            // std::copy(other.metadata, other.metadata + sizeof(Metadata_t<T>), metadata);
       }
       return *this;
     };
-
-    Proxy(Proxy<T>&& other) noexcept: addr(nullptr), metadata(nullptr) {
-	LOGINFO("Move Constructing Proxy<{}> @{}", type_name<T>().c_str(), fmt::ptr(this));
-	location = other.location;
-	addr = other.addr;
-	// For now we avoid std::move, but we may choose to change this behavior
-	// const Metadata_t<T>& tmp = *(other.metadata);
-	metadata = other.metadata;
-	other.metadata = nullptr;
-	other.addr = nullptr;
+    Proxy(Proxy<T>&& other) : addr(nullptr), metadata(nullptr) {
+        LOGINFO("Move Constructing Proxy<{}> @{}", type_name<T>().c_str(), fmt::ptr(this));
+        location = other.location;
+        addr = other.addr;
+        // For now we avoid std::move, but we may choose to change this behavior
+        // const Metadata_t<T>& tmp = *(other.metadata);
+        metadata = other.metadata;
+        other.metadata = nullptr;
     };
 
     Proxy& operator=(Proxy<T>&& other) noexcept {
@@ -231,9 +205,11 @@ struct Proxy {
     }
 
     ~Proxy() {
-	LOGINFO("Deconstructing Proxy<{}> @{} with metadata @{}", type_name<T>().c_str(), fmt::ptr(this), fmt::ptr(metadata));
-	if (metadata != nullptr) delete metadata;
+        LOGINFO("Deconstructing Proxy<{}> @{} with metadata @{}", type_name<T>().c_str(), fmt::ptr(this), fmt::ptr(metadata));
+        if (metadata != nullptr) delete metadata;
     };
+
+
     
     /**
      * @brief Overloaded operator-> returns the address of the underlying object.
@@ -269,7 +245,7 @@ struct Proxy {
 	    }
 	    break;
 	case Resource::GPU:
-        #ifdef __CUDACC__
+    #ifdef __CUDACC__
 	    if (location.is_local()) {
 		if (sizeof(RetType) > 0) {
 		    // Note: this only support basic RetType objects
@@ -326,7 +302,7 @@ struct Proxy {
        #else
            Exception(NotImplementedError, "MPI calls require USE_MPI flag");
        #endif
-       break;
+	    break;
 	default:
 	    Exception( ValueError, "Proxy::callSync(): Unknown resource type" );
         }
@@ -345,6 +321,7 @@ struct Proxy {
 	    }
 	    break;
 	case Resource::GPU:
+	#ifdef __CUDACC__
 	    if (location.is_local()) {
             return std::async(std::launch::async, [this, memberFunc, args...] {
                 RetType* dest;
@@ -356,27 +333,29 @@ struct Proxy {
                 return result;
 		//Exception( NotImplementedError, "Proxy::callAsync() local GPU calls" );
 	    }); 
-	    else {
-            return std::async(std::launch::async, [this, memberFunc, args...] {
-                size_t target_device = location.id;
-                int current_device;
-                gpuErrchk(cudaGetDevice(&current_device));
-                gpuErrchk(cudaSetDevice(target_device));
-                
-                RetType* dest;
-                RetType result;
-                gpuErrchk(cudaMalloc(&dest, sizeof(RetType)));
-                proxy_sync_call_kernel<T, RetType, Args2...><<<1,32>>>(dest, addr, memberFunc, args...);
-                gpuErrchk(cudaMemcpy(&result, dest, sizeof(RetType), cudaMemcpyDeviceToHost));
-                gpuErrchk(cudaFree(dest));
-                
-                gpuErrchk(cudaSetDevice(current_device));
-                return result;
-		//Exception( NotImplementedError, "Proxy::callAsync() non-local GPU calls" );
-	    })};
+	    } else {
+           return std::async(std::launch::async, [this, memberFunc, args...] {
+               int current_device;
+               gpuErrchk(cudaGetDevice(&current_device));
+               gpuErrchk(cudaSetDevice(location.id));
+               
+               RetType* dest;
+               RetType result;
+               gpuErrchk(cudaMalloc(&dest, sizeof(RetType)));
+               proxy_sync_call_kernel<T, RetType, Args2...><<<1,32>>>(dest, addr, memberFunc, args...);
+               gpuErrchk(cudaMemcpy(&result, dest, sizeof(RetType), cudaMemcpyDeviceToHost));
+               gpuErrchk(cudaFree(dest));
+               
+               gpuErrchk(cudaSetDevice(current_device));
+               return result;
+           });
+       }
+       #else
+	    Exception(NotImplementedError, "Async for GPU only defined for files compiled with nvvc");
+       #endif
 	    break;
 	case Resource::MPI:
-       #ifdef USE_MPI
+	    #ifdef USE_MPI
            return std::async(std::launch::async, [this, memberFunc, args...] {
                int rank, size;
                MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -384,18 +363,18 @@ struct Proxy {
 
                if (rank == location.id) {
                    RetType result = (addr->*memberFunc)(args...);
-                   MPI_Bcast(&result, sizeof(RetType), MPI_BYTE, location.id, MPI_COMM_WORLD);
+                   MPI_Bcast(&result, 1, MPI_BYTE, location.id, MPI_COMM_WORLD);
                    return result;
                } else {
                    RetType result;
-                   MPI_Bcast(&result, sizeof(RetType), MPI_BYTE, location.id, MPI_COMM_WORLD);
+                   MPI_Bcast(&result, 1, MPI_BYTE, location.id, MPI_COMM_WORLD);
                    return result;
                }
            });
        #else
-           Exception(NotImplementedError, "Async MPI calls require USE_MPI flag");
+        Exception(NotImplementedError, "Async MPI calls require USE_MPI flag");
        #endif
-	    break;
+       break;
 	default:
 	    Exception( ValueError, "Proxy::callAsync(): Unknown resource type" );
         }
@@ -693,6 +672,7 @@ HOST inline Proxy<T>& send(const Resource& location, T& obj, T* dest = nullptr) 
  */
 template <typename T, typename Dummy = void, typename std::enable_if_t<has_send_children<T>::value, Dummy>* = nullptr>
 HOST inline Proxy<T> send(const Resource& location, T& obj, T* dest = nullptr) {
+    // static_assert(!has_no_send<T>());
     LOGINFO("Sending complex object {} @{} to device at {}", type_name<T>().c_str(), fmt::ptr(&obj), fmt::ptr(dest));
     auto dummy = obj.send_children(location); // function is expected to return an object of type obj with all pointers appropriately assigned to valid pointers on location
     Proxy<T> ret = _send_ignoring_children<T>(location, dummy, dest);
@@ -709,6 +689,7 @@ HOST inline Proxy<T> send(const Resource& location, T& obj, T* dest = nullptr) {
 // Proxy will be blank.
 template<typename T, typename... Args>
 Proxy<T> construct_remote(Resource location, Args&&...args) {
+    //static_assert(!has_no_send<T>());
     switch (location.type) {
     case Resource::CPU:
 	if (location.is_local()) {
@@ -719,7 +700,7 @@ Proxy<T> construct_remote(Resource location, Args&&...args) {
 	}
 	break;
     case Resource::GPU:
-#ifdef __CUDACC__
+    #ifdef __CUDACC__
 	if (location.is_local()) {
 	    T* devptr;
 	    LOGWARN("construct_remote: TODO: switch to device associated with location");
@@ -739,9 +720,9 @@ Proxy<T> construct_remote(Resource location, Args&&...args) {
 	} else {
 	    Exception( NotImplementedError, "cunstruct_remote() non-local GPU call" );
 	}
-#else
-	Exception( NotImplementedError, "construct_remote() for GPU only defined for files compiled with nvvc" );
-#endif	    		
+    #else
+	    Exception( NotImplementedError, "construct_remote() for GPU only defined for files compiled with nvvc" );
+    #endif	    		
 	break;
     case Resource::MPI:
 	Exception( NotImplementedError, "construct_remote() for MPI" );

@@ -34,7 +34,7 @@ endif()
 set(USE_MPI OFF)
 
 ## specify the C++ standard
-set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 # Set a default build type if none was specified
@@ -87,8 +87,8 @@ if(USE_CUDA)
   include_directories(${CUDA_INCLUDE_DIRS})
 
   if(NOT DEFINED CMAKE_CUDA_STANDARD)
-    set(CMAKE_CUDA_STANDARD 14)
-    set(CMAKE_CUDA_STANDARD_REQUIRED ON)
+    set(CMAKE_CUDA_STANDARD 17)
+    # set(CMAKE_CUDA_STANDARD_REQUIRED ON)
   endif()
 endif()
 

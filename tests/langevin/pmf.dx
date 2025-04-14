@@ -1,0 +1,10 @@
+# a(v) = 1.76375*[1 - (1-100/1.76375)*exp(-v/2.93) ]
+object 1 class gridpositions counts 1 1 1
+origin -20 -20 -20
+delta  86.167 0 0
+delta  0 86.167 0
+delta  0 0 86.167
+object 2 class gridconnections counts 1 1 1
+object 3 class array type double rank 0 items 1 data follows
+0
+object "3D grid" class field

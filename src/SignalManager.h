@@ -6,15 +6,14 @@
 #ifndef SIGNALMANAGER_H_
 #define SIGNALMANAGER_H_
 
-#ifdef USE_LOGGER
-
-/* #define ARBD_LOG_ACTIVE_LEVEL 0 */
-/* #include "logger.h" */
-
 #define S1(x) #x
 #define S2(x) S1(x)
 #define LOCATION __FILE__ "(" S2(__LINE__)")" /* mainly used by ARBDException */
 
+#ifdef USE_LOGGER
+
+/* #define ARBD_LOG_ACTIVE_LEVEL 0 */
+/* #include "logger.h" */
 //*
 #ifdef __CUDA_ARCH__
 // #define LOGHELPER(TYPE, FMT,...) printf("[%d,%d] [%s] [%s]: %s", blockIdx.x, threadIdx.x, TYPE, LOCATION, FMT);
@@ -61,12 +60,12 @@
 
 // Disable logger macros
 // NOTE to developers: only use the macros below for logging, only in host code
-#define TRACE(...)
-#define DEBUG(...)
-#define INFO(...)
-#define WARN(...)
-#define ERROR(...)
-#define CRITICAL(...)
+#define LOGTRACE(...)
+#define LOGDEBUG(...)
+#define LOGINFO(...)
+#define LOGWARN(...)
+#define LOGERROR(...)
+#define LOGCRITICAL(...)
 
 #endif
 
