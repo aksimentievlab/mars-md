@@ -21,9 +21,11 @@ class BoundaryConditions {
 public:
     BoundaryConditions() :  origin(0), basis{(5000,0,0),(0,5000,0),(0,0,5000)}, periodic{true,true,true} {
 	// do things
+	LOGINFO("BoundaryConditions()");
     }
     BoundaryConditions( Vector3 basis1, Vector3 basis2, Vector3 basis3, Vector3 origin = Vector3(0), bool periodic1 = true, bool periodic2 = true, bool periodic3 = true ) {
 	// do things
+	LOGINFO("BoundaryConditions(...)");
     }
 
     static constexpr size_t dim = 3;
@@ -105,6 +107,7 @@ public:
 	// explicit operator int() const {return object_type*16 + algorithm*4 + backend;};
     };
 
+    inline			// C++17 feature needed for compilation... unsure of why
     static constexpr Conf default_conf = Conf{291.0f, Conf::CellDecomp, Conf::AllPeriodic, {5000.0f,5000.0f,5000.0f}, 50.0f };
 
     SimSystem() : SimSystem(default_conf) {}
@@ -170,6 +173,7 @@ public:
 	       
     // void consolidate_patches(); // maybe not needed
     void distribute_patches() {
+	LOGINFO("distribute_patches()");
 	decomp;
     }
 

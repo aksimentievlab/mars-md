@@ -1,5 +1,6 @@
 ## Specify the project
-cmake_minimum_required(VERSION 3.9 FATAL_ERROR)
+# cmake_minimum_required(VERSION 3.9 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.12 FATAL_ERROR) # FOR PYBIND, should be 3.15+?
 
 # option(USE_CUDA "Use CUDA" ON)
 set(USE_CUDA ON)
@@ -33,7 +34,7 @@ endif()
 set(USE_MPI OFF)
 
 ## specify the C++ standard
-set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 # Set a default build type if none was specified
@@ -71,6 +72,7 @@ message(STATUS "DEBUG: ${DEBUG}")
 message(STATUS "USE_NCCL: ${USE_NCCL}")
 message(STATUS "USE_NVTX: ${USE_NVTX}")
 message(STATUS "USE_LOGGER: ${USE_LOGGER}")
+message(STATUS "USE_PYBIND: ${USE_PYBIND}")
 
 
 ## Set flags before adding executable 
@@ -85,8 +87,8 @@ if(USE_CUDA)
   include_directories(${CUDA_INCLUDE_DIRS})
 
   if(NOT DEFINED CMAKE_CUDA_STANDARD)
-    set(CMAKE_CUDA_STANDARD 14)
-    set(CMAKE_CUDA_STANDARD_REQUIRED ON)
+    set(CMAKE_CUDA_STANDARD 17)
+    # set(CMAKE_CUDA_STANDARD_REQUIRED ON)
   endif()
 endif()
 
@@ -163,6 +165,11 @@ add_executable("${PROJECT_NAME}" src/arbd.cpp
 src/SimManager.cu
 src/useful.cu
 )
+
+if(USE_PYBIND)
+  add_subdirectory(extern/pybind11)
+  add_subdirectory(src/pybindings)
+endif()
 
 target_link_libraries("${PROJECT_NAME}" PUBLIC "lib${PROJECT_NAME}")
 

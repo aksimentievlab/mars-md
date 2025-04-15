@@ -7,12 +7,29 @@
 //     // rb_pos = rb_orient = rb_mom = rb_ang_mom = type = rb_type = nullptr;
 // };
 
+size_t BasePatch::global_patch_idx = 0;
+
 void Patch::initialize() {
+    LOGINFO("Creating Patch::Data");
+    /*
     Data* data = new Data{nullptr,nullptr,nullptr,nullptr};	// TODO free
-    metadata = Metadata{0,0,0};
+    // metadata = Metadata{0,0,0};
     // data->pos_force = data->momentum = nullptr;
     // data->particle_types = data->particle_order = nullptr;
-    metadata.data = send( Resource{Resource::CPU,0}, *data );
+    LOGINFO("Sending Patch::Data @{}", fmt::ptr(data));
+    Resource r = Resource{Resource::CPU,0};
+    // if (&(metadata.data) != nullptr) {
+    // 	LOGINFO( "Freeing metadata.data");
+    // 	delete &(metadata.data);
+    // 	LOGINFO( "Freeing metadata");
+    // }
+    // send(r,*data);
+    metadata.data = send(r, *data);
+    LOGINFO("Data sent");
+    */
+    LOGWARN("Patch::initialize(): Creating Data on CPU resource");
+    Resource r = Resource{Resource::CPU,0};
+    metadata.data = construct_remote<Data>(r, capacity);
 };
 
 Patch* Patch::copy_to_cuda(Patch* dev_ptr) const {
@@ -49,10 +66,12 @@ Patch* Patch::copy_to_cuda(Patch* dev_ptr) const {
 };
 
 Patch Patch::send_children(Resource location) const {
+    LOGWARN("Patch::send_children()");
     Patch tmp(0);
     Proxy<Data> newdata;
     switch (location.type) {
     case Resource::GPU:
+	Exception( NotImplementedError, "`send_children(...)` not implemented on GPU" );
 	// metadata.data is already a proxy because the data may reside on the GPU;
 	// Q: In what cases should we move metadata.data.addr?
 	//     For example, we could always move, or we could never move, or we could move if location metadata.data.location is a CPU resource
@@ -80,11 +99,13 @@ Patch Patch::send_children(Resource location) const {
 
 
 Patch Patch::copy_from_cuda(Patch* dev_ptr, Patch* dest) {
+    Exception(NotImplementedError, "Deprecated");
     // TODO
     Patch tmp = Patch();
     return tmp;
 };
 void Patch::remove_from_cuda(Patch* dev_ptr) {
+    Exception(NotImplementedError, "Deprecated");
     // TODO
 };
     
@@ -99,7 +120,7 @@ void Patch::compute() {
 // template<typename T>
 // size_t Patch::send_particles_filtered( Proxy<Patch>& destination, T filter ) {
 size_t Patch::send_particles_filtered( Proxy<Patch>& destination, std::function<bool(size_t,Patch::Data)> filter ) {
-// TODO determine who allocates and cleans up temporary data
+    // TODO determine who allocates and cleans up temporary data
     // TODO determine if there is a good way to avoid having temporary data (this can be done later if delegated to a reasonable object)
 
     // TODO think about the design and whether it's possible to have a single array with start/end

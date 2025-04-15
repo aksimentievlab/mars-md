@@ -11,15 +11,21 @@
 #include <exception>
 #include "SignalManager.h"
 
-enum ExceptionType {
-    UnspeficiedError,
-    NotImplementedError,
-    ValueError,
-    DivideByZeroError,
-    CUDARuntimeError,
-    FileIoError,
-    FileOpenError
+struct ExceptionType {
+public:
+    explicit constexpr ExceptionType(int value) noexcept : value{value} {};
+    constexpr operator int() const { return value; };
+private:
+    const int value;
 };
+// inline constexpr ExceptionType const UnspecifiedError{0};
+constexpr ExceptionType const UnspecifiedError{0};
+constexpr ExceptionType const NotImplementedError{1};
+constexpr ExceptionType const ValueError{2};
+constexpr ExceptionType const DivideByZeroError{3};
+constexpr ExceptionType const CUDARuntimeError{4};
+constexpr ExceptionType const FileIoError{5};
+constexpr ExceptionType const FileOpenError{6};
 
 class _ARBDException : public std::exception 
 {
@@ -29,7 +35,7 @@ class _ARBDException : public std::exception
     std::string sformat(const std::string &fmt, va_list &ap);
     static std::string type_to_str(ExceptionType type) {
 	switch (type) {
-	case UnspeficiedError:
+	case UnspecifiedError:
 	    return "Error";
 	case NotImplementedError:
 	    return "NotImplementedError";
@@ -44,11 +50,12 @@ class _ARBDException : public std::exception
 };
 
 // #include "common_macros.h"
-#define S1(x) #x
-#define S2(x) S1(x)
-#define LOCATION __FILE__ "(" S2(__LINE__)")"
-
+#ifdef CUDACC
 #define Exception(...) throw _ARBDException(LOCATION, __VA_ARGS__)
+#else
+#define Exception(EXCPT,...) printf("Runtime CUDA exception at %s: ", LOCATION); \
+    printf("%s %s\n", #EXCPT, __VA_ARGS__);
+#endif
 //use illegal instruction to abort; used in functions defined both in __host__ and __device__
 #if 0
 #define CudaException(...) \

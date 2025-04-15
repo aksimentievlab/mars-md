@@ -19,8 +19,11 @@ Linux workstation with CUDA-compatible GPU (minimum 3.5 compute capability)
   - CMake >= 3.9
   - gcc >= 4.9
   - cuda >= 9.0  (> 11.5 recommended)
+  - spdlog >= 1.10.0 (note: this is normally installed to extern/spdlog by running `git submodule update --init` from this directory)
 
 ### Build process
+
+From the root arbd directory (where this README is found), ensure you have spdlog installed to the extern directory, usually by running `git submodule update --init`.
 
 From the root arbd directory (where this README is found), run:
 ```
@@ -50,6 +53,7 @@ ARBD2 is being developed by the Aksimentiev group
 (http://bionano.physics.illinois.edu).
 
   - Christopher Maffeo <mailto:cmaffeo2@illinois.edu>
-  - Han-yi Chao
+  - Han-yi Chou
+  - Pin-Yi Li <mailto:pinyili2@illinois.edu>
 
-Please direct questions or problems to Chris.
+Please direct questions, problems or suggestions to Chris.

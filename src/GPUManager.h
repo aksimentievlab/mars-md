@@ -81,7 +81,7 @@ struct has_copy_to_cuda<T, decltype(std::declval<T>().copy_to_cuda(), void())> :
 #ifndef gpuErrchk
 #define delgpuErrchk
 #define gpuErrchk(code) { if ((code) != cudaSuccess) {    \
-	    Exception(CUDARuntimeError, " ", cudaGetErrorString(code)); \
+	    Exception(CUDARuntimeError, cudaGetErrorString(code)); \
 	}}
 #endif
 /*

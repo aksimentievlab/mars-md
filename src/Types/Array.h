@@ -333,6 +333,8 @@ struct Array {
     }
 #endif
     HOST DEVICE size_t size() const { return num; }
+
+    HOST T* get_pointer() const { return values; }
     
 private:
     HOST void host_allocate() {

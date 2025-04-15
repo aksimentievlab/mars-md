@@ -9,6 +9,15 @@
 #include <type_traits> // for std::common_type<T,U>
 #include <sstream>
 
+#ifdef __CUDA_ARCH__
+#include <cuda/std/limits>
+template<typename T>
+using numeric_limits = ::cuda::std::numeric_limits<T>;
+#else
+template<typename T>
+using numeric_limits = ::std::numeric_limits<T>;
+#endif
+
 /**
  * 3D vector utility class with common operations implemented on CPU and GPU.
  * 
@@ -217,8 +226,8 @@ public:
 	}
 	
 	// Numeric limits
-	HOST DEVICE static inline T highest() { return std::numeric_limits<T>::max(); }
-	HOST DEVICE static inline T lowest() { return std::numeric_limits<T>::lowest(); }
+	HOST DEVICE static inline T highest() { return numeric_limits<T>::max(); }
+	HOST DEVICE static inline T lowest() { return numeric_limits<T>::lowest(); }
 
 	// String
 	HOST DEVICE inline void print() const {

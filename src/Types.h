@@ -55,3 +55,6 @@ HOST DEVICE inline Vector3_t<size_t> index_to_ijk(size_t idx, const Vector3_t<si
     return index_to_ijk(idx, n.x, n.y, n.z);
 }
 
+using idx_t = size_t;		/* We will sometimes refer to global
+				 * particle index, which may be too
+				 * large to represent via size_t */

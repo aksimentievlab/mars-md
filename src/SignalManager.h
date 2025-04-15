@@ -6,12 +6,26 @@
 #ifndef SIGNALMANAGER_H_
 #define SIGNALMANAGER_H_
 
+#define S1(x) #x
+#define S2(x) S1(x)
+#define LOCATION __FILE__ "(" S2(__LINE__)")" /* mainly used by ARBDException */
+
 #ifdef USE_LOGGER
 
 /* #define ARBD_LOG_ACTIVE_LEVEL 0 */
 /* #include "logger.h" */
-
 //*
+#ifdef __CUDA_ARCH__
+// #define LOGHELPER(TYPE, FMT,...) printf("[%d,%d] [%s] [%s]: %s", blockIdx.x, threadIdx.x, TYPE, LOCATION, FMT);
+#define LOGHELPER(TYPE, FMT,...) printf("[%s] [%s]: %s\n", TYPE, LOCATION, FMT);
+#define LOGTRACE(...) LOGHELPER("trace",  __VA_ARGS__)
+#define LOGDEBUG(...) LOGHELPER("debug",__VA_ARGS__)
+// #define DEBUG(...) spdlog::debug(__VA_ARGS__)
+#define LOGINFO(...) LOGHELPER("info",__VA_ARGS__)
+#define LOGWARN(...) LOGHELPER("warn",__VA_ARGS__)
+#define LOGERROR(...) LOGHELPER("error",__VA_ARGS__)
+#define LOGCRITICAL(...) LOGHELPER("critical",__VA_ARGS__)
+#else
 #define FMT_HEADER_ONLY
 #include <spdlog/fmt/bundled/core.h>
 #include <spdlog/fmt/bundled/format.h>
@@ -29,6 +43,7 @@
 #define LOGERROR(...) SPDLOG_ERROR(__VA_ARGS__)
 #define LOGCRITICAL(...) SPDLOG_CRITICAL(__VA_ARGS__)
 // spdlog::set_level(spdlog::level::trace);
+#endif
 //*/
 
 /*
@@ -45,12 +60,12 @@
 
 // Disable logger macros
 // NOTE to developers: only use the macros below for logging, only in host code
-#define TRACE(...)
-#define DEBUG(...)
-#define INFO(...)
-#define WARN(...)
-#define ERROR(...)
-#define CRITICAL(...)
+#define LOGTRACE(...)
+#define LOGDEBUG(...)
+#define LOGINFO(...)
+#define LOGWARN(...)
+#define LOGERROR(...)
+#define LOGCRITICAL(...)
 
 #endif
 

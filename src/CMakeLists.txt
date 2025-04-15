@@ -1,9 +1,10 @@
 
 add_library("lib${PROJECT_NAME}"
   ARBDException.cpp
+  Resource.cu
   GPUManager.cpp
   ParticlePatch.cpp
-  SimSystem.cpp
+  #SimSystem.cpp
   Integrator.cpp
   Integrator/CPU.cpp
   Integrator/CUDA.cu

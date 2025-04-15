@@ -16,37 +16,38 @@
 #include "PatchOp.h"
 
 
-template<typename Pos, typename Force>
-class Patch {
-    // size_t num_replicas;
+// template<typename Pos, typename Force>
+// class Patch {
+//     // size_t num_replicas;
 
-public:    
-    Patch(SimParameters* sim);
+// public:    
+//     Patch(SimParameters* sim);
 	
     
-    void compute();
+//     void compute();
     
-private:
+// private:
 
-    SimParameters* sim;
+//     SimParameters* sim;
     
-    Pos minimum;
-    Pos maximum;
+//     Pos minimum;
+//     Pos maximum;
 
-    ParticleTypes* types;
-    ParticleTypes* types_d;
+//     ParticleTypes* types;
+//     ParticleTypes* types_d;
 
-    // Particle data
-    size_t num_particles;
+//     // Particle data
+//     size_t num_particles;
 
-    size_t* type_ids;
-    Pos* pos;
-    Force* force;
+//     idx_t* global_idx;		// global index of particle
+//     size_t* type_ids;
+//     Pos* pos;
+//     Force* force;
     
-    size_t* type_ids_d;
-    Pos* pos_d;
-    Force* force_d;
+//     size_t* type_ids_d;
+//     Pos* pos_d;
+//     Force* force_d;
 
-    std::vector<Patch> neighbor_patches;
-    std::vector<BasePatchOp> ops;
-};
+//     std::vector<Patch> neighbor_patches;
+//     std::vector<BasePatchOp> ops;
+// };

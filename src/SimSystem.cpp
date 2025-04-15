@@ -30,7 +30,7 @@ void CellDecomposer::decompose(SimSystem& sys, ResourceCollection& resources) {
 	Vector3_t<size_t> ijk = index_to_ijk( idx, n_p_v.x, n_p_v.y, n_p_v.z );
 	// size_t cap = 2*num_particles / n_r;
 	// auto p2 = Patch(cap);
-	auto p2 = Patch();	// don't allocate array locally
+	Patch p2 = Patch();	// don't allocate array locally
 	// TODO: generalize to non-orthogonal basis
 	Vector3 pmin = min + dr.element_mult(ijk);
 	Vector3 pmax = pmin + dr;

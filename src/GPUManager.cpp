@@ -20,9 +20,9 @@ std::vector<GPU> GPUManager::allGpus, GPUManager::gpus, GPUManager::notimeouts;
 GPU::GPU(unsigned int id) : id(id) {
     cudaSetDevice(id);
     cudaGetDeviceProperties(&properties, id);
-    char* timeout_str = "";
+    char timeout_str[32] = "";
     if (properties.kernelExecTimeoutEnabled) {
-	timeout_str = "(may timeout) ";
+	sprintf(timeout_str, "(may timeout) ");
 	may_timeout = true;
     } else {
 	may_timeout = false;
