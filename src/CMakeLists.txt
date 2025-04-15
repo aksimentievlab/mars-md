@@ -1,7 +1,7 @@
 
 add_library("lib${PROJECT_NAME}"
   ARBDException.cpp
-  Resource.cu
+  #Resource.cu
   GPUManager.cpp
   ParticlePatch.cpp
   #SimSystem.cpp
