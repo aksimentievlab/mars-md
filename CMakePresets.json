@@ -25,24 +25,56 @@
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Release",
                 "CMAKE_CUDA_COMPILER": "/sw/external/cudatoolkits/cuda-12.6.3/bin/nvcc",
-                "CMAKE_CXX_COMPILER": "/sw/spack/deltas11-2023-03/apps/linux-rhel8-zen3/gcc-11.4.0/openmpi-5.0.2-o2g3ojh/bin/mpicxx",
-                "CMAKE_C_COMPILER": "/sw/spack/deltas11-2023-03/apps/linux-rhel8-zen3/gcc-11.4.0/openmpi-5.0.2-o2g3ojh/bin/mpicc",
+                "CMAKE_CXX_COMPILER": "/sw/external/llvm/16.0.6/bin/clang++",
+                "CMAKE_C_COMPILER": "/sw/external/llvm/16.0.6/bin/clang",
                 "USE_CUDA": "ON",
                 "CMAKE_CXX_EXTENSIONS": "OFF",
                 "CMAKE_CXX_FLAGS": "-I/opt/rh/gcc-toolset-12/root/usr/include/c++/12"
             }
         },
         {
-            "name": "delta-sycl-release",
+            "name": "delta-icpx-release",
             "displayName": "Delta SYCL (Release)",
-            "description": "Targets Delta with SYCL for GPU development (Release build).",
-            "binaryDir": "${sourceDir}/build/delta-sycl-release",
+            "description": "Targets Delta with icpx SYCL for GPU development (Release build).",
+            "binaryDir": "${sourceDir}/build/delta-icpx-release",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Release",
                 "CMAKE_CXX_COMPILER": "/sw/spack/deltas11-2023-03/apps/linux-rhel8-zen/gcc-8.5.0/intel-oneapi-compilers-2024.0.0-r5a4jwi/compiler/2024.0/bin/icpx",
                 "USE_SYCL_ICPX": "ON",
                 "CMAKE_CXX_EXTENSIONS": "OFF",
                 "CMAKE_CXX_FLAGS": "-I/opt/rh/gcc-toolset-12/root/usr/include/c++/12"
+            }
+        },
+        {
+            "name": "delta-acpp-release",
+            "displayName": "Delta SYCL (Release)",
+            "description": "Targets Delta with SYCL for GPU development (Release build).",
+            "binaryDir": "${sourceDir}/build/delta-acpp-release",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "CMAKE_CXX_COMPILER": "/sw/external/adaptivecpp/AdaptiveCpp/25.02.0/bin/acpp",
+                "CMAKE_C_COMPILER": "/sw/external/llvm/16.0.6/bin/clang",
+                "USE_SYCL_ACPP": "ON",
+                "CMAKE_CXX_EXTENSIONS": "OFF",
+                "CMAKE_CXX_FLAGS": "-I/opt/rh/gcc-toolset-12/root/usr/include/c++/12 -I/sw/external/adaptivecpp/spack/opt/spack/linux-zen3/boost-1.88.0-ujw6ygicduudrnfy4b6s53k7liwy5ouo/include",
+                "CMAKE_EXE_LINKER_FLAGS": "-fuse-ld=lld -lstdc++",
+                "Boost_ROOT": "/sw/external/adaptivecpp/spack/opt/spack/linux-zen3/boost-1.88.0-ujw6ygicduudrnfy4b6s53k7liwy5ouo"
+            }
+        },
+        {
+            "name": "delta-acpp-debug",
+            "displayName": "Delta ACPP SYCL (Debug)",
+            "description": "Targets Delta with ACPP SYCL for GPU development (Debug build).",
+            "binaryDir": "${sourceDir}/build/delta-acpp-debug",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "CMAKE_CXX_COMPILER": "/sw/external/adaptivecpp/AdaptiveCpp/25.02.0/bin/acpp",
+                "CMAKE_C_COMPILER": "/sw/external/llvm/16.0.6/bin/clang",
+                "USE_SYCL_ACPP": "ON",
+                "CMAKE_CXX_EXTENSIONS": "OFF",
+                "CMAKE_CXX_FLAGS": "-I/opt/rh/gcc-toolset-12/root/usr/include/c++/12 -I/sw/external/adaptivecpp/spack/opt/spack/linux-zen3/boost-1.88.0-ujw6ygicduudrnfy4b6s53k7liwy5ouo/include",
+                "CMAKE_EXE_LINKER_FLAGS": "-fuse-ld=lld -lstdc++",
+                "Boost_ROOT": "/sw/external/adaptivecpp/spack/opt/spack/linux-zen3/boost-1.88.0-ujw6ygicduudrnfy4b6s53k7liwy5ouo"
             }
         },
         {
@@ -254,9 +286,9 @@
             "displayName": "Build Delta CUDA Release"
         },
         {
-            "name": "delta-sycl-release-build",
-            "configurePreset": "delta-sycl-release",
-            "displayName": "Build Delta SYCL Release"
+            "name": "delta-acpp-release-build",
+            "configurePreset": "delta-acpp-release",
+            "displayName": "Build Delta ACPP Release"
         }
     ]
 }
