@@ -4,7 +4,6 @@
 #include <string>
 #include <vector>
 #include "ARBDLogger.h"
-#include "Backend/Proxy.h"
 #include "Backend/Resource.h"
 #include "ARBDException.h"
 
@@ -121,8 +120,8 @@ public:
   
   // Backend operations using Proxy system
   template<typename ResourceType>
-  Proxy<IndexList<T>> send_to_backend(const ResourceType& resource) const {
-    return send(resource, *this);
+  IndexList<T> send_to_backend(const ResourceType& resource) const {
+    return IndexList<T>(*this);
   }
 };
 

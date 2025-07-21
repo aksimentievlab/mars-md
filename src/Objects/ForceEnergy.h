@@ -2,7 +2,6 @@
 
 #include "Backend/Resource.h" 
 #include "ARBDLogger.h"
-#include "Backend/Proxy.h"
 #include "ARBDException.h"
 #include <string>
 #include <sstream>

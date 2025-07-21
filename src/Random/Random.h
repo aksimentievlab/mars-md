@@ -1,121 +1,161 @@
-// Random.h
-//Clean version for compile purposes
-
 #pragma once
 
-#include "GPUManager.h"
-#include "../Types.h"
-#include "../Proxy.h"
-#include <map>
-#include <vector>
+#include "openrand/philox.h"
+#include "Backend/Buffer.h"
+#include "Backend/Resource.h"
+#include "Backend/Events.h"
+#include "Backend/Resource.h"
+#include "Math/Types.h"
+#include "ARBDLogger.h"
+#include "ARBDException.h"
 #include <memory>
-#include <random>
 
-// CPU Implementation
-template<size_t num_states>
-class RandomCPU {
-    static_assert(num_states > 0, "Number of states must be positive");
+namespace ARBD {
 
-private:
-    // CPU-specific RNG state
-    struct State {
-        std::mt19937 rng;
-        std::normal_distribution<float> dist;
-        State() : rng(std::random_device{}()), dist(0.0f, 1.0f) {}
-    };
-
-public:
-    using state_type = State;
-
-    RandomCPU() : state{std::make_unique<State>()} {}
-
-    void init(unsigned long seed, size_t offset = 0) {
-        state->rng.seed(seed);
-        if (offset > 0) {
-            for (size_t i = 0; i < offset; ++i) {
-                state->dist(state->rng);
-            }
-        }
-    }
-
-    float gaussian(state_type* external_state = nullptr) {
-        auto& s = external_state ? *external_state : *state;
-        return s.dist(s.rng);
-    }
-
-    state_type* get_gaussian_state() {
-        return state.get();
-    }
-
-    void set_gaussian_state(state_type* new_state) {
-        if (new_state) {
-            *state = *new_state;
-        }
-    }
-
-    Vector3 gaussian_vector(state_type* external_state = nullptr) {
-        return Vector3(gaussian(external_state), 
-                      gaussian(external_state), 
-                      gaussian(external_state));
-    }
-
-private:
-    std::unique_ptr<State> state;
+// Random number generator configuration
+struct RandomConfig {
+    unsigned long seed = 42;
+    size_t num_threads = 128;
+    size_t offset = 0;
 };
 
-#ifdef __CUDACC__
-// GPU Implementation
+// Random number distributions
+enum class RandomDistribution {
+    Uniform,
+    Gaussian,
+    Poisson
+};
+
+// Base class for device-specific random implementations
 template<size_t num_states>
-class RandomGPU {
-    static_assert(num_states > 0, "Number of states must be positive");
-
+class RandomDevice {
 public:
-    using state_type = curandStateXORWOW_t;
-
-    HOST DEVICE RandomGPU() : states{nullptr} {
-        assert(threadIdx.x + blockIdx.x == 0);
-        states = new state_type[num_states];
+    static_assert(num_states > 0, "Number of states must be positive");
+    
+    RandomDevice(const Resource& resource) 
+        : resource_(resource), seed_(42), offset_(0), initialized_(false) {}
+    
+    virtual ~RandomDevice() = default;
+    
+    // Initialize the random number generator
+    virtual void init(unsigned long seed, size_t offset = 0) {
+        seed_ = seed;
+        offset_ = offset;
+        initialized_ = true;
+        LOGINFO("Initialized Random generator with seed {} and offset {}", seed, offset);
     }
+    
+    // Generate random numbers
+    virtual Event generate_uniform(DeviceBuffer<float>& output, float min = 0.0f, float max = 1.0f) = 0;
+    virtual Event generate_gaussian(DeviceBuffer<float>& output, float mean = 0.0f, float stddev = 1.0f) = 0;
+    virtual Event generate_gaussian_vector3(DeviceBuffer<Vector3>& output, float mean = 0.0f, float stddev = 1.0f) = 0;
+    
+    // Double precision versions
+    virtual Event generate_uniform(DeviceBuffer<double>& output, double min = 0.0, double max = 1.0) = 0;
+    virtual Event generate_gaussian(DeviceBuffer<double>& output, double mean = 0.0, double stddev = 1.0) = 0;
+    
+    // Integer versions
+    virtual Event generate_uniform_int(DeviceBuffer<int>& output, int min = 0, int max = INT_MAX) = 0;
+    virtual Event generate_uniform_uint(DeviceBuffer<unsigned int>& output, unsigned int min = 0, unsigned int max = UINT_MAX) = 0;
+    
+protected:
+    Resource resource_;
+    unsigned long seed_;
+    size_t offset_;
+    bool initialized_;
+};
 
-    HOST DEVICE ~RandomGPU() {
-        assert(threadIdx.x + blockIdx.x == 0);
-        if (states) {
-            delete[] states;
-        }
-    }
+// Random kernel function declarations
+namespace RandomKernels {
 
-    DEVICE void init(unsigned long seed, size_t offset = 0) {
-        auto state = get_gaussian_state();
-        if (state) {
-            size_t idx = threadIdx.x + blockDim.x * blockIdx.x;
-            curand_init(seed, idx, offset, state);
-        }
-    }
+#ifdef USE_CUDA
+// CUDA kernels
+__global__ void generate_uniform_float_kernel(float* output, size_t count, unsigned long seed, size_t offset, float min, float max);
+__global__ void generate_gaussian_float_kernel(float* output, size_t count, unsigned long seed, size_t offset, float mean, float stddev);
+__global__ void generate_gaussian_vector3_kernel(Vector3* output, size_t count, unsigned long seed, size_t offset, float mean, float stddev);
+__global__ void generate_uniform_double_kernel(double* output, size_t count, unsigned long seed, size_t offset, double min, double max);
+__global__ void generate_gaussian_double_kernel(double* output, size_t count, unsigned long seed, size_t offset, double mean, double stddev);
+__global__ void generate_uniform_int_kernel(int* output, size_t count, unsigned long seed, size_t offset, int min, int max);
+__global__ void generate_uniform_uint_kernel(unsigned int* output, size_t count, unsigned long seed, size_t offset, unsigned int min, unsigned int max);
+#endif
 
-    DEVICE float gaussian(state_type* external_state = nullptr) {
-        return curand_normal(external_state ? external_state : get_gaussian_state());
-    }
+} // namespace RandomKernels
 
-    DEVICE state_type* get_gaussian_state() {
-        size_t idx = threadIdx.x + blockDim.x * blockIdx.x;
-        return (idx < num_states && states) ? &states[idx] : nullptr;
-    }
-
-    DEVICE void set_gaussian_state(state_type* new_state) {
-        size_t idx = threadIdx.x + blockDim.x * blockIdx.x;
-        if (idx < num_states && new_state && states) {
-            states[idx] = *new_state;
-        }
-    }
-
-    DEVICE Vector3 gaussian_vector(state_type* external_state = nullptr) {
-        return Vector3(gaussian(external_state), 
-                      gaussian(external_state), 
-                      gaussian(external_state));
-    }
-
-private:
-    state_type* states;
+// Implementation classes for each backend
+#ifdef USE_CUDA
+template<size_t num_states>
+class RandomCUDA : public RandomDevice<num_states> {
+public:
+    RandomCUDA(const Resource& resource);
+    
+    Event generate_uniform(DeviceBuffer<float>& output, float min = 0.0f, float max = 1.0f) override;
+    Event generate_gaussian(DeviceBuffer<float>& output, float mean = 0.0f, float stddev = 1.0f) override;
+    Event generate_gaussian_vector3(DeviceBuffer<Vector3>& output, float mean = 0.0f, float stddev = 1.0f) override;
+    Event generate_uniform(DeviceBuffer<double>& output, double min = 0.0, double max = 1.0) override;
+    Event generate_gaussian(DeviceBuffer<double>& output, double mean = 0.0, double stddev = 1.0) override;
+    Event generate_uniform_int(DeviceBuffer<int>& output, int min = 0, int max = INT_MAX) override;
+    Event generate_uniform_uint(DeviceBuffer<unsigned int>& output, unsigned int min = 0, unsigned int max = UINT_MAX) override;
 };
 #endif
 
+#ifdef USE_SYCL
+template<size_t num_states>
+class RandomSYCL : public RandomDevice<num_states> {
+public:
+    RandomSYCL(const Resource& resource);
+    
+    Event generate_uniform(DeviceBuffer<float>& output, float min = 0.0f, float max = 1.0f) override;
+    Event generate_gaussian(DeviceBuffer<float>& output, float mean = 0.0f, float stddev = 1.0f) override;
+    Event generate_gaussian_vector3(DeviceBuffer<Vector3>& output, float mean = 0.0f, float stddev = 1.0f) override;
+    Event generate_uniform(DeviceBuffer<double>& output, double min = 0.0, double max = 1.0) override;
+    Event generate_gaussian(DeviceBuffer<double>& output, double mean = 0.0, double stddev = 1.0) override;
+    Event generate_uniform_int(DeviceBuffer<int>& output, int min = 0, int max = INT_MAX) override;
+    Event generate_uniform_uint(DeviceBuffer<unsigned int>& output, unsigned int min = 0, unsigned int max = UINT_MAX) override;
+};
+#endif
+
+#ifdef USE_METAL
+template<size_t num_states>
+class RandomMETAL : public RandomDevice<num_states> {
+public:
+    RandomMETAL(const Resource& resource);
+    
+    Event generate_uniform(DeviceBuffer<float>& output, float min = 0.0f, float max = 1.0f) override;
+    Event generate_gaussian(DeviceBuffer<float>& output, float mean = 0.0f, float stddev = 1.0f) override;
+    Event generate_gaussian_vector3(DeviceBuffer<Vector3>& output, float mean = 0.0f, float stddev = 1.0f) override;
+    Event generate_uniform(DeviceBuffer<double>& output, double min = 0.0, double max = 1.0) override;
+    Event generate_gaussian(DeviceBuffer<double>& output, double mean = 0.0, double stddev = 1.0) override;
+    Event generate_uniform_int(DeviceBuffer<int>& output, int min = 0, int max = INT_MAX) override;
+    Event generate_uniform_uint(DeviceBuffer<unsigned int>& output, unsigned int min = 0, unsigned int max = UINT_MAX) override;
+    
+private:
+    void* compute_pipeline_state_ = nullptr;
+};
+#endif
+
+// Factory function to create appropriate random generator
+template<size_t num_states = 128>
+std::unique_ptr<RandomDevice<num_states>> create_random_generator(const Resource& resource) {
+    if (resource.is_device()) {
+        switch (resource.type) {
+#ifdef USE_CUDA
+        case ResourceType::CUDA:
+            return std::make_unique<RandomCUDA<num_states>>(resource);
+#endif
+#ifdef USE_SYCL
+        case ResourceType::SYCL:
+            return std::make_unique<RandomSYCL<num_states>>(resource);
+#endif
+#ifdef USE_METAL
+        case ResourceType::METAL:
+            return std::make_unique<RandomMETAL<num_states>>(resource);
+#endif
+        default:
+            throw_not_implemented("Unsupported device type for random number generation");
+        }
+    } else {
+        throw_not_implemented("Random generator requires device resource");
+    }
+}
+
+} // namespace ARBD

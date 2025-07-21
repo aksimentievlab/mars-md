@@ -1,12 +1,12 @@
-#include "Types/Types.h"
+#include "Math/Array.h"
+#include "Math/Types.h"
+#include "Math/Vector3.h"
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
 #include <pybind11/operators.h>
 
-#include <iostream>
-
 namespace py = pybind11;
-
+using namespace ARBD;
 /// Convert a NumPy array to a Vector3_t object.
 ///
 /// This function converts a 1D NumPy array of size 3 or 4 into a Vector3_t object.
@@ -82,7 +82,7 @@ auto vector_arr_to_numpy_array(Array<Vector3_t<T>>& inp) {
     // Create a Python object that will free the allocated
     // memory when destroyed:
 
-    T* ptr = reinterpret_cast<T*>(inp.get_pointer());
+    T* ptr = reinterpret_cast<T*>(std::span(inp).data());
 
     // unsigned char* cptr = reinterpret_cast<unsigned char*>(inp.get_pointer());
     // Vector3_t<T> tmp(1);
@@ -121,13 +121,10 @@ auto vector_arr_to_numpy_array(Array<Vector3_t<T>>& inp) {
     
     // std::vector<size_t> shape;
     // shape.push_back(inp.size());
-    // shape.push_back(4);
     py::array::ShapeContainer shape = {inp.size(), std::size_t{4}};
-    py::array::StridesContainer strides = {sizeof(Vector3_t<T>), sizeof(T)};
+    std::vector<ssize_t> strides = {static_cast<ssize_t>(sizeof(Vector3_t<T>)), static_cast<ssize_t>(sizeof(T))};
     
-    // std::cerr << "sizeof(T) " << sizeof(T) << std::endl;
-
-    assert( sizeof(Vector3_t<T>) == 4 * sizeof(T) );
+    assert(sizeof(Vector3_t<T>) == 4 * sizeof(T));
     auto a = py::template array_t<T>(
 	shape,		   //shape
 	strides, // strides

@@ -42,15 +42,17 @@ add_compile_definitions(_GLIBCXX23_CONSTEXPR=)
 # Generate compile_commands.json for clangd and other tools
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+include_directories(${CMAKE_SOURCE_DIR}/extern/OpenRAND/include)
+
 if(USE_CUDA)
     set(CMAKE_CUDA_STANDARD 20)
     set(CMAKE_CUDA_STANDARD_REQUIRED ON)
     set(CMAKE_CUDA_EXTENSIONS OFF)
-    
+
     # Set CUDA architectures for compatibility with modern GPUs
     # Include common architectures: 7.0 (V100), 7.5 (T4), 8.0 (A100), 8.6 (A40), 8.9 (RTX 4090)
     set(CMAKE_CUDA_ARCHITECTURES "70;75;80;86;89")
-    
+
     message(STATUS "CUDA architectures set to: ${CMAKE_CUDA_ARCHITECTURES}")
 endif()
 
@@ -207,16 +209,14 @@ Example for USE_SYCL_ACPP on macOS:    cmake -D CMAKE_CXX_COMPILER=/opt/homebrew
 
         if(CMAKE_CXX_COMPILER MATCHES "acpp")
             message(STATUS "Verified AdaptiveCpp (acpp) compiler: ${CMAKE_CXX_COMPILER}")
-            set(ACPP_TARGET_FLAGS "")
+            set(ACPP_TARGET_FLAGS "-O2")
             if(CMAKE_SYSTEM_NAME STREQUAL "Darwin") # macOS
                 message(STATUS "Setting AdaptiveCpp default target flags for macOS (CPU via OpenMP).")
                 set(ACPP_TARGET_FLAGS "--acpp-targets=omp")
             elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
                 message(STATUS "Setting AdaptiveCpp default target flags for Linux (CPU via OpenMP).")
-                set(ACPP_TARGET_FLAGS "--acpp-targets=omp")
-                # For specific GPU backends on Linux:
-                # set(ACPP_TARGET_FLAGS "--acpp-targets=omp,hip") # For AMD GPUs (if acpp built with ROCm/HIP backend)
-                # set(ACPP_TARGET_FLAGS "--acpp-targets=omp,cuda") # For NVIDIA GPUs (if acpp built with CUDA backend)
+                set(ACPP_TARGET_FLAGS "--acpp-targets=generic -O3")
+
             else() # Other OS
                 message(WARNING "AdaptiveCpp on unknown OS ${CMAKE_SYSTEM_NAME}. Defaulting to OpenMP target.")
                 set(ACPP_TARGET_FLAGS "--acpp-targets=omp")

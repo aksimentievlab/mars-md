@@ -12,7 +12,6 @@
 #define HAS_CXXABI 0
 #endif
 #include "ARBDLogger.h"
-#include "Backend/Proxy.h"
 #include "Backend/Resource.h"
 #include "ARBDException.h"
 
@@ -197,4 +196,5 @@ template <typename T> std::string pretty_type_name() {
 
   return name;
 }
+
 } // namespace ARBD

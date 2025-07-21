@@ -2,6 +2,7 @@
 
 #ifdef USE_SYCL
 #include "ARBDException.h"
+#include "ARBDLogger.h"
 #include <array>
 #include <chrono>
 #include <iostream>
@@ -65,7 +66,7 @@ inline void check_sycl_error(const sycl::exception &e, std::string_view file,
  * ```
  *
  * @note The class prevents copying to avoid accidental memory leaks.
- *       Use move semantics when transferring ownership.
+ * Use move semantics when transferring ownership.
  */
 template <typename T> class DeviceMemory {
 private:
@@ -156,169 +157,116 @@ public:
 };
 
 /**
- * @brief SYCL queue wrapper with additional functionality
+ * @brief RAII SYCL queue wrapper with proper resource management
  *
- * This class extends sycl::queue with additional convenience methods
- * and RAII semantics for better integration with the ARBD framework.
+ * This class provides a safe RAII wrapper around sycl::queue with
+ * guaranteed valid state and automatic resource cleanup.
  *
  * Features:
- * - Automatic device selection and queue creation
- * - Synchronization utilities
- * - Exception handling integration
- * - Performance profiling support
+ * - Guaranteed valid state (no optional/uninitialized queues)
+ * - Automatic resource management (RAII)
+ * - Exception safety
+ * - Move semantics support
  *
  * @example Basic Usage:
  * ```cpp
- * // Create a queue for a specific device
+ * // Create a queue for a specific device - always valid after construction
  * ARBD::Queue queue(device);
  *
- * // Submit work and synchronize
+ * // Submit work - no need to check if queue is valid
  * queue.submit([&](sycl::handler& h) {
- *     // kernel code
+ * // kernel code
  * });
  * queue.synchronize();
- *
- * // Check if queue is in-order
- * bool in_order = queue.is_in_order();
  * ```
  *
- * @note The queue is automatically synchronized when the Queue object is
- * destroyed
+ * @note The queue is automatically cleaned up when the Queue object is destroyed
  */
 class Queue {
 private:
-  std::optional<sycl::queue> queue_;
-
+  sycl::queue queue_; 
+  sycl::device device_; 
 public:
-  Queue() {
-    // Don't try to create a queue with selectors in default constructor
-    // as they might fail. Queue will be initialized later via assignment.
+  // Delete default constructor to prevent invalid state
+  Queue() = delete;
+
+  // **MODIFIED**: Explicitly create a single-device context to prevent ambiguity.
+  // This guarantees that the queue is not considered "multi-device" by the runtime.
+  explicit Queue(const sycl::device &dev) 
+      : queue_(sycl::context({dev}), dev), device_(dev) {
   }
 
-  explicit Queue(const sycl::device &dev) {
-    try {
-      queue_ = sycl::queue(dev); // Create queue with device only, no properties
-    } catch (const sycl::exception &e) {
-      // Directly log before check_sycl_error
-      std::cerr << "!!! ARBD::Queue constructor caught sycl::exception: "
-                << e.what()
-                << " for device: " << dev.get_info<sycl::info::device::name>()
-                << std::endl;
-      check_sycl_error(e, __FILE__, __LINE__);
-    }
+  // **MODIFIED**: Also apply the explicit single-device context here.
+  explicit Queue(const sycl::device &dev, const sycl::property_list &props) 
+      : queue_(sycl::context({dev}), dev, props), device_(dev) {
   }
 
-  explicit Queue(const sycl::device &dev, const sycl::property_list &props) {
-    try {
-      // Create queue with single device directly, not as a multi-device queue
-      queue_ = sycl::queue(dev, props);
-    } catch (const sycl::exception &e) {
-      check_sycl_error(e, __FILE__, __LINE__);
-    }
-  }
-
-  // Add constructor for multiple devices
-  explicit Queue(const std::vector<sycl::device> &devices,
-                 const sycl::property_list &props = {}) {
-    try {
-      if (devices.empty()) {
-        ARBD_Exception(ExceptionType::SYCLRuntimeError,
-                       "Cannot create queue with empty device list");
-      }
-      // Create context with all devices, but queue with first device
-      sycl::context ctx(devices);
-      queue_ = sycl::queue(ctx, devices[0], props);
-    } catch (const sycl::exception &e) {
-      check_sycl_error(e, __FILE__, __LINE__);
-    }
-  }
-
+  // RAII destructor - automatic cleanup
   ~Queue() {
     try {
-      if (queue_.has_value()) {
-        // queue_->wait(); // Still commented out from previous debugging
-      }
+      queue_.wait();
     } catch (...) {
-      // Don't throw from destructor
+      // Never throw from destructor - log error to stderr directly
+      LOGWARN("Warning: Exception during Queue cleanup - continuing with destruction");
     }
   }
 
-  // Prevent copying
+  // Prevent copying to avoid resource management complexity
   Queue(const Queue &) = delete;
   Queue &operator=(const Queue &) = delete;
 
-  // Allow moving
-  Queue(Queue &&other) noexcept : queue_(std::move(other.queue_)) {}
+  // Allow moving for efficiency
+  Queue(Queue &&other) noexcept : queue_(std::move(other.queue_)), device_(std::move(other.device_)) {}
 
   Queue &operator=(Queue &&other) noexcept {
     if (this != &other) {
-      if (queue_.has_value()) {
-        // try { queue_->wait(); } catch (...) {} // If re-enabled
+      // Clean up current queue before moving
+      try {
+        queue_.wait();
+      } catch (...) {
+        // Log but don't throw during assignment
       }
       queue_ = std::move(other.queue_);
+      device_ = std::move(other.device_);
     }
     return *this;
   }
 
+  // All operations can assume queue_ is valid
   void synchronize() {
-    if (queue_.has_value()) {
-      SYCL_CHECK(queue_->wait());
-    }
+    queue_.wait();  // No need to check if valid
   }
 
   template <typename KernelName = class kernel_default_name, typename F>
   sycl::event submit(F &&f) {
-    if (!queue_.has_value()) {
-      ARBD_Exception(ExceptionType::SYCLRuntimeError,
-                     "Queue not initialized for submission");
-    }
-    try {
-      return queue_->submit(std::forward<F>(f));
-    } catch (const sycl::exception &e) {
-      check_sycl_error(e, __FILE__, __LINE__);
-      throw; // Re-throw after logging
-    }
+    return queue_.submit(std::forward<F>(f));  // Direct delegation
   }
 
-  [[nodiscard]] bool is_in_order() const {
-    return queue_.has_value() ? queue_->is_in_order() : false;
+  [[nodiscard]] bool is_in_order() const noexcept {
+    return queue_.is_in_order();
   }
 
   [[nodiscard]] sycl::context get_context() const {
-    if (!queue_.has_value()) {
-      ARBD_Exception(ExceptionType::SYCLRuntimeError,
-                     "Queue not initialized for get_context");
-    }
-    return queue_->get_context();
+    return queue_.get_context();
   }
 
-  // Add method to get all devices
-  [[nodiscard]] std::vector<sycl::device> get_devices() const {
-    if (!queue_.has_value()) {
-      ARBD_Exception(ExceptionType::SYCLRuntimeError,
-                     "Queue not initialized for get_devices");
-    }
-    return {queue_->get_device()};
+  // Return the specific device associated with this queue.
+  [[nodiscard]] const sycl::device& get_device() const {
+      return device_;
   }
 
-  [[nodiscard]] sycl::queue &get() {
-    if (!queue_.has_value()) {
-      ARBD_Exception(ExceptionType::SYCLRuntimeError,
-                     "Queue not initialized for get");
-    }
-    return *queue_;
+  // Direct access to underlying queue - always safe
+  [[nodiscard]] sycl::queue &get() noexcept {
+    return queue_;
   }
 
-  [[nodiscard]] const sycl::queue &get() const {
-    if (!queue_.has_value()) {
-      ARBD_Exception(ExceptionType::SYCLRuntimeError,
-                     "Queue not initialized for get const");
-    }
-    return *queue_;
+  [[nodiscard]] const sycl::queue &get() const noexcept {
+    return queue_;
   }
 
-  operator sycl::queue &() { return get(); }
-  operator const sycl::queue &() const { return get(); }
+  // Implicit conversion operators for convenience
+  operator sycl::queue &() noexcept { return queue_; }
+  operator const sycl::queue &() const noexcept { return queue_; }
 };
 
 /**
@@ -337,7 +285,7 @@ public:
  * ```cpp
  * // Submit work and get an event
  * ARBD::Event event = queue.submit([&](sycl::handler& h) {
- *     // kernel code
+ * // kernel code
  * });
  *
  * // Wait for completion
@@ -472,12 +420,12 @@ private:
  * // Submit work to specific device
  * auto& queue = device.get_queue();
  * queue.submit([&](sycl::handler& h) {
- *     // kernel code
+ * // kernel code
  * });
  * ```
  *
  * @note The class uses static methods for global device management.
- *       All operations are thread-safe and exception-safe.
+ * All operations are thread-safe and exception-safe.
  */
 class SYCLManager {
 public:
@@ -517,7 +465,7 @@ public:
     Device(const Device &) = delete;
     Device &operator=(const Device &) = delete;
 
-    // Enable move constructor and move assignment operator
+    // Allow moving 
     Device(Device &&) = default;
     Device &operator=(Device &&) = default;
 
@@ -568,6 +516,9 @@ public:
 
   private:
     void query_device_properties();
+    
+    // Helper function to create all queues for a device
+    static std::array<ARBD::SYCL::Queue, NUM_QUEUES> create_queues(const sycl::device& dev, unsigned int id);
 
     unsigned int id_;
     sycl::device device_;
@@ -621,6 +572,15 @@ public:
   [[nodiscard]] static std::vector<unsigned int> get_gpu_device_ids();
   [[nodiscard]] static std::vector<unsigned int> get_cpu_device_ids();
   [[nodiscard]] static std::vector<unsigned int> get_accelerator_device_ids();
+
+  // Add missing static method declaration
+  [[nodiscard]] static Device &get_device(unsigned int device_id) {
+    if (device_id >= devices_.size()) {
+      ARBD_Exception(ExceptionType::ValueError, 
+          "Invalid device ID: {}", device_id);
+    }
+    return devices_[device_id];
+  }
 
 private:
   static void init_devices();

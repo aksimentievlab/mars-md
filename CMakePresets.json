@@ -186,29 +186,31 @@
             }
         },
         {
-            "name": "tbgl-clang-debug",
-            "displayName": "tbgl Clang 18.1 (Debug)",
-            "description": "Standard tbgl build with Clang 18.1 (Debug build) - Full C++20 support.",
+            "name": "tbgl-acpp-debug",
+            "displayName": "tbgl ACPP (Debug)",
+            "description": "Standard tbgl build with ACPP (Debug build) - Full C++20 support.",
             "generator": "Ninja",
-            "binaryDir": "${sourceDir}/build/tbgl-clang-debug",
+            "binaryDir": "${sourceDir}/build/tbgl-acpp-debug",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Debug",
-                "CMAKE_CXX_COMPILER": "/data/server10/pinyili2/local/bin/clang++",
-                "CMAKE_C_COMPILER": "/data/server10/pinyili2/local/bin/clang",
-                "CMAKE_CXX_EXTENSIONS": "OFF"
+                "CMAKE_CXX_COMPILER": "/data/server10/pinyili2/local/bin/acpp",
+                "USE_SYCL_ACPP": "ON",
+                "CMAKE_CXX_EXTENSIONS": "OFF",
+                "CMAKE_CXX_FLAGS": "-stdlib=libc++ -nostdinc++ -I/data/server10/pinyili2/local/include/c++/v1 -I/data/server10/pinyili2/local/include/x86_64-unknown-linux-gnu/c++/v1 -L/data/server10/pinyili2/local/lib/x86_64-unknown-linux-gnu"
             }
         },
         {
-            "name": "tbgl-clang-release",
-            "displayName": "tbgl Clang 18.1 (Release)",
-            "description": "Standard tbgl build with Clang 18.1 (Release build) - Full C++20 support.",
+            "name": "tbgl-acpp-release",
+            "displayName": "tbgl ACPP (Release)",
+            "description": "Standard tbgl build with ACPP (Release build) - Full C++20 support.",
             "generator": "Ninja",
-            "binaryDir": "${sourceDir}/build/tbgl-clang-release",
+            "binaryDir": "${sourceDir}/build/tbgl-acpp-release",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Release",
-                "CMAKE_CXX_COMPILER": "/data/server10/pinyili2/local/bin/clang++",
-                "CMAKE_C_COMPILER": "/data/server10/pinyili2/local/bin/clang",
-                "CMAKE_CXX_EXTENSIONS": "OFF"
+                "CMAKE_CXX_COMPILER": "/data/server10/pinyili2/local/bin/acpp",
+                "USE_SYCL_ACPP": "ON",
+                "CMAKE_CXX_EXTENSIONS": "OFF",
+                "CMAKE_CXX_FLAGS": "-stdlib=libc++ -nostdinc++ -I/data/server10/pinyili2/local/include/c++/v1 -I/data/server10/pinyili2/local/include/x86_64-unknown-linux-gnu/c++/v1 -L/data/server10/pinyili2/local/lib/x86_64-unknown-linux-gnu"
             }
         },
         {
@@ -266,14 +268,14 @@
             "displayName": "Build tbgl CUDA Release"
         },
         {
-            "name": "tbgl-clang-debug-build",
-            "configurePreset": "tbgl-clang-debug",
-            "displayName": "Build tbgl Clang Debug"
+            "name": "tbgl-acpp-debug-build",
+            "configurePreset": "tbgl-acpp-debug",
+            "displayName": "Build tbgl ACPP Debug"
         },
         {
-            "name": "tbgl-clang-release-build",
-            "configurePreset": "tbgl-clang-release",
-            "displayName": "Build tbgl Clang Release"
+            "name": "tbgl-acpp-release-build",
+            "configurePreset": "tbgl-acpp-release",
+            "displayName": "Build tbgl ACPP Release"
         },
         {
             "name": "delta-cuda-debug-build",

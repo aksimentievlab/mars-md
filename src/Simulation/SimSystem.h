@@ -1,15 +1,13 @@
 #pragma once
 
-#include "Types.h"
-#include "ParticlePatch.h"
-#include "PatchOp.h"
-#include "Proxy.h"
+#include "Math/Types.h"
+#include "Objects/Patch/PatchOp.h"
 
 // Class providing a description of a simulation system, including composition, coordinates, interactions, state parameters (temperature, boundary conditions, etc)
 // Also includes RNG state
 
 //   Although only one instance of this should be created per replica of the system, it should be possible to distribute (at least parts of) the description of the system
-
+namespace ARBD{
 using Temperature = float;	// TODO: replace with units object
 using Length = float;
 
@@ -80,7 +78,7 @@ class CellDecomposer : public Decomposer {
     inline void decompose(SimSystem& sys, ResourceCollection& resources);
     struct Worker {
 	Length cutoff;
-	std::vector<Proxy<Patch>> patches;
+	Patch patches;
     };
 };
 
@@ -121,7 +119,7 @@ public:
 	    decomp = static_cast<Decomposer>(_d);
 	    break;
 	default:
-	    Exception( ValueError, "SimSystem::GetIntegrator: Unrecognized CellDecomp type; exiting" );
+	    throw_value_error("SimSystem::GetIntegrator: Unrecognized CellDecomp type; exiting");
 	    // std::cerr << "Error: SimSystem::GetIntegrator: "
 	    // 	      << "Unrecognized CellDecomp type; exiting" << std::endl;
 	    // assert(false);
@@ -133,7 +131,7 @@ public:
 	    boundary_conditions = BoundaryConditions( Vector3{conf.cell_lengths[0],0,0}, Vector3{0,conf.cell_lengths[1],0}, Vector3{0,0,conf.cell_lengths[2]} );
 	    break;
 	default:
-	    Exception( ValueError, "Integrator::GetIntegrator: Unrecognized algorithm type; exiting" );
+	    throw_value_error("Integrator::GetIntegrator: Unrecognized algorithm type; exiting");
 	    // std::cerr << "Error: Integrator::GetIntegrator: "
 	    // 	      << "Unrecognized algorithm type; exiting" << std::endl;
 	    // assert(false);
@@ -181,7 +179,7 @@ protected:
     Temperature temperature;
     // std::vector<Interactions> interactions; // not quite..
     
-    std::vector<Proxy<Patch>> patches;
+    std::vector<Patch> patches;
     std::vector<SymbolicOp> Interactions;
     std::vector<SymbolicOp> computations;
     
@@ -195,7 +193,7 @@ protected:
     Decomposer decomp;
     BoundaryConditions boundary_conditions;
 };
-
+}
 // inline void Decomposer::decompose(SimSystem& sys, ResourceCollection& resources) {
 //     // sys.patches
 // };

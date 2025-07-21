@@ -1,5 +1,4 @@
 #pragma once
-#include "Backend/Proxy.h"
 #include "Backend/Resource.h"
 #include "ARBDException.h"
 #include "ARBDLogger.h"
@@ -14,7 +13,10 @@
 #include <cstdint>
 #include <string>
 #include <cstdio>
-
+#include <string_view>
+#include <sstream>
+#include <charconv>
+#include <ranges>
 #include "TypeName.h"
 
 namespace ARBD {
@@ -40,9 +42,9 @@ inline std::string string_format(const char* format, Args... args) {
 using Vector3 = Vector3_t<float>;
 using Matrix3 = Matrix3_t<float, false>;
 
-using VectorArr = Array<Vector3>;
+using VecArray = Array<Vector3>;
 
-// Helpful routines
+// Helpful routines, not sure if needed
 HOST DEVICE inline Vector3_t<size_t> index_to_ijk(size_t idx, size_t nx,
                                                   size_t ny, size_t nz) {
   Vector3_t<size_t> res;
@@ -60,7 +62,5 @@ HOST DEVICE inline Vector3_t<size_t> index_to_ijk(size_t idx,
   return index_to_ijk(idx, n.x, n.y, n.z);
 }
 
-using idx_t = size_t; /* We will sometimes refer to global
-                       * particle index, which may be too
-                       * large to represent via size_t */
+using idx_t = size_t; 
 } // namespace ARBD

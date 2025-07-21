@@ -131,7 +131,11 @@ public:
 
     // Use printf-style formatting for universal compatibility
     char buffer[1024];
-    std::snprintf(buffer, sizeof(buffer), fmt, args...);
+    if constexpr (sizeof...(args) == 0) {
+      std::snprintf(buffer, sizeof(buffer), "%s", fmt);
+    } else {
+      std::snprintf(buffer, sizeof(buffer), fmt, args...);
+    }
     oss << buffer;
 
     oss << " [" << _location.file_name << "(" << _location.line << ") '"

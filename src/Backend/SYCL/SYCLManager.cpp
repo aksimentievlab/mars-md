@@ -17,9 +17,9 @@ sycl::info::device_type SYCLManager::preferred_type_{sycl::info::device_type::cp
 
 // Device class implementation
 SYCLManager::Device::Device(const sycl::device& dev, unsigned int id) 
-    : id_(id), device_(dev) {
+    : id_(id), device_(dev), queues_(create_queues(dev, id)) {
     
-    // Query device properties first, before creating queues
+    // Query device properties after construction
     query_device_properties();
     
     LOGINFO("Device {} initialized: {} ({})", id_, name_.c_str(), vendor_.c_str());
@@ -27,37 +27,38 @@ SYCLManager::Device::Device(const sycl::device& dev, unsigned int id)
          max_compute_units_,
          static_cast<float>(global_mem_size_) / (1024.0f * 1024.0f * 1024.0f),
          max_work_group_size_);
-    
-    // Create queues with more defensive error handling
+}
+
+// Helper function to create all queues for a device with proper RAII
+std::array<ARBD::SYCL::Queue, SYCLManager::NUM_QUEUES> 
+SYCLManager::Device::create_queues(const sycl::device& dev, unsigned int id) {
     try {
-        for (size_t i = 0; i < queues_.size(); ++i) { 
-            try {
-                // Test if device can create a basic queue first
-                sycl::queue test_queue(device_);
-                
-                // If successful, create our wrapped queue
-                queues_[i] = Queue(device_); 
-                LOGDEBUG("Successfully created queue {} for device {}", i, id_);
-            } catch (const sycl::exception& e) {
-                LOGERROR("SYCL exception creating queue {} for device {}: {}", i, id_, e.what());
-                // Try to create with different properties or fail gracefully
-                try {
-                    // Fallback: try without any special properties
-                    sycl::property_list empty_props;
-                    queues_[i] = Queue(device_, empty_props);
-                    LOGWARN("Created fallback queue {} for device {} without properties", i, id_);
-                } catch (const sycl::exception& e2) {
-                    LOGERROR("Failed to create fallback queue {} for device {}: {}", i, id_, e2.what());
-                    throw; // Re-throw if we can't create any queue
-                }
-            }
+        // Test if device can create a basic queue first with explicit single-device context
+        sycl::queue test_queue(sycl::context({dev}), dev);
+        
+        // If successful, create all our wrapped queues
+        // Note: We need to construct each queue individually since Queue() is deleted
+        return std::array<Queue, NUM_QUEUES>{{
+            Queue(dev), Queue(dev), Queue(dev), Queue(dev),
+            Queue(dev), Queue(dev), Queue(dev), Queue(dev)
+        }};
+        
+    } catch (const sycl::exception& e) {
+        LOGERROR("SYCL exception creating queues for device {}: {}", id, e.what());
+        
+        // Try fallback with empty properties
+        try {
+            sycl::property_list empty_props;
+            return std::array<Queue, NUM_QUEUES>{{
+                Queue(dev, empty_props), Queue(dev, empty_props), 
+                Queue(dev, empty_props), Queue(dev, empty_props),
+                Queue(dev, empty_props), Queue(dev, empty_props), 
+                Queue(dev, empty_props), Queue(dev, empty_props)
+            }};
+        } catch (const sycl::exception& e2) {
+            LOGERROR("Failed to create fallback queues for device {}: {}", id, e2.what());
+            throw; // Re-throw if we can't create any queues
         }
-    } catch (const ARBD::Exception& e) {
-        LOGERROR("ARBD::Exception during ARBD::Queue construction for device {}: {}", id_, e.what());
-        throw; 
-    } catch (const std::exception& e) {
-        LOGERROR("Unexpected std::exception during ARBD::Queue construction for device {}: {}", id_, e.what());
-        throw; 
     }
 }
 
@@ -139,7 +140,15 @@ void SYCLManager::Device::query_device_properties() {
 
 void SYCLManager::Device::synchronize_all_queues() {
     for (auto& queue : queues_) {
-        queue.synchronize();
+        try {
+            queue.synchronize();
+        } catch (const sycl::exception& e) {
+            // Log SYCL errors but continue with other queues
+            std::cerr << "Warning: SYCL error during queue synchronization: " << e.what() << std::endl;
+        } catch (const std::exception& e) {
+            // Log other errors but continue with other queues
+            std::cerr << "Warning: Error during queue synchronization: " << e.what() << std::endl;
+        }
     }
 }
 
@@ -254,8 +263,17 @@ void SYCLManager::discover_devices() {
 
 void SYCLManager::load_info() {
     init();
-    devices_ = std::move(all_devices_); // Use move instead of copy
-    init_devices();
+    
+    // For single device case (Mac), explicitly select only the first device
+    // to avoid multi-device context issues
+    if (all_devices_.size() == 1) {
+        LOGINFO("Single device detected, selecting device 0 for single-device operation");
+        select_devices(std::span<const unsigned int>{&all_devices_[0].id_, 1});
+    } else {
+        // Multi-device case - use all discovered devices
+        devices_ = std::move(all_devices_);
+        init_devices();
+    }
 }
 
 void SYCLManager::init_devices() {
@@ -313,22 +331,42 @@ void SYCLManager::sync(int device_id) {
 
 void SYCLManager::sync() {
     for (auto& device : devices_) {
-        device.synchronize_all_queues();
+        try {
+            device.synchronize_all_queues();
+        } catch (const std::exception& e) {
+            // Log but continue with other devices
+            std::cerr << "Warning: Error synchronizing device " << device.id() << ": " << e.what() << std::endl;
+        }
     }
 }
 
 void SYCLManager::finalize() {
-    // Synchronize all devices first
-    sync();
-    
-    // Clear the device vectors which will trigger proper cleanup
-    // of Device objects and their associated queues
-    devices_.clear();
-    all_devices_.clear();
-    
-    // Reset state
-    current_device_ = 0;
-    preferred_type_ = sycl::info::device_type::gpu;
+    try {
+        // First, synchronize all devices to ensure all operations complete
+        if (!devices_.empty()) {
+            sync();
+        }
+        
+        // Clear current device reference first to prevent access during cleanup
+        current_device_ = 0;
+        
+        // Clear devices explicitly which will call Device destructors
+        // in a controlled manner
+        devices_.clear();
+        
+        // Now clear all_devices_ 
+        all_devices_.clear();
+        
+        // Reset to default state
+        preferred_type_ = sycl::info::device_type::cpu;
+        
+    } catch (const std::exception& e) {
+        // Log but don't throw during finalization to prevent cascading errors
+        std::cerr << "Warning: Error during SYCL finalization: " << e.what() << std::endl;
+    } catch (...) {
+        // Catch any other exceptions during cleanup
+        std::cerr << "Warning: Unknown error during SYCL finalization" << std::endl;
+    }
 }
 
 int SYCLManager::current() {

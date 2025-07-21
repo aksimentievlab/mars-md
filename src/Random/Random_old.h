@@ -1,13 +1,12 @@
 #pragma once
-
-#include "GPUManager.h"
-#include "Types.h"
-#include "Proxy.h"
+#include "Math/Types.h"
 #include <map>
 #include <vector>
+
+#ifdef USE_CUDA
+#include "Backend/CUDA/CUDAManager.h"
 #include <cuda.h>
 #include <cuda_runtime.h>
-#ifdef USE_CUDA
 #include <curand_kernel.h>
 #include <curand.h>
 #include <cassert>
@@ -34,13 +33,6 @@ template<size_t num_states> class RandomCPU;
 template<size_t num_states> class RandomGPU;
 #endif
 
-// class RandomBackend {
-//     // TBD
-// };
-
-// class RandomBackendGPU : RandomBackend {};
-
-// END Oct2024
 
 namespace Random {
 

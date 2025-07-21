@@ -9,9 +9,7 @@ if(USE_SYCL_ACPP OR USE_SYCL_ICPX)
     message(STATUS "src: Adding SYCL specific sources to lib${PROJECT_NAME}")
     list(APPEND LIB_SOURCES
         Backend/SYCL/SYCLManager.cpp
-        Backend/SYCL/Proxy_sycl.cpp
-        #Simulation/Integrator/IntegratorSYCL.cpp
-        #Simulation/Interactions/ExampleForceSYCL.cpp
+        Random/Random_SYCL.cpp
         # Add any other SYCL-specific .cpp files here
     )
     # If your SYCL implementation uses a different file extension for device code
@@ -24,7 +22,7 @@ if(USE_CUDA)
     message(STATUS "src: Adding CUDA specific sources to lib${PROJECT_NAME}")
     list(APPEND LIB_SOURCES
         Backend/CUDA/CUDAManager.cpp         # Can be a .cpp file managing CUDA operations
-        Backend/CUDA/Proxy.cu
+        Random/Random.cu
         #Simulation/Integrator/IntegratorCUDA.cu # Note .cu extension
         #Simulation/Interactions/ExampleForceCUDA.cu # Note .cu extension
     )
@@ -38,7 +36,6 @@ if(USE_METAL)
     message(STATUS "src: Adding Metal specific sources to lib${PROJECT_NAME}")
     list(APPEND LIB_SOURCES
         Backend/METAL/METALManager.mm         # Objective-C++ implementation file
-        Backend/Proxy.mm                      # METAL proxy implementation
         #Simulation/Integrator/IntegratorMetal.mm # Future Metal integrator
         #Simulation/Interactions/ExampleForceMetal.mm # Future Metal force calculations
     )
@@ -70,28 +67,32 @@ target_include_directories("lib${PROJECT_NAME}"
 # or add SYCL specific include dirs for this target if necessary.
 if(USE_SYCL_ACPP OR USE_SYCL_ICPX)
     # For Intel DPC++ (icpx), linking is usually handled by -fsycl.
-    # For AdaptiveCpp (acpp), linking is also typically automatic when using acpp as the compiler.
-    # If explicit linking to a SYCL runtime library target provided by acpp or icpx is needed,
-    # it would go here. For example:
-    # target_link_libraries("lib${PROJECT_NAME}" PRIVATE SYCL::sycl) # If such an imported target exists
-    message(STATUS "src: SYCL is enabled for lib${PROJECT_NAME}. Ensure SYCL runtime is linked (usually automatic).")
+    message(STATUS "src: SYCL is enabled for lib${PROJECT_NAME}.")
 
-    # Link Boost libraries for AdaptiveCpp
-    if(USE_SYCL_ACPP)
-        # Link using imported targets to avoid transitive dependencies
-        target_link_libraries("lib${PROJECT_NAME}" PRIVATE Boost::context Boost::fiber Boost::atomic)
-        message(STATUS "src: Linked Boost imported targets to lib${PROJECT_NAME} for AdaptiveCpp backend")
+    # Explicit linking for AdaptiveCpp runtime libraries
+    if(USE_SYCL_ACPP AND CMAKE_CXX_COMPILER MATCHES "acpp")
+        # Find ACPP installation directory from the compiler path
+        get_filename_component(ACPP_BIN_DIR "${CMAKE_CXX_COMPILER}" DIRECTORY)
+        get_filename_component(ACPP_INSTALL_DIR "${ACPP_BIN_DIR}" DIRECTORY)
+        set(ACPP_LIB_DIR "${ACPP_INSTALL_DIR}/lib")
+
+                        # Link ACPP runtime libraries explicitly
+        target_link_libraries("lib${PROJECT_NAME}" PRIVATE
+            "${ACPP_LIB_DIR}/libacpp-rt.so"
+            "${ACPP_LIB_DIR}/libacpp-common.so"
+            "${ACPP_LIB_DIR}/libacpp-clang.so"
+            "${ACPP_LIB_DIR}/libclang-cpp.so.17"
+            "${ACPP_LIB_DIR}/libLLVM.so"
+        )
+
+        message(STATUS "src: Explicitly linked ACPP runtime libraries from ${ACPP_LIB_DIR}")
+        message(STATUS "Configured lib${PROJECT_NAME} to avoid C++ standard flag conflicts with AdaptiveCpp")
     endif()
 
     # Link OpenMP for AdaptiveCpp
     if(USE_SYCL_ACPP AND OpenMP_CXX_FOUND)
         target_link_libraries("lib${PROJECT_NAME}" PUBLIC OpenMP_Custom)
         message(STATUS "src: Linked custom OpenMP to lib${PROJECT_NAME} for AdaptiveCpp backend")
-    endif()
-
-    # Special handling for AdaptiveCpp to avoid duplicate C++ standard flags
-    if(USE_SYCL_ACPP AND CMAKE_CXX_COMPILER MATCHES "acpp")
-        message(STATUS "Configured lib${PROJECT_NAME} to avoid C++ standard flag conflicts with AdaptiveCpp")
     endif()
 endif()
 
@@ -106,7 +107,7 @@ if(USE_CUDA)
     else()
         target_link_libraries("lib${PROJECT_NAME}" PRIVATE stdc++)
     endif()
-    
+
     message(STATUS "src: CUDA is enabled for lib${PROJECT_NAME}. Added explicit C++ standard library linking.")
 endif()
 

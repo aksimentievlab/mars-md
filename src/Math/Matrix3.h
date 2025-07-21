@@ -6,7 +6,6 @@
 #pragma once
 #include "ARBDException.h"
 #include "ARBDLogger.h"
-#include "Backend/Proxy.h"
 #include "Backend/Resource.h"
 #include "Vector3.h"
 #include <cassert>

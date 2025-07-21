@@ -5,6 +5,7 @@
 #import <Foundation/Foundation.h>
 #include <algorithm>
 #include <iostream>
+#include <unordered_map>
 
 namespace ARBD {
 namespace METAL {
@@ -226,6 +227,13 @@ void Event::wait() {
     if (!command_buffer_) return;
     
     id<MTLCommandBuffer> cmd_buffer = (__bridge id<MTLCommandBuffer>)command_buffer_;
+
+    MTLCommandBufferStatus status = [cmd_buffer status];
+    if (status == MTLCommandBufferStatusNotEnqueued) {
+        // Command buffer was never committed, just return
+        return;
+    }
+    
     [cmd_buffer waitUntilCompleted];
     
     if (timing_available_) {
@@ -237,7 +245,14 @@ bool Event::is_complete() const {
     if (!command_buffer_) return true;
     
     id<MTLCommandBuffer> cmd_buffer = (__bridge id<MTLCommandBuffer>)command_buffer_;
-    return [cmd_buffer status] == MTLCommandBufferStatusCompleted;
+    MTLCommandBufferStatus status = [cmd_buffer status];
+    
+    // If the command buffer was never committed, consider it complete
+    if (status == MTLCommandBufferStatusNotEnqueued) {
+        return true;
+    }
+    
+    return status == MTLCommandBufferStatusCompleted;
 }
 
 std::chrono::nanoseconds Event::get_execution_time() const {
@@ -527,6 +542,46 @@ std::vector<unsigned int> METALManager::get_low_power_device_ids() {
         }
     }
     return low_power_ids;
+}
+
+// Static buffer map to track MTLBuffer objects for raw pointer deallocation
+static std::unordered_map<void*, void*> metal_buffer_map;
+
+// C-style allocation functions for compatibility with UnifiedBuffer
+void* METALManager::allocate_raw(size_t size) {
+    if (devices_.empty()) {
+        ARBD_Exception(ExceptionType::ValueError, "No Metal devices available for allocation");
+    }
+    
+    auto& device = get_current_device();
+    id<MTLDevice> mtl_device = (__bridge id<MTLDevice>)device.metal_device();
+    id<MTLBuffer> mtl_buffer = [mtl_device newBufferWithLength:size 
+                                                       options:MTLResourceStorageModeShared];
+    if (!mtl_buffer) {
+        ARBD_Exception(ExceptionType::MetalRuntimeError, "Metal buffer allocation failed");
+    }
+    
+    // Store the buffer reference for later deallocation
+    void* contents = [mtl_buffer contents];
+    
+    // We need to retain the buffer to prevent premature deallocation
+    // Store it in the global map for later retrieval during deallocation
+    metal_buffer_map[contents] = (__bridge_retained void*)mtl_buffer;
+    
+    return contents;
+}
+
+void METALManager::deallocate_raw(void* ptr) {
+    if (!ptr) return;
+    
+    // Retrieve and release the stored buffer
+    auto it = metal_buffer_map.find(ptr);
+    if (it != metal_buffer_map.end()) {
+        id<MTLBuffer> mtl_buffer = (__bridge_transfer id<MTLBuffer>)it->second;
+        metal_buffer_map.erase(it);
+        // ARC will handle cleanup when mtl_buffer goes out of scope
+        mtl_buffer = nil;
+    }
 }
 
 } // namespace METAL

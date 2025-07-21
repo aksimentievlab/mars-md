@@ -333,6 +333,10 @@ public:
     [[nodiscard]] static Queue& get_current_queue() { return devices_[current_device_].get_next_queue(); }
     [[nodiscard]] static Device& get_current_device() { return devices_[current_device_]; }
 
+    // C-style allocation functions for compatibility with UnifiedBuffer
+    static void* allocate_raw(size_t size);
+    static void deallocate_raw(void* ptr);
+
 private:
     [[nodiscard]] static std::vector<unsigned int> get_discrete_gpu_device_ids();
     [[nodiscard]] static std::vector<unsigned int> get_integrated_gpu_device_ids();

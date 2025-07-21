@@ -8,3 +8,9 @@
 [submodule "extern/fmt"]
 	path = extern/fmt
 	url = https://github.com/fmtlib/fmt.git
+[submodule "extern/neighbor"]
+	path = extern/neighbor
+	url = https://github.com/mphowardlab/neighbor.git
+[submodule "extern/OpenRAND"]
+	path = extern/OpenRAND
+	url = https://github.com/glotzerlab/OpenRAND.git

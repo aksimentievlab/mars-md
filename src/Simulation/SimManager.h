@@ -1,8 +1,11 @@
 #pragma once
 #include <iostream>
-#include "ParticlePatch.h"
-#include "PatchOp.h"
+#include "Objects/Patch/ParticlePatch.h"
+#include "Objects/Patch/PatchOp.h"
 #include "SimSystem.h"
+
+#include "ARBDLogger.h"
+#include "ARBDException.h"
 
 // Q: what is our parallel heirarchy?
 // A: depends!
@@ -14,7 +17,6 @@
 // Patch to Patch data exchange should not require explicit scheduling by SimManager
 
 // Load balancing?
-
 class LoadBalancer {
     // nothing for now
 };
