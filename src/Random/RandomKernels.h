@@ -89,13 +89,7 @@ struct GaussianFunctor<ARBD::Vector3_t<T>> {
 	}
 
 	// Device code for Vector3_t types
-	template<typename... Args>
-	HOST DEVICE void operator()(size_t i, Args... args) const {
-		// The template system will pass the extracted pointers as args
-		// For this kernel: args should be (Vector3_t<T>* output)
-		auto tuple_args = make_tuple(args...);
-		auto* output = get<0>(tuple_args);
-
+	HOST DEVICE void operator()(size_t i, ARBD::Vector3_t<T>* output) const {
 		if (i >= output_size)
 			return;
 
