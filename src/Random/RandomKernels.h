@@ -29,13 +29,7 @@ struct UniformFunctor {
 	uint32_t base_ctr;
 	uint32_t global_seed;
 
-	template<typename... Args>
-	HOST DEVICE void operator()(size_t i, Args... args) const {
-		// The template system will pass the extracted pointers as args
-		// For this kernel: args should be (T* output)
-		auto tuple_args = make_tuple(args...);
-		auto* output = get<0>(tuple_args);
-
+	HOST DEVICE void operator()(size_t i, T* output) const {
 		// Create a fresh Philox instance with deterministic parameters
 		// Each thread gets a unique counter value based on its index
 		openrand::Philox rng(base_seed, base_ctr + static_cast<uint32_t>(i), global_seed);
@@ -56,13 +50,7 @@ struct GaussianFunctor {
 	uint32_t base_ctr;
 	uint32_t global_seed;
 
-	template<typename... Args>
-	HOST DEVICE void operator()(size_t i, Args... args) const {
-		// The template system will pass the extracted pointers as args
-		// For this kernel: args should be (T* output)
-		auto tuple_args = make_tuple(args...);
-		auto* output = get<0>(tuple_args);
-
+	HOST DEVICE void operator()(size_t i, T* output) const {
 		if (i >= output_size)
 			return;
 

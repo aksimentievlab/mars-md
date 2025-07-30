@@ -10,48 +10,57 @@
 #include "Backend/Resource.h"
 
 namespace ARBD {
-
-// --- EXPLICIT TEMPLATE INSTANTIATIONS ---
-// This is where you tell nvcc which versions of your templates to build.
-
 using BufferFloat = DeviceBuffer<float>;
+using BufferVector3 = DeviceBuffer<ARBD::Vector3_t<float>>;
 
+// Random kernel template instantiations
+// UniformFunctor template instantiations
 template Event
 launch_cuda_kernel_impl<std::tuple<>, std::tuple<BufferFloat&>, UniformFunctor<float>&>(
-	const Resource&,
-	size_t,
-	const std::tuple<>&,
-	const std::tuple<BufferFloat&>&,
-	const KernelConfig&,
-	UniformFunctor<float>&);
+	const Resource& resource,
+	size_t thread_count,
+	const std::tuple<>& inputs,
+	const std::tuple<BufferFloat&>& outputs,
+	const KernelConfig& config,
+	UniformFunctor<float>& kernel_func);
 
-// For GaussianFunctor<float>
+template Event launch_cuda_kernel_impl<std::tuple<>,
+									   std::tuple<BufferVector3&>,
+									   UniformFunctor<ARBD::Vector3_t<float>>&>(
+	const Resource& resource,
+	size_t thread_count,
+	const std::tuple<>& inputs,
+	const std::tuple<BufferVector3&>& outputs,
+	const KernelConfig& config,
+	UniformFunctor<ARBD::Vector3_t<float>>& kernel_func);
+
+// GaussianFunctor template instantiations
 template Event
 launch_cuda_kernel_impl<std::tuple<>, std::tuple<BufferFloat&>, GaussianFunctor<float>&>(
-	const Resource&,
-	size_t,
-	const std::tuple<>&,
-	const std::tuple<BufferFloat&>&,
-	const KernelConfig&,
-	GaussianFunctor<float>&);
+	const Resource& resource,
+	size_t thread_count,
+	const std::tuple<>& inputs,
+	const std::tuple<BufferFloat&>& outputs,
+	const KernelConfig& config,
+	GaussianFunctor<float>& kernel_func);
 
-// For GaussianFunctor<Vector3_t<float>>
-using BufferVec3f = DeviceBuffer<Vector3_t<float>>;
+template Event launch_cuda_kernel_impl<std::tuple<>,
+									   std::tuple<BufferVector3&>,
+									   GaussianFunctor<ARBD::Vector3_t<float>>&>(
+	const Resource& resource,
+	size_t thread_count,
+	const std::tuple<>& inputs,
+	const std::tuple<BufferVector3&>& outputs,
+	const KernelConfig& config,
+	GaussianFunctor<ARBD::Vector3_t<float>>& kernel_func);
+
+// Also need int version for UniformFunctor
 template Event
-launch_cuda_kernel_impl<std::tuple<>, std::tuple<BufferVec3f&>, GaussianFunctor<Vector3_t<float>>&>(
-	const Resource&,
-	size_t,
-	const std::tuple<>&,
-	const std::tuple<BufferVec3f&>&,
-	const KernelConfig&,
-	GaussianFunctor<Vector3_t<float>>&);
-
-using BufferInt = DeviceBuffer<int>;
-template Event launch_cuda_kernel_impl<std::tuple<>, std::tuple<BufferInt&>, UniformFunctor<int>&>(
-	const Resource&,
-	size_t,
-	const std::tuple<>&,
-	const std::tuple<BufferInt&>&,
-	const KernelConfig&,
-	UniformFunctor<int>&);
+launch_cuda_kernel_impl<std::tuple<>, std::tuple<DeviceBuffer<int>&>, UniformFunctor<int>&>(
+	const Resource& resource,
+	size_t thread_count,
+	const std::tuple<>& inputs,
+	const std::tuple<DeviceBuffer<int>&>& outputs,
+	const KernelConfig& config,
+	UniformFunctor<int>& kernel_func);
 } // namespace ARBD

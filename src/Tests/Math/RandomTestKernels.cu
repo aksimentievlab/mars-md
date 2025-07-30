@@ -4,6 +4,7 @@
 #include "Backend/Kernels.h"
 #include "Backend/Resource.h"
 #include "Kernel_for_test.h"
+#include "Random/RandomKernels.h"
 
 // This file contains the explicit template instantiations needed by CUDA.
 // You tell nvcc exactly which kernels to build.
