@@ -1,8 +1,6 @@
 #include <metal_stdlib>
 using namespace metal;
-//@Todo: Rework this to use METAL4 API
 
-// Simple Philox-like PRNG implementation for Metal
 struct PhiloxGenerator {
     uint4 counter;
     uint2 key;

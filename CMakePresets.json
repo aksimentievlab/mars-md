@@ -113,6 +113,7 @@
             "binaryDir": "${sourceDir}/build/macos-metal-debug",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Debug",
+                "ARBD_METAL_FRAMEWORK_PATH": "/Applications/Xcode-beta.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks",
                 "USE_METAL": "ON",
                 "CMAKE_CXX_EXTENSIONS": "OFF"
             }
@@ -125,6 +126,7 @@
             "binaryDir": "${sourceDir}/build/macos-metal-release",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Release",
+                "ARBD_METAL_FRAMEWORK_PATH": "/Applications/Xcode-beta.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks",
                 "USE_METAL": "ON",
                 "CMAKE_CXX_EXTENSIONS": "OFF"
             }
@@ -164,8 +166,9 @@
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Debug",
                 "CMAKE_CUDA_COMPILER": "/software/cuda-12.4/bin/nvcc",
-                "CMAKE_CXX_COMPILER": "/data/server10/pinyili2/local/bin/clang++",
-                "CMAKE_C_COMPILER": "/data/server10/pinyili2/local/bin/clang",
+                "CMAKE_CUDA_HOST_COMPILER": "/software/gcc-12.3.0/bin/gcc",
+                "CMAKE_CXX_COMPILER": "/software/gcc-12.3.0/bin/g++",
+                "CMAKE_C_COMPILER": "/software/gcc-12.3.0/bin/gcc",
                 "USE_CUDA": "ON",
                 "CMAKE_CXX_EXTENSIONS": "OFF"
             }
@@ -179,8 +182,9 @@
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Release",
                 "CMAKE_CUDA_COMPILER": "/software/cuda-12.4/bin/nvcc",
-                "CMAKE_CXX_COMPILER": "/data/server10/pinyili2/local/bin/clang++",
-                "CMAKE_C_COMPILER": "/data/server10/pinyili2/local/bin/clang",
+                "CMAKE_CUDA_HOST_COMPILER": "/software/gcc-12.3.0/bin/gcc",
+                "CMAKE_CXX_COMPILER": "/software/gcc-12.3.0/bin/g++",
+                "CMAKE_C_COMPILER": "/software/gcc-12.3.0/bin/gcc",
                 "USE_CUDA": "ON",
                 "CMAKE_CXX_EXTENSIONS": "OFF"
             }
@@ -196,7 +200,8 @@
                 "CMAKE_CXX_COMPILER": "/data/server10/pinyili2/local/bin/acpp",
                 "USE_SYCL_ACPP": "ON",
                 "CMAKE_CXX_EXTENSIONS": "OFF",
-                "CMAKE_CXX_FLAGS": "-stdlib=libc++ -nostdinc++ -I/data/server10/pinyili2/local/include/c++/v1 -I/data/server10/pinyili2/local/include/x86_64-unknown-linux-gnu/c++/v1 -L/data/server10/pinyili2/local/lib/x86_64-unknown-linux-gnu"
+                "CMAKE_BUILD_WITH_INSTALL_RPATH": "YES",
+                "CMAKE_CXX_FLAGS": "-stdlib=libc++ -nostdinc++ -I/data/server10/pinyili2/local/include/c++/v1 -I/data/server10/pinyili2/local/include/x86_64-unknown-linux-gnu/c++/v1"
             }
         },
         {

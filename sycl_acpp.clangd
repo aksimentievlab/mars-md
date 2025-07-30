@@ -12,7 +12,7 @@ CompileFlags:
     - -DNDEBUG
     - -march=native
     - -mtune=native
-  Remove: 
+  Remove:
     - -Wno-unknown-cuda-version
     - -DUSE_METAL
 Diagnostics:

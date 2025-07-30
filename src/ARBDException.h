@@ -134,7 +134,8 @@ public:
     if constexpr (sizeof...(args) == 0) {
       std::snprintf(buffer, sizeof(buffer), "%s", fmt);
     } else {
-      std::snprintf(buffer, sizeof(buffer), fmt, args...);
+      // Convert any std::string arguments to const char*
+      std::snprintf(buffer, sizeof(buffer), fmt, convert_to_cstr(std::forward<Args>(args))...);
     }
     oss << buffer;
 
@@ -142,6 +143,16 @@ public:
         << _location.function_name << "']";
 
     _error_message = oss.str();
+  }
+
+  // Helper function to convert std::string to const char* if needed
+  template <typename T>
+  static const T& convert_to_cstr(const T& arg) {
+    return arg;
+  }
+  
+  static const char* convert_to_cstr(const std::string& str) {
+    return str.c_str();
   }
 
   // Convenience constructor for simple string messages

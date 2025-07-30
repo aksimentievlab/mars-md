@@ -1,7 +1,7 @@
 CompileFlags:
   Add:
     - -std=c++20
-    - -I/home/pinyili2/server10/arbd2_cpp20/src
+    - -I/home/pinyili2/server10/arbd2v/src
     - -I/software/intel-oneapi-base-toolkit-2025.1.3.7/2025.1/include
     - -I/software/intel-oneapi-base-toolkit-2025.1.3.7/2025.1/include/sycl
     - -I/software/cuda-12.4/include

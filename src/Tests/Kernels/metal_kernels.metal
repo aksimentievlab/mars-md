@@ -75,3 +75,53 @@ kernel void fill_buffer(device float* output [[buffer(0)]],
                        uint index [[thread_position_in_grid]]) {
     output[index] = value;
 } 
+
+#include <metal_stdlib>
+using namespace metal;
+
+kernel void zero_buffer(device float* buffer [[buffer(0)]],
+                       uint index [[thread_position_in_grid]]) {
+    buffer[index] = 0.0f;
+}
+
+kernel void add_arrays(device const float* a [[buffer(0)]],
+                      device const float* b [[buffer(1)]],
+                      device float* result [[buffer(2)]],
+                      uint index [[thread_position_in_grid]]) {
+    result[index] = a[index] + b[index];
+}
+
+// Packed version: input buffer contains [a_data..., b_data...]
+// Assumes packed_input has size 2*n, result has size n, and we launch n threads
+kernel void add_arrays_packed(device const float* packed_input [[buffer(0)]],
+                             device float* result [[buffer(1)]],
+                             uint index [[thread_position_in_grid]]) {
+    // We need to know n (array size). Let's pass it as the first element of packed_input
+    // Layout: [n, a_0, a_1, ..., a_{n-1}, b_0, b_1, ..., b_{n-1}]
+    uint n = (uint)packed_input[0];
+    
+    if (index >= n) return;
+    
+    // Data starts at index 1, first n elements are 'a', next n are 'b'
+    float a_val = packed_input[1 + index];      // a[index]
+    float b_val = packed_input[1 + n + index];  // b[index] 
+    
+    result[index] = a_val + b_val;
+}
+
+kernel void matmul_kernel(device const float* A [[buffer(0)]],
+                         device const float* B [[buffer(1)]],
+                         device float* C [[buffer(2)]],
+                         constant size_t& M [[buffer(3)]],
+                         constant size_t& N [[buffer(4)]],
+                         constant size_t& K [[buffer(5)]],
+                         uint2 gid [[thread_position_in_grid]]) {
+    
+    if (gid.x >= N || gid.y >= M) return;
+    
+    float sum = 0.0f;
+    for (size_t k = 0; k < K; ++k) {
+        sum += A[gid.y * K + k] * B[k * N + gid.x];
+    }
+    C[gid.y * N + gid.x] = sum;
+}

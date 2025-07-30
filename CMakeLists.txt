@@ -42,6 +42,9 @@ add_compile_definitions(_GLIBCXX23_CONSTEXPR=)
 # Generate compile_commands.json for clangd and other tools
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# Find threading library for use across the project
+find_package(Threads REQUIRED)
+
 include_directories(${CMAKE_SOURCE_DIR}/extern/OpenRAND/include)
 
 if(USE_CUDA)
@@ -53,7 +56,11 @@ if(USE_CUDA)
     # Include common architectures: 7.0 (V100), 7.5 (T4), 8.0 (A100), 8.6 (A40), 8.9 (RTX 4090)
     set(CMAKE_CUDA_ARCHITECTURES "70;75;80;86;89")
 
+    # Add CUDA compiler flags for compatibility and force older GCC
+    set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --allow-unsupported-compiler")
+
     message(STATUS "CUDA architectures set to: ${CMAKE_CUDA_ARCHITECTURES}")
+    message(STATUS "CUDA flags: ${CMAKE_CUDA_FLAGS}")
 endif()
 
 # Set a default build type if none was specified
@@ -79,50 +86,50 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     # GCC
     set(CMAKE_CXX_FLAGS_RELEASE "-O${OPT_LEVEL} -DNDEBUG")
     set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O${OPT_LEVEL} -g -DNDEBUG")
-    
+
     # Add additional GCC-specific optimizations
     if(OPT_LEVEL GREATER_EQUAL 3)
         set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -march=native -mtune=native")
         set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -march=native -mtune=native")
     endif()
-    
+
     if(USE_CUDA AND CMAKE_CUDA_FLAGS_RELEASE)
         set(CMAKE_CUDA_FLAGS_RELEASE "-O${OPT_LEVEL} -DNDEBUG")
         set(CMAKE_CUDA_FLAGS_RELWITHDEBINFO "-O${OPT_LEVEL} -g -DNDEBUG")
     endif()
-    
+
 elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     # Clang/AppleClang
     set(CMAKE_CXX_FLAGS_RELEASE "-O${OPT_LEVEL} -DNDEBUG")
     set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O${OPT_LEVEL} -g -DNDEBUG")
-    
+
     # Add additional Clang-specific optimizations
     if(OPT_LEVEL GREATER_EQUAL 3)
         set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -march=native -mtune=native")
         set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -march=native -mtune=native")
     endif()
-    
+
     if(USE_CUDA AND CMAKE_CUDA_FLAGS_RELEASE)
         set(CMAKE_CUDA_FLAGS_RELEASE "-O${OPT_LEVEL} -DNDEBUG")
         set(CMAKE_CUDA_FLAGS_RELWITHDEBINFO "-O${OPT_LEVEL} -g -DNDEBUG")
     endif()
-    
+
 elseif(CMAKE_CXX_COMPILER_ID MATCHES "IntelLLVM" OR CMAKE_CXX_COMPILER_ID MATCHES "Intel")
     # Intel compilers (icpx, icc)
     set(CMAKE_CXX_FLAGS_RELEASE "-O${OPT_LEVEL} -DNDEBUG")
     set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O${OPT_LEVEL} -g -DNDEBUG")
-    
+
     # Add Intel-specific optimizations
     if(OPT_LEVEL GREATER_EQUAL 3)
         set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -xHost")
         set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -xHost")
     endif()
-    
+
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
     # Microsoft Visual C++
     set(CMAKE_CXX_FLAGS_RELEASE "/O${OPT_LEVEL} /DNDEBUG")
     set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "/O${OPT_LEVEL} /Zi /DNDEBUG")
-    
+
 else()
     # Generic fallback
     set(CMAKE_CXX_FLAGS_RELEASE "-O${OPT_LEVEL} -DNDEBUG")
@@ -135,7 +142,7 @@ if(USE_SYCL_ACPP OR USE_SYCL_ICPX)
     message(STATUS "SYCL detected: Ensuring optimization flags are properly set")
     set(CMAKE_CXX_FLAGS_RELEASE "-O${OPT_LEVEL} -DNDEBUG")
     set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O${OPT_LEVEL} -g -DNDEBUG")
-    
+
     # For ACPP specifically, ensure optimization flags are added to general flags too
     if(USE_SYCL_ACPP)
         # Add optimization flags to general CXX flags to ensure they're always present
@@ -148,7 +155,7 @@ endif()
 if(USE_METAL AND APPLE)
     set(CMAKE_OBJCXX_FLAGS_RELEASE "-O${OPT_LEVEL} -DNDEBUG")
     set(CMAKE_OBJCXX_FLAGS_RELWITHDEBINFO "-O${OPT_LEVEL} -g -DNDEBUG")
-    
+
     if(OPT_LEVEL GREATER_EQUAL 3)
         set(CMAKE_OBJCXX_FLAGS_RELEASE "${CMAKE_OBJCXX_FLAGS_RELEASE} -march=native -mtune=native")
         set(CMAKE_OBJCXX_FLAGS_RELWITHDEBINFO "${CMAKE_OBJCXX_FLAGS_RELWITHDEBINFO} -march=native -mtune=native")
@@ -209,13 +216,25 @@ Example for USE_SYCL_ACPP on macOS:    cmake -D CMAKE_CXX_COMPILER=/opt/homebrew
 
         if(CMAKE_CXX_COMPILER MATCHES "acpp")
             message(STATUS "Verified AdaptiveCpp (acpp) compiler: ${CMAKE_CXX_COMPILER}")
+
+            # Add rpath to acpp libraries to solve linking issues
+            get_filename_component(ACPP_COMPILER_PATH ${CMAKE_CXX_COMPILER} DIRECTORY)
+            get_filename_component(ACPP_INSTALL_PREFIX ${ACPP_COMPILER_PATH}/.. REALPATH)
+            set(ACPP_LIB_DIR ${ACPP_INSTALL_PREFIX}/lib)
+            if(EXISTS ${ACPP_LIB_DIR})
+                message(STATUS "Found AdaptiveCpp library path: ${ACPP_LIB_DIR}. Adding to RPATH.")
+                set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-rpath,${ACPP_LIB_DIR}")
+            else()
+                message(WARNING "Could not find AdaptiveCpp library path at ${ACPP_LIB_DIR}. Linking may fail.")
+            endif()
+
             set(ACPP_TARGET_FLAGS "-O2")
             if(CMAKE_SYSTEM_NAME STREQUAL "Darwin") # macOS
                 message(STATUS "Setting AdaptiveCpp default target flags for macOS (CPU via OpenMP).")
                 set(ACPP_TARGET_FLAGS "--acpp-targets=omp")
             elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-                message(STATUS "Setting AdaptiveCpp default target flags for Linux (CPU via OpenMP).")
-                set(ACPP_TARGET_FLAGS "--acpp-targets=generic -O3")
+                message(STATUS "Setting AdaptiveCpp default target flags for Linux (CUDA and OpenMP).")
+                set(ACPP_TARGET_FLAGS "--acpp-targets=cuda,omp")
 
             else() # Other OS
                 message(WARNING "AdaptiveCpp on unknown OS ${CMAKE_SYSTEM_NAME}. Defaulting to OpenMP target.")
@@ -240,9 +259,34 @@ Ensure CMAKE_CXX_COMPILER is set to your AdaptiveCpp executable path (e.g., /opt
         # CMAKE_CXX_COMPILER_ID for icpx is typically "IntelLLVM".
         if(CMAKE_CXX_COMPILER_ID MATCHES "IntelLLVM" OR CMAKE_CXX_COMPILER MATCHES "icpx")
             message(STATUS "Verified Intel DPC++ (icpx) compiler: ${CMAKE_CXX_COMPILER}")
-            set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsycl")
-            # Add any other DPC++ specific flags here if needed for icpx.
-            # Example: set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-sycl-strict")
+
+            # Configure SYCL targets based on available hardware
+            if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+                # On Linux, check for CUDA and configure accordingly
+                find_program(NVIDIA_SMI nvidia-smi)
+                if(NVIDIA_SMI)
+                    execute_process(COMMAND ${NVIDIA_SMI} --query-gpu=count --format=csv,noheader,nounits
+                                  OUTPUT_VARIABLE GPU_COUNT
+                                  OUTPUT_STRIP_TRAILING_WHITESPACE
+                                  ERROR_QUIET)
+                    if(GPU_COUNT AND GPU_COUNT GREATER 0)
+                        message(STATUS "Found ${GPU_COUNT} NVIDIA GPU(s), configuring SYCL for CUDA backend")
+                        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsycl -fsycl-targets=nvptx64-nvidia-cuda -O3")
+                        # Additional CUDA-specific optimizations for SYCL
+                        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Xsycl-target-backend=nvptx64-nvidia-cuda --cuda-gpu-arch=sm_80")
+                    else()
+                        message(STATUS "No NVIDIA GPUs found, using default SYCL targets")
+                        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsycl -O3")
+                    endif()
+                else()
+                    message(STATUS "nvidia-smi not found, using default SYCL targets")
+                    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsycl -O3")
+                endif()
+            else()
+                # For non-Linux systems, use default targets
+                set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsycl -O3")
+            endif()
+
             set(SYCL_COMPILER_CONFIGURED_CORRECTLY TRUE)
             if(CMAKE_SYSTEM_NAME STREQUAL "Darwin") # macOS
                 message(WARNING "Intel DPC++ (icpx) is not officially supported on macOS. Compilation might fail or be unstable.")
@@ -271,16 +315,52 @@ if(USE_METAL)
     message(STATUS "Metal support is enabled for Apple platforms.")
     add_definitions(-DUSE_METAL)
 
+    # Add metal-cmake subdirectory
+    add_subdirectory(${CMAKE_SOURCE_DIR}/extern/metal-cpp-cmake/metal-cmake EXCLUDE_FROM_ALL)
+
+    # Set up include paths for metal-cpp headers
+    include_directories(
+        ${CMAKE_SOURCE_DIR}/extern/metal-cpp-cmake/metal-cmake/metal-cpp
+        ${CMAKE_SOURCE_DIR}/extern/metal-cpp-cmake/metal-cmake/metal-cpp-extensions
+    )
+
     # Find Metal framework
     find_library(METAL_FRAMEWORK Metal REQUIRED)
     find_library(FOUNDATION_FRAMEWORK Foundation REQUIRED)
+    find_library(QUARTZCORE_FRAMEWORK QuartzCore REQUIRED)
 
-    if(METAL_FRAMEWORK AND FOUNDATION_FRAMEWORK)
+    if(METAL_FRAMEWORK AND FOUNDATION_FRAMEWORK AND QUARTZCORE_FRAMEWORK)
         message(STATUS "Found Metal framework: ${METAL_FRAMEWORK}")
         message(STATUS "Found Foundation framework: ${FOUNDATION_FRAMEWORK}")
+        message(STATUS "Found QuartzCore framework: ${QUARTZCORE_FRAMEWORK}")
     else()
-        message(FATAL_ERROR "Metal or Foundation framework not found")
+        message(FATAL_ERROR "Required frameworks not found")
     endif()
+    set(ARBD_METAL_FRAMEWORK_PATH "" CACHE PATH "Path to the macOS SDK Frameworks directory (e.g., /Applications/Xcode.app/...)")
+
+    # If the user hasn't provided a path, set a default to the standard location.
+    if(NOT ARBD_METAL_FRAMEWORK_PATH)
+        set(ARBD_METAL_FRAMEWORK_PATH "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks")
+    endif()
+
+    # Verify that the specified path is valid. If not, stop the build with a helpful error.
+    if(NOT EXISTS "${ARBD_METAL_FRAMEWORK_PATH}")
+        message(FATAL_ERROR "========================================================================\n"
+                            "macOS SDK Frameworks not found at the specified path:\n"
+                            "  ${ARBD_METAL_FRAMEWORK_PATH}\n\n"
+                            "If you are using a non-standard Xcode installation (e.g., Xcode-beta.app), "
+                            "please specify the correct path by setting the ARBD_METAL_FRAMEWORK_PATH CMake variable.\n\n"
+                            "Example:\n"
+                            "  cmake -DARBD_METAL_FRAMEWORK_PATH=/Applications/Xcode-beta.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks ...\n"
+                            "========================================================================")
+    endif()
+
+    # Add the framework path to the compiler flags for all targets.
+    add_compile_options("-F${ARBD_METAL_FRAMEWORK_PATH}")
+
+    # Add framework path for Metal.framework
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -F${ARBD_METAL_FRAMEWORK_PATH}")
+    set(CMAKE_OBJCXX_FLAGS "${CMAKE_OBJCXX_FLAGS} -F${ARBD_METAL_FRAMEWORK_PATH}")
 endif()
 # --- End Metal Configuration ---
 
@@ -365,6 +445,15 @@ if(USE_METAL)
         PRIVATE
         ${METAL_FRAMEWORK}
         ${FOUNDATION_FRAMEWORK}
+        ${QUARTZCORE_FRAMEWORK}
     )
-    message(STATUS "Linked Metal and Foundation frameworks")
+
+    # Add include directories for metal-cpp
+    target_include_directories("${PROJECT_NAME}"
+        PRIVATE
+        ${CMAKE_SOURCE_DIR}/extern/metal-cpp-cmake/metal-cmake/metal-cpp
+        ${CMAKE_SOURCE_DIR}/extern/metal-cpp-cmake/metal-cmake/metal-cpp-extensions
+    )
+
+    message(STATUS "Linked Metal frameworks and headers")
 endif()

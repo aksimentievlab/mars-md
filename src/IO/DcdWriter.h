@@ -1,4 +1,4 @@
-///////////////////////////////////////////////////////////////////////  
+///////////////////////////////////////////////////////////////////////
 // Modified dcd reader from NAMD.
 // Author: Jeff Comer <jcomer2@illinois.edu>
 
@@ -15,313 +15,308 @@
 */
 
 #pragma once
-#include <unistd.h>
-#include <cstring>
-#include <fstream>
-#include <fcntl.h>
-#include <sys/stat.h>
-#include "ARBDLogger.h"
 #include "ARBDException.h"
+#include "ARBDLogger.h"
+#include <cstring>
+#include <fcntl.h>
+#include <fstream>
+#include <sys/stat.h>
+#include <unistd.h>
 
-
-#define NFILE_POS (off_t) 8
-#define NPRIV_POS (off_t) 12
-#define NSAVC_POS (off_t) 16
-#define NSTEP_POS (off_t) 20
+#define NFILE_POS (off_t)8
+#define NPRIV_POS (off_t)12
+#define NSAVC_POS (off_t)16
+#define NSTEP_POS (off_t)20
 
 #ifndef O_LARGEFILE
 #define O_LARGEFILE 0x0
 #endif
 
 /*  DEFINE ERROR CODES THAT MAY BE RETURNED BY DCD ROUTINES		*/
-#define DCD_DNE		-2	/*  DCD file does not exist		*/
-#define DCD_OPENFAILED	-3	/*  Open of DCD file failed		*/
-#define DCD_BADREAD 	-4	/*  read call on DCD file failed	*/
-#define DCD_BADEOF	-5	/*  premature EOF found in DCD file	*/
-#define DCD_BADFORMAT	-6	/*  format of DCD file is wrong		*/
-#define DCD_FILEEXISTS  -7	/*  output file already exists		*/
-#define DCD_BADMALLOC   -8	/*  malloc failed			*/
+#define DCD_DNE -2		  /*  DCD file does not exist		*/
+#define DCD_OPENFAILED -3 /*  Open of DCD file failed		*/
+#define DCD_BADREAD -4	  /*  read call on DCD file failed	*/
+#define DCD_BADEOF -5	  /*  premature EOF found in DCD file	*/
+#define DCD_BADFORMAT -6  /*  format of DCD file is wrong		*/
+#define DCD_FILEEXISTS -7 /*  output file already exists		*/
+#define DCD_BADMALLOC -8  /*  malloc failed			*/
 
 // Just use write instead of NAMD_write --JRC
 #define NAMD_write write
-namespace ARBD{
+namespace ARBD {
 class DcdWriter {
-public:
-  DcdWriter(const char* fileName) {
-    fd = openDcd(fileName);    
-    
-    if (fd == DCD_OPENFAILED) {
-      printf("DcdWriter::DcdWriter Failed to open dcd file %s.", fileName);
-      exit(-1);
-    }
-  }
+  public:
+	DcdWriter(const char* fileName) {
+		fd = openDcd(fileName);
 
-  ~DcdWriter() {
-    closeDcd();
-  }
-private:
-  int fd;
-
-private:
-
-void pad(char *s, int len)
-{
-	int curlen;
-	int i;
-
-	curlen=strlen(s);
-
-	if (curlen>len)
-	{
-		s[len]='\0';
-		return;
+		if (fd == DCD_OPENFAILED) {
+			printf("DcdWriter::DcdWriter Failed to open dcd file %s.", fileName);
+			exit(-1);
+		}
 	}
 
-	for (i=curlen; i<len; i++)
-	{
-		s[i]=' ';
+	~DcdWriter() {
+		closeDcd();
 	}
 
-	s[i]='\0';
-}
+  private:
+	int fd;
 
+  private:
+	void pad(char* s, int len) {
+		int curlen;
+		int i;
 
-  /*********************************************************************/
-  /*								     */
-  /*			FUNCTION open_dcd_write			     */
-  /*								     */
-  /*   INPUTS:							     */
-  /*	dcdfile - Name of the dcd file				     */
-  /*								     */
-  /*   OUTPUTS:							     */
-  /*	returns an open file descriptor for writing		     */
-  /*								     */
-  /*	This function will open a dcd file for writing.  It takes    */
-  /*   the filename to open as its only argument.	 It will return a    */
-  /*   valid file descriptor if successful or DCD_OPENFAILED if the    */
-  /*   open fails for some reason.  If the file specifed already       */
-  /*   exists, it is renamed by appending .BAK to it.		     */
-  /*								     */
-  /*********************************************************************/
-  int openDcd(const char* dcdname)
-  {
-    struct stat sbuf;
-    int dcdfd;
-    char *newdcdname = 0;
+		curlen = strlen(s);
 
-    if (stat(dcdname, &sbuf) == 0) 
-      {
-	newdcdname = new char[strlen(dcdname)+5];
-	if(newdcdname == (char *) 0)
-	  return DCD_OPENFAILED;
-	strcpy(newdcdname, dcdname);
-	strcat(newdcdname, ".BAK");
-	if(rename(dcdname, newdcdname))
-	  return(DCD_OPENFAILED);
-	delete [] newdcdname;
-      } 
+		if (curlen > len) {
+			s[len] = '\0';
+			return;
+		}
 
+		for (i = curlen; i < len; i++) {
+			s[i] = ' ';
+		}
 
-    if ( (dcdfd = open(dcdname, O_RDWR|O_CREAT|O_EXCL|O_LARGEFILE,
-		       S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH)) < 0)
-      {
-	return(DCD_OPENFAILED);
-      }
+		s[i] = '\0';
+	}
 
-    return dcdfd;
-  }
+	/*********************************************************************/
+	/*								     */
+	/*			FUNCTION open_dcd_write			     */
+	/*								     */
+	/*   INPUTS:							     */
+	/*	dcdfile - Name of the dcd file				     */
+	/*								     */
+	/*   OUTPUTS:							     */
+	/*	returns an open file descriptor for writing		     */
+	/*								     */
+	/*	This function will open a dcd file for writing.  It takes    */
+	/*   the filename to open as its only argument.	 It will return a    */
+	/*   valid file descriptor if successful or DCD_OPENFAILED if the    */
+	/*   open fails for some reason.  If the file specifed already       */
+	/*   exists, it is renamed by appending .BAK to it.		     */
+	/*								     */
+	/*********************************************************************/
+	int openDcd(const char* dcdname) {
+		struct stat sbuf;
+		int dcdfd;
+		char* newdcdname = 0;
 
-  /****************************************************************/
-  /*								*/
-  /*			FUNCTION close_dcd_write		*/
-  /*								*/
-  /*   INPUTS:							*/
-  /*	fd - file descriptor to close				*/
-  /*								*/
-  /*   OUTPUTS:							*/
-  /*	the file pointed to by fd				*/
-  /*								*/
-  /*	close_dcd_write close a dcd file that was opened for    */
-  /*   writing							*/
-  /*								*/
-  /****************************************************************/
+		if (stat(dcdname, &sbuf) == 0) {
+			newdcdname = new char[strlen(dcdname) + 5];
+			if (newdcdname == (char*)0)
+				return DCD_OPENFAILED;
+			strcpy(newdcdname, dcdname);
+			strcat(newdcdname, ".BAK");
+			if (rename(dcdname, newdcdname))
+				return (DCD_OPENFAILED);
+			delete[] newdcdname;
+		}
 
-  void closeDcd()
+		if ((dcdfd = open(dcdname,
+						  O_RDWR | O_CREAT | O_EXCL | O_LARGEFILE,
+						  S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH)) < 0) {
+			return (DCD_OPENFAILED);
+		}
 
-  {	
-    close(fd);
-  }
+		return dcdfd;
+	}
 
-public:
-  /*****************************************************************************/
-  /*									     */
-  /*				FUNCTION write_dcdheader		     */
-  /*									     */
-  /*   INPUTS:								     */
-  /*	fd - file descriptor for the dcd file				     */
-  /*	filename - filename for output					     */
-  /*	N - Number of atoms						     */
-  /*	NFILE - Number of sets of coordinates				     */
-  /*	NPRIV - Starting timestep of DCD file - NOT ZERO		     */
-  /*	NSAVC - Timesteps between DCD saves				     */
-  /*	NSTEP - Number of timesteps					     */
-  /*	DELTA - length of a timestep					     */
-  /*									     */
-  /*   OUTPUTS:								     */
-  /*	none								     */
-  /*									     */
-  /*	This function prints the "header" information to the DCD file.  Since*/
-  /*   this is duplicating an unformatted binary output from FORTRAN, its ugly.*/
-  /*   So if you're squeamish, don't look.					     */
-  /*									     */
-  /*****************************************************************************/
-  int writeHeader(const char *filename, int N, int NFILE, int NPRIV, 
-		  int NSAVC, int NSTEP, float DELTA, int with_unitcell)
-  {
-    int	out_integer;
-    float   out_float;
-    char	title_string[200];
-    //int	user_id;
-    time_t 	cur_time;
-    struct  tm *tmbuf;
-    char    time_str[11];
+	/****************************************************************/
+	/*								*/
+	/*			FUNCTION close_dcd_write		*/
+	/*								*/
+	/*   INPUTS:							*/
+	/*	fd - file descriptor to close				*/
+	/*								*/
+	/*   OUTPUTS:							*/
+	/*	the file pointed to by fd				*/
+	/*								*/
+	/*	close_dcd_write close a dcd file that was opened for    */
+	/*   writing							*/
+	/*								*/
+	/****************************************************************/
 
-    out_integer = 84;
-    NAMD_write(fd, (char *) & out_integer, sizeof(int));
-    strcpy(title_string, "CORD");
-    NAMD_write(fd, title_string, 4);
-    out_integer = NFILE;  /* located at fpos 8 */
-    out_integer = 0;  /* ignore the lies */
-    NAMD_write(fd, (char *) & out_integer, sizeof(int));
-    out_integer = NPRIV;  /* located at fpos 12 */
-    NAMD_write(fd, (char *) & out_integer, sizeof(int));
-    out_integer = NSAVC;  /* located at fpos 16 */
-    NAMD_write(fd, (char *) & out_integer, sizeof(int));
-    out_integer = NSTEP;  /* located at fpos 20 */
-    out_integer = NPRIV - NSAVC;  /* ignore the lies */
-    NAMD_write(fd, (char *) &out_integer, sizeof(int));
-    out_integer=0;
-    NAMD_write(fd, (char *) &out_integer, sizeof(int));
-    NAMD_write(fd, (char *) &out_integer, sizeof(int));
-    NAMD_write(fd, (char *) &out_integer, sizeof(int));
-    NAMD_write(fd, (char *) &out_integer, sizeof(int));
-    NAMD_write(fd, (char *) &out_integer, sizeof(int));
-    out_float = DELTA;
-    NAMD_write(fd, (char *) &out_float, sizeof(float));
-    out_integer = with_unitcell ? 1 : 0;
-    NAMD_write(fd, (char *) &out_integer, sizeof(int));
-    out_integer = 0;
-    NAMD_write(fd, (char *) &out_integer, sizeof(int));
-    NAMD_write(fd, (char *) &out_integer, sizeof(int));
-    NAMD_write(fd, (char *) &out_integer, sizeof(int));
-    NAMD_write(fd, (char *) &out_integer, sizeof(int));
-    NAMD_write(fd, (char *) &out_integer, sizeof(int));
-    NAMD_write(fd, (char *) &out_integer, sizeof(int));
-    NAMD_write(fd, (char *) &out_integer, sizeof(int));
-    NAMD_write(fd, (char *) &out_integer, sizeof(int));
-    out_integer = 24;  // PRETEND TO BE CHARMM24 -JCP
-    NAMD_write(fd, (char *) &out_integer, sizeof(int));
-    out_integer = 84;
-    NAMD_write(fd, (char *) & out_integer, sizeof(int));
+	void closeDcd()
 
-    out_integer = 164;
-    NAMD_write(fd, (char *) & out_integer, sizeof(int));
-    out_integer = 2;
-    NAMD_write(fd, (char *) & out_integer, sizeof(int));
+	{
+		close(fd);
+	}
 
-    sprintf(title_string, "REMARKS FILENAME=%s CREATED BY NAMD", filename);
-    pad(title_string, 80);
-    NAMD_write(fd, title_string, 80);
+  public:
+	/*****************************************************************************/
+	/*									     */
+	/*				FUNCTION write_dcdheader		     */
+	/*									     */
+	/*   INPUTS:								     */
+	/*	fd - file descriptor for the dcd file				     */
+	/*	filename - filename for output					     */
+	/*	N - Number of atoms						     */
+	/*	NFILE - Number of sets of coordinates				     */
+	/*	NPRIV - Starting timestep of DCD file - NOT ZERO		     */
+	/*	NSAVC - Timesteps between DCD saves				     */
+	/*	NSTEP - Number of timesteps					     */
+	/*	DELTA - length of a timestep					     */
+	/*									     */
+	/*   OUTPUTS:								     */
+	/*	none								     */
+	/*									     */
+	/*	This function prints the "header" information to the DCD file.  Since*/
+	/*   this is duplicating an unformatted binary output from FORTRAN, its ugly.*/
+	/*   So if you're squeamish, don't look.					     */
+	/*									     */
+	/*****************************************************************************/
+	int writeHeader(const char* filename,
+					int N,
+					int NFILE,
+					int NPRIV,
+					int NSAVC,
+					int NSTEP,
+					float DELTA,
+					int with_unitcell) {
+		int out_integer;
+		float out_float;
+		char title_string[200];
+		// int	user_id;
+		time_t cur_time;
+		struct tm* tmbuf;
+		char time_str[11];
 
-    char username[100];
-    //user_id= (int) getuid();
-    //pwbuf=getpwuid(user_id);
-    //if ( pwbuf ) sprintf(username,"%s",pwbuf->pw_name);
-    //else sprintf(username,"%d",user_id);
-    sprintf(username,"%s", "BrownTown");
+		out_integer = 84;
+		NAMD_write(fd, (char*)&out_integer, sizeof(int));
+		strcpy(title_string, "CORD");
+		NAMD_write(fd, title_string, 4);
+		out_integer = NFILE; /* located at fpos 8 */
+		out_integer = 0;	 /* ignore the lies */
+		NAMD_write(fd, (char*)&out_integer, sizeof(int));
+		out_integer = NPRIV; /* located at fpos 12 */
+		NAMD_write(fd, (char*)&out_integer, sizeof(int));
+		out_integer = NSAVC; /* located at fpos 16 */
+		NAMD_write(fd, (char*)&out_integer, sizeof(int));
+		out_integer = NSTEP;		 /* located at fpos 20 */
+		out_integer = NPRIV - NSAVC; /* ignore the lies */
+		NAMD_write(fd, (char*)&out_integer, sizeof(int));
+		out_integer = 0;
+		NAMD_write(fd, (char*)&out_integer, sizeof(int));
+		NAMD_write(fd, (char*)&out_integer, sizeof(int));
+		NAMD_write(fd, (char*)&out_integer, sizeof(int));
+		NAMD_write(fd, (char*)&out_integer, sizeof(int));
+		NAMD_write(fd, (char*)&out_integer, sizeof(int));
+		out_float = DELTA;
+		NAMD_write(fd, (char*)&out_float, sizeof(float));
+		out_integer = with_unitcell ? 1 : 0;
+		NAMD_write(fd, (char*)&out_integer, sizeof(int));
+		out_integer = 0;
+		NAMD_write(fd, (char*)&out_integer, sizeof(int));
+		NAMD_write(fd, (char*)&out_integer, sizeof(int));
+		NAMD_write(fd, (char*)&out_integer, sizeof(int));
+		NAMD_write(fd, (char*)&out_integer, sizeof(int));
+		NAMD_write(fd, (char*)&out_integer, sizeof(int));
+		NAMD_write(fd, (char*)&out_integer, sizeof(int));
+		NAMD_write(fd, (char*)&out_integer, sizeof(int));
+		NAMD_write(fd, (char*)&out_integer, sizeof(int));
+		out_integer = 24; // PRETEND TO BE CHARMM24 -JCP
+		NAMD_write(fd, (char*)&out_integer, sizeof(int));
+		out_integer = 84;
+		NAMD_write(fd, (char*)&out_integer, sizeof(int));
 
-    cur_time=time(NULL);
-    tmbuf=localtime(&cur_time);
-    strftime(time_str, 10, "%m/%d/%y", tmbuf);
+		out_integer = 164;
+		NAMD_write(fd, (char*)&out_integer, sizeof(int));
+		out_integer = 2;
+		NAMD_write(fd, (char*)&out_integer, sizeof(int));
 
-    sprintf(title_string, "REMARKS DATE: %s CREATED BY USER: %s",
-	    time_str, username);
-    pad(title_string, 80);
-    NAMD_write(fd, title_string, 80);
-    out_integer = 164;
-    NAMD_write(fd, (char *) & out_integer, sizeof(int));
-    out_integer = 4;
-    NAMD_write(fd, (char *) & out_integer, sizeof(int));
-    out_integer = N;
-    NAMD_write(fd, (char *) & out_integer, sizeof(int));
-    out_integer = 4;
-    NAMD_write(fd, (char *) & out_integer, sizeof(int));
+		sprintf(title_string, "REMARKS FILENAME=%s CREATED BY NAMD", filename);
+		pad(title_string, 80);
+		NAMD_write(fd, title_string, 80);
 
-    return(0);
-  }
+		char username[100];
+		// user_id= (int) getuid();
+		// pwbuf=getpwuid(user_id);
+		// if ( pwbuf ) sprintf(username,"%s",pwbuf->pw_name);
+		// else sprintf(username,"%d",user_id);
+		sprintf(username, "%s", "BrownTown");
 
-  
-  /************************************************************************/
-  /*									*/
-  /*				FUNCTION write_dcdstep			*/
-  /*									*/
-  /*   INPUTS:								*/
-  /*	fd - file descriptor for the DCD file to write to		*/
-  /*	N - Number of atoms						*/
-  /*	X - X coordinates						*/
-  /*	Y - Y coordinates						*/
-  /*	Z - Z coordinates						*/
-  /*  unitcell - a, b, c, alpha, beta, gamma of unit cell */
-  /*									*/
-  /*   OUTPUTS:								*/
-  /*	none								*/
-  /*									*/
-  /*	write_dcdstep writes the coordinates out for a given timestep   */
-  /*   to the specified DCD file.						*/
-  /*                                                                      */
-  /************************************************************************/
-  int writeStep(int N, const float *X, const float *Y, const float *Z, const double *cell)
+		cur_time = time(NULL);
+		tmbuf = localtime(&cur_time);
+		strftime(time_str, 10, "%m/%d/%y", tmbuf);
 
-  {
-    int NSAVC,NSTEP,NFILE;
-    int out_integer;
+		sprintf(title_string, "REMARKS DATE: %s CREATED BY USER: %s", time_str, username);
+		pad(title_string, 80);
+		NAMD_write(fd, title_string, 80);
+		out_integer = 164;
+		NAMD_write(fd, (char*)&out_integer, sizeof(int));
+		out_integer = 4;
+		NAMD_write(fd, (char*)&out_integer, sizeof(int));
+		out_integer = N;
+		NAMD_write(fd, (char*)&out_integer, sizeof(int));
+		out_integer = 4;
+		NAMD_write(fd, (char*)&out_integer, sizeof(int));
 
-    /* Unit cell */
-    if (cell) {
-      out_integer = 6*8;
-      NAMD_write(fd, (char *) &out_integer, sizeof(int));
-      NAMD_write(fd, (char *) cell, out_integer);
-      NAMD_write(fd, (char *) &out_integer, sizeof(int));
-    }
+		return (0);
+	}
 
-    /* Coordinates */
-    out_integer = N*4;
-    NAMD_write(fd, (char *) &out_integer, sizeof(int));
-    NAMD_write(fd, (char *) X, out_integer);
-    NAMD_write(fd, (char *) &out_integer, sizeof(int));
-    NAMD_write(fd, (char *) &out_integer, sizeof(int));
-    NAMD_write(fd, (char *) Y, out_integer);
-    NAMD_write(fd, (char *) &out_integer, sizeof(int));
-    NAMD_write(fd, (char *) &out_integer, sizeof(int));
-    NAMD_write(fd, (char *) Z, out_integer);
-    NAMD_write(fd, (char *) &out_integer, sizeof(int));
+	/************************************************************************/
+	/*									*/
+	/*				FUNCTION write_dcdstep			*/
+	/*									*/
+	/*   INPUTS:								*/
+	/*	fd - file descriptor for the DCD file to write to		*/
+	/*	N - Number of atoms						*/
+	/*	X - X coordinates						*/
+	/*	Y - Y coordinates						*/
+	/*	Z - Z coordinates						*/
+	/*  unitcell - a, b, c, alpha, beta, gamma of unit cell */
+	/*									*/
+	/*   OUTPUTS:								*/
+	/*	none								*/
+	/*									*/
+	/*	write_dcdstep writes the coordinates out for a given timestep   */
+	/*   to the specified DCD file.						*/
+	/*                                                                      */
+	/************************************************************************/
+	int writeStep(int N, const float* X, const float* Y, const float* Z, const double* cell)
 
-    /* don't update header until after write succeeds */
-    lseek(fd,NSAVC_POS,SEEK_SET);
-    read(fd,(void*) &NSAVC,sizeof(int));
-    lseek(fd,NSTEP_POS,SEEK_SET);
-    read(fd,(void*) &NSTEP,sizeof(int));
-    lseek(fd,NFILE_POS,SEEK_SET);
-    read(fd,(void*) &NFILE,sizeof(int));
-    NSTEP += NSAVC;
-    NFILE += 1;
-    lseek(fd,NSTEP_POS,SEEK_SET);
-    NAMD_write(fd,(char*) &NSTEP,sizeof(int));
-    lseek(fd,NFILE_POS,SEEK_SET);
-    NAMD_write(fd,(char*) &NFILE,sizeof(int));
-    lseek(fd,0,SEEK_END);
+	{
+		int NSAVC, NSTEP, NFILE;
+		int out_integer;
 
-    return(0);
-  }
+		/* Unit cell */
+		if (cell) {
+			out_integer = 6 * 8;
+			NAMD_write(fd, (char*)&out_integer, sizeof(int));
+			NAMD_write(fd, (char*)cell, out_integer);
+			NAMD_write(fd, (char*)&out_integer, sizeof(int));
+		}
+
+		/* Coordinates */
+		out_integer = N * 4;
+		NAMD_write(fd, (char*)&out_integer, sizeof(int));
+		NAMD_write(fd, (char*)X, out_integer);
+		NAMD_write(fd, (char*)&out_integer, sizeof(int));
+		NAMD_write(fd, (char*)&out_integer, sizeof(int));
+		NAMD_write(fd, (char*)Y, out_integer);
+		NAMD_write(fd, (char*)&out_integer, sizeof(int));
+		NAMD_write(fd, (char*)&out_integer, sizeof(int));
+		NAMD_write(fd, (char*)Z, out_integer);
+		NAMD_write(fd, (char*)&out_integer, sizeof(int));
+
+		/* don't update header until after write succeeds */
+		lseek(fd, NSAVC_POS, SEEK_SET);
+		read(fd, (void*)&NSAVC, sizeof(int));
+		lseek(fd, NSTEP_POS, SEEK_SET);
+		read(fd, (void*)&NSTEP, sizeof(int));
+		lseek(fd, NFILE_POS, SEEK_SET);
+		read(fd, (void*)&NFILE, sizeof(int));
+		NSTEP += NSAVC;
+		NFILE += 1;
+		lseek(fd, NSTEP_POS, SEEK_SET);
+		NAMD_write(fd, (char*)&NSTEP, sizeof(int));
+		lseek(fd, NFILE_POS, SEEK_SET);
+		NAMD_write(fd, (char*)&NFILE, sizeof(int));
+		lseek(fd, 0, SEEK_END);
+
+		return (0);
+	}
 };
-}
+} // namespace ARBD

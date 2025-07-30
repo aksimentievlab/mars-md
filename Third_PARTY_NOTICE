@@ -1,0 +1,21 @@
+# Third-Party Dependencies and Licenses
+
+This project incorporates code from several open-source projects. We are grateful to the developers for their contributions.
+
+---
+
+### **metal-cpp**
+* **Purpose**: Apple's official C++ bindings for the Metal framework.
+* **License**: Apache 2.0
+* **Copyright**: Copyright (c) 2021 Apple Inc.
+* The full license text can be found in `THIRD_PARTY_LICENSES/LICENSE-metal-cpp.txt`.
+
+---
+
+### **{fmt}**
+* **Purpose**: A modern formatting library for C++.
+* **License**: MIT License
+* **Copyright**: Copyright (c) 2012 - present, Victor Zverovich and {fmt} contributors
+* The full license text can be found in `THIRD_PARTY_LICENSES/LICENSE-fmt.txt`.
+
+---

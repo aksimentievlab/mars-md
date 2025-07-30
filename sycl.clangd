@@ -1,13 +1,13 @@
 CompileFlags:
   Add:
     - -std=c++20
-    - -I/home/pinyili2/server10/arbd2_cpp20/src
-    - -I/software/gcc-12.3.0/include/c++/12.3.0
-    - -I/software/gcc-12.3.0/include/c++/12.3.0/x86_64-pc-linux-gnu
+    - -I/home/pinyili2/server10/arbd2v/src
+    - -I/software/gcc-14.2.0-rh8/include/c++/14.2.0/
+    - -I/software/gcc-14.2.0-rh8/include/c++/14.2.0/x86_64-redhat-linux
     - -I/software/intel-oneapi-base-toolkit-2025.1.3.7/2025.1/include
     - -I/software/intel-oneapi-base-toolkit-2025.1.3.7/2025.1/include/sycl
-    - -I/software/cuda-12.4/include
-    - -I/data/server10/pinyili2/local/lib/clang/18/include
+    - -I/home/pinyili2/server10/arbd2v/extern/OpenRand/include
+    - -I/data/server10/pinyili2/local/lib/clang/17/include
     - -DUSE_SYCL_ICPX
     - -DUSE_SYCL
   Remove:
@@ -16,4 +16,3 @@ Diagnostics:
   Suppress:
     - drv_unknown_argument
     - unused-command-line-argument-hard-error-in-future
-
