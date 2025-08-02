@@ -28,20 +28,36 @@
  namespace ARBD {
  
  // Forward declarations for address space handling
- #ifdef __METAL_VERSION__
- template<typename T, typename AddressSpace = device>
- using metal_ptr = AddressSpace T*;
- 
- #define DEVICE_PTR(T) device T*
- #define CONSTANT_PTR(T) constant T*
- #define THREAD_PTR(T) thread T*
- #define THREADGROUP_PTR(T) threadgroup T*
- #else
- #define DEVICE_PTR(T) T*
- #define CONSTANT_PTR(T) const T*
- #define THREAD_PTR(T) T*
- #define THREADGROUP_PTR(T) T*
- #endif
+#ifdef __METAL_VERSION__
+template<typename T, typename AddressSpace = device>
+using metal_ptr = AddressSpace T*;
+
+#ifndef DEVICE_PTR
+#define DEVICE_PTR(T) device T*
+#endif
+#ifndef CONSTANT_PTR
+#define CONSTANT_PTR(T) constant T*
+#endif
+#ifndef THREAD_PTR
+#define THREAD_PTR(T) thread T*
+#endif
+#ifndef THREADGROUP_PTR
+#define THREADGROUP_PTR(T) threadgroup T*
+#endif
+#else
+#ifndef DEVICE_PTR
+#define DEVICE_PTR(T) T*
+#endif
+#ifndef CONSTANT_PTR
+#define CONSTANT_PTR(T) const T*
+#endif
+#ifndef THREAD_PTR
+#define THREAD_PTR(T) T*
+#endif
+#ifndef THREADGROUP_PTR
+#define THREADGROUP_PTR(T) T*
+#endif
+#endif
  
  /**
   * 3D vector utility class with common operations implemented on CPU and GPU.

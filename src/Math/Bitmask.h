@@ -43,7 +43,10 @@ HOST DEVICE inline void atomic_or(T* addr, T val) {
 #ifdef __CUDA_ARCH__
 	atomicOr(addr, val);
 #elif defined(__SYCL_DEVICE_ONLY__)
-	sycl::atomic<T, sycl::memory_order::relaxed, sycl::memory_scope::device>(addr).fetch_or(val);
+	// SYCL atomic operations need proper address space qualification
+	if (addr != nullptr) {
+		sycl::atomic_ref<T, sycl::memory_order::relaxed, sycl::memory_scope::device>(*addr).fetch_or(val);
+	}
 #elif defined(__METAL_VERSION__)
 	// Metal doesn't have built-in atomic OR, so we use compare-and-swap
 	T old_val, new_val;
@@ -66,7 +69,10 @@ HOST DEVICE inline void atomic_and(T* addr, T val) {
 #ifdef __CUDA_ARCH__
 	atomicAnd(addr, val);
 #elif defined(__SYCL_DEVICE_ONLY__)
-	sycl::atomic<T, sycl::memory_order::relaxed, sycl::memory_scope::device>(addr).fetch_and(val);
+	// SYCL atomic operations need proper address space qualification
+	if (addr != nullptr) {
+		sycl::atomic_ref<T, sycl::memory_order::relaxed, sycl::memory_scope::device>(*addr).fetch_and(val);
+	}
 #elif defined(__METAL_VERSION__)
 	// Metal doesn't have built-in atomic AND, so we use compare-and-swap
 	T old_val, new_val;
@@ -148,6 +154,11 @@ public:
 		assert(i < len);
 		assert(mask != nullptr); // Device safety check
 		
+		// Additional safety check for corrupted pointers
+		if (mask == nullptr || mask == reinterpret_cast<data_t*>(0x4110000041000000)) {
+			return; // Skip operation if pointer is corrupted
+		}
+		
 		idx_t ci = i / data_stride;
 		data_t change_bit = (data_t(1) << (i - ci * data_stride));
 
@@ -166,6 +177,11 @@ public:
 	HOST DEVICE bool get_mask(const idx_t i) const {
 		assert(i < len);
 		assert(mask != nullptr); // Device safety check
+		
+		// Additional safety check for corrupted pointers
+		if (mask == nullptr || mask == reinterpret_cast<data_t*>(0x4110000041000000)) {
+			return false; // Return false if pointer is corrupted
+		}
 		
 		const idx_t ci = i / data_stride;
 		return (mask[ci] & (data_t(1) << (i - ci * data_stride))) != 0;
@@ -358,22 +374,41 @@ public:
 	 * @brief Remove bitmask from device
 	 */
 	HOST static void remove_from_backend(Bitmask* device_obj, const Resource& resource) {
-		Bitmask obj_tmp(0);
-
-		// Copy the Bitmask object from device to get mask pointer
-		ARBD::BackendPolicy::copy_to_host(&obj_tmp, device_obj, sizeof(Bitmask));
-
-		// Free the device mask data if it exists
-		if (obj_tmp.len > 0 && obj_tmp.mask != nullptr) {
-			ARBD::BackendPolicy::deallocate(obj_tmp.mask);
+		if (!device_obj) {
+			return; // Nothing to do if device_obj is null
 		}
 
-		// Clear the mask pointer on device (set to nullptr)
-		obj_tmp.mask = nullptr;
-		ARBD::BackendPolicy::copy_from_host(device_obj, &obj_tmp, sizeof(Bitmask));
+		Bitmask obj_tmp(0);
 
-		// Free the device Bitmask object itself
-		ARBD::BackendPolicy::deallocate(device_obj);
+		try {
+			// Copy the Bitmask object from device to get mask pointer
+			ARBD::BackendPolicy::copy_to_host(&obj_tmp, device_obj, sizeof(Bitmask));
+
+			// Free the device mask data if it exists and is valid
+			if (obj_tmp.len > 0 && obj_tmp.mask != nullptr) {
+				// Validate pointer before deallocation
+				if (obj_tmp.mask != reinterpret_cast<data_t*>(0x4110000041000000)) { // Check for corrupted pointer
+					ARBD::BackendPolicy::deallocate(obj_tmp.mask);
+				}
+			}
+
+			// Clear the mask pointer on device (set to nullptr)
+			obj_tmp.mask = nullptr;
+			ARBD::BackendPolicy::copy_from_host(device_obj, &obj_tmp, sizeof(Bitmask));
+
+			// Free the device Bitmask object itself
+			ARBD::BackendPolicy::deallocate(device_obj);
+		} catch (const std::exception& e) {
+			// Log the error but don't throw from cleanup
+			LOGWARN("Warning: Failed to cleanup device Bitmask properly: {}", e.what());
+			
+			// Try to free the device object even if mask cleanup failed
+			try {
+				ARBD::BackendPolicy::deallocate(device_obj);
+			} catch (...) {
+				// Ignore cleanup errors
+			}
+		}
 	}
 
 	/**

@@ -1,11 +1,22 @@
 #pragma once
-#ifdef __METAL_VERSION__
-#define DEVICE_PTR(type) device type*
-#define CONSTANT_PTR(type) constant type*
-#else
-#define DEVICE_PTR(type) type*
-#define CONSTANT_PTR(type) const type*
 
+// Address space qualifiers for different backends
+#ifdef __METAL_VERSION__
+#ifndef DEVICE_PTR
+#define DEVICE_PTR(type) device type*
+#endif
+#ifndef CONSTANT_PTR
+#define CONSTANT_PTR(type) constant type*
+#endif
+#else
+#ifndef DEVICE_PTR
+#define DEVICE_PTR(type) type*
+#endif
+#ifndef CONSTANT_PTR
+#define CONSTANT_PTR(type) const type*
+#endif
+#endif
+#ifndef __METAL_VERSION__
 #include <cstring>
 #include <memory>
 #include <type_traits>
@@ -142,11 +153,11 @@ class Buffer {
 		return device_ptr_;
 	}
 	DEVICE_PTR(T) device_data() {
-		return reinterpret_cast<DEVICE_PTR(T)>(device_ptr_);
+		return static_cast<DEVICE_PTR(T)>(device_ptr_);
 	}
 
 	CONSTANT_PTR(T) constant_data() const {
-		return reinterpret_cast<CONSTANT_PTR(T)>(device_ptr_);
+		return static_cast<CONSTANT_PTR(T)>(device_ptr_);
 	}
 	/**
 	 * @brief Returns the number of elements the buffer can hold.
@@ -236,7 +247,7 @@ class Buffer {
 	void bind_to_encoder(MTL::ComputeCommandEncoder* encoder, uint32_t index) const {
 		auto* metal_buffer = METAL::Manager::get_metal_buffer_from_ptr(device_ptr_);
 		if (!metal_buffer) {
-			throw_value_error("Failed to get Metal buffer for binding at index {}", index);
+			ARBD::throw_value_error("Failed to get Metal buffer for binding at index {}", index);
 		}
 		LOGINFO("Binding Metal buffer {} to encoder at index {}", (void*)metal_buffer, index);
 		encoder->setBuffer(metal_buffer, 0, index);
@@ -289,5 +300,4 @@ auto get_buffer_pointers(const std::tuple<Buffers...>& buffer_tuple) {
 	return get_buffer_pointers_impl(buffer_tuple, std::make_index_sequence<sizeof...(Buffers)>{});
 }
 } // namespace ARBD
-
-#endif // __METAL_VERSION__
+#endif
