@@ -1,13 +1,11 @@
 #pragma once
 #ifdef __METAL_VERSION__
-    #define DEVICE_PTR(type) device type*
-    #define CONSTANT_PTR(type) constant type*
+#define DEVICE_PTR(type) device type*
+#define CONSTANT_PTR(type) constant type*
 #else
-    #define DEVICE_PTR(type) type*
-    #define CONSTANT_PTR(type) const type*
-#endif
+#define DEVICE_PTR(type) type*
+#define CONSTANT_PTR(type) const type*
 
-#ifndef __METAL_VERSION__
 #include <cstring>
 #include <memory>
 #include <type_traits>
@@ -143,13 +141,13 @@ class Buffer {
 	T* data() const {
 		return device_ptr_;
 	}
-	DEVICE_PTR(T) device_data() { 
-        return reinterpret_cast<DEVICE_PTR(T)>(device_ptr_); 
-    }
-    
-    CONSTANT_PTR(T) constant_data() const { 
-        return reinterpret_cast<CONSTANT_PTR(T)>(device_ptr_); 
-    }
+	DEVICE_PTR(T) device_data() {
+		return reinterpret_cast<DEVICE_PTR(T)>(device_ptr_);
+	}
+
+	CONSTANT_PTR(T) constant_data() const {
+		return reinterpret_cast<CONSTANT_PTR(T)>(device_ptr_);
+	}
 	/**
 	 * @brief Returns the number of elements the buffer can hold.
 	 */
@@ -184,7 +182,8 @@ class Buffer {
 			throw std::runtime_error("Copy size exceeds buffer size.");
 		}
 		Policy::copy_to_host(host_dst, device_ptr_, num_elements * sizeof(T));
-#if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__) && !defined(__METAL_VERSION__) // Host-only logging
+#if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__) && \
+	!defined(__METAL_VERSION__) // Host-only logging
 		LOGTRACE("Copied {} bytes to host", num_elements * sizeof(T));
 #endif
 	}
@@ -201,35 +200,37 @@ class Buffer {
 
 	void copy_from_host(const T* host_src, size_t num_elements) {
 		if (num_elements > count_) {
-	#if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__) && !defined(__METAL_VERSION__)
+#if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__) && !defined(__METAL_VERSION__)
 			throw std::runtime_error("Copy size exceeds buffer size.");
-	#else
+#else
 			// Device code: clamp to safe size
 			num_elements = (count_ < num_elements) ? count_ : num_elements;
-			if (num_elements == 0) return;
-	#endif
+			if (num_elements == 0)
+				return;
+#endif
 		}
 		Policy::copy_from_host(device_ptr_, host_src, num_elements * sizeof(T));
-#if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__) && !defined(__METAL_VERSION__) // Host-only logging
+#if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__) && \
+	!defined(__METAL_VERSION__) // Host-only logging
 		LOGTRACE("Copied {} bytes from host", num_elements * sizeof(T));
 #endif
 	}
 
 	void copy_device_to_device(const Buffer& src, size_t num_elements) {
 		if (num_elements > count_ || num_elements > src.count_) {
-	#if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__) && !defined(__METAL_VERSION__)
+#if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__) && !defined(__METAL_VERSION__)
 			throw std::runtime_error("Copy size exceeds buffer size.");
-	#else
+#else
 			// Device code: clamp to safe size
 			num_elements = min(num_elements, min(count_, src.count_));
-			if (num_elements == 0) return;
-	#endif
-	
+			if (num_elements == 0)
+				return;
+#endif
 		}
 		Policy::copy_device_to_device(device_ptr_, src.device_ptr_, num_elements * sizeof(T));
-	#if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__) && !defined(__METAL_VERSION__)
+#if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__) && !defined(__METAL_VERSION__)
 		LOGTRACE("Copied {} bytes device-to-device", num_elements * sizeof(T));
-	#endif
+#endif
 	}
 #ifdef USE_METAL
 	void bind_to_encoder(MTL::ComputeCommandEncoder* encoder, uint32_t index) const {
@@ -246,7 +247,8 @@ class Buffer {
 		count_ = count;
 		if (count_ > 0) {
 			device_ptr_ = static_cast<T*>(Policy::allocate(count_ * sizeof(T)));
-#if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__) && !defined(__METAL_VERSION__) // Host-only logging
+#if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__) && \
+	!defined(__METAL_VERSION__) // Host-only logging
 			LOGTRACE("Allocated {} bytes", count_ * sizeof(T));
 #endif
 		}
@@ -256,7 +258,8 @@ class Buffer {
 		if (device_ptr_) {
 			Policy::deallocate(device_ptr_);
 			device_ptr_ = nullptr;
-#if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__) && !defined(__METAL_VERSION__) // Host-only logging
+#if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__) && \
+	!defined(__METAL_VERSION__) // Host-only logging
 			LOGTRACE("Deallocated buffer");
 #endif
 		}

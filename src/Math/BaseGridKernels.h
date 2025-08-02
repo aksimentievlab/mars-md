@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../BaseGrid.h"
+#include "BaseGrid.h"
 
 #ifdef USE_SYCL
 #include <sycl/sycl.hpp>

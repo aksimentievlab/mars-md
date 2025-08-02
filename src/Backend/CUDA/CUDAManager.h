@@ -643,7 +643,7 @@ class Manager {
 /**
  * @brief Policy for CUDA memory operations.
  */
- struct CUDAPolicy {
+ struct Policy {
 	static void* allocate(size_t bytes) {
 		void* ptr = nullptr;
 		CUDA_CHECK(cudaMalloc(&ptr, bytes));
@@ -717,6 +717,15 @@ class Manager {
 #ifndef __CUDA_ARCH__ // Host-only logging
 		LOGTRACE("CUDAPolicy: NCCL-based broadcasting {} elements across {} GPUs.", count, num_gpus);
 #endif
+/**
+ * @brief NCCL-based broadcast for multi-GPU scenarios
+ * 
+ * This function uses NCCL for efficient broadcasting when multiple GPUs
+ * are involved. It's particularly useful for:
+ * - Broadcasting data from one GPU to multiple GPUs
+ * - Cross-GPU data transfers with optimal bandwidth utilization
+ * @todo: Implement this
+ */
 		if (!NCCLManager::is_initialized()) {
 			// Fall back to regular CUDA memcpy if NCCL is not initialized
 			for (size_t i = 0; i < num_gpus; ++i) {

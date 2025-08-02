@@ -585,22 +585,15 @@ void bind_tuple_to_encoder(MTL::ComputeCommandEncoder* encoder,
 
 template<typename... Args>
 void bind_args_to_encoder(MTL::ComputeCommandEncoder* encoder,
-						  uint32_t& buffer_index,
-						  Args&&... args) {
-	(void)encoder;
-	(void)buffer_index;
-	((void)args, ...);
-}
-
-template<typename T>
-void bind_buffer_to_encoder(MTL::ComputeCommandEncoder* encoder,
-							const DeviceBuffer<T>& buffer,
-							uint32_t index) {
-	if (auto* metal_buffer = buffer.get_metal_buffer()) {
-		encoder->setBuffer(metal_buffer, 0, index);
-	} else {
-		throw_value_error("Failed to get Metal buffer for kernel argument {}", index);
-	}
+                         uint32_t& buffer_index,
+                         Args&&... args) {
+    auto bind_arg = [&](auto&& arg) {
+        using ArgType = std::decay_t<decltype(arg)>;
+        if constexpr (std::is_arithmetic_v<ArgType> || std::is_trivial_v<ArgType>) {
+            encoder->setBytes(&arg, sizeof(ArgType), buffer_index++);
+        }
+    };
+    (bind_arg(std::forward<Args>(args)), ...);
 }
 
 // Grid configuration helper
