@@ -5,14 +5,14 @@
  *********************************************************************/
  #pragma once
 
- #ifndef __METAL_VERSION__
+ #if !defined(__METAL_VERSION__) && !defined(__SYCL_DEVICE_ONLY__) && !defined(__CUDA_ARCH__)
  #include "ARBDException.h"
  #include "ARBDLogger.h"
  #include <limits>
  #include <type_traits>
  #include <sstream>
  #endif
- 
+
  #include "Backend/Header.h"
  // Metal compatibility includes
  #ifdef __METAL_VERSION__
