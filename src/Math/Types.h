@@ -26,8 +26,7 @@ inline std::string string_format(const char* format, Args... args) {
 }
 #endif
 
-// Includes of various types (allows those to be used simply by including
-// Types.h)
+// Includes of various types (allows those to be used simply by including Types.h)
 
 using Vector3 = Vector3_t<float>;
 using Matrix3 = Matrix3_t<float>;
