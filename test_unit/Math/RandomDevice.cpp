@@ -198,17 +198,8 @@ TEST_CASE_METHOD(RandomTestFixture,
 			auto inputs = std::make_tuple(std::ref(random_buffer));
 			auto outputs = std::make_tuple(std::ref(processed_buffer));
 
-			Event process_event;
-			if (resource.type == ResourceType::METAL) {
-				process_event = launch_metal_kernel(resource,
-														TEST_SIZE,
-														inputs,
-														outputs,
-														config,
-														"transform_kernel");
-			} else {
-				process_event = launch_kernel(resource, TEST_SIZE, config, inputs, outputs, TransformKernel{});
-			}
+			Event process_event =
+				launch_kernel(resource, TEST_SIZE, config, inputs, outputs, TransformKernel{});
 
 			process_event.wait();
 
@@ -296,16 +287,8 @@ TEST_CASE_METHOD(RandomTestFixture,
 
 			// Simple combination: 70% uniform + 30% gaussian
 			Event combine_event;
-			if (resource.type == ResourceType::METAL) {
-				combine_event = launch_metal_kernel(resource,
-														TEST_SIZE,
-														inputs,
-														outputs,
-														config,
-														"combine_kernel");
-			} else {
+			
 				combine_event = launch_kernel(resource, TEST_SIZE, config, inputs, outputs, CombineKernel{});
-			}
 
 			combine_event.wait();
 
