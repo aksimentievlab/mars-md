@@ -35,14 +35,16 @@ TEST_CASE("Metal Vector3 Basic Arithmetic Kernels", "[metal][vector3][kernels]")
         host_a[i] = Vector3_t<float>(float(i), float(i+1), float(i+2));
         host_b[i] = Vector3_t<float>(float(2*i), float(2*i+1), float(2*i+2));
     }
-
+    const float host_c=2.0f;
     // Create buffers using the correct constructor (size only)
     DeviceBuffer<Vector3_t<float>> buf_a(n);
     DeviceBuffer<Vector3_t<float>> buf_b(n);
     DeviceBuffer<Vector3_t<float>> buf_out(n);
+    DeviceBuffer<float> buf_scalar(1);
 
     buf_a.copy_from_host(host_a.data(), n);
     buf_b.copy_from_host(host_b.data(), n);
+    buf_scalar.copy_from_host(&host_c, 1);
 
     ARBD::KernelConfig config;
     config.async = false;
@@ -52,7 +54,7 @@ TEST_CASE("Metal Vector3 Basic Arithmetic Kernels", "[metal][vector3][kernels]")
     ARBD::Event event = ARBD::launch_metal_kernel(
         metal_res,
         n,
-        std::make_tuple(buf_a, buf_b),  // Input buffers
+        std::make_tuple(buf_a, buf_b,buf_scalar),  // Input buffers
         std::forward_as_tuple(buf_out), // Output buffers
         config,
         "vector_operations_kernel"

@@ -249,7 +249,7 @@ launch_kernel(const Resource& resource,
 								  std::forward<Args>(args)...);
 #elif defined(USE_METAL)
 		throw_value_error("METAL backend requires a kernel name (string), not a functor. "
-						  "Please use the named-kernel overload of launch_kernel.");
+						  "Please use launch_metal_kernel.");
 #else
 		return launch_cpu_kernel(resource,
 								 thread_count,
@@ -266,8 +266,9 @@ launch_kernel(const Resource& resource,
 }
 
 /**
- * @brief Name-based kernel launcher (for Metal)
+ * @brief Name-based kernel launcher (for Metal), does not work. 
  */
+/*
 template<typename InputTuple, typename OutputTuple, typename KernelName, typename... Args>
 std::enable_if_t<is_string_v<KernelName>, Event> launch_kernel(const Resource& resource,
 															   size_t thread_count,
@@ -295,6 +296,7 @@ std::enable_if_t<is_string_v<KernelName>, Event> launch_kernel(const Resource& r
 		throw_not_implemented("Unsupported resource type for named kernel launch.");
 	}
 }
+*/
 
 /**
  * @brief Single output buffer (generators like Random)
@@ -419,7 +421,7 @@ Event launch_cpu_kernel(const Resource& resource,
 				auto all_args = std::tuple_cat(input_ptrs, output_ptrs);
 				std::apply([&](auto&&... unpacked_args) { kernel_func(i, unpacked_args...); },
 						   all_args);
-			}
+			}  
 		});
 	}
 
@@ -779,6 +781,21 @@ Event launch_metal_kernel(const Resource& resource,
 	}
 
 	return Event(std::move(metal_event), resource);
+}
+
+template<typename InputBuffer, typename OutputBuffer, typename... Args>
+std::enable_if_t<is_device_buffer_v<OutputBuffer> && !is_device_buffer_v<InputBuffer> &&
+!is_string_v<InputBuffer>,Event> launch_metal_kernel(const Resource& resource,
+						  size_t thread_count,
+						  const InputBuffer& input_buffer,
+						  const OutputBuffer& output_buffer,
+						  const KernelConfig& config,
+						  const std::string& kernel_name,
+						  Args&&... args) {
+	auto input=std::make_tuple(std::ref(input_buffer));
+	auto output=std::make_tuple(std::ref(output_buffer),std::ref(thread_count));
+	return launch_metal_kernel(resource, thread_count, input, output, config, kernel_name, std::forward<Args>(args)...);
+
 }
 /*
 template<typename... Args>

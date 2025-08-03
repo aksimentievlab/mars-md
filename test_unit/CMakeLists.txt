@@ -100,8 +100,6 @@ if(USE_METAL AND APPLE)
     install(TARGETS arbd_test_metal)
     # Metal math tests
     add_executable(arbd_test_metal_math
-        Math/RandomDevice_metal.cpp
-        Math/RandomProfile_metal.cpp
         Math/metal_math.cpp
         ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp)
     target_include_directories(arbd_test_metal_math PRIVATE ${METAL_TEST_INCLUDES})

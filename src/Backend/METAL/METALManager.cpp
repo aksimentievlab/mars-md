@@ -418,7 +418,7 @@ void Manager::init() {
 			library_loaded = true;
 			break;
 		} else {
-			LOGINFO("Failed to load Metal library from: {} (error: {})", 
+			LOGWARN("Failed to load Metal library from: {} (error: {})", 
 				path_str, 
 				pError ? pError->localizedDescription()->utf8String() : "Unknown error");
 		}
@@ -509,10 +509,7 @@ void Manager::discover_devices() {
 		LOGWARN("Multiple Metal devices detected ({} devices). This is unusual for Apple Silicon "
 				"which typically has one unified GPU.",
 				all_devices_.size());
-	} else if (all_devices_.size() == 1) {
-		LOGINFO(
-			"Single Metal device detected - typical for Apple Silicon unified GPU architecture");
-	}
+	} 
 
 	// Release the array now that we are done with it.
 	mtl_devices->release();

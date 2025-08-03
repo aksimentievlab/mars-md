@@ -90,8 +90,7 @@ TEST_CASE("Metal Vector Addition", "[metal][kernels][simple_test]") {
 			std::make_tuple(buffer_a, buffer_b),  // No input buffers for debug kernel
 			std::forward_as_tuple(buffer_result),  // Use forward_as_tuple to avoid copy
 			config,
-			"scalar_add",
-			nullptr
+			"scalar_add"
 		);
 		
 		// Check buffer pointer after kernel launch

@@ -23,14 +23,15 @@ kernel void debug_kernel(
 kernel void vector_operations_kernel(
     device MetalVector3* input_a    [[buffer(0)]],
     device MetalVector3* input_b    [[buffer(1)]],
-    device MetalVector3* output     [[buffer(2)]],
+    device float* input_c         [[buffer(2)]],
+    device MetalVector3* output     [[buffer(3)]],
     uint index                      [[thread_position_in_grid]]
 ) {
     Vector3_t<float> a = Vector3_t<float>(input_a[index].x, input_a[index].y, input_a[index].z);
     Vector3_t<float> b = Vector3_t<float>(input_b[index].x, input_b[index].y, input_b[index].z);
     
     // Perform vector addition and multiply by 2.0f
-    Vector3_t<float> result = (a + b) * 2.0f;
+    Vector3_t<float> result = (a + b) * input_c[0];
     
     // Calculate dot product for w component
     float dot_product = a.dot(b);

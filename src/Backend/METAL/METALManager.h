@@ -16,11 +16,13 @@
 // Metal.hpp header in every file that includes the manager.
 namespace MTL {
 class Device;
-class CommandQueue;
 class Library;
 class Function;
 class ComputePipelineState;
 } // namespace MTL
+namespace MTL4 {
+class CommandQueue;
+} // namespace MTL4
 
 namespace ARBD {
 namespace METAL {
