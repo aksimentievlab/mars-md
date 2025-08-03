@@ -1,3 +1,6 @@
+#include "../extern/Catch2/extras/catch_amalgamated.hpp"
+
+
 #include <cstdio>
 #include <iostream>
 #include <memory>
@@ -29,7 +32,7 @@
 #include "Math/Types.h"
 
 // Use Catch2 v3 amalgamated header (self-contained)
-#include "../extern/Catch2/extras/catch_amalgamated.hpp"
+
 
 // Macro for run_trial function - defines run_trial as an alias to run_trial function
 #define DEF_RUN_TRIAL using Tests::run_trial;

@@ -1,25 +1,24 @@
 /*********************************************************************
  * @file  Vector3.h
  *
- * @brief Declaration of templated Vector3_t class with conditional Metal support.
+ * @brief Declaration of templated Vector3_t class.
  *********************************************************************/
  #pragma once
 
- // Metal-specific implementation
- #ifdef __METAL_VERSION__
- #include "METAL/Vector3.h"
- #else
- 
- // Standard implementation for CUDA, SYCL, and HOST
- #if !defined(__SYCL_DEVICE_ONLY__) && !defined(__CUDA_ARCH__)
+ #if !defined(__METAL_VERSION__) && !defined(__SYCL_DEVICE_ONLY__) && !defined(__CUDA_ARCH__)
  #include "ARBDException.h"
  #include "ARBDLogger.h"
  #include <limits>
  #include <type_traits>
  #include <sstream>
  #endif
- 
+
  #include "Backend/Header.h"
+ // Metal compatibility includes
+ #ifdef __METAL_VERSION__
+ #include <metal_stdlib>
+ using namespace metal;
+ #endif
  
  #ifdef __CUDA_ARCH__
  #include <cuda/std/limits>
@@ -28,19 +27,37 @@
  
  namespace ARBD {
  
- // Address space pointer macros for non-Metal backends
- #ifndef DEVICE_PTR
- #define DEVICE_PTR(T) T*
- #endif
- #ifndef CONSTANT_PTR
- #define CONSTANT_PTR(T) const T*
- #endif
- #ifndef THREAD_PTR
- #define THREAD_PTR(T) T*
- #endif
- #ifndef THREADGROUP_PTR
- #define THREADGROUP_PTR(T) T*
- #endif
+ // Forward declarations for address space handling
+#ifdef __METAL_VERSION__
+template<typename T, typename AddressSpace = device>
+using metal_ptr = AddressSpace T*;
+
+#ifndef DEVICE_PTR
+#define DEVICE_PTR(T) device T*
+#endif
+#ifndef CONSTANT_PTR
+#define CONSTANT_PTR(T) constant T*
+#endif
+#ifndef THREAD_PTR
+#define THREAD_PTR(T) thread T*
+#endif
+#ifndef THREADGROUP_PTR
+#define THREADGROUP_PTR(T) threadgroup T*
+#endif
+#else
+#ifndef DEVICE_PTR
+#define DEVICE_PTR(T) T*
+#endif
+#ifndef CONSTANT_PTR
+#define CONSTANT_PTR(T) const T*
+#endif
+#ifndef THREAD_PTR
+#define THREAD_PTR(T) T*
+#endif
+#ifndef THREADGROUP_PTR
+#define THREADGROUP_PTR(T) T*
+#endif
+#endif
  
  /**
   * 3D vector utility class with common operations implemented on CPU and GPU.
@@ -48,8 +65,7 @@
   * Implemented with 4D data storage for better GPU alignment; extra
   * data can be stored in fourth variable this->w
   *
-  * @tparam T the type of data stored in the four fields, x,y,z,w; T
-  * Should usually be float or double.
+  * @tparam T the type of data stored in the four fields, x,y,z,w; T should usually be float.
   */
  template<typename T>
  class alignas(4 * sizeof(T)) Vector3_t {
@@ -69,8 +85,8 @@
 	 // Cross product with template type deduction
 	 template<typename U>
 	 HOST DEVICE constexpr auto cross(const Vector3_t<U>& w) const {
- #ifdef __CUDA_ARCH__
-		 using TU = T; // CUDA limitation for device code
+ #ifdef __METAL_VERSION__
+		 using TU = T; // Metal doesn't support std::common_type
  #else
 		 using TU = typename std::common_type<T, U>::type;
  #endif
@@ -122,8 +138,8 @@
 	 // Binary operators with type deduction
 	 template<typename U>
 	 HOST DEVICE constexpr auto operator+(const Vector3_t<U>& w) const {
- #ifdef __CUDA_ARCH__
-		 using TU = T; // CUDA limitation for device code
+ #ifdef __METAL_VERSION__
+		 using TU = T; // Metal limitation
  #else
 		 using TU = typename std::common_type<T, U>::type;
  #endif
@@ -132,7 +148,7 @@
  
 	 template<typename U>
 	 HOST DEVICE constexpr auto operator-(const Vector3_t<U>& w) const {
- #ifdef __CUDA_ARCH__
+ #ifdef __METAL_VERSION__
 		 using TU = T;
  #else
 		 using TU = typename std::common_type<T, U>::type;
@@ -142,7 +158,7 @@
  
 	 template<typename U>
 	 HOST DEVICE constexpr auto operator*(U s) const {
- #ifdef __CUDA_ARCH__
+ #ifdef __METAL_VERSION__
 		 using TU = T;
  #else
 		 using TU = typename std::common_type<T, U>::type;
@@ -166,9 +182,11 @@
 		 return x * x + y * y + z * z;
 	 }
  
-	 // Only enable for floating point types - simplified for GPU compatibility
+	 // Only enable for floating point types - simplified for Metal compatibility
 	 HOST DEVICE auto length() const {
- #ifdef __CUDA_ARCH__
+ #ifdef __METAL_VERSION__
+		 return sqrt(length2());
+ #elif defined(__CUDA_ARCH__)
 		 return sqrtf(length2());
  #else
 		 return std::sqrt(length2());
@@ -185,10 +203,10 @@
 		 return (l2 != T(0)) ? T(1) / l2 : T(0);
 	 }
  
-	 // Element-wise operations
+	 // Element-wise operations - simplified for Metal compatibility
 	 HOST DEVICE auto element_floor() const {
- #ifdef __CUDA_ARCH__
-		 return Vector3_t<T>(floorf(x), floorf(y), floorf(z));
+ #ifdef __METAL_VERSION__
+		 return Vector3_t<T>(floor(x), floor(y), floor(z));
  #else
 		 return Vector3_t<T>(std::floor(x), std::floor(y), std::floor(z));
  #endif
@@ -196,7 +214,7 @@
  
 	 template<typename U>
 	 HOST DEVICE constexpr auto element_mult(const U w[]) const {
- #ifdef __CUDA_ARCH__
+ #ifdef __METAL_VERSION__
 		 using TU = T;
  #else
 		 using TU = typename std::common_type<T, U>::type;
@@ -206,7 +224,7 @@
  
 	 template<typename U>
 	 HOST DEVICE constexpr auto element_mult(const Vector3_t<U>& w) const {
- #ifdef __CUDA_ARCH__
+ #ifdef __METAL_VERSION__
 		 using TU = T;
  #else
 		 using TU = typename std::common_type<T, U>::type;
@@ -217,7 +235,7 @@
 	 // Static element-wise operations
 	 template<typename U>
 	 HOST DEVICE static constexpr auto element_mult(const Vector3_t<T>& v, const Vector3_t<U>& w) {
- #ifdef __CUDA_ARCH__
+ #ifdef __METAL_VERSION__
 		 using TU = T;
  #else
 		 using TU = typename std::common_type<T, U>::type;
@@ -227,7 +245,7 @@
  
 	 template<typename U>
 	 HOST DEVICE static constexpr auto element_mult(const Vector3_t<T>& v, const U w[]) {
- #ifdef __CUDA_ARCH__
+ #ifdef __METAL_VERSION__
 		 using TU = T;
  #else
 		 using TU = typename std::common_type<T, U>::type;
@@ -236,8 +254,8 @@
 	 }
  
 	 HOST DEVICE static auto element_sqrt(const Vector3_t<T>& w) {
- #ifdef __CUDA_ARCH__
-		 return Vector3_t<T>(sqrtf(w.x), sqrtf(w.y), sqrtf(w.z));
+ #ifdef __METAL_VERSION__
+		 return Vector3_t<T>(sqrt(w.x), sqrt(w.y), sqrt(w.z));
  #else
 		 return Vector3_t<T>(std::sqrt(w.x), std::sqrt(w.y), std::sqrt(w.z));
  #endif
@@ -247,6 +265,11 @@
 	 HOST DEVICE static constexpr T highest() {
  #ifdef __CUDA_ARCH__
 		 return cuda::std::numeric_limits<T>::max();
+ #elif defined(__METAL_VERSION__)
+		 // Metal doesn't have numeric_limits, use hardcoded values
+		 if (sizeof(T) == 4) return T(3.40282347e+38f); // FLT_MAX
+		 if (sizeof(T) == 8) return T(1.7976931348623157e+308); // DBL_MAX
+		 return T(1);
  #else
 		 return std::numeric_limits<T>::max();
  #endif
@@ -255,13 +278,17 @@
 	 HOST DEVICE static constexpr T lowest() {
  #ifdef __CUDA_ARCH__
 		 return cuda::std::numeric_limits<T>::lowest();
+ #elif defined(__METAL_VERSION__)
+		 if (sizeof(T) == 4) return T(-3.40282347e+38f); // -FLT_MAX
+		 if (sizeof(T) == 8) return T(-1.7976931348623157e+308); // -DBL_MAX
+		 return T(-1);
  #else
 		 return std::numeric_limits<T>::lowest();
  #endif
 	 }
  
-	 // String and printing (host-only)
- #if !defined(__SYCL_DEVICE_ONLY__) && !defined(__CUDA_ARCH__)
+	 // String and printing (host-only for Metal compatibility)
+ #ifndef __METAL_VERSION__
 	 HOST DEVICE void print() const {
 		 DEVICEINFO("%0.3f %0.3f %0.3f",
 					static_cast<double>(x),
@@ -293,7 +320,7 @@
  // Free function operators
  template<typename T, typename U>
  HOST DEVICE constexpr auto operator/(U s, const Vector3_t<T>& v) {
- #ifdef __CUDA_ARCH__
+ #ifdef __METAL_VERSION__
 	 using TU = T;
  #else
 	 using TU = typename std::common_type<T, U>::type;
@@ -319,13 +346,14 @@
 	 return index_to_ijk(idx, n[0], n[1], n[2]);
  }
  
- HOST DEVICE inline Vector3_t<size_t> index_to_ijk(size_t idx, const Vector3_t<size_t>& n) {
+ HOST DEVICE inline Vector3_t<size_t> index_to_ijk(size_t idx, const Vector3_t<size_t> n) {
 	 return index_to_ijk(idx, n.x, n.y, n.z);
  }
  
  } // namespace ARBD
  
  // Backend-specific specializations
+ #ifndef __METAL_VERSION__
  #ifdef USE_SYCL
  #include <sycl/sycl.hpp>
  template<typename T>
@@ -333,7 +361,7 @@
  #endif
  
  // Provide common type for vectors (only when std:: is available)
- #if !defined(__SYCL_DEVICE_ONLY__) && !defined(__CUDA_ARCH__)
+ #ifndef __CUDA_ARCH__
  namespace std {
  template<typename T, typename U>
  struct common_type<ARBD::Vector3_t<T>, ARBD::Vector3_t<U>> {
@@ -341,5 +369,4 @@
  };
  } // namespace std
  #endif
- 
- #endif // __METAL_VERSION__
+ #endif

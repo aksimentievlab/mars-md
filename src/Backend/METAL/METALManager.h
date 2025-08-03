@@ -459,16 +459,16 @@ class Manager {
 	}
 	static MTL::Buffer* get_metal_buffer_from_ptr(void* ptr) {
 		std::lock_guard<std::mutex> lock(buffer_map_mutex_);
-		LOGDEBUG("Looking for buffer with ptr: {} in map with {} entries", ptr, raw_buffer_map_.size());
+		LOGINFO("Looking for buffer with ptr: {} in map with {} entries", ptr, raw_buffer_map_.size());
 		for (const auto& entry : raw_buffer_map_) {
-			LOGDEBUG("Map entry: ptr={}, buffer={}", entry.first, (void*)entry.second.get());
+			LOGINFO("Map entry: ptr={}, buffer={}", entry.first, (void*)entry.second.get());
 		}
 		auto it = raw_buffer_map_.find(ptr);
 		if (it != raw_buffer_map_.end()) {
-			LOGDEBUG("Found Metal buffer: {} for ptr: {}", (void*)it->second.get(), ptr);
+			LOGINFO("Found Metal buffer: {} for ptr: {}", (void*)it->second.get(), ptr);
 			return it->second.get();
 		}
-		LOGDEBUG("Metal buffer not found for ptr: {}", ptr);
+		LOGINFO("Metal buffer not found for ptr: {}", ptr);
 		return nullptr;
 	}
 

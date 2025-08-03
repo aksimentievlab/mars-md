@@ -6,9 +6,8 @@
 #include "Backend/Kernels.h"
 #include "Backend/METAL/METALManager.h"
 #include "Backend/Resource.h"
-#include "Math/Types.h"
 
-TEST_CASE("Metal Vector Addition", "[metal][kernels]") {
+TEST_CASE("Metal Vector Addition", "[metal][kernels][simple_test]") {
 	// Metal manager is already initialized by the test framework
 	ARBD::METAL::Manager::load_info(); 
 

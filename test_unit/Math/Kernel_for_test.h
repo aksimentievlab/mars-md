@@ -5,10 +5,34 @@
 #include "Math/Types.h"
 #include "Math/Vector3.h"
 #include "Random/Random.h"
-#include <algorithm>
 #include <cmath>
 #include <numeric>
 #include <vector>
+inline double calculate_correlation(const std::vector<float>& x, const std::vector<float>& y) {
+	if (x.size() != y.size() || x.empty())
+		return 0.0;
+
+	double sum_x = std::accumulate(x.begin(), x.end(), 0.0);
+	double sum_y = std::accumulate(y.begin(), y.end(), 0.0);
+	double mean_x = sum_x / x.size();
+	double mean_y = sum_y / y.size();
+
+	double numerator = 0.0;
+	double sum_sq_x = 0.0;
+	double sum_sq_y = 0.0;
+
+	for (size_t i = 0; i < x.size(); ++i) {
+		double dx = x[i] - mean_x;
+		double dy = y[i] - mean_y;
+		numerator += dx * dy;
+		sum_sq_x += dx * dx;
+		sum_sq_y += dy * dy;
+	}
+
+	double denominator = std::sqrt(sum_sq_x * sum_sq_y);
+	return (denominator > 1e-10) ? (numerator / denominator) : 0.0;
+}
+
 
 struct TransformKernel {
 	HOST DEVICE void operator()(size_t i, const float* input, float* output) const {
@@ -84,30 +108,7 @@ struct CalculateDistancesKernel {
 		distances[i] = std::sqrt(pos.x * pos.x + pos.y * pos.y + pos.z * pos.z);
 	}
 };
-inline double calculate_correlation(const std::vector<float>& x, const std::vector<float>& y) {
-	if (x.size() != y.size() || x.empty())
-		return 0.0;
 
-	double sum_x = std::accumulate(x.begin(), x.end(), 0.0);
-	double sum_y = std::accumulate(y.begin(), y.end(), 0.0);
-	double mean_x = sum_x / x.size();
-	double mean_y = sum_y / y.size();
-
-	double numerator = 0.0;
-	double sum_sq_x = 0.0;
-	double sum_sq_y = 0.0;
-
-	for (size_t i = 0; i < x.size(); ++i) {
-		double dx = x[i] - mean_x;
-		double dy = y[i] - mean_y;
-		numerator += dx * dy;
-		sum_sq_x += dx * dx;
-		sum_sq_y += dy * dy;
-	}
-
-	double denominator = std::sqrt(sum_sq_x * sum_sq_y);
-	return (denominator > 1e-10) ? (numerator / denominator) : 0.0;
-}
 struct SimpleKernel {
 	HOST DEVICE void operator()(size_t i, const float* input, float* output) const {
 		output[i] = static_cast<float>(i);

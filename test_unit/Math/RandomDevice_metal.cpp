@@ -2,6 +2,7 @@
 #include "Backend/Buffer.h"
 #include "Backend/Events.h"
 #include "Backend/Kernels.h"
+#include "Backend/METAL/METALManager.h"
 #include "Backend/Resource.h"
 #include "Kernel_for_test.h"
 #include "Math/Types.h"
@@ -13,6 +14,13 @@
 
 using namespace ARBD;
 using Catch::Approx;
+
+// Helper: Check if Metal is available, else skip
+#define REQUIRE_METAL_OR_SKIP() \
+    ARBD::METAL::Manager::load_info(); \
+    if (!ARBD::METAL::Manager::get_library()) { \
+        SKIP("Metal library not loaded - skipping Metal kernel test"); \
+    }
 
 // Fix Vector3 type usage - Vector3 is defined as Vector3_t<float> in Types.h
 
@@ -99,39 +107,15 @@ bool test_normality(const std::vector<float>& data,
 } // namespace TestUtils
 
 // ============================================================================
-// Backend Initialization Fixture for Random Tests
+// Backend Initialization Fixture for Random Tests - Metal Only
 // ============================================================================
 
-struct RandomTestFixture {
-	Resource cuda_resource, sycl_resource, metal_resource;
-	bool cuda_available = false;
-	bool sycl_available = false;
+struct MetalRandomTestFixture {
+	Resource metal_resource;
 	bool metal_available = false;
 
-	RandomTestFixture() {
+	MetalRandomTestFixture() {
 		try {
-#ifdef USE_CUDA
-			CUDA::Manager::init();
-			CUDA::Manager::load_info();
-			if (!CUDA::Manager::devices().empty()) {
-				CUDA::Manager::use(0);
-				cuda_resource = Resource(ResourceType::CUDA, 0);
-				cuda_available = true;
-				LOGINFO("CUDA backend available for Random tests");
-			}
-#endif
-
-#ifdef USE_SYCL
-			SYCL::Manager::init();
-			SYCL::Manager::load_info();
-			if (!SYCL::Manager::devices().empty()) {
-				SYCL::Manager::use(0);
-				sycl_resource = Resource(ResourceType::SYCL, 0);
-				sycl_available = true;
-				LOGINFO("SYCL backend available for Random tests");
-			}
-#endif
-
 #ifdef USE_METAL
 			METAL::Manager::init();
 			METAL::Manager::load_info();
@@ -143,43 +127,36 @@ struct RandomTestFixture {
 			}
 #endif
 		} catch (const std::exception& e) {
-			LOGWARN("Backend initialization failed in RandomTestFixture: {}", e.what());
+			LOGWARN("Metal backend initialization failed in MetalRandomTestFixture: {}", e.what());
 		}
 	}
 
-	~RandomTestFixture() {
+	~MetalRandomTestFixture() {
 		try {
-#ifdef USE_CUDA
-			if (cuda_available)
-				CUDA::Manager::finalize();
-#endif
-#ifdef USE_SYCL
-			if (sycl_available)
-				SYCL::Manager::finalize();
-#endif
 #ifdef USE_METAL
 			if (metal_available)
 				METAL::Manager::finalize();
 #endif
 		} catch (const std::exception& e) {
-			std::cerr << "Error during RandomTestFixture cleanup: " << e.what() << std::endl;
+			std::cerr << "Error during MetalRandomTestFixture cleanup: " << e.what() << std::endl;
 		}
 	}
 };
 
 // ============================================================================
-// Integration Tests with Kernels.h
+// Integration Tests with Kernels.h - Metal Backend
 // ============================================================================
 
-TEST_CASE_METHOD(RandomTestFixture,
-				 "Random + Kernels Integration",
-				 "[random][kernels][integration]") {
+TEST_CASE_METHOD(MetalRandomTestFixture,
+				 "Metal Random + Kernels Integration",
+				 "[random][kernels][integration][metal]") {
 
 	auto test_kernel_integration = [this](const Resource& resource) {
+		REQUIRE_METAL_OR_SKIP();
 		if (!resource.is_device()) {
-			SKIP("Backend " + std::string(resource.getTypeString()) + " not available");
+			SKIP("Metal backend not available");
 		}
-		std::string backend_name = std::string(resource.getTypeString());
+		std::string backend_name = "Metal";
 		SECTION("Random generation + custom kernel processing on " + backend_name) {
 			Random<Resource> rng(resource, 128);
 			rng.init(98765, 0);
@@ -194,21 +171,18 @@ TEST_CASE_METHOD(RandomTestFixture,
 			// Process with custom kernel using Kernels.h
 			KernelConfig config{.block_size = 256, .async = false};
 
-			// Create input and output tuples for launch_kernel
-			auto inputs = std::make_tuple(std::ref(random_buffer));
-			auto outputs = std::make_tuple(std::ref(processed_buffer));
+			// Create input and output tuples for Metal kernel launch
+			auto inputs = std::make_tuple(random_buffer);
+			auto outputs = std::forward_as_tuple(processed_buffer);
 
-			Event process_event;
-			if (resource.type == ResourceType::METAL) {
-				process_event = launch_metal_kernel(resource,
-														TEST_SIZE,
-														inputs,
-														outputs,
-														config,
-														"transform_kernel");
-			} else {
-				process_event = launch_kernel(resource, TEST_SIZE, config, inputs, outputs, TransformKernel{});
-			}
+			Event process_event = launch_metal_kernel(
+				resource,
+				TEST_SIZE,
+				inputs,
+				outputs,
+				config,
+				"transform_kernel"
+			);
 
 			process_event.wait();
 
@@ -291,21 +265,18 @@ TEST_CASE_METHOD(RandomTestFixture,
 			combine_events.add(gaussian_event);
 
 			// Create input and output tuples for the combine kernel
-			auto inputs = std::make_tuple(std::ref(uniform_buffer), std::ref(gaussian_buffer));
-			auto outputs = std::make_tuple(std::ref(combined_buffer));
+			auto inputs = std::make_tuple(uniform_buffer, gaussian_buffer);
+			auto outputs = std::forward_as_tuple(combined_buffer);
 
 			// Simple combination: 70% uniform + 30% gaussian
-			Event combine_event;
-			if (resource.type == ResourceType::METAL) {
-				combine_event = launch_metal_kernel(resource,
-														TEST_SIZE,
-														inputs,
-														outputs,
-														config,
-														"combine_kernel");
-			} else {
-				combine_event = launch_kernel(resource, TEST_SIZE, config, inputs, outputs, CombineKernel{});
-			}
+			Event combine_event = launch_metal_kernel(
+				resource,
+				TEST_SIZE,
+				inputs,
+				outputs,
+				config,
+				"combine_kernel"
+			);
 
 			combine_event.wait();
 
@@ -332,12 +303,6 @@ TEST_CASE_METHOD(RandomTestFixture,
 			LOGINFO("{} parallel random distribution combination successful", backend_name);
 		}
 	};
-#ifdef USE_CUDA
-	test_kernel_integration(cuda_resource);
-#endif
-#ifdef USE_SYCL
-	test_kernel_integration(sycl_resource);
-#endif
 #ifdef USE_METAL
 	test_kernel_integration(metal_resource);
 #endif
@@ -347,9 +312,9 @@ TEST_CASE_METHOD(RandomTestFixture,
 // Device Memory Creation Tests - CRITICAL: Test creation on device, NOT copy from CPU
 // ============================================================================
 
-TEST_CASE_METHOD(RandomTestFixture,
-				 "Random Device Creation and Initialization",
-				 "[random][device][creation]") {
+TEST_CASE_METHOD(MetalRandomTestFixture,
+				 "Metal Random Device Creation and Initialization",
+				 "[random][device][creation][metal]") {
 
 	auto test_device_creation = [](const Resource& resource, const std::string& backend_name) {
 		if (!resource.is_device()) {
@@ -387,24 +352,22 @@ TEST_CASE_METHOD(RandomTestFixture,
 		}
 	};
 
-	test_device_creation(cuda_resource, "CUDA");
-	test_device_creation(sycl_resource, "SYCL");
 	test_device_creation(metal_resource, "Metal");
 }
 
 // ============================================================================
-// Random Generation Tests Using Kernels.h
+// Random Generation Tests Using Kernels.h - Metal Backend
 // ============================================================================
 
-TEST_CASE_METHOD(RandomTestFixture,
-				 "Random Number Generation with Kernels",
-				 "[random][kernels][generation]") {
+TEST_CASE_METHOD(MetalRandomTestFixture,
+				 "Metal Random Number Generation with Kernels",
+				 "[random][kernels][generation][metal]") {
 
 	auto test_random_generation = [this](const Resource& resource) {
 		if (!resource.is_device()) {
-			SKIP("Backend " + std::string(resource.getTypeString()) + " not available");
+			SKIP("Metal backend not available");
 		}
-		std::string backend_name = std::string(resource.getTypeString());
+		std::string backend_name = "Metal";
 		SECTION("Uniform float generation on " + backend_name) {
 			Random<Resource> rng(resource, 128);
 			rng.init(42, 0);
@@ -542,30 +505,24 @@ TEST_CASE_METHOD(RandomTestFixture,
 		}
 	};
 
-#ifdef USE_CUDA
-	test_random_generation(cuda_resource);
-#endif
-#ifdef USE_SYCL
-	test_random_generation(sycl_resource);
-#endif
 #ifdef USE_METAL
 	test_random_generation(metal_resource);
 #endif
 }
 
 // ============================================================================
-// Performance and State Management Tests
+// Performance and State Management Tests - Metal Backend
 // ============================================================================
 
-TEST_CASE_METHOD(RandomTestFixture,
-				 "Random Performance and State Tests",
-				 "[random][performance][state]") {
+TEST_CASE_METHOD(MetalRandomTestFixture,
+				 "Metal Random Performance and State Tests",
+				 "[random][performance][state][metal]") {
 
 	auto test_performance = [this](const Resource& resource) {
 		if (!resource.is_device()) {
-			SKIP("Backend " + std::string(resource.getTypeString()) + " not available");
+			SKIP("Metal backend not available");
 		}
-		std::string backend_name = std::string(resource.getTypeString());
+		std::string backend_name = "Metal";
 		SECTION("Large buffer generation performance on " + backend_name) {
 			constexpr size_t PERF_SIZE = 1000000; // 1M elements
 
@@ -665,22 +622,16 @@ TEST_CASE_METHOD(RandomTestFixture,
 			LOGINFO("{} generator produces different sequences as state advances", backend_name);
 		}
 	};
-#ifdef USE_CUDA
-	test_performance(cuda_resource);
-#endif
-#ifdef USE_SYCL
-	test_performance(sycl_resource);
-#endif
 #ifdef USE_METAL
 	test_performance(metal_resource);
 #endif
 }
 
 // ============================================================================
-// Error Handling and Edge Cases
+// Error Handling and Edge Cases - Metal Backend
 // ============================================================================
 
-TEST_CASE_METHOD(RandomTestFixture, "Random Error Handling", "[random][error][edge_cases]"){
+TEST_CASE_METHOD(MetalRandomTestFixture, "Metal Random Error Handling", "[random][error][edge_cases][metal]"){
 
 	SECTION("Invalid resource handling"){
 		Resource invalid_resource(ResourceType::CPU,
@@ -690,8 +641,8 @@ REQUIRE_THROWS_AS(Random<Resource>(invalid_resource, 128), std::exception);
 }
 
 SECTION("Empty buffer generation") {
-	if (cuda_available) {
-		Random<Resource> rng(cuda_resource, 128);
+	if (metal_available) {
+		Random<Resource> rng(metal_resource, 128);
 		rng.init(42, 0);
 
 		DeviceBuffer<float> empty_buffer(0);
@@ -703,8 +654,8 @@ SECTION("Empty buffer generation") {
 }
 
 SECTION("Extreme parameter ranges") {
-	if (cuda_available) {
-		Random<Resource> rng(cuda_resource, 128);
+	if (metal_available) {
+		Random<Resource> rng(metal_resource, 128);
 		rng.init(42, 0);
 
 		DeviceBuffer<float> buffer(100);

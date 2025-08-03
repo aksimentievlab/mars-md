@@ -31,7 +31,7 @@ if(USE_METAL AND APPLE)
     )
     # Horrible METAL library loding system, just use the default.metallib
     # Compile Metal shaders
-    set(METAL_SHADER_DIR ${CMAKE_CURRENT_SOURCE_DIR}/Kernels)
+    set(METAL_SHADER_DIR ${CMAKE_CURRENT_SOURCE_DIR}/*)
     set(METAL_OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR})
 
     # Find all .metal files
@@ -47,7 +47,7 @@ if(USE_METAL AND APPLE)
 
         add_custom_command(
             OUTPUT ${AIR_FILE}
-            COMMAND xcrun -sdk macosx metal -c ${METAL_SOURCE} -o ${AIR_FILE}
+            COMMAND xcrun -sdk macosx metal -c ${METAL_SOURCE} -o ${AIR_FILE} -I${CMAKE_SOURCE_DIR}/src
             DEPENDS ${METAL_SOURCE}
             COMMENT "Compiling Metal shader: ${METAL_NAME}.metal"
             VERBATIM
@@ -83,7 +83,8 @@ if(USE_METAL AND APPLE)
         Backends/metal_backend.cpp
         Backends/generic_Buffer.cpp
         Backends/metal_buffer_test.cpp
-        #Kernels/metal_kernels.cpp
+        Math/metal_bitmask.cpp
+        Kernels/metal_kernels.cpp
         ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp)
     target_include_directories(arbd_test_metal PRIVATE ${METAL_TEST_INCLUDES})
     target_link_libraries(arbd_test_metal PRIVATE ${METAL_TEST_LIBS})
@@ -99,8 +100,9 @@ if(USE_METAL AND APPLE)
     install(TARGETS arbd_test_metal)
     # Metal math tests
     add_executable(arbd_test_metal_math
-        #Math/metal_bitmask.cpp
-        #All of the above works
+        Math/RandomDevice_metal.cpp
+        Math/RandomProfile_metal.cpp
+        Math/metal_math.cpp
         ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp)
     target_include_directories(arbd_test_metal_math PRIVATE ${METAL_TEST_INCLUDES})
     target_link_libraries(arbd_test_metal_math PRIVATE ${METAL_TEST_LIBS})

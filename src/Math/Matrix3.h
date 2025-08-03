@@ -5,8 +5,10 @@
  * using column-major layout for cross-platform GPU compatibility.
  *********************************************************************/
  #pragma once
-
- #if !defined(__METAL_VERSION__) && !defined(__SYCL_DEVICE_ONLY__) && !defined(__CUDA_ARCH__)
+ #ifdef __METAL_VERSION__
+ #include "METAL/Matrix3.h"
+#else
+ #if !defined(__SYCL_DEVICE_ONLY__) && !defined(__CUDA_ARCH__)
  #include "ARBDException.h" 
  #include "ARBDLogger.h"
  #include "Backend/Resource.h"
@@ -35,7 +37,6 @@
 	 
 	 // Simple conditional compilation - Metal supports this
 	 static constexpr bool is_float = sizeof(T) == sizeof(float);
-	 static constexpr bool is_double = sizeof(T) == sizeof(double);
  
  private:
 	 // Column-major storage: three column vectors
@@ -151,7 +152,6 @@
  
  // Common type aliases
  using Matrix3f = Matrix3_t<float>;
- using Matrix3d = Matrix3_t<double>;
  
  } // namespace ARBD
  
@@ -160,4 +160,5 @@
  #include <sycl/sycl.hpp>
  template<typename T>
  struct sycl::is_device_copyable<ARBD::Matrix3_t<T>> : std::true_type {};
+ #endif
  #endif

@@ -15,34 +15,34 @@ struct MetalBitmaskTestFixture {
 
 	MetalBitmaskTestFixture() {
 		try {
-			ARBD::METAL::METALManager::init();
-			ARBD::METAL::METALManager::load_info();
+			ARBD::METAL::Manager::init();
+			ARBD::METAL::Manager::load_info();
 
-			if (ARBD::METAL::METALManager::devices().empty()) {
+			if (ARBD::METAL::Manager::devices().empty()) {
 				WARN("No Metal devices found. Skipping Metal Bitmask tests.");
 				return;
 			}
 
 			metal_resource = Resource(ResourceType::METAL, 0);
-			ARBD::METAL::METALManager::use(0);
+			ARBD::METAL::Manager::use(0);
 
 		} catch (const std::exception& e) {
-			FAIL("Failed to initialize METALManager in Bitmask test fixture: " << e.what());
+			FAIL("Failed to initialize Manager in Bitmask test fixture: " << e.what());
 		}
 	}
 
 	~MetalBitmaskTestFixture() {
 		try {
-			ARBD::METAL::METALManager::finalize();
+			ARBD::METAL::Manager::finalize();
 		} catch (const std::exception& e) {
-			std::cerr << "Error during METALManager finalization in Bitmask test fixture: "
+			std::cerr << "Error during Manager finalization in Bitmask test fixture: "
 					  << e.what() << std::endl;
 		}
 	}
 };
 
 TEST_CASE_METHOD(MetalBitmaskTestFixture, "Metal Bitmask Basic Operations", "[metal][bitmask]") {
-	if (ARBD::METAL::METALManager::devices().empty()) {
+	if (ARBD::METAL::Manager::devices().empty()) {
 		SKIP("No Metal devices available");
 	}
 
@@ -100,7 +100,7 @@ TEST_CASE_METHOD(MetalBitmaskTestFixture, "Metal Bitmask Basic Operations", "[me
 TEST_CASE_METHOD(MetalBitmaskTestFixture,
 				 "Metal Bitmask Backend Operations",
 				 "[metal][bitmask][backend]") {
-	if (METAL::METALManager::devices().empty()) {
+	if (METAL::Manager::devices().empty()) {
 		SKIP("No Metal devices available");
 	}
 
@@ -140,7 +140,7 @@ TEST_CASE_METHOD(MetalBitmaskTestFixture,
 TEST_CASE_METHOD(MetalBitmaskTestFixture,
 				 "Metal SparseBitmask Operations",
 				 "[metal][bitmask][sparse]") {
-	if (ARBD::METAL::METALManager::devices().empty()) {
+	if (ARBD::METAL::Manager::devices().empty()) {
 		SKIP("No Metal devices available");
 	}
 
@@ -195,7 +195,7 @@ TEST_CASE_METHOD(MetalBitmaskTestFixture,
 TEST_CASE_METHOD(MetalBitmaskTestFixture,
 				 "Metal Bitmask Stress Tests",
 				 "[metal][bitmask][stress]") {
-	if (ARBD::METAL::METALManager::devices().empty()) {
+	if (ARBD::METAL::Manager::devices().empty()) {
 		SKIP("No Metal devices available");
 	}
 
@@ -227,7 +227,7 @@ TEST_CASE_METHOD(MetalBitmaskTestFixture,
 TEST_CASE_METHOD(MetalBitmaskTestFixture,
 				 "Metal Bitmask Performance Tests",
 				 "[metal][bitmask][performance]") {
-	if (ARBD::METAL::METALManager::devices().empty()) {
+	if (ARBD::METAL::Manager::devices().empty()) {
 		SKIP("No Metal devices available");
 	}
 
@@ -274,7 +274,7 @@ TEST_CASE_METHOD(MetalBitmaskTestFixture,
 TEST_CASE_METHOD(MetalBitmaskTestFixture,
 				 "Metal Bitmask Memory Management",
 				 "[metal][bitmask][memory]") {
-	if (ARBD::METAL::METALManager::devices().empty()) {
+	if (ARBD::METAL::Manager::devices().empty()) {
 		SKIP("No Metal devices available");
 	}
 
