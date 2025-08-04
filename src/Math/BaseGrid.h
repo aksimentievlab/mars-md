@@ -306,6 +306,28 @@ class BaseGrid {
 	}
 #endif
 
+	/**
+	 * @brief Get device pointer for backend operations (if available)
+	 */
+#if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__)
+	HOST T* get_device_pointer() const noexcept {
+		return device_ptr_;
+	}
+
+	HOST void set_device_pointer(T* ptr) const noexcept {
+		device_ptr_ = ptr;
+		device_dirty_ = false;
+	}
+
+	HOST bool is_device_dirty() const noexcept {
+		return device_dirty_;
+	}
+
+	HOST void mark_device_clean() const noexcept {
+		device_dirty_ = false;
+	}
+#endif
+
 	/*===================*\
 	|  INDEX OPERATIONS   |
 	\*===================*/
@@ -479,10 +501,10 @@ class BaseGrid {
 	 */
 	HOST DEVICE T get_value_nearest(const Vector3& world_pos) const {
 		return get_value_nearest(values_.data(),
-									 world_pos,
-									 config_.origin,
-									 basis_inv_,
-									 config_.dimensions);
+								 world_pos,
+								 config_.origin,
+								 basis_inv_,
+								 config_.dimensions);
 	}
 
 	/**
@@ -592,10 +614,10 @@ class BaseGrid {
 	 */
 	template<typename U>
 	friend HOST DEVICE U get_value_nearest(const U* grid_values,
-											   const Vector3_t<U>& world_pos,
-											   const Vector3_t<U>& origin,
-											   const Matrix3_t<U>& basis_inv,
-											   const Vector3_t<size_t>& dimensions);
+										   const Vector3_t<U>& world_pos,
+										   const Vector3_t<U>& origin,
+										   const Matrix3_t<U>& basis_inv,
+										   const Vector3_t<size_t>& dimensions);
 
 	/**
 	 * @brief Device-safe gradient computation
@@ -739,10 +761,10 @@ HOST DEVICE T interpolate_grid_point(const T* grid_values,
  */
 template<typename T>
 HOST DEVICE T get_value_nearest(const T* grid_values,
-									const Vector3_t<T>& world_pos,
-									const Vector3_t<T>& origin,
-									const Matrix3_t<T>& basis_inv,
-									const Vector3_t<size_t>& dimensions) {
+								const Vector3_t<T>& world_pos,
+								const Vector3_t<T>& origin,
+								const Matrix3_t<T>& basis_inv,
+								const Vector3_t<size_t>& dimensions) {
 	// Transform to grid coordinates
 	const Vector3_t<T> grid_pos = basis_inv.transform(world_pos - origin);
 
