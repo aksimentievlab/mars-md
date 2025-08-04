@@ -2,9 +2,8 @@
  * @file  IndexList.h
  *
  * @brief Device-safe IndexList for CUDA/SYCL/CPU compatibility
- *        Replaces std::vector-based implementation with fixed-size arrays
  *
- * @author V2: [Your Name] with Claude 4.0 Sonnet
+ * @author V2: Pin-Yi Li <pinyili2@illinois.edu>
  *********************************************************************/
 #pragma once
 

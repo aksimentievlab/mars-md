@@ -1,19 +1,24 @@
-// Configuration.h (2013)
-// Loads .brown config file that can be shared between simulations
-// To be used by GrandBrownTown to initialize its members
-//
-// Authors: Terrance Howward <howard33@illinois.edu>
-//          Justin Dufresne <jdufres1@friars.providence.edu>
-//
+/*********************************************************************
+ * Configuration.h (2013)
+ *     Loads .brown config file that can be shared between simulations
+ *     To be used by GrandBrownTown to initialize its members
+ *
+ * Authors: Terrance Howward <howard33@illinois.edu>
+ *          Justin Dufresne <jdufres1@friars.providence.edu>
+ *
+ * V2 Port: Pin-Yi Li with Claude 4.0 Sonnet <pinyili2@illinois.edu>
+ *********************************************************************/
+#pragma once
 
-#ifndef CONFIGURATION_H
-#define CONFIGURATION_H
-
+#if !defined(__METAL_VERSION__) && !defined(__SYCL_DEVICE_ONLY__) && !defined(__CUDA_ARCH__)
 #include "ARBDException.h"
 #include "ARBDLogger.h"
+#include "IO/FileHandle.h"
+#include "IO/Reader.h"
 #include "Math/BaseGrid.h"
 #include "Math/Types.h"
 #include "Math/Vector3.h"
+
 #include <algorithm> // sort
 #include <map>
 #include <sstream>
@@ -109,19 +114,18 @@ class Configuration {
 	Configuration(const char* config_file, int simNum = 0, bool debug = false);
 	~Configuration();
 
-	int find_particle_type(const char* s) const {
+	/*int find_particle_type(const char* s) const {
 		for (int j = 0; j < numParts; j++) {
 			// printf("Searching particle %d (%s) =? %s\n", j, part[j].name.val(), s);
 			if (strcmp(s, part[j].name.val()) == 0)
 				return j;
 		}
 		return -1;
-	}
+	}*/
 
 	// Output variables
 	Vector3 sysDim;
-	// BaseGrid* sys;
-	//  temporary variables
+	BaseGrid<float>* sys;
 	Vector3 origin, size, basis1, basis2, basis3;
 
 	bool loadedCoordinates;
@@ -170,7 +174,7 @@ class Configuration {
 	float timestep;
 	long int steps;
 	long int seed;
-	// String kTGridFile;
+	String kTGridFile;
 	String temperatureGridFile;
 	String inputCoordinates;
 	String inputMomentum; // Han-Yi Chou
@@ -198,9 +202,9 @@ class Configuration {
 	int numberFluctPeriod;
 	int decompPeriod;
 	int numCapFactor;
-	// BaseGrid* kTGrid;
-	// BaseGrid* tGrid;
-	// BaseGrid* sigmaT;
+	BaseGrid<float>* kTGrid;
+	BaseGrid<float>* tGrid;
+	BaseGrid<float>* sigmaT;
 	unsigned long randoSeed;
 
 	// Other parameters.
@@ -242,8 +246,8 @@ class Configuration {
 	// float* partGridFileScale;
 	float** partGridFileScale;
 	// int *numPartGridFiles;
-	std::map<std::string, BaseGrid> part_grid_dictionary;
-	std::map<std::string, BaseGrid*> part_grid_dictionary_d;
+	std::map<std::string, BaseGrid<float>> part_grid_dictionary;
+	std::map<std::string, BaseGrid<float>*> part_grid_dictionary_d;
 	std::vector<std::vector<String>> partRigidBodyGrid;
 	String* partDiffusionGridFile;
 	String* partForceXGridFile;
@@ -302,6 +306,5 @@ class Configuration {
 	int ParticleInterpolationType;
 	int RigidBodyInterpolationType;
 };
-
-#endif
 }
+#endif

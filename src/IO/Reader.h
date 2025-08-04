@@ -2,7 +2,7 @@
 // Configuration file reader
 // Author: Jeff Comer <jcomer2@illinois.edu>
 // Refactored for the arbd2/cpp20 branch with on 2025
-// Author: Pin-Yi Li <pinyili2@illinois.edu> with Claude 4.0 sonnet
+// Author: Pin-Yi Li <pinyili2@illinois.edu>
 #pragma once
 
 #include "ARBDException.h"
