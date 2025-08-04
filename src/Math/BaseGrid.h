@@ -54,7 +54,7 @@
   */
  template<typename T = float>
  struct GridConfig {
-	 Vector3_t<T> origin{0};         ///< Origin point of the grid
+	 Vector3_t<T> origin{0,0,0};         ///< Origin point of the grid
 	 Matrix3_t<T> basis{T(1)};       ///< Basis vectors defining grid spacing
 	 Vector3_t<size_t> dimensions{1, 1, 1}; ///< Grid dimensions (nx, ny, nz)
 	 BoundaryCondition boundary = BoundaryCondition::Periodic;
@@ -89,8 +89,6 @@
 	 using Matrix3 = Matrix3_t<T>;
 	 using IndexType = size_t;
 	 
-	 static_assert(std::is_floating_point_v<T>, "BaseGrid requires floating-point type");
- 
  private:
 	 // Core grid data
 	 GridConfig<T> config_;
@@ -384,9 +382,9 @@
 	  */
 	 HOST DEVICE bool in_interpolation_bounds(const Vector3& world_pos) const {
 		 Vector3 grid_pos = transform_to_grid(world_pos);
-		 return grid_pos.x >= 2 && grid_pos.x < nx() - 3 &&
-				grid_pos.y >= 2 && grid_pos.y < ny() - 3 &&
-				grid_pos.z >= 2 && grid_pos.z < nz() - 3;
+		 return grid_pos.x >= 1 && grid_pos.x < nx() - 1 &&
+				grid_pos.y >= 1 && grid_pos.y < ny() - 1 &&
+				grid_pos.z >= 1 && grid_pos.z < nz() - 1;
 	 }
 	 
 	 /*====================*\
@@ -464,7 +462,7 @@
 	  * @brief Get volume of single grid cell
 	  */
 	 HOST DEVICE T get_cell_volume() const {
-		 return std::abs(basis().determinant());
+		 return std::abs(basis().det());
 	 }
 	 
 	 /**
@@ -511,11 +509,11 @@
 	  */
 	 HOST DEVICE Vector3 compute_gradient(const Vector3& world_pos) const {
 		 #if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__)
-		 return	compute_gradient(values_.data(), world_pos, config_.origin,
+		 return compute_gradient<T>(values_.data(), world_pos, config_.origin,
 									 config_.basis, basis_inv_, config_.dimensions);
 		 #else
 		 // On device, use device_ptr_ (assumed to be set by backend)
-		 return ARBD::compute_gradient(device_ptr_, world_pos, config_.origin,
+		 return compute_gradient<T>(device_ptr_, world_pos, config_.origin,
 									 config_.basis, basis_inv_, config_.dimensions);
 		 #endif
 	 }
@@ -558,7 +556,7 @@
 	  * @brief Get 3x3x3 neighborhood around a grid point (device-safe)
 	  */
 	 HOST DEVICE NeighborList<T> get_neighbor_list(size_t ix, size_t iy, size_t iz) const {
-		 #if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__)
+		 #if !defined(__CUDA_ARCH__)
 		 return get_neighbor_list_from_grid(values_.data(), ix, iy, iz, config_.dimensions);
 		 #else
 		 // On device, this would need to be called with explicit grid pointer
@@ -570,7 +568,7 @@
 	  * @brief Get neighbor value at relative offset (device-safe)
 	  */
 	 HOST DEVICE T get_neighbor(size_t ix, size_t iy, size_t iz, int di, int dj, int dk) const {
-		 #if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__)
+		 #if !defined(__CUDA_ARCH__)
 		 return get_neighbor_from_grid(values_.data(), ix, iy, iz, di, dj, dk, config_.dimensions);
 		 #else
 		 // On device, this would need to be called with explicit grid pointer
@@ -714,9 +712,9 @@
 	 const size_t nz = dimensions.z;
 	 
 	 // Check bounds
-	 if (grid_pos.x < 0 || grid_pos.x >= nx - 1 ||
-		 grid_pos.y < 0 || grid_pos.y >= ny - 1 ||  
-		 grid_pos.z < 0 || grid_pos.z >= nz - 1) {
+	 if (grid_pos.x < 0 || grid_pos.x >= nx ||
+		 grid_pos.y < 0 || grid_pos.y >= ny ||  
+		 grid_pos.z < 0 || grid_pos.z >= nz) {
 		 return T{0};
 	 }
 	 
@@ -814,7 +812,7 @@
 	 if (grid_pos.x < 1 || grid_pos.x >= nx - 1 ||
 		 grid_pos.y < 1 || grid_pos.y >= ny - 1 ||
 		 grid_pos.z < 1 || grid_pos.z >= nz - 1) {
-		 return Vector3_t<T>{0};
+		 return Vector3_t<T>{T{0}, T{0}, T{0}};
 	 }
 	 
 	 const size_t i = static_cast<size_t>(grid_pos.x);
