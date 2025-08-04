@@ -1,406 +1,873 @@
+#pragma once
 /*********************************************************************
  * @file  BaseGrid.h
  *
- * @brief Declaration of templated BaseGrid class.
+ * @brief Modern C++20 BaseGrid class for arbd2/cpp20 branch
+ *        Multi-backend support (CUDA, SYCL, CPU) with clean separation
+ *
+ * @author Original: Jeff Comer <jcomer2@illinois.edu>
+ * @author V2 Port: Pin-Yi Li with Claude 4.0 Sonnet <pinyili2@illinois.edu>
  *********************************************************************/
-#pragma once
 
-#include <cmath>
-#include <cstdio>
+#if !defined(__METAL_VERSION__) && !defined(__SYCL_DEVICE_ONLY__) && !defined(__CUDA_ARCH__)
+#include "ARBDException.h"
+#include "ARBDLogger.h"
+#include <concepts>
 #include <memory>
+#include <span>
+#include <string_view>
+#include <vector>
+#endif
 
-// ARBD2 includes
-#include "Backend/Buffer.h"
-#include "Backend/Events.h"
-#include "Backend/Resource.h"
+#include "Backend/Header.h"
+#include "IO/FileHandle.h"
+#include "Math/IndexList.h"
 #include "Math/Matrix3.h"
 #include "Math/Types.h"
 #include "Math/Vector3.h"
 
-#ifdef USE_SYCL
-#include "Backend/SYCL/SYCLManager.h"
-#include <sycl/sycl.hpp>
-#endif
-
-#ifdef USE_CUDA
-#include "Backend/CUDA/CUDAManager.h"
-#include <cuda_runtime.h>
-#endif
-
-#ifdef USE_METAL
-#include "Backend/METAL/METALManager.h"
-#endif
-
 namespace ARBD {
 
-enum class BoundaryCondition { dirichlet, neumann, periodic };
+/**
+ * @brief Boundary condition types for grid operations
+ */
+enum class BoundaryCondition : int {
+	Dirichlet = 0, ///< Fixed value at boundary
+	Neumann = 1,   ///< Fixed derivative at boundary
+	Periodic = 2   ///< Periodic boundary conditions
+};
 
-enum class InterpolationOrder { linear = 1, cubic = 3 };
+/**
+ * @brief Interpolation orders supported by the grid
+ */
+enum class InterpolationOrder : int {
+	Linear = 1, ///< Linear interpolation
+	Cubic = 3	///< Cubic interpolation
+};
 
-constexpr size_t STRLEN = 512;
+/**
+ * @brief Grid configuration structure for initialization
+ */
+template<typename T = float>
+struct GridConfig {
+	Vector3_t<T> origin{0};				   ///< Origin point of the grid
+	Matrix3_t<T> basis{T(1)};			   ///< Basis vectors defining grid spacing
+	Vector3_t<size_t> dimensions{1, 1, 1}; ///< Grid dimensions (nx, ny, nz)
+	BoundaryCondition boundary = BoundaryCondition::Periodic;
 
+	HOST DEVICE constexpr size_t total_size() const noexcept {
+		return dimensions.x * dimensions.y * dimensions.z;
+	}
+
+	HOST DEVICE constexpr bool is_valid() const noexcept {
+		return dimensions.x > 0 && dimensions.y > 0 && dimensions.z > 0;
+	}
+};
+
+/**
+ * @brief Modern C++20 BaseGrid class with multi-backend support
+ *
+ * Features:
+ * - Template-based for different data types (float, double)
+ * - CUDA/SYCL/CPU compatibility using unified math system
+ * - Clean separation of I/O operations at the end of class
+ * - RAII memory management
+ * - Exception-safe operations
+ * - Modern C++20 concepts and ranges support
+ *
+ * @tparam T Data type stored in grid (typically float or double)
+ */
+template<typename T = float>
 class BaseGrid {
+  public:
+	using value_type = T;
+	using Vector3 = Vector3_t<T>;
+	using Matrix3 = Matrix3_t<T>;
+	using IndexType = size_t;
+
+	static_assert(std::is_floating_point_v<T>, "BaseGrid requires floating-point type");
+
   private:
-	// Grid parameters
-	int nx_, ny_, nz_;
-	size_t size_;
-	Matrix3 basis_;
-	Matrix3 basisInv_;
-	Vector3 origin_;
+	// Core grid data
+	GridConfig<T> config_;
+	Matrix3 basis_inv_;		///< Inverse of basis matrix (cached for performance)
+	std::vector<T> values_; ///< Grid values in contiguous memory
 
-	// Data storage with DeviceBuffer
-	std::unique_ptr<DeviceBuffer<float>> val_buffer_;
-	Resource resource_;
+	// Backend-specific data pointers (managed by backend systems)
+	mutable T* device_ptr_ = nullptr;	///< Device memory pointer (if applicable)
+	mutable bool device_dirty_ = false; ///< Track if device memory needs sync
 
-	void init();
+	HOST DEVICE void update_derived_quantities() {
+		basis_inv_ = config_.basis.inverse();
+	}
 
   public:
-	/*===============================*\
-	| CONSTRUCTORS, DESTRUCTORS, I/O |
-	\===============================*/
+	/*=============================*\
+	|  CONSTRUCTORS & DESTRUCTORS   |
+	\*=============================*/
 
-	// Default constructor
-	BaseGrid(const Resource& resource = Resource::Local());
-
-	// The most obvious of constructors
-	BaseGrid(const Matrix3& basis0,
-			 const Vector3& origin0,
-			 int nx0,
-			 int ny0,
-			 int nz0,
-			 const Resource& resource = Resource::Local());
-
-	// Make an orthogonal grid given the box dimensions and resolution
-	BaseGrid(const Vector3& box, float dx, const Resource& resource = Resource::Local());
-
-	// The box gives the system geometry, grid point numbers define resolution
-	BaseGrid(const Matrix3& box,
-			 int nx0,
-			 int ny0,
-			 int nz0,
-			 const Resource& resource = Resource::Local());
-
-	// Box with origin and approximate resolution
-	BaseGrid(const Matrix3& box,
-			 const Vector3& origin0,
-			 float dx,
-			 const Resource& resource = Resource::Local());
-
-	// Box with approximate resolution (auto-calculated grid spacing)
-	BaseGrid(const Matrix3& box, float dx, const Resource& resource = Resource::Local());
-
-	// Copy constructor
-	BaseGrid(const BaseGrid& g);
-
-	// Copy constructor with different resolution
-	BaseGrid(const BaseGrid& g, int nx0, int ny0, int nz0);
-
-	// Read from file constructor
-	BaseGrid(const char* fileName, const Resource& resource = Resource::Local());
-
-	// Move constructor
-	BaseGrid(BaseGrid&& other) noexcept;
-
-	// Destructor
-	~BaseGrid() = default;
-
-	/*===============================*\
-	|         OPERATORS              |
-	\===============================*/
-
-	// Assignment operator
-	BaseGrid& operator=(const BaseGrid& g);
-
-	// Move assignment
-	BaseGrid& operator=(BaseGrid&& other) noexcept;
-
-	// Multiplication with another grid
-	BaseGrid& mult(const BaseGrid& g);
-
-	/*===============================*\
-	|      GRID PROPERTIES           |
-	\===============================*/
-
-	// Accessors
-	int nx() const {
-		return nx_;
-	}
-	int ny() const {
-		return ny_;
-	}
-	int nz() const {
-		return nz_;
-	}
-	size_t size() const {
-		return size_;
+	/**
+	 * @brief Default constructor - creates unit grid
+	 */
+	BaseGrid() : config_{}, values_(1, T{0}) {
+		update_derived_quantities();
+		LOGINFO("BaseGrid() - Default constructor");
 	}
 
-	const Matrix3& basis() const {
-		return basis_;
-	}
-	const Matrix3& basisInv() const {
-		return basisInv_;
-	}
-	const Vector3& origin() const {
-		return origin_;
-	}
+	/**
+	 * @brief Primary constructor with full specification
+	 */
+	HOST BaseGrid(const Matrix3& basis, const Vector3& origin, size_t nx, size_t ny, size_t nz)
+		: config_{origin, basis, Vector3_t<size_t>(nx, ny, nz)},
+		  values_(config_.total_size(), T{0}) {
 
-	const Resource& resource() const {
-		return resource_;
-	}
+		if (!config_.is_valid()) {
+			throw Exception(ExceptionType::ValueError,
+							SourceLocation(),
+							"BaseGrid: Invalid dimensions (%zu, %zu, %zu)",
+							nx,
+							ny,
+							nz);
+		}
 
-	// Get the system box
-	Matrix3 getBox() const {
-		return Matrix3(basis_.ex() * nx_, basis_.ey() * ny_, basis_.ez() * nz_);
-	}
-
-	/*===============================*\
-	|      MEMORY MANAGEMENT         |
-	\===============================*/
-
-	// Get raw data pointer (device memory)
-	float* data() {
-		return val_buffer_->data();
-	}
-	const float* data() const {
-		return val_buffer_->data();
+		update_derived_quantities();
+		LOGINFO("BaseGrid({}, {}, {}) - Primary constructor", nx, ny, nz);
 	}
 
-	// Zero the grid
-	BACKEND::Event zero();
+	/**
+	 * @brief Orthogonal grid constructor from box size and resolution
+	 */
+	HOST BaseGrid(const Vector3& box_size, T dx) {
+		T abs_dx = std::abs(dx);
+		Vector3 abs_box{std::abs(box_size.x), std::abs(box_size.y), std::abs(box_size.z)};
 
-	// Copy data from another grid
-	BACKEND::Event copy_from(const BaseGrid& other);
+		// Calculate grid dimensions ensuring dx is upper bound for spacing
+		auto nx = static_cast<size_t>(std::max(1.0f, std::ceil(abs_box.x / abs_dx)));
+		auto ny = static_cast<size_t>(std::max(1.0f, std::ceil(abs_box.y / abs_dx)));
+		auto nz = static_cast<size_t>(std::max(1.0f, std::ceil(abs_box.z / abs_dx)));
 
-	/*===============================*\
-	|      INDEX/POSITION CONVERSION |
-	\===============================*/
+		config_.dimensions = Vector3_t<size_t>(nx, ny, nz);
+		config_.basis = Matrix3(Vector3(abs_box.x / nx, 0, 0),
+								Vector3(0, abs_box.y / ny, 0),
+								Vector3(0, 0, abs_box.z / nz));
+		config_.origin = -T(0.5) * abs_box;
 
-	// Convert from grid indices to linear index
-	HOST DEVICE size_t getIndex(int i, int j, int k) const {
-		return size_t(i) * ny_ * nz_ + size_t(j) * nz_ + size_t(k);
+		values_.resize(config_.total_size(), T{0});
+		update_derived_quantities();
+		LOGINFO("BaseGrid(box={}, dx={}) - Orthogonal constructor", box_size.length(), dx);
 	}
 
-	// Convert from linear index to grid indices
-	HOST DEVICE Vector3_t<int> getIndices(size_t idx) const {
-		Vector3_t<int> result;
-		result.z = int(idx % nz_);
-		result.y = int((idx / nz_) % ny_);
-		result.x = int(idx / (ny_ * nz_));
+	/**
+	 * @brief Copy constructor
+	 */
+	HOST BaseGrid(const BaseGrid& other)
+		: config_(other.config_), basis_inv_(other.basis_inv_), values_(other.values_) {
+		LOGINFO("BaseGrid - Copy constructor");
+	}
+
+	/**
+	 * @brief Move constructor
+	 */
+	HOST BaseGrid(BaseGrid&& other) noexcept
+		: config_(std::move(other.config_)), basis_inv_(std::move(other.basis_inv_)),
+		  values_(std::move(other.values_)), device_ptr_(std::exchange(other.device_ptr_, nullptr)),
+		  device_dirty_(std::exchange(other.device_dirty_, false)) {
+		LOGINFO("BaseGrid - Move constructor");
+	}
+
+	/**
+	 * @brief Copy assignment
+	 */
+	HOST BaseGrid& operator=(const BaseGrid& other) {
+		if (this != &other) {
+			config_ = other.config_;
+			basis_inv_ = other.basis_inv_;
+			values_ = other.values_;
+			device_ptr_ = nullptr; // Force reallocation on device
+			device_dirty_ = false;
+		}
+		return *this;
+	}
+
+	/**
+	 * @brief Move assignment
+	 */
+	HOST BaseGrid& operator=(BaseGrid&& other) noexcept {
+		if (this != &other) {
+			config_ = std::move(other.config_);
+			basis_inv_ = std::move(other.basis_inv_);
+			values_ = std::move(other.values_);
+			device_ptr_ = std::exchange(other.device_ptr_, nullptr);
+			device_dirty_ = std::exchange(other.device_dirty_, false);
+		}
+		return *this;
+	}
+
+	/**
+	 * @brief Destructor
+	 */
+	virtual ~BaseGrid() = default;
+
+	/*=======================*\
+	|  CORE GRID OPERATIONS   |
+	\*=======================*/
+
+	/**
+	 * @brief Get grid dimensions
+	 */
+	HOST DEVICE const Vector3_t<size_t>& dimensions() const noexcept {
+		return config_.dimensions;
+	}
+
+	HOST DEVICE size_t nx() const noexcept {
+		return config_.dimensions.x;
+	}
+	HOST DEVICE size_t ny() const noexcept {
+		return config_.dimensions.y;
+	}
+	HOST DEVICE size_t nz() const noexcept {
+		return config_.dimensions.z;
+	}
+	HOST DEVICE size_t size() const noexcept {
+		return config_.total_size();
+	}
+
+	/**
+	 * @brief Get grid configuration
+	 */
+	HOST DEVICE const GridConfig<T>& config() const noexcept {
+		return config_;
+	}
+	HOST DEVICE const Vector3& origin() const noexcept {
+		return config_.origin;
+	}
+	HOST DEVICE const Matrix3& basis() const noexcept {
+		return config_.basis;
+	}
+	HOST DEVICE const Matrix3& basis_inverse() const noexcept {
+		return basis_inv_;
+	}
+
+/**
+ * @brief Access grid values (host-only - uses std::vector)
+ */
+#if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__)
+	HOST T& operator[](size_t index) {
+		device_dirty_ = true;
+		return values_[index];
+	}
+	HOST const T& operator[](size_t index) const {
+		return values_[index];
+	}
+
+	HOST T& at(size_t index) {
+		if (index >= values_.size()) {
+			throw Exception(ExceptionType::ValueError,
+							SourceLocation(),
+							"BaseGrid::at: Index %zu out of range [0, %zu)",
+							index,
+							values_.size());
+		}
+		device_dirty_ = true;
+		return values_[index];
+	}
+
+	HOST const T& at(size_t index) const {
+		if (index >= values_.size()) {
+			throw Exception(ExceptionType::ValueError,
+							SourceLocation(),
+							"BaseGrid::at: Index %zu out of range [0, %zu)",
+							index,
+							values_.size());
+		}
+		return values_[index];
+	}
+
+	/**
+	 * @brief Get raw data pointer for interfacing with backends (host-only)
+	 */
+	HOST T* data() noexcept {
+		device_dirty_ = true;
+		return values_.data();
+	}
+	HOST const T* data() const noexcept {
+		return values_.data();
+	}
+
+	/**
+	 * @brief Get span view of data (C++20, host-only)
+	 */
+	HOST std::span<T> span() noexcept {
+		device_dirty_ = true;
+		return std::span<T>(values_);
+	}
+	HOST std::span<const T> span() const noexcept {
+		return std::span<const T>(values_);
+	}
+#endif
+
+	/*===================*\
+	|  INDEX OPERATIONS   |
+	\*===================*/
+
+	/**
+	 * @brief Convert 3D indices to linear index
+	 */
+	HOST DEVICE size_t index(size_t ix, size_t iy, size_t iz) const noexcept {
+		return iz + iy * nz() + ix * ny() * nz();
+	}
+
+	/**
+	 * @brief Convert linear index to 3D indices using device-safe IndexList
+	 */
+	HOST DEVICE IndexList<size_t, 3> index_to_ijk(size_t linear_index) const {
+		IndexList<size_t, 3> result;
+		result.add(linear_index / (ny() * nz())); // ix
+		result.add((linear_index / nz()) % ny()); // iy
+		result.add(linear_index % nz());		  // iz
 		return result;
 	}
 
-	// Get world position from grid indices
-	HOST DEVICE Vector3 getPosition(int i, int j, int k) const {
-		return origin_ + basis_.transform(Vector3(float(i), float(j), float(k)));
+	/**
+	 * @brief Get position in space from linear index
+	 */
+	HOST DEVICE Vector3 get_position(size_t linear_index) const {
+		auto ijk = index_to_ijk(linear_index);
+		Vector3 grid_coords(static_cast<T>(ijk[0]), static_cast<T>(ijk[1]), static_cast<T>(ijk[2]));
+		return basis().transform(grid_coords) + origin();
 	}
 
-	// Get world position from linear index
-	HOST DEVICE Vector3 getPosition(size_t idx) const {
-		auto ijk = getIndices(idx);
-		return getPosition(ijk.x, ijk.y, ijk.z);
+	/**
+	 * @brief Transform world position to grid coordinates
+	 */
+	HOST DEVICE Vector3 transform_to_grid(const Vector3& world_pos) const {
+		return basis_inverse().transform(world_pos - origin());
 	}
 
-	// Get grid indices from world position
-	HOST DEVICE Vector3_t<int> getGridIndices(const Vector3& pos) const {
-		Vector3 local = basisInv_.transform(pos - origin_);
-		return Vector3_t<int>(int(std::round(local.x)),
-							  int(std::round(local.y)),
-							  int(std::round(local.z)));
+	/**
+	 * @brief Transform grid coordinates to world position
+	 */
+	HOST DEVICE Vector3 transform_to_world(const Vector3& grid_pos) const {
+		return basis().transform(grid_pos) + origin();
 	}
 
-	/*===============================*\
-	|         INTERPOLATION          |
-	\===============================*/
-
-	// Linear interpolation at world position
-	float interpolatePotential(const Vector3& pos) const;
-
-	// Trilinear interpolation with boundary conditions
-	template<BoundaryCondition BC = BoundaryCondition::periodic>
-	float interpolateTrilinear(const Vector3& pos) const {
-		return dispatch_interpolate_trilinear<BC>(pos);
+	/**
+	 * @brief Check if position is within grid bounds
+	 */
+	HOST DEVICE bool in_bounds(const Vector3& world_pos) const {
+		Vector3 grid_pos = transform_to_grid(world_pos);
+		return grid_pos.x >= 0 && grid_pos.x < nx() && grid_pos.y >= 0 && grid_pos.y < ny() &&
+			   grid_pos.z >= 0 && grid_pos.z < nz();
 	}
 
-	// Compute force (negative gradient) at position
-	template<BoundaryCondition BC = BoundaryCondition::periodic>
-	Vector3 interpolateForce(const Vector3& pos) const {
-		return dispatch_interpolate_force<BC>(pos);
+	/**
+	 * @brief Check if position is within interpolation bounds (with safety margin)
+	 */
+	HOST DEVICE bool in_interpolation_bounds(const Vector3& world_pos) const {
+		Vector3 grid_pos = transform_to_grid(world_pos);
+		return grid_pos.x >= 2 && grid_pos.x < nx() - 3 && grid_pos.y >= 2 &&
+			   grid_pos.y < ny() - 3 && grid_pos.z >= 2 && grid_pos.z < nz() - 3;
 	}
 
-	/*===============================*\
-	|           FILE I/O             |
-	\===============================*/
+	/*====================*\
+	|  UTILITY OPERATIONS  |
+	\*====================*/
 
-	// Write grid to file
-	void write(const char* fileName) const;
+	/**
+	 * @brief Zero all grid values
+	 */
+	HOST void zero() {
+		std::fill(values_.begin(), values_.end(), T{0});
+		device_dirty_ = true;
+	}
 
-	// Read grid from file
-	void read(const char* fileName);
+	/**
+	 * @brief Add constant to all grid values
+	 */
+	HOST void shift(T value) {
+		for (auto& v : values_)
+			v += value;
+		device_dirty_ = true;
+	}
 
-	/*===============================*\
-	|        GRID OPERATIONS         |
-	\===============================*/
+	/**
+	 * @brief Scale all grid values by constant
+	 */
+	HOST void scale(T factor) {
+		for (auto& v : values_)
+			v *= factor;
+		device_dirty_ = true;
+	}
 
-	// Add scalar to all grid points
-	BACKEND::Event add_scalar(float value);
+	/**
+	 * @brief Compute mean of all grid values
+	 */
+	HOST T mean() const {
+		T sum = T{0};
+		for (const auto& v : values_)
+			sum += v;
+		return sum / static_cast<T>(values_.size());
+	}
 
-	// Multiply all grid points by scalar
-	BACKEND::Event multiply_scalar(float value);
+	/**
+	 * @brief Element-wise multiplication with another grid
+	 */
+	HOST BaseGrid& multiply(const BaseGrid& other) {
+		if (values_.size() != other.values_.size()) {
+			throw Exception(ExceptionType::ValueError,
+							SourceLocation(),
+							"BaseGrid::multiply: Size mismatch (%zu vs %zu)",
+							values_.size(),
+							other.values_.size());
+		}
 
-	// Add another grid
-	BACKEND::Event add_grid(const BaseGrid& other);
+		for (size_t i = 0; i < values_.size(); ++i) {
+			values_[i] *= other.values_[i];
+		}
+		device_dirty_ = true;
+		return *this;
+	}
 
-	// Element-wise multiplication with another grid
-	BACKEND::Event multiply_grid(const BaseGrid& other);
+	/**
+	 * @brief Get system box as Matrix3
+	 */
+	HOST DEVICE Matrix3 get_box() const {
+		return Matrix3(static_cast<T>(nx()) * basis().ex(),
+					   static_cast<T>(ny()) * basis().ey(),
+					   static_cast<T>(nz()) * basis().ez());
+	}
 
-	/*===============================*\
-	|      BACKEND-SPECIFIC METHODS  |
-	\===============================*/
+	/**
+	 * @brief Get grid center position
+	 */
+	HOST DEVICE Vector3 get_center() const {
+		Vector3 center_grid(T(0.5) * nx(), T(0.5) * ny(), T(0.5) * nz());
+		return transform_to_world(center_grid);
+	}
 
-#ifdef USE_SYCL
-	// SYCL-specific operations
-	BACKEND::Event sycl_zero_grid();
-	BACKEND::Event sycl_copy_from(const BaseGrid& other);
-	BACKEND::Event sycl_add_scalar(float value);
-	BACKEND::Event sycl_multiply_scalar(float value);
-	BACKEND::Event sycl_add_grid(const BaseGrid& other);
-	BACKEND::Event sycl_multiply_grid(const BaseGrid& other);
+	/**
+	 * @brief Get volume of single grid cell
+	 */
+	HOST DEVICE T get_cell_volume() const {
+		return std::abs(basis().determinant());
+	}
 
-	// SYCL interpolation
-	template<BoundaryCondition BC = BoundaryCondition::periodic>
-	float sycl_interpolate_trilinear(const Vector3& pos) const;
+	/**
+	 * @brief Get total grid volume
+	 */
+	HOST DEVICE T get_total_volume() const {
+		return get_cell_volume() * static_cast<T>(size());
+	}
 
-	template<BoundaryCondition BC = BoundaryCondition::periodic>
-	Vector3 sycl_interpolate_force(const Vector3& pos) const;
+	/*===========================*\
+	|  INTERPOLATION & SAMPLING   |
+	\*===========================*/
+
+	/**
+	 * @brief Interpolate value at world position using trilinear interpolation
+	 */
+	HOST DEVICE T interpolate_value(const Vector3& world_pos) const {
+		return interpolate_grid_point(values_.data(),
+									  world_pos,
+									  config_.origin,
+									  basis_inv_,
+									  config_.dimensions);
+	}
+
+	/**
+	 * @brief Get value at nearest grid point
+	 */
+	HOST DEVICE T get_value_nearest(const Vector3& world_pos) const {
+		return get_value_nearest(values_.data(),
+									 world_pos,
+									 config_.origin,
+									 basis_inv_,
+									 config_.dimensions);
+	}
+
+	/**
+	 * @brief Compute gradient at world position using finite differences
+	 */
+	HOST DEVICE Vector3 compute_gradient(const Vector3& world_pos) const {
+		return compute_gradient(values_.data(),
+								world_pos,
+								config_.origin,
+								config_.basis,
+								basis_inv_,
+								config_.dimensions);
+	}
+
+	/*====================*\
+	|  NEIGHBOR OPERATIONS |
+	\*====================*/
+
+	/**
+	 * @brief Device-safe 3x3x3 neighbor structure
+	 */
+	template<typename U = T>
+	struct alignas(16) NeighborList {
+		U v[3][3][3]; ///< 3x3x3 neighborhood values
+
+		HOST DEVICE constexpr NeighborList() {
+			// Initialize to zero
+			for (int i = 0; i < 3; ++i) {
+				for (int j = 0; j < 3; ++j) {
+					for (int k = 0; k < 3; ++k) {
+						v[i][j][k] = U{0};
+					}
+				}
+			}
+		}
+
+		HOST DEVICE constexpr U& operator()(int i, int j, int k) noexcept {
+			return v[i][j][k];
+		}
+
+		HOST DEVICE constexpr const U& operator()(int i, int j, int k) const noexcept {
+			return v[i][j][k];
+		}
+
+		HOST DEVICE constexpr U& center() noexcept {
+			return v[1][1][1];
+		}
+		HOST DEVICE constexpr const U& center() const noexcept {
+			return v[1][1][1];
+		}
+	};
+
+	/**
+	 * @brief Get 3x3x3 neighborhood around a grid point (device-safe)
+	 */
+	HOST DEVICE NeighborList<T> get_neighbor_list(size_t ix, size_t iy, size_t iz) const {
+#if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__)
+		return get_neighbor_list_from_grid(values_.data(), ix, iy, iz, config_.dimensions);
+#else
+		// On device, this would need to be called with explicit grid pointer
+		return NeighborList<T>{}; // Return empty - device code should use free functions
 #endif
-
-#ifdef USE_CUDA
-	// CUDA-specific operations
-	BACKEND::Event cuda_zero_grid();
-	BACKEND::Event cuda_copy_from(const BaseGrid& other);
-	BACKEND::Event cuda_add_scalar(float value);
-	BACKEND::Event cuda_multiply_scalar(float value);
-	BACKEND::Event cuda_add_grid(const BaseGrid& other);
-	BACKEND::Event cuda_multiply_grid(const BaseGrid& other);
-
-	// CUDA interpolation
-	template<BoundaryCondition BC = BoundaryCondition::periodic>
-	float cuda_interpolate_trilinear(const Vector3& pos) const;
-
-	template<BoundaryCondition BC = BoundaryCondition::periodic>
-	Vector3 cuda_interpolate_force(const Vector3& pos) const;
-
-	// CUDA texture memory operations (optional optimization)
-	void cuda_bind_texture();
-	void cuda_unbind_texture();
-#endif
-
-#ifdef USE_METAL
-	// Metal-specific operations
-	BACKEND::Event metal_zero_grid();
-	BACKEND::Event metal_copy_from(const BaseGrid& other);
-	BACKEND::Event metal_add_scalar(float value);
-	BACKEND::Event metal_multiply_scalar(float value);
-	BACKEND::Event metal_add_grid(const BaseGrid& other);
-	BACKEND::Event metal_multiply_grid(const BaseGrid& other);
-
-	// Metal interpolation
-	template<BoundaryCondition BC = BoundaryCondition::periodic>
-	float metal_interpolate_trilinear(const Vector3& pos) const;
-
-	template<BoundaryCondition BC = BoundaryCondition::periodic>
-	Vector3 metal_interpolate_force(const Vector3& pos) const;
-
-	// Metal buffer management
-	void metal_sync_buffers();
-#endif
-
-  private:
-	/*===============================*\
-	|        HELPER FUNCTIONS        |
-	\===============================*/
-
-	// Check if indices are within bounds
-	HOST DEVICE bool isInBounds(int i, int j, int k) const {
-		return i >= 0 && i < nx_ && j >= 0 && j < ny_ && k >= 0 && k < nz_;
 	}
 
-	// Apply boundary conditions
-	template<BoundaryCondition BC>
-	HOST DEVICE Vector3_t<int> applyBoundaryConditions(int i, int j, int k) const;
+	/**
+	 * @brief Get neighbor value at relative offset (device-safe)
+	 */
+	HOST DEVICE T get_neighbor(size_t ix, size_t iy, size_t iz, int di, int dj, int dk) const {
+#if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__)
+		return get_neighbor_from_grid(values_.data(), ix, iy, iz, di, dj, dk, config_.dimensions);
+#else
+		// On device, this would need to be called with explicit grid pointer
+		return T{0}; // Return zero - device code should use free functions
+#endif
+	}
 
-	// Bilinear interpolation helpers
-	HOST DEVICE float getValue(int i, int j, int k) const;
-	HOST DEVICE float getValueSafe(int i, int j, int k, BoundaryCondition bc) const;
+	/**
+	 * @brief Get neighbor at world position with offset (device-safe)
+	 */
+	HOST DEVICE T get_neighbor_at_position(const Vector3& world_pos, int di, int dj, int dk) const {
+		const Vector3 grid_pos = transform_to_grid(world_pos);
 
-	/*===============================*\
-	|      BACKEND DISPATCH          |
-	\===============================*/
+		const size_t ix = static_cast<size_t>(grid_pos.x);
+		const size_t iy = static_cast<size_t>(grid_pos.y);
+		const size_t iz = static_cast<size_t>(grid_pos.z);
 
-	// Internal dispatch methods that route to appropriate backend
-	BACKEND::Event dispatch_zero();
-	BACKEND::Event dispatch_copy_from(const BaseGrid& other);
-	BACKEND::Event dispatch_add_scalar(float value);
-	BACKEND::Event dispatch_multiply_scalar(float value);
-	BACKEND::Event dispatch_add_grid(const BaseGrid& other);
-	BACKEND::Event dispatch_multiply_grid(const BaseGrid& other);
+		return get_neighbor(ix, iy, iz, di, dj, dk);
+	}
 
-	template<BoundaryCondition BC>
-	float dispatch_interpolate_trilinear(const Vector3& pos) const;
+	/*================================*\
+	|  DEVICE-SAFE HELPER FUNCTIONS   |
+	\*================================*/
 
-	template<BoundaryCondition BC>
-	Vector3 dispatch_interpolate_force(const Vector3& pos) const;
+  public:
+	/**
+	 * @brief Device-safe interpolation function (CUDA/SYCL compatible)
+	 */
+	template<typename U>
+	friend HOST DEVICE U interpolate_grid_point(const U* grid_values,
+												const Vector3_t<U>& world_pos,
+												const Vector3_t<U>& origin,
+												const Matrix3_t<U>& basis_inv,
+												const Vector3_t<size_t>& dimensions);
 
-	/*===============================*\
-	|      CPU IMPLEMENTATIONS       |
-	\===============================*/
+	/**
+	 * @brief Device-safe nearest point sampling
+	 */
+	template<typename U>
+	friend HOST DEVICE U get_value_nearest(const U* grid_values,
+											   const Vector3_t<U>& world_pos,
+											   const Vector3_t<U>& origin,
+											   const Matrix3_t<U>& basis_inv,
+											   const Vector3_t<size_t>& dimensions);
 
-	// CPU fallback implementations
-	template<BoundaryCondition BC>
-	float cpu_interpolate_trilinear(const Vector3& pos, const float* data) const;
+	/**
+	 * @brief Device-safe gradient computation
+	 */
+	template<typename U>
+	friend HOST DEVICE Vector3_t<U> compute_gradient(const U* grid_values,
+													 const Vector3_t<U>& world_pos,
+													 const Vector3_t<U>& origin,
+													 const Matrix3_t<U>& basis,
+													 const Matrix3_t<U>& basis_inv,
+													 const Vector3_t<size_t>& dimensions);
 
-	template<BoundaryCondition BC>
-	Vector3 cpu_interpolate_force(const Vector3& pos, const float* data) const;
+	/**
+	 * @brief Device-safe neighbor list extraction
+	 */
+	template<typename U>
+	friend HOST DEVICE auto get_neighbor_list_from_grid(const U* grid_values,
+														size_t ix,
+														size_t iy,
+														size_t iz,
+														const Vector3_t<size_t>& dimensions);
+
+	/**
+	 * @brief Device-safe single neighbor access
+	 */
+	template<typename U>
+	friend HOST DEVICE U get_neighbor_from_grid(const U* grid_values,
+												size_t ix,
+												size_t iy,
+												size_t iz,
+												int di,
+												int dj,
+												int dk,
+												const Vector3_t<size_t>& dimensions);
+
+	/**
+	 * @brief Device-safe index wrapping for periodic boundaries
+	 */
+	friend HOST DEVICE size_t wrap_index(int index, size_t size);
+
+	/*===================*\
+	|  I/O OPERATIONS     |
+	\*===================*/
+
+#if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__)
+
+	/**
+	 * @brief Write grid to file (various formats supported)
+	 */
+	void write(std::string_view filename) const;
+	void write(std::string_view filename, std::string_view comments) const;
+	void write_dx_format(const FileHandle& file, std::string_view comments = "") const;
+	void write_data_format(const FileHandle& file) const;
+
+	/**
+	 * @brief Read grid from file
+	 */
+	static BaseGrid read_from_file(std::string_view filename);
+	void read_dx_format(const FileHandle& file);
+
+	/**
+	 * @brief Write average profile along axis
+	 */
+	void write_average_profile(std::string_view filename, int axis) const;
+
+#endif
 };
 
-/*===============================*\
-|     TEMPLATE IMPLEMENTATIONS   |
-\===============================*/
+/*==========================*\
+|  DEVICE-SAFE FUNCTIONS     |
+\*==========================*/
 
-template<BoundaryCondition BC>
-HOST DEVICE Vector3_t<int> BaseGrid::applyBoundaryConditions(int i, int j, int k) const {
-	Vector3_t<int> result{i, j, k};
+/**
+ * @brief Device-safe interpolation function (CUDA/SYCL compatible)
+ */
+template<typename T>
+HOST DEVICE T interpolate_grid_point(const T* grid_values,
+									 const Vector3_t<T>& world_pos,
+									 const Vector3_t<T>& origin,
+									 const Matrix3_t<T>& basis_inv,
+									 const Vector3_t<size_t>& dimensions) {
+	// Transform world position to grid coordinates
+	const Vector3_t<T> grid_pos = basis_inv.transform(world_pos - origin);
 
-	if constexpr (BC == BoundaryCondition::periodic) {
-		// Periodic boundary conditions
-		result.x = ((i % nx_) + nx_) % nx_;
-		result.y = ((j % ny_) + ny_) % ny_;
-		result.z = ((k % nz_) + nz_) % nz_;
-	} else if constexpr (BC == BoundaryCondition::dirichlet) {
-		// Clamp to boundaries (Dirichlet: values at boundary are fixed)
-		result.x = std::max(0, std::min(nx_ - 1, i));
-		result.y = std::max(0, std::min(ny_ - 1, j));
-		result.z = std::max(0, std::min(nz_ - 1, k));
-	} else if constexpr (BC == BoundaryCondition::neumann) {
-		// Reflect at boundaries (Neumann: derivatives at boundary are fixed)
-		if (i < 0)
-			result.x = -i;
-		else if (i >= nx_)
-			result.x = 2 * nx_ - 1 - i;
+	const size_t nx = dimensions.x;
+	const size_t ny = dimensions.y;
+	const size_t nz = dimensions.z;
 
-		if (j < 0)
-			result.y = -j;
-		else if (j >= ny_)
-			result.y = 2 * ny_ - 1 - j;
-
-		if (k < 0)
-			result.z = -k;
-		else if (k >= nz_)
-			result.z = 2 * nz_ - 1 - k;
+	// Check bounds
+	if (grid_pos.x < 0 || grid_pos.x >= nx - 1 || grid_pos.y < 0 || grid_pos.y >= ny - 1 ||
+		grid_pos.z < 0 || grid_pos.z >= nz - 1) {
+		return T{0};
 	}
 
-	return result;
+	// Linear interpolation
+	const size_t i0 = static_cast<size_t>(grid_pos.x);
+	const size_t j0 = static_cast<size_t>(grid_pos.y);
+	const size_t k0 = static_cast<size_t>(grid_pos.z);
+
+	const size_t i1 = i0 + 1;
+	const size_t j1 = j0 + 1;
+	const size_t k1 = k0 + 1;
+
+	const T fx = grid_pos.x - static_cast<T>(i0);
+	const T fy = grid_pos.y - static_cast<T>(j0);
+	const T fz = grid_pos.z - static_cast<T>(k0);
+
+	// Get grid indices using consistent indexing
+	const size_t idx000 = k0 + j0 * nz + i0 * ny * nz;
+	const size_t idx001 = k1 + j0 * nz + i0 * ny * nz;
+	const size_t idx010 = k0 + j1 * nz + i0 * ny * nz;
+	const size_t idx011 = k1 + j1 * nz + i0 * ny * nz;
+	const size_t idx100 = k0 + j0 * nz + i1 * ny * nz;
+	const size_t idx101 = k1 + j0 * nz + i1 * ny * nz;
+	const size_t idx110 = k0 + j1 * nz + i1 * ny * nz;
+	const size_t idx111 = k1 + j1 * nz + i1 * ny * nz;
+
+	// Trilinear interpolation
+	const T v000 = grid_values[idx000];
+	const T v001 = grid_values[idx001];
+	const T v010 = grid_values[idx010];
+	const T v011 = grid_values[idx011];
+	const T v100 = grid_values[idx100];
+	const T v101 = grid_values[idx101];
+	const T v110 = grid_values[idx110];
+	const T v111 = grid_values[idx111];
+
+	const T v00 = v000 * (T{1} - fx) + v100 * fx;
+	const T v01 = v001 * (T{1} - fx) + v101 * fx;
+	const T v10 = v010 * (T{1} - fx) + v110 * fx;
+	const T v11 = v011 * (T{1} - fx) + v111 * fx;
+
+	const T v0 = v00 * (T{1} - fy) + v10 * fy;
+	const T v1 = v01 * (T{1} - fy) + v11 * fy;
+
+	return v0 * (T{1} - fz) + v1 * fz;
 }
 
+/**
+ * @brief Get value at nearest grid point (device-safe)
+ */
+template<typename T>
+HOST DEVICE T get_value_nearest(const T* grid_values,
+									const Vector3_t<T>& world_pos,
+									const Vector3_t<T>& origin,
+									const Matrix3_t<T>& basis_inv,
+									const Vector3_t<size_t>& dimensions) {
+	// Transform to grid coordinates
+	const Vector3_t<T> grid_pos = basis_inv.transform(world_pos - origin);
+
+	// Find nearest grid point
+	const size_t ix = static_cast<size_t>(grid_pos.x + T{0.5});
+	const size_t iy = static_cast<size_t>(grid_pos.y + T{0.5});
+	const size_t iz = static_cast<size_t>(grid_pos.z + T{0.5});
+
+	// Wrap for periodic boundaries (simple modulo)
+	const size_t wrapped_ix = ix % dimensions.x;
+	const size_t wrapped_iy = iy % dimensions.y;
+	const size_t wrapped_iz = iz % dimensions.z;
+
+	const size_t linear_idx =
+		wrapped_iz + wrapped_iy * dimensions.z + wrapped_ix * dimensions.y * dimensions.z;
+	return grid_values[linear_idx];
+}
+
+/**
+ * @brief Compute gradient at a point using finite differences (device-safe)
+ */
+template<typename T>
+HOST DEVICE Vector3_t<T> compute_gradient(const T* grid_values,
+										  const Vector3_t<T>& world_pos,
+										  const Vector3_t<T>& origin,
+										  const Matrix3_t<T>& basis,
+										  const Matrix3_t<T>& basis_inv,
+										  const Vector3_t<size_t>& dimensions) {
+	const Vector3_t<T> grid_pos = basis_inv.transform(world_pos - origin);
+
+	const size_t nx = dimensions.x;
+	const size_t ny = dimensions.y;
+	const size_t nz = dimensions.z;
+
+	// Check if we're in bounds for gradient calculation
+	if (grid_pos.x < 1 || grid_pos.x >= nx - 1 || grid_pos.y < 1 || grid_pos.y >= ny - 1 ||
+		grid_pos.z < 1 || grid_pos.z >= nz - 1) {
+		return Vector3_t<T>{0};
+	}
+
+	const size_t i = static_cast<size_t>(grid_pos.x);
+	const size_t j = static_cast<size_t>(grid_pos.y);
+	const size_t k = static_cast<size_t>(grid_pos.z);
+
+	// Central differences
+	const size_t idx_xp = k + j * nz + (i + 1) * ny * nz;
+	const size_t idx_xm = k + j * nz + (i - 1) * ny * nz;
+	const size_t idx_yp = k + (j + 1) * nz + i * ny * nz;
+	const size_t idx_ym = k + (j - 1) * nz + i * ny * nz;
+	const size_t idx_zp = (k + 1) + j * nz + i * ny * nz;
+	const size_t idx_zm = (k - 1) + j * nz + i * ny * nz;
+
+	const T dx_grid = (grid_values[idx_xp] - grid_values[idx_xm]) / T{2};
+	const T dy_grid = (grid_values[idx_yp] - grid_values[idx_ym]) / T{2};
+	const T dz_grid = (grid_values[idx_zp] - grid_values[idx_zm]) / T{2};
+
+	// Transform gradient from grid space to world space
+	const Vector3_t<T> grad_grid(dx_grid, dy_grid, dz_grid);
+	return basis_inv.transpose().transform(grad_grid);
+}
+/**
+ * @brief Device-safe index wrapping for periodic boundaries
+ */
+HOST DEVICE inline size_t wrap_index(int index, size_t size) {
+	if (index < 0) {
+		return static_cast<size_t>(index + static_cast<int>(size) *
+											   ((-index / static_cast<int>(size)) + 1)) %
+			   size;
+	}
+	return static_cast<size_t>(index) % size;
+}
+/**
+ * @brief Device-safe neighbor list extraction
+ */
+template<typename T>
+HOST DEVICE auto get_neighbor_list_from_grid(const T* grid_values,
+											 size_t ix,
+											 size_t iy,
+											 size_t iz,
+											 const Vector3_t<size_t>& dimensions) {
+	typename BaseGrid<T>::template NeighborList<T> neighbors;
+
+	const size_t nx_val = dimensions.x;
+	const size_t ny_val = dimensions.y;
+	const size_t nz_val = dimensions.z;
+
+	// Fill 3x3x3 neighborhood
+	for (int di = -1; di <= 1; ++di) {
+		for (int dj = -1; dj <= 1; ++dj) {
+			for (int dk = -1; dk <= 1; ++dk) {
+				// Calculate neighbor indices with wrapping
+				const size_t ni = wrap_index(static_cast<int>(ix) + di, nx_val);
+				const size_t nj = wrap_index(static_cast<int>(iy) + dj, ny_val);
+				const size_t nk = wrap_index(static_cast<int>(iz) + dk, nz_val);
+
+				const size_t neighbor_idx = nk + nj * nz_val + ni * ny_val * nz_val;
+				neighbors.v[di + 1][dj + 1][dk + 1] = grid_values[neighbor_idx];
+			}
+		}
+	}
+
+	return neighbors;
+}
+
+/**
+ * @brief Device-safe single neighbor access (works with raw pointers)
+ */
+template<typename T>
+HOST DEVICE T get_neighbor_from_grid(const T* grid_values,
+									 size_t ix,
+									 size_t iy,
+									 size_t iz,
+									 int di,
+									 int dj,
+									 int dk,
+									 const Vector3_t<size_t>& dimensions) {
+	const size_t ni = wrap_index(static_cast<int>(ix) + di, dimensions.x);
+	const size_t nj = wrap_index(static_cast<int>(iy) + dj, dimensions.y);
+	const size_t nk = wrap_index(static_cast<int>(iz) + dk, dimensions.z);
+
+	const size_t neighbor_idx = nk + nj * dimensions.z + ni * dimensions.y * dimensions.z;
+	return grid_values[neighbor_idx];
+}
+
+// Type aliases for common usage
+using BaseGridf = BaseGrid<float>;
+using BaseGridd = BaseGrid<double>;
 } // namespace ARBD

@@ -4,6 +4,8 @@
 #include "ARBDLogger.h"
 #include "Backend/Buffer.h"
 #include "Math/IndexList.h"
+#include "Objects/Patch/Patch.h"
+//#include "Objects/Particles/ParticlePatch.h"
 #include "Math/Types.h"
 
 // Class providing a description of a simulation system, including composition, coordinates,
@@ -22,30 +24,12 @@ struct Length {
 struct ResourceCollection {
 	std::vector<Resource> resources;
 };
-class SimSystem;
-
-class Decomposer {
-	// Make virtual?
-	inline void decompose(SimSystem& sys, ResourceCollection& resources);
-
-	// Also update PatchOp objects...
-	void concretize_symbolic_ops(SimSystem& sys) {}
-};
-
-class CellDecomposer : public Decomposer {
-	inline void decompose(SimSystem& sys, ResourceCollection& resources);
-	struct Worker {
-		Length cutoff;
-	};
-};
-
 
 class BoundaryConditions {
-	friend class Decomposer;
 
   public:
 	BoundaryConditions()
-		: origin(0), basis{Vector3(5000, 0, 0), Vector3(0, 5000, 0), Vector3(0, 0, 5000)},
+		: origin(0,0,0), basis{Vector3(5000, 0, 0), Vector3(0, 5000, 0), Vector3(0, 0, 5000)},
 		  periodic{true, true, true} {
 		// do things
 		LOGINFO("BoundaryConditions()");
@@ -53,7 +37,7 @@ class BoundaryConditions {
 	BoundaryConditions(Vector3 basis1,
 					   Vector3 basis2,
 					   Vector3 basis3,
-					   Vector3 origin = Vector3(0),
+					   Vector3 origin = Vector3(0.0f, 0.0f, 0.0f),
 					   bool periodic1 = true,
 					   bool periodic2 = true,
 					   bool periodic3 = true) {
@@ -96,13 +80,12 @@ friend class CellDecomposer;
 	};
 
 	inline static constexpr Conf default_conf =
-		Conf{291.0f, Conf::CellDecomp, Conf::AllPeriodic, {5000.0f, 5000.0f, 5000.0f}, 50.0f};
+		Conf{290.0f, Conf::CellDecomp, Conf::AllPeriodic, {5000.0f, 5000.0f, 5000.0f}, 50.0f};
 
 	SimSystem() : SimSystem(default_conf) {}
 	// temperature(291.0f), decomp(), boundary_conditions() {}
 	SimSystem(const Conf& conf) : temperature(conf.temperature), cutoff(conf.cutoff) {
 
-		// Set up decomposition
 		switch (conf.decomp) {
 		case Conf::CellDecomp:
 			CellDecomposer _d;
@@ -128,6 +111,8 @@ friend class CellDecomposer;
 	}
 	SimSystem(Temperature& temp, Decomposer& decomp, BoundaryConditions boundary_conditions)
 		: temperature(temp), decomp(decomp), boundary_conditions(boundary_conditions) {}
+	
+    Patch patches;
 
 	const Vector3 get_min() const {
 		Vector3 min(Vector3::highest());

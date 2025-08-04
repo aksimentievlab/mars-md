@@ -17,9 +17,6 @@
 
 // Load balancing?
 namespace ARBD {
-class LoadBalancer {
-    // nothing for now
-};
 
 class SimManager {
 
