@@ -7,6 +7,7 @@
  *********************************************************************/
 
 #include "Math/Types.h"
+#include "Math/BaseGrid.h"
 
 namespace ARBD {
 

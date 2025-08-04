@@ -5,9 +5,11 @@
 #include "Backend/Events.h"
 #include "Backend/Kernels.h"
 
-
-using namespace ARBD;
-
+namespace ARBD {
+class CellDecomposer {
+    public:
+        void decompose(SimSystem& sys, ResourceCollection& resources);
+    };
 void CellDecomposer::decompose(SimSystem& sys, ResourceCollection& resources) {
     BoundaryConditions& bcs = sys.boundary_conditions;
     const Length& cutoff = sys.cutoff;
@@ -84,4 +86,5 @@ void CellDecomposer::decompose(SimSystem& sys, ResourceCollection& resources) {
     // Then add particles from old patches to new one
     
     sys.patches = new_patches;
+}
 }

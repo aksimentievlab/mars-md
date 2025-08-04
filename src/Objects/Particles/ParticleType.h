@@ -5,7 +5,7 @@
 namespace ARBD {
 struct Particle {
 	int id;
-	int type_index;
+	int type_id;
 	Vector3 position;
 	Vector3 momentum;
 	bool is_dummy = false;
@@ -27,12 +27,10 @@ class ParticleType {
 		float* meanPmf;
 		float* pmf_scale;
 	};
-	BaseGrid** pmf;
+	BaseGrid<float>** pmf;
 	BoundaryCondition* pmf_boundary_conditions;
-	BaseGrid* diffusionGrid;
-	BaseGrid* forceXGrid;
-	BaseGrid* forceYGrid;
-	BaseGrid* forceZGrid;
+	BaseGrid<float>* diffusionGrid;
+	BaseGrid<float>* forceGrid;
 	using props = Properties;
 };
 } // namespace ARBD

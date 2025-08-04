@@ -427,39 +427,39 @@ class Metrics {
 	}
 
   private:
-    static bool check_device_busy(int device_id) {
-        // Try to synchronize device - if it takes time, device is busy
-        auto start = std::chrono::high_resolution_clock::now();
-        cudaError_t result = cudaDeviceSynchronize();
-        auto end = std::chrono::high_resolution_clock::now();
-        
-        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-        
-        // If synchronization took more than 1ms, device is likely busy
-        return (duration.count() > 1000) && (result == cudaSuccess);
-    }
-    
-    static bool check_active_kernels(int device_id) {
-        // Quick check for active kernels by trying to query device
-        cudaError_t result = cudaGetLastError();
-        if (result == cudaSuccess) {
-            // Try a quick kernel launch to see if device is responsive
-            // This is a heuristic - if device is busy, this might take longer
-            return check_device_busy(device_id);
-        }
-        return false;
-    }
-    
-    static float calculate_real_time_load_score(const RealTimeDeviceMetrics& metrics) {
-        float memory_score = metrics.memory_utilization / 100.0f;
-        float activity_score = metrics.device_busy ? 0.7f : 0.0f;
-        float kernel_score = metrics.has_active_kernels ? 0.3f : 0.0f;
-        
-        // Weighted combination focusing on real-time state
-        return (memory_score * 0.4f + activity_score * 0.4f + kernel_score * 0.2f);
-    }
+	static bool check_device_busy(int device_id) {
+		// Try to synchronize device - if it takes time, device is busy
+		auto start = std::chrono::high_resolution_clock::now();
+		cudaError_t result = cudaDeviceSynchronize();
+		auto end = std::chrono::high_resolution_clock::now();
+
+		auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+
+		// If synchronization took more than 1ms, device is likely busy
+		return (duration.count() > 1000) && (result == cudaSuccess);
 	}
-};
+
+	static bool check_active_kernels(int device_id) {
+		// Quick check for active kernels by trying to query device
+		cudaError_t result = cudaGetLastError();
+		if (result == cudaSuccess) {
+			// Try a quick kernel launch to see if device is responsive
+			// This is a heuristic - if device is busy, this might take longer
+			return check_device_busy(device_id);
+		}
+		return false;
+	}
+
+	static float calculate_real_time_load_score(const RealTimeDeviceMetrics& metrics) {
+		float memory_score = metrics.memory_utilization / 100.0f;
+		float activity_score = metrics.device_busy ? 0.7f : 0.0f;
+		float kernel_score = metrics.has_active_kernels ? 0.3f : 0.0f;
+
+		// Weighted combination focusing on real-time state
+		return (memory_score * 0.4f + activity_score * 0.4f + kernel_score * 0.2f);
+	}
+}
+}; // namespace CUDA
 
 #endif
 #ifdef USE_SYCL

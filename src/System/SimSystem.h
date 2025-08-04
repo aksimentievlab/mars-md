@@ -4,7 +4,7 @@
 #include "ARBDLogger.h"
 #include "Backend/Buffer.h"
 #include "Math/IndexList.h"
-#include "Objects/Patch/Patch.h"
+#include "Objects/BasePatch.h"
 //#include "Objects/Particles/ParticlePatch.h"
 #include "Math/Types.h"
 
@@ -62,8 +62,9 @@ class BoundaryConditions {
  * of the details of the decomposition
  */
 
+
 class SimSystem {
-friend class CellDecomposer;
+//friend class CellDecomposer;
   public:
 	struct Conf {
 		enum Decomposer { CellDecomp };
@@ -112,7 +113,7 @@ friend class CellDecomposer;
 	SimSystem(Temperature& temp, Decomposer& decomp, BoundaryConditions boundary_conditions)
 		: temperature(temp), decomp(decomp), boundary_conditions(boundary_conditions) {}
 	
-    Patch patches;
+    BasePatch patches; // TODO: should this be a vector?
 
 	const Vector3 get_min() const {
 		Vector3 min(Vector3::highest());
