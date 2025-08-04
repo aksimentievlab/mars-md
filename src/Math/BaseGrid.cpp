@@ -5,7 +5,7 @@
  *        Following the pattern of Vector3.h (keeping device code in header)
  *
  * @author Original: Jeff Comer <jcomer2@illinois.edu>
- * @author V2 Port: [Your Name] with Claude 4.0 Sonnet
+ * @author V2 Port: Pin-Yi Li with Claude 4.0 Sonnet
  *********************************************************************/
 #if !defined(__METAL_VERSION__) && !defined(__SYCL_DEVICE_ONLY__) && !defined(__CUDA_ARCH__)
 #include "BaseGrid.h"

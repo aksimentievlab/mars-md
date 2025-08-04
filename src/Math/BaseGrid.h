@@ -5,7 +5,7 @@
  *        Multi-backend support (CUDA, SYCL, CPU) with clean separation
  * 
  * @author Original: Jeff Comer <jcomer2@illinois.edu>
- * @author V2 Port: [Your Name] with Claude 4.0 Sonnet
+ * @author V2 Port: Pin-Yi Li with Claude 4.0 Sonnet
  *********************************************************************/
  #pragma once
 

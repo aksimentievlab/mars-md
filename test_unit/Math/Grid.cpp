@@ -10,12 +10,12 @@
 #include "../catch_boiler.h"
 #include "Backend/Buffer.h"
 #include "Backend/Events.h"
+#include "Backend/Kernels.h"
 #include "Backend/Resource.h"
 #include "Backend/SYCL/SYCLManager.h"
 #include "IO/FileHandle.h"
 #include "Math/BaseGrid.h"
 #include "Math/IndexList.h"
-#include "Backend/Kernels.h"
 
 #include <cmath>
 #include <filesystem>
@@ -308,7 +308,7 @@ TEST_CASE("BaseGrid Data Access", "[BaseGrid][data_access]") {
 	SECTION("Const access") {
 		const auto& const_grid = grid;
 
-		REQUIRE(const_grid[0] == Approx(0.0f));	 // ix=0, iy=0, iz=0 => 0+0*10+0*100
+		REQUIRE(const_grid[0] == Approx(0.0f)); // ix=0, iy=0, iz=0 => 0+0*10+0*100
 		LOGINFO("const_grid[5] = {}", const_grid[5]);
 		REQUIRE(const_grid[7] == Approx(210.0f)); // ix=0, iy=1, iz=2 => 0+1*10+2*100
 
@@ -523,9 +523,13 @@ TEST_CASE("BaseGrid Utility Operations", "[BaseGrid][utilities]") {
 /*===================*\
 |  I/O TESTS          |
 \*===================*/
-/*
+
 TEST_CASE("BaseGrid I/O Operations", "[BaseGrid][io]") {
 	auto grid = create_test_grid();
+	
+	// Create test output directory
+	std::filesystem::create_directories("test_output");
+	
 	const std::string test_file = "test_output/test_grid.dx";
 
 	SECTION("Write and read DX format") {
@@ -567,9 +571,6 @@ TEST_CASE("BaseGrid I/O Operations", "[BaseGrid][io]") {
 		REQUIRE_THROWS_AS(grid.write("/invalid/path/file.dx"), Exception);
 	}
 }
-*/
-
-
 
 /*===================*\
 |  DEVICE FUNCTIONS   |
@@ -652,10 +653,12 @@ struct GridInterpolationKernel {
 	const Vector3_t<size_t> dimensions;
 	const Vector3 origin;
 	const Matrix3 basis_inverse;
-	
-	GridInterpolationKernel(const Vector3_t<size_t>& dims, const Vector3& orig, const Matrix3& basis_inv)
+
+	GridInterpolationKernel(const Vector3_t<size_t>& dims,
+							const Vector3& orig,
+							const Matrix3& basis_inv)
 		: dimensions(dims), origin(orig), basis_inverse(basis_inv) {}
-	
+
 	HOST DEVICE void operator()(size_t i, const float* grid_data, float* result) const {
 		if (i == 0) {
 			Vector3 pos(0.5f, 0.5f, 0.5f);
@@ -669,10 +672,12 @@ struct GridNearestValueKernel {
 	const Vector3_t<size_t> dimensions;
 	const Vector3 origin;
 	const Matrix3 basis_inverse;
-	
-	GridNearestValueKernel(const Vector3_t<size_t>& dims, const Vector3& orig, const Matrix3& basis_inv)
+
+	GridNearestValueKernel(const Vector3_t<size_t>& dims,
+						   const Vector3& orig,
+						   const Matrix3& basis_inv)
 		: dimensions(dims), origin(orig), basis_inverse(basis_inv) {}
-	
+
 	HOST DEVICE void operator()(size_t i, const float* grid_data, float* result) const {
 		if (i == 0) {
 			Vector3 pos(1.1f, 1.1f, 1.1f);
@@ -684,15 +689,18 @@ struct GridNearestValueKernel {
 
 struct GridNeighborKernel {
 	const Vector3_t<size_t> dimensions;
-	
+
 	GridNeighborKernel(const Vector3_t<size_t>& dims) : dimensions(dims) {}
-	
-	HOST DEVICE void operator()(size_t i, const float* grid_data, float* neighbor_result, float* center_result) const {
+
+	HOST DEVICE void operator()(size_t i,
+								const float* grid_data,
+								float* neighbor_result,
+								float* center_result) const {
 		if (i == 0) {
 			// Test single neighbor access
 			float neighbor = get_neighbor_from_grid(grid_data, 1, 1, 1, 1, 0, 0, dimensions);
 			neighbor_result[i] = neighbor;
-			
+
 			// Test neighbor list access
 			auto neighbors = get_neighbor_list_from_grid(grid_data, 1, 1, 1, dimensions);
 			center_result[i] = neighbors.center();
@@ -702,10 +710,11 @@ struct GridNeighborKernel {
 
 struct GridNeighborListKernel {
 	const Vector3_t<size_t> dimensions;
-	
+
 	GridNeighborListKernel(const Vector3_t<size_t>& dims) : dimensions(dims) {}
-	
-	HOST DEVICE void operator()(size_t i, const float* grid_data, float* left_neighbor_result) const {
+
+	HOST DEVICE void
+	operator()(size_t i, const float* grid_data, float* left_neighbor_result) const {
 		if (i == 0) {
 			// Test neighbor list access for specific neighbor
 			auto neighbors = get_neighbor_list_from_grid(grid_data, 1, 1, 0, dimensions);
@@ -721,7 +730,7 @@ struct WrapIndexKernel {
 		if (i < 6) {
 			int test_cases[6][2] = {{-1, 5}, {0, 5}, {4, 5}, {5, 5}, {6, 5}, {-7, 5}};
 			int expected[6] = {4, 0, 4, 0, 1, 3};
-			
+
 			if (i < 6) {
 				int result = wrap_index(test_cases[i][0], test_cases[i][1]);
 				results[i] = result;
@@ -735,13 +744,13 @@ struct WrapIndexKernel {
 // ============================================================================
 
 TEST_CASE_METHOD(GridTestFixture, "Device-Safe Functions", "[BaseGrid][device][neighbors]") {
-	
+
 	auto test_device_functions = [this](const Resource& resource) {
 		if (!resource.is_device()) {
 			SKIP("Backend " + std::string(resource.getTypeString()) + " not available");
 		}
 		std::string backend_name = std::string(resource.getTypeString());
-		
+
 		SECTION("Grid interpolation on " + backend_name) {
 			// Create simple 3x3x3 grid
 			Matrix3 basis = Matrix3(1.0f, 1.0f, 1.0f);
@@ -756,33 +765,38 @@ TEST_CASE_METHOD(GridTestFixture, "Device-Safe Functions", "[BaseGrid][device][n
 			// Create device buffers
 			DeviceBuffer<float> grid_buffer(grid.size());
 			DeviceBuffer<float> result_buffer(1);
-			
+
 			// Copy grid data to device
 			grid_buffer.copy_from_host(grid.data(), grid.size());
-			
+
 			// Kernel configuration
 			KernelConfig config{.block_size = 256, .async = false};
-			
+
 			// Create input and output tuples
 			auto inputs = std::make_tuple(std::ref(grid_buffer));
 			auto outputs = std::make_tuple(std::ref(result_buffer));
-			
+
 			// Launch interpolation kernel
-			Event interpolation_event = launch_kernel(resource, 256, config, inputs, outputs,
+			Event interpolation_event = launch_kernel(
+				resource,
+				256,
+				config,
+				inputs,
+				outputs,
 				GridInterpolationKernel{grid.dimensions(), grid.origin(), grid.basis_inverse()});
 			interpolation_event.wait();
-			
+
 			// Copy results back to host
 			std::vector<float> result(1);
 			result_buffer.copy_to_host(result);
-			
+
 			// Verify interpolation result
 			REQUIRE(result[0] > 0.0f);
 			REQUIRE(result[0] < 27.0f); // Max value in 3x3x3 grid
-			
+
 			LOGINFO("{} grid interpolation successful", backend_name);
 		}
-		
+
 		SECTION("Grid nearest value on " + backend_name) {
 			// Create simple 3x3x3 grid
 			Matrix3 basis = Matrix3(1.0f, 1.0f, 1.0f);
@@ -797,32 +811,37 @@ TEST_CASE_METHOD(GridTestFixture, "Device-Safe Functions", "[BaseGrid][device][n
 			// Create device buffers
 			DeviceBuffer<float> grid_buffer(grid.size());
 			DeviceBuffer<float> result_buffer(1);
-			
+
 			// Copy grid data to device
 			grid_buffer.copy_from_host(grid.data(), grid.size());
-			
+
 			// Kernel configuration
 			KernelConfig config{.block_size = 256, .async = false};
-			
+
 			// Create input and output tuples
 			auto inputs = std::make_tuple(std::ref(grid_buffer));
 			auto outputs = std::make_tuple(std::ref(result_buffer));
-			
+
 			// Launch nearest value kernel
-			Event nearest_event = launch_kernel(resource, 256, config, inputs, outputs,
+			Event nearest_event = launch_kernel(
+				resource,
+				256,
+				config,
+				inputs,
+				outputs,
 				GridNearestValueKernel{grid.dimensions(), grid.origin(), grid.basis_inverse()});
 			nearest_event.wait();
-			
+
 			// Copy results back to host
 			std::vector<float> result(1);
 			result_buffer.copy_to_host(result);
-			
+
 			// Verify nearest value result (should get value at (1,1,1) = index 13)
 			REQUIRE(result[0] == Approx(13.0f));
-			
+
 			LOGINFO("{} grid nearest value successful", backend_name);
 		}
-		
+
 		SECTION("Grid neighbor functions on " + backend_name) {
 			// Create simple 3x3x3 grid
 			Matrix3 basis = Matrix3(1.0f, 1.0f, 1.0f);
@@ -838,127 +857,137 @@ TEST_CASE_METHOD(GridTestFixture, "Device-Safe Functions", "[BaseGrid][device][n
 			DeviceBuffer<float> grid_buffer(grid.size());
 			DeviceBuffer<float> neighbor_result(1);
 			DeviceBuffer<float> center_result(1);
-			
+
 			// Copy grid data to device
 			grid_buffer.copy_from_host(grid.data(), grid.size());
-			
+
 			// Kernel configuration
 			KernelConfig config{.block_size = 256, .async = false};
-			
+
 			// Create input and output tuples
 			auto inputs = std::make_tuple(std::ref(grid_buffer));
 			auto outputs = std::make_tuple(std::ref(neighbor_result), std::ref(center_result));
-			
+
 			// Launch neighbor kernel
-			Event neighbor_event = launch_kernel(resource, 256, config, inputs, outputs,
-				GridNeighborKernel{grid.dimensions()});
+			Event neighbor_event = launch_kernel(resource,
+												 256,
+												 config,
+												 inputs,
+												 outputs,
+												 GridNeighborKernel{grid.dimensions()});
 			neighbor_event.wait();
-			
+
 			// Copy results back to host
 			std::vector<float> neighbor_host(1);
 			std::vector<float> center_host(1);
 			neighbor_result.copy_to_host(neighbor_host);
 			center_result.copy_to_host(center_host);
-			
+
 			// Verify neighbor results
-			REQUIRE(center_host[0] == Approx(13.0f)); // Value at (1,1,1)
+			REQUIRE(center_host[0] == Approx(13.0f));	// Value at (1,1,1)
 			REQUIRE(neighbor_host[0] == Approx(22.0f)); // Value at (2,1,1)
-			
+
 			LOGINFO("{} grid neighbor functions successful", backend_name);
 		}
-		
+
 		SECTION("Grid neighbor list on " + backend_name) {
 			// Create test grid with known pattern
-			BaseGrid<float> test_grid = create_test_grid(); // 5x5x5 with pattern: ix + iy*10 + iz*100
-			
+			BaseGrid<float> test_grid =
+				create_test_grid(); // 5x5x5 with pattern: ix + iy*10 + iz*100
+
 			// Create device buffers
 			DeviceBuffer<float> grid_buffer(test_grid.size());
 			DeviceBuffer<float> left_neighbor_result(1);
-			
+
 			// Copy grid data to device
 			grid_buffer.copy_from_host(test_grid.data(), test_grid.size());
-			
+
 			// Kernel configuration
 			KernelConfig config{.block_size = 256, .async = false};
-			
+
 			// Create input and output tuples
 			auto inputs = std::make_tuple(std::ref(grid_buffer));
 			auto outputs = std::make_tuple(std::ref(left_neighbor_result));
-			
+
 			// Launch neighbor list kernel
-			Event neighbor_list_event = launch_kernel(resource, 256, config, inputs, outputs,
-				GridNeighborListKernel{test_grid.dimensions()});
+			Event neighbor_list_event =
+				launch_kernel(resource,
+							  256,
+							  config,
+							  inputs,
+							  outputs,
+							  GridNeighborListKernel{test_grid.dimensions()});
 			neighbor_list_event.wait();
-			
+
 			// Copy results back to host
 			std::vector<float> left_neighbor_host(1);
 			left_neighbor_result.copy_to_host(left_neighbor_host);
-			
+
 			// Verify neighbor list result (should be value at (0,1,0) = 10)
 			REQUIRE(left_neighbor_host[0] == Approx(10.0f));
-			
+
 			LOGINFO("{} grid neighbor list successful", backend_name);
 		}
-		
+
 		SECTION("Wrap index function on " + backend_name) {
 			// Create device buffer for results
 			DeviceBuffer<int> results_buffer(6);
-			
+
 			// Kernel configuration
 			KernelConfig config{.block_size = 256, .async = false};
-			
+
 			// Create output tuple
 			auto outputs = std::make_tuple(std::ref(results_buffer));
-			
+
 			// Launch wrap index kernel
 			auto empty_inputs = std::make_tuple();
-			Event wrap_event = launch_kernel(resource, 256, config, empty_inputs, outputs,
-				WrapIndexKernel{});
+			Event wrap_event =
+				launch_kernel(resource, 256, config, empty_inputs, outputs, WrapIndexKernel{});
 			wrap_event.wait();
-			
+
 			// Copy results back to host
 			std::vector<int> results(6);
 			results_buffer.copy_to_host(results);
-			
+
 			// Verify wrap index results
-			REQUIRE(results[0] == 4);  // wrap_index(-1, 5)
-			REQUIRE(results[1] == 0);  // wrap_index(0, 5)
-			REQUIRE(results[2] == 4);  // wrap_index(4, 5)
-			REQUIRE(results[3] == 0);  // wrap_index(5, 5)
-			REQUIRE(results[4] == 1);  // wrap_index(6, 5)
-			REQUIRE(results[5] == 3);  // wrap_index(-7, 5)
-			
+			REQUIRE(results[0] == 4); // wrap_index(-1, 5)
+			REQUIRE(results[1] == 0); // wrap_index(0, 5)
+			REQUIRE(results[2] == 4); // wrap_index(4, 5)
+			REQUIRE(results[3] == 0); // wrap_index(5, 5)
+			REQUIRE(results[4] == 1); // wrap_index(6, 5)
+			REQUIRE(results[5] == 3); // wrap_index(-7, 5)
+
 			LOGINFO("{} wrap index function successful", backend_name);
 		}
-		
+
 		SECTION("Device dirty flag management on " + backend_name) {
 			// Create simple grid
 			Matrix3 basis = Matrix3(1.0f, 1.0f, 1.0f);
 			Vector3 origin(0.0f, 0.0f, 0.0f);
 			BaseGrid<float> grid(basis, origin, 3, 3, 3);
-			
+
 			// Mark grid as clean after creation
 			grid.mark_device_clean();
-			
+
 			// Test initial state
 			REQUIRE_FALSE(grid.is_device_dirty());
-			
+
 			// Modify data - should mark as dirty
 			grid[0] = 999.0f;
 			REQUIRE(grid.is_device_dirty());
-			
+
 			// Mark clean
 			grid.mark_device_clean();
 			REQUIRE_FALSE(grid.is_device_dirty());
-			
+
 			// Access data - should mark as dirty
 			grid.data();
 			REQUIRE(grid.is_device_dirty());
-			
+
 			LOGINFO("{} device dirty flag management successful", backend_name);
 		}
 	};
-	
+
 	// Test on all available backends
 #ifdef USE_CUDA
 	test_device_functions(cuda_resource);
@@ -983,7 +1012,6 @@ TEST_CASE("BaseGrid Type Support", "[BaseGrid][types]") {
 		grid_f[0] = 3.14f;
 		REQUIRE(grid_f[0] == Approx(3.14f));
 	}
-
 
 	SECTION("Integer grid (particle indices)") {
 		BaseGrid<int> grid_i;
@@ -1108,7 +1136,7 @@ TEST_CASE("BaseGrid Integration", "[BaseGrid][integration]") {
 	SECTION("Real-world scenario: potential field") {
 		// Simulate a simple potential field around a point charge
 		Matrix3 basis = Matrix3(0.1f, 0.1f, 0.1f); // 0.1 unit spacing
-		Vector3 origin(-2.0f, -2.0f, -2.0f);				 // Center grid around origin
+		Vector3 origin(-2.0f, -2.0f, -2.0f);	   // Center grid around origin
 		BaseGrid<float> potential_grid(basis, origin, 40, 40, 40);
 
 		Vector3 charge_pos(0.0f, 0.0f, 0.0f); // Charge at center
