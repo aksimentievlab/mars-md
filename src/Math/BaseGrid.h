@@ -137,7 +137,7 @@
 		 #endif
 		 
 		 update_derived_quantities();
-		 LOGINFO("BaseGrid({}, {}, {}) - Primary constructor", nx, ny, nz);
+		 LOGINFO("BaseGrid({}, {}, {})", nx, ny, nz);
 	 }
 	 
 	 /**
@@ -174,7 +174,7 @@
 		 #if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__)
 		 values_ = other.values_;
 		 #endif
-		 LOGINFO("BaseGrid - Copy constructor");
+		 LOGINFO("BaseGrid - Copy");
 	 }
 	 
 	 /**
@@ -188,7 +188,6 @@
 		 #if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__)
 		 values_ = std::move(other.values_);
 		 #endif
-		 LOGINFO("BaseGrid - Move constructor");
 	 }
 	 
 	 /**
@@ -541,11 +540,11 @@
 		 }
 		 
 		 HOST DEVICE constexpr U& operator()(int i, int j, int k) noexcept {
-			 return v[i][j][k];
+			 return v[i + 1][j + 1][k + 1];
 		 }
 		 
 		 HOST DEVICE constexpr const U& operator()(int i, int j, int k) const noexcept {
-			 return v[i][j][k];
+			 return v[i + 1][j + 1][k + 1];
 		 }
 		 
 		 HOST DEVICE constexpr U& center() noexcept { return v[1][1][1]; }
@@ -556,10 +555,12 @@
 	  * @brief Get 3x3x3 neighborhood around a grid point (device-safe)
 	  */
 	 HOST DEVICE NeighborList<T> get_neighbor_list(size_t ix, size_t iy, size_t iz) const {
-		 #if !defined(__CUDA_ARCH__)
+		 #if (!defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__))
+		 LOGINFO("get_neighbor_list: calling get_neighbor_list_from_grid");
 		 return get_neighbor_list_from_grid(values_.data(), ix, iy, iz, config_.dimensions);
 		 #else
 		 // On device, this would need to be called with explicit grid pointer
+		 LOGINFO("get_neighbor_list: returning empty NeighborList");
 		 return NeighborList<T>{}; // Return empty - device code should use free functions
 		 #endif
 	 }
@@ -568,7 +569,8 @@
 	  * @brief Get neighbor value at relative offset (device-safe)
 	  */
 	 HOST DEVICE T get_neighbor(size_t ix, size_t iy, size_t iz, int di, int dj, int dk) const {
-		 #if !defined(__CUDA_ARCH__)
+		 #if (!defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__))
+		 LOGINFO("get_neighbor on HOST: ix={}, iy={}, iz={}, di={}, dj={}, dk={}", ix, iy, iz, di, dj, dk);
 		 return get_neighbor_from_grid(values_.data(), ix, iy, iz, di, dj, dk, config_.dimensions);
 		 #else
 		 // On device, this would need to be called with explicit grid pointer
@@ -854,10 +856,14 @@
 	 const Vector3_t<size_t>& dimensions
  ) {
 	 typename BaseGrid<T>::template NeighborList<T> neighbors;
-	 
+	
 	 const size_t nx_val = dimensions.x;
 	 const size_t ny_val = dimensions.y;
 	 const size_t nz_val = dimensions.z;
+	 
+	 #if (!defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__))
+	 LOGINFO("get_neighbor_list_from_grid: ix={}, iy={}, iz={}, nx={}, ny={}, nz={}", ix, iy, iz, nx_val, ny_val, nz_val);
+	 #endif
 	 
 	 // Fill 3x3x3 neighborhood
 	 for (int di = -1; di <= 1; ++di) {
@@ -869,7 +875,14 @@
 				 const size_t nk = wrap_index(static_cast<int>(iz) + dk, nz_val);
 				 
 				 const size_t neighbor_idx = nk + nj * nz_val + ni * ny_val * nz_val;
-				 neighbors.v[di + 1][dj + 1][dk + 1] = grid_values[neighbor_idx];
+				 const T value = grid_values[neighbor_idx];
+				 neighbors.v[di + 1][dj + 1][dk + 1] = value;
+				 
+				 #if (!defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__))
+				 if (di == -1 && dj == 0 && dk == 0) {
+					 LOGINFO("left_neighbor: di={}, dj={}, dk={}, ni={}, nj={}, nk={}, idx={}, value={}", di, dj, dk, ni, nj, nk, neighbor_idx, value);
+				 }
+				 #endif
 			 }
 		 }
 	 }

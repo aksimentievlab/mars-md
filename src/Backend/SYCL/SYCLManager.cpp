@@ -6,6 +6,7 @@
 #include <string>
 #include <sycl/sycl.hpp>
 #include <vector>
+#include <cstdlib>
 
 namespace ARBD {
 namespace SYCL {
@@ -176,8 +177,39 @@ void Manager::init() {
 	LOGINFO("Found {} SYCL device(s)", all_devices_.size());
 }
 
+// Helper function to check if OpenMP backend should be preferred via environment variables
+static bool should_prefer_openmp_backend() {
+	// Check ONEAPI_DEVICE_SELECTOR for OpenMP preference
+	const char* oneapi_selector = std::getenv("ONEAPI_DEVICE_SELECTOR");
+	if (oneapi_selector) {
+		std::string selector_str(oneapi_selector);
+		if (selector_str.find("omp:") != std::string::npos || 
+			selector_str.find("openmp:") != std::string::npos) {
+			return true;
+		}
+	}
+	
+	// Check SYCL_DEVICE_FILTER for OpenMP backend
+	const char* sycl_filter = std::getenv("SYCL_DEVICE_FILTER");
+	if (sycl_filter) {
+		std::string filter_str(sycl_filter);
+		if (filter_str.find("omp") != std::string::npos || 
+			filter_str.find("openmp") != std::string::npos) {
+			return true;
+		}
+	}
+	
+	return false;
+}
+
 void Manager::discover_devices() {
 	try {
+		// Check if OpenMP backend is explicitly requested via environment variables
+		bool env_prefers_openmp = should_prefer_openmp_backend();
+		if (env_prefers_openmp) {
+			LOGINFO("Environment variables indicate OpenMP backend preference");
+		}
+		
 		// Get all platforms
 		auto platforms = sycl::platform::get_platforms();
 
@@ -186,15 +218,29 @@ void Manager::discover_devices() {
 			sycl::device device;
 			unsigned int id;
 			sycl::info::device_type type;
+			std::string platform_name;
+			bool is_openmp_backend;
 		};
 
 		std::vector<DeviceInfo> potential_device_infos;
 		unsigned int device_id = 0;
 
 		for (const auto& platform : platforms) {
-			LOGDEBUG("Platform: {} ({})",
-					 platform.get_info<sycl::info::platform::name>().c_str(),
-					 platform.get_info<sycl::info::platform::vendor>().c_str());
+			std::string platform_name = platform.get_info<sycl::info::platform::name>();
+			std::string platform_vendor = platform.get_info<sycl::info::platform::vendor>();
+			
+			LOGDEBUG("Platform: {} ({})", platform_name.c_str(), platform_vendor.c_str());
+
+			// Check if this platform supports OpenMP backend
+			// Look for OpenMP indicators in platform name or vendor
+			bool is_openmp_platform = (platform_name.find("OpenMP") != std::string::npos) ||
+									  (platform_name.find("omp") != std::string::npos) ||
+									  (platform_name.find("OMP") != std::string::npos) ||
+									  (platform_vendor.find("OpenMP") != std::string::npos) ||
+									  (platform_vendor.find("omp") != std::string::npos) ||
+									  // Check for common OpenMP backend implementations
+									  (platform_name.find("hipSYCL") != std::string::npos && env_prefers_openmp) ||
+									  (platform_name.find("AdaptiveCpp") != std::string::npos && env_prefers_openmp);
 
 			// Get all devices for this platform
 			auto platform_devices = platform.get_devices();
@@ -209,7 +255,7 @@ void Manager::discover_devices() {
 
 					// Store device info for later construction
 					potential_device_infos.push_back(
-						{std::move(temp_device_copy), device_id, dev_type});
+						{std::move(temp_device_copy), device_id, dev_type, platform_name, is_openmp_platform});
 					device_id++;
 
 				} catch (const sycl::exception& e) {
@@ -228,39 +274,71 @@ void Manager::discover_devices() {
 			}
 		}
 
-		// Filter devices based on preference
+		// Filter devices with smart preference: GPU > OpenMP CPU > regular CPU
 		std::vector<DeviceInfo> selected_device_infos;
 
-		if (preferred_type_ != sycl::info::device_type::all) {
-			// First, try to find devices matching the preferred type
+		// First, look for GPU devices (highest priority)
+		for (const auto& device_info : potential_device_infos) {
+			if (device_info.type == sycl::info::device_type::gpu) {
+				selected_device_infos.push_back(device_info);
+			}
+		}
+
+		// If no GPU devices found, look for CPU devices with OpenMP preference
+		if (selected_device_infos.empty()) {
+			LOGINFO("No GPU devices found, looking for CPU devices with OpenMP preference");
+			
+			// Look for OpenMP CPU devices first
 			for (const auto& device_info : potential_device_infos) {
-				if (device_info.type == preferred_type_) {
+				if (device_info.type == sycl::info::device_type::cpu && device_info.is_openmp_backend) {
 					selected_device_infos.push_back(device_info);
 				}
 			}
-
-			// If no preferred devices found, fall back to any available devices
+			
+			// If no OpenMP CPU devices, fall back to regular CPU devices
 			if (selected_device_infos.empty()) {
-				LOGWARN("No devices of preferred type {} found, using all available devices",
-						static_cast<int>(preferred_type_));
-				selected_device_infos = std::move(potential_device_infos);
+				LOGINFO("No OpenMP CPU devices found, using regular CPU devices");
+				for (const auto& device_info : potential_device_infos) {
+					if (device_info.type == sycl::info::device_type::cpu) {
+						selected_device_infos.push_back(device_info);
+					}
+				}
 			} else {
-				LOGINFO("Found {} device(s) of preferred type {}",
-						selected_device_infos.size(),
-						static_cast<int>(preferred_type_));
+				LOGINFO("Found {} OpenMP CPU device(s)", selected_device_infos.size());
 			}
 		} else {
-			// Use all devices if preference is 'all'
+			LOGINFO("Found {} GPU device(s)", selected_device_infos.size());
+		}
+
+		// If still no devices, use whatever is available
+		if (selected_device_infos.empty()) {
+			LOGWARN("No GPU or CPU devices found, using all available devices");
 			selected_device_infos = std::move(potential_device_infos);
 		}
 
-		// Sort device infos by preference
+		// Sort device infos by preference: GPU > OpenMP CPU > regular CPU
 		std::stable_sort(selected_device_infos.begin(),
 						 selected_device_infos.end(),
 						 [](const DeviceInfo& a, const DeviceInfo& b) {
-							 if (a.type != b.type) {
-								 return a.type == Manager::preferred_type_;
+							 // GPU devices have highest priority
+							 if (a.type == sycl::info::device_type::gpu && b.type != sycl::info::device_type::gpu) {
+								 return true;
 							 }
+							 if (b.type == sycl::info::device_type::gpu && a.type != sycl::info::device_type::gpu) {
+								 return false;
+							 }
+							 
+							 // Among CPU devices, prefer OpenMP
+							 if (a.type == sycl::info::device_type::cpu && b.type == sycl::info::device_type::cpu) {
+								 if (a.is_openmp_backend && !b.is_openmp_backend) {
+									 return true;
+								 }
+								 if (b.is_openmp_backend && !a.is_openmp_backend) {
+									 return false;
+								 }
+							 }
+							 
+							 // Default to device ID ordering
 							 return a.id < b.id;
 						 });
 

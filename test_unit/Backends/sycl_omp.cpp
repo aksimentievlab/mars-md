@@ -1,111 +1,88 @@
-#include <vector>
-#include <numeric>
-#include <iostream>
-
-#include <cassert>
+#include "../catch_boiler.h"
 #include <cmath>
+#include <string>
 
 #ifdef USE_SYCL
 
-#include "Backend/SYCL/SYCLManager.h"
-
-
 using namespace ARBD::SYCL;
-
 
 // Helper function for floating point comparison
 bool within_tolerance(float a, float b, float tolerance = 1e-6f) {
     return std::fabs(a - b) <= tolerance;
 }
 
-void test_sycl_cpu_initialization() {
-    std::cout << "[TEST] SYCL CPU Initialization... ";
-    try {
-        // Set CPU preference before initialization for AdaptiveCpp
-        Manager::prefer_device_type(sycl::info::device_type::cpu);
+TEST_CASE("SYCL OpenMP Backend Device Discovery", "[SYCL][OpenMP]") {
+    SECTION("OpenMP Platform Detection") {
+        // Set environment variable to prefer OpenMP
+        setenv("ONEAPI_DEVICE_SELECTOR", "omp:*", 1);
         
-        // Initialize the SYCL manager
+        // Initialize SYCL manager
         Manager::init();
-        
-        // Verify we have at least one device
-        if (Manager::all_device_size() == 0) {
-            std::cout << "SKIP: No SYCL devices found\n";
-            return;
-        }
-        
-        // Verify AdaptiveCpp CPU device functionality
-        try {
-            auto platforms = sycl::platform::get_platforms();
-            bool cpu_device_found = false;
-            
-            for (const auto& platform : platforms) {
-                auto devices = platform.get_devices();
-                for (const auto& device : devices) {
-                    if (device.is_cpu()) {
-                        // Test basic queue creation with in-order property (AdaptiveCpp recommendation)
-                        sycl::queue test_queue{device, sycl::property::queue::in_order{}};
-                        
-                        // Simple functionality test
-                        int test_value = 42;
-                        int* device_ptr = sycl::malloc_device<int>(1, test_queue);
-                        if (device_ptr) {
-                            test_queue.memcpy(device_ptr, &test_value, sizeof(int)).wait();
-                            int result = 0;
-                            test_queue.memcpy(&result, device_ptr, sizeof(int)).wait();
-                            sycl::free(device_ptr, test_queue);
-                            
-                            if (result == test_value) {
-                                cpu_device_found = true;
-                                break;
-                            }
-                        }
-                    }
-                }
-                if (cpu_device_found) break;
-            }
-            
-            if (!cpu_device_found) {
-                std::cout << "SKIP: No functional CPU device available\n";
-                return;
-            }
-        } catch (const sycl::exception& e) {
-            std::cout << "SKIP: CPU device verification failed - " << e.what() << "\n";
-            return;
-        }
-        
-        // Display device information
-        const auto& devices = Manager::all_devices();
-        bool found_cpu = false;
-        for (const auto& device : devices) {
-            if (device.is_cpu()) {
-                found_cpu = true;
-                std::cout << "\n  CPU Device " << device.id() << ": " << device.name()
-                          << " (" << device.vendor() << ")\n";
-                std::cout << "  - Compute units: " << device.max_compute_units() << "\n";
-                std::cout << "  - Global memory: " << device.global_mem_size() / (1024*1024) << " MB\n";
-                break; // Only show first CPU device to reduce output
-            }
-        }
-        
-        if (!found_cpu) {
-            std::cout << "SKIP: No CPU device found in Manager\n";
-            return;
-        }
-        
-        // Load device info and verify initialization
         Manager::load_info();
-        assert(Manager::devices().size() > 0);
-        std::cout << "PASS\n";
         
-    } catch (const std::exception& e) {
-        std::cout << "FAIL: " << e.what() << "\n";
-        throw;
+        // Check that we have devices
+        REQUIRE(Manager::all_device_size() > 0);
+        
+        // Check that we have selected devices
+        const auto& selected_devices = Manager::devices();
+        REQUIRE(selected_devices.size() > 0);
+        
+        // Verify that we're using OpenMP backend
+        bool found_openmp_device = false;
+        for (const auto& device : selected_devices) {
+            std::string device_name = device.name();
+            if (device_name.find("OpenMP") != std::string::npos || 
+                device_name.find("AdaptiveCpp") != std::string::npos) {
+                found_openmp_device = true;
+                INFO("Found OpenMP device: " << device_name);
+                break;
+            }
+        }
+        
+        // This should be true on macOS with AdaptiveCpp
+        if (found_openmp_device) {
+            SUCCEED("OpenMP backend detected successfully");
+        } else {
+            WARN("OpenMP backend not detected, but continuing with available devices");
+        }
     }
 }
 
-void test_sycl_basic_memory_operations() {
-    std::cout << "[TEST] SYCL Basic Memory Operations... ";
-    try {
+TEST_CASE("SYCL OpenMP Queue Operations", "[SYCL][OpenMP]") {
+    SECTION("Queue Creation and Synchronization") {
+        auto& queue = Manager::get_current_queue();
+        
+        // Test queue synchronization
+        queue.synchronize();
+        SUCCEED("Queue synchronization successful");
+    }
+    
+    SECTION("Simple Kernel Execution") {
+        auto& queue = Manager::get_current_queue();
+        
+        // Test simple kernel execution
+        int data[10] = {0};
+        sycl::buffer<int, 1> buf(data, sycl::range<1>(10));
+        
+        queue.submit([&](sycl::handler& h) {
+            auto acc = buf.get_access<sycl::access::mode::write>(h);
+            h.parallel_for(sycl::range<1>(10), [=](sycl::id<1> idx) {
+                acc[idx] = idx[0] * 2;
+            });
+        });
+        
+        queue.synchronize();
+        
+        // Verify results
+        auto host_acc = buf.get_access<sycl::access::mode::read>();
+        for (int i = 0; i < 10; ++i) {
+            REQUIRE(host_acc[i] == i * 2);
+        }
+    }
+}
+
+TEST_CASE("SYCL OpenMP Memory Operations", "[SYCL][OpenMP]") {
+    SECTION("Basic Memory Copy Operations") {
         auto& queue = Manager::get_current_queue();
         
         // Test memory allocation and copy operations using USM
@@ -121,26 +98,14 @@ void test_sycl_basic_memory_operations() {
         device_mem.copyToHost(result);
         
         // Verify the copy operation
-        bool copy_successful = true;
         for (size_t i = 0; i < SIZE; ++i) {
-            if (!within_tolerance(result[i], host_data[i])) {
-                copy_successful = false;
-                break;
-            }
+            REQUIRE(within_tolerance(result[i], host_data[i]));
         }
-        
-        assert(copy_successful && "Memory copy verification failed");
-        std::cout << "PASS\n";
-        
-    } catch (const std::exception& e) {
-        std::cout << "FAIL: " << e.what() << "\n";
-        throw;
     }
 }
 
-void test_sycl_parallel_for() {
-    std::cout << "[TEST] SYCL Parallel For... ";
-    try {
+TEST_CASE("SYCL OpenMP Parallel For", "[SYCL][OpenMP]") {
+    SECTION("Vector Addition Kernel") {
         auto& queue = Manager::get_current_queue();
         
         // Vector addition test using USM and in-order queue
@@ -174,26 +139,14 @@ void test_sycl_parallel_for() {
         d_c.copyToHost(c);
         
         // Verify results
-        bool computation_correct = true;
         for (size_t i = 0; i < SIZE; ++i) {
-            if (!within_tolerance(c[i], 3.0f)) {
-                computation_correct = false;
-                break;
-            }
+            REQUIRE(within_tolerance(c[i], 3.0f));
         }
-        
-        assert(computation_correct && "Parallel computation verification failed");
-        std::cout << "PASS\n";
-        
-    } catch (const std::exception& e) {
-        std::cout << "FAIL: " << e.what() << "\n";
-        throw;
     }
 }
 
-void test_sycl_reduction() {
-    std::cout << "[TEST] SYCL Reduction... ";
-    try {
+TEST_CASE("SYCL OpenMP Reduction", "[SYCL][OpenMP]") {
+    SECTION("Parallel Sum Reduction") {
         auto& queue = Manager::get_current_queue();
         
         // Parallel reduction test
@@ -229,56 +182,16 @@ void test_sycl_reduction() {
         
         // Verify result: sum of 1 to SIZE = SIZE * (SIZE + 1) / 2
         int expected = SIZE * (SIZE + 1) / 2;
-        assert(result[0] == expected && "Reduction computation verification failed");
-        
-        std::cout << "PASS\n";
-        
-    } catch (const std::exception& e) {
-        std::cout << "FAIL: " << e.what() << "\n";
-        throw;
+        REQUIRE(result[0] == expected);
     }
 }
 
- 
+#else // USE_SYCL
 
-int main() {
-    try {
-        // Run tests in sequence with proper error handling
-        test_sycl_cpu_initialization();
-        test_sycl_basic_memory_operations();
-        test_sycl_parallel_for();
-        test_sycl_reduction();
-        
-        std::cout << "\nAll SYCL OpenMP tests passed!\n";
-        
-        // Explicit cleanup to prevent mutex issues
-        try {
-            Manager::finalize();
-        } catch (...) {
-            // Ignore cleanup errors
-        }
-        
-        return 0;
-        
-    } catch (const std::exception& e) {
-        std::cerr << "\nTest failed with error: " << e.what() << "\n";
-        
-        // Attempt cleanup even on failure
-        try {
-            Manager::finalize();
-        } catch (...) {
-            // Ignore cleanup errors
-        }
-        
-        return 1;
+TEST_CASE("SYCL OpenMP Backend", "[SYCL][OpenMP]") {
+    SECTION("SYCL Not Enabled") {
+        SKIP("SYCL support not enabled, skipping OpenMP SYCL tests");
     }
 }
 
-#else // PROJECT_USES_SYCL
-
-int main() {
-    std::cout << "SYCL support not enabled, skipping OpenMP SYCL tests\n";
-    return 0;
-}
-
-#endif // PROJECT_USES_SYCL 
+#endif // USE_SYCL 

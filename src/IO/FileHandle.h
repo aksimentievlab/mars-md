@@ -1,5 +1,5 @@
 #pragma once
-
+#if !defined(__SYCL_DEVICE_ONLY__) && !defined(__CUDA_ARCH__) && !defined(__METAL_VERSION__)
 #include "ARBDException.h"
 #include "ARBDLogger.h"
 #include <cstdio>
@@ -90,3 +90,4 @@ public:
 };
 // Usage: FileHandle my_file("data.txt", "r"); // Automatically closes
 } // namespace ARBD
+#endif
