@@ -70,7 +70,7 @@ class BasePatch {
 	static size_t global_patch_idx; // Unique ID across ranks // TODO: preallocate
 									// regions that will be used, or offload this
 									// to a parallel singleton class
-	/* const */ size_t patch_idx;	// Unique ID across ranks
+	size_t patch_idx;	// Unique ID across ranks
 
 	// Q: should we have different kinds of patches? E.g. Spheres? This
 	// specialization _could_ go into subclass, or we could have a ptr to a Region

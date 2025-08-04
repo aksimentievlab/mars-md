@@ -5,7 +5,10 @@
 #include <vector> // std::vector
 
 #include "Math/Types.h"
-#include "System/SimSystem.h"
+#include "Objects/Patch/Patch.h"
+#include "ParticleType.h"
+
+namespace ARBD{
 
 template<typename Pos, typename Force>
 class Patch {
@@ -22,8 +25,8 @@ class Patch {
 	Pos minimum;
 	Pos maximum;
 
-	ParticleTypes* types;
-	ParticleTypes* types_d;
+	std::vector<ParticleType> types;
+	std::vector<ParticleType> types_d;
 
 	// Particle data
 	size_t num_particles;
@@ -174,19 +177,7 @@ class Patch : public BasePatch {
 
 	Metadata metadata; // Usually associated with proxy, but can use it here too
 
-	// size_t num_rb;
-	// Vector3* rb_pos;
-	// Matrix3* rb_orient;
-	// Vector3* rb_mom;
-	// Vector3* rb_ang_mom;
-
-	// size_t* type;	     // particle types: 0, 1, ... -> num * numReplicas
-	// size_t* rb_type;	     // rigid body types: 0, 1, ... -> num * numReplicas
-
-	// size_t num_rb_attached_particles;
-
-	// TODO: add a rb_attached bitmask
-
 	size_t num_group_sites;
 };
 } // namespace ARBD
+
