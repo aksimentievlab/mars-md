@@ -24,6 +24,7 @@ struct Length {
 struct ResourceCollection {
 	std::vector<Resource> resources;
 };
+class Patch;
 
 class BoundaryConditions {
 
@@ -113,7 +114,7 @@ class SimSystem {
 	SimSystem(Temperature& temp, Decomposer& decomp, BoundaryConditions boundary_conditions)
 		: temperature(temp), decomp(decomp), boundary_conditions(boundary_conditions) {}
 	
-    BasePatch patches; // TODO: should this be a vector?
+    Patch patches; // TODO: should this be a vector?
 
 	const Vector3 get_min() const {
 		Vector3 min(Vector3::highest());

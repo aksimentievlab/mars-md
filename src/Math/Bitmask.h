@@ -322,12 +322,12 @@ public:
 
 		// Allocate device memory for the Bitmask object itself
 		if (device_obj == nullptr) {
-			device_obj = static_cast<Bitmask*>(ARBD::BackendPolicy::allocate(sizeof(Bitmask)));
+			device_obj = static_cast<Bitmask*>(ARBD::BackendPolicy::allocate(resource, sizeof(Bitmask)));
 		}
 
 		// Allocate and copy mask data if needed
 		if (sz > 0) {
-			mask_d = static_cast<data_t*>(ARBD::BackendPolicy::allocate(sz));
+			mask_d = static_cast<data_t*>(ARBD::BackendPolicy::allocate(resource, sz));
 			ARBD::BackendPolicy::copy_from_host(mask_d, mask, sz);
 		}
 

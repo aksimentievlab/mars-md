@@ -286,8 +286,6 @@ void Manager::discover_devices() {
 
 		// If no GPU devices found, look for CPU devices with OpenMP preference
 		if (selected_device_infos.empty()) {
-			LOGINFO("No GPU devices found, looking for CPU devices with OpenMP preference");
-			
 			// Look for OpenMP CPU devices first
 			for (const auto& device_info : potential_device_infos) {
 				if (device_info.type == sycl::info::device_type::cpu && device_info.is_openmp_backend) {
@@ -297,7 +295,7 @@ void Manager::discover_devices() {
 			
 			// If no OpenMP CPU devices, fall back to regular CPU devices
 			if (selected_device_infos.empty()) {
-				LOGINFO("No OpenMP CPU devices found, using regular CPU devices");
+				LOGWARN("No OpenMP CPU devices found, using regular CPU devices");
 				for (const auto& device_info : potential_device_infos) {
 					if (device_info.type == sycl::info::device_type::cpu) {
 						selected_device_infos.push_back(device_info);
@@ -529,4 +527,4 @@ std::vector<unsigned int> Manager::get_accelerator_device_ids() {
 } // namespace SYCL
 } // namespace ARBD
 
-#endif // PROJECT_USES_SYCL
+#endif

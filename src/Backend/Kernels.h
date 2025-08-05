@@ -266,7 +266,7 @@ launch_kernel(const Resource& resource,
 }
 
 /**
- * @brief Name-based kernel launcher (for Metal), does not work. 
+ * @brief Name-based kernel launcher (for Metal), does not work.
  */
 /*
 template<typename InputTuple, typename OutputTuple, typename KernelName, typename... Args>
@@ -421,7 +421,7 @@ Event launch_cpu_kernel(const Resource& resource,
 				auto all_args = std::tuple_cat(input_ptrs, output_ptrs);
 				std::apply([&](auto&&... unpacked_args) { kernel_func(i, unpacked_args...); },
 						   all_args);
-			}  
+			}
 		});
 	}
 
@@ -587,15 +587,15 @@ void bind_tuple_to_encoder(MTL::ComputeCommandEncoder* encoder,
 
 template<typename... Args>
 void bind_args_to_encoder(MTL::ComputeCommandEncoder* encoder,
-                         uint32_t& buffer_index,
-                         Args&&... args) {
-    auto bind_arg = [&](auto&& arg) {
-        using ArgType = std::decay_t<decltype(arg)>;
-        if constexpr (std::is_arithmetic_v<ArgType> || std::is_trivial_v<ArgType>) {
-            encoder->setBytes(&arg, sizeof(ArgType), buffer_index++);
-        }
-    };
-    (bind_arg(std::forward<Args>(args)), ...);
+						  uint32_t& buffer_index,
+						  Args&&... args) {
+	auto bind_arg = [&](auto&& arg) {
+		using ArgType = std::decay_t<decltype(arg)>;
+		if constexpr (std::is_arithmetic_v<ArgType> || std::is_trivial_v<ArgType>) {
+			encoder->setBytes(&arg, sizeof(ArgType), buffer_index++);
+		}
+	};
+	(bind_arg(std::forward<Args>(args)), ...);
 }
 
 // Grid configuration helper
@@ -625,12 +625,12 @@ inline MetalGridConfig calculate_metal_grid_config(size_t thread_count,
 /**
  * @example
  * Example: Launching a Metal kernel for vector operations
- * 
+ *
  * @code
  * #include "Backend/Kernels.h"
  * #include "Math/Vector3.h"
  * using namespace ARBD;
- * 
+ *
  * // Prepare Metal resource and buffers
  * Resource metal_res(ResourceType::METAL, 0);
  * constexpr size_t n = 16;
@@ -642,11 +642,11 @@ inline MetalGridConfig calculate_metal_grid_config(size_t thread_count,
  * DeviceBuffer<Vector3_t<float>> buf_a(n), buf_b(n), buf_out(n);
  * buf_a.copy_from_host(host_a.data(), n);
  * buf_b.copy_from_host(host_b.data(), n);
- * 
+ *
  * KernelConfig config;
  * config.async = false;
  * config.grid_size = {n, 1, 1};
- * 
+ *
  * // Launch the Metal kernel by name
  * Event event = launch_metal_kernel(
  *     metal_res,
@@ -659,14 +659,14 @@ inline MetalGridConfig calculate_metal_grid_config(size_t thread_count,
  * event.wait();
  * buf_out.copy_to_host(host_out.data(), n);
  * @endcode
- * 
+ *
  * Example: Launching a Metal kernel for matrix elementwise multiplication
- * 
+ *
  * @code
  * #include "Backend/Kernels.h"
  * #include "Math/Matrix3.h"
  * using namespace ARBD;
- * 
+ *
  * Resource metal_res(ResourceType::METAL, 0);
  * constexpr size_t n = 4;
  * std::vector<Matrix3_t<float>> host_a(n), host_b(n), host_out(n);
@@ -675,20 +675,19 @@ inline MetalGridConfig calculate_metal_grid_config(size_t thread_count,
  *     m1.ex().x = float(i + 1); m1.ex().y = float(i + 2); m1.ex().z = float(i + 3);
  *     m1.ey().x = float(i + 4); m1.ey().y = float(i + 5); m1.ey().z = float(i + 6);
  *     m1.ez().x = float(i + 7); m1.ez().y = float(i + 8); m1.ez().z = float(i + 9);
- *     m2.ex().x = float(2 * (i + 1)); m2.ex().y = float(2 * (i + 2)); m2.ex().z = float(2 * (i + 3));
- *     m2.ey().x = float(2 * (i + 4)); m2.ey().y = float(2 * (i + 5)); m2.ey().z = float(2 * (i + 6));
- *     m2.ez().x = float(2 * (i + 7)); m2.ez().y = float(2 * (i + 8)); m2.ez().z = float(2 * (i + 9));
- *     host_a[i] = m1;
- *     host_b[i] = m2;
+ *     m2.ex().x = float(2 * (i + 1)); m2.ex().y = float(2 * (i + 2)); m2.ex().z = float(2 * (i +
+ * 3)); m2.ey().x = float(2 * (i + 4)); m2.ey().y = float(2 * (i + 5)); m2.ey().z = float(2 * (i +
+ * 6)); m2.ez().x = float(2 * (i + 7)); m2.ez().y = float(2 * (i + 8)); m2.ez().z = float(2 * (i +
+ * 9)); host_a[i] = m1; host_b[i] = m2;
  * }
  * DeviceBuffer<Matrix3_t<float>> buf_a(n), buf_b(n), buf_out(n);
  * buf_a.copy_from_host(host_a.data(), n);
  * buf_b.copy_from_host(host_b.data(), n);
- * 
+ *
  * KernelConfig config;
  * config.async = false;
  * config.grid_size = {n, 1, 1};
- * 
+ *
  * Event event = launch_metal_kernel(
  *     metal_res,
  *     n,
@@ -748,10 +747,15 @@ Event launch_metal_kernel(const Resource& resource,
 
 	// Configure and dispatch
 	auto grid_config = calculate_metal_grid_config(thread_count, config, pipeline);
-	LOGINFO("Dispatching Metal kernel: {} with grid size ({}, {}, {}) and threadgroup size ({}, {}, {})", 
-		kernel_name, 
-		grid_config.grid_size.width, grid_config.grid_size.height, grid_config.grid_size.depth,
-		grid_config.threadgroup_size.width, grid_config.threadgroup_size.height, grid_config.threadgroup_size.depth);
+	LOGINFO("Dispatching Metal kernel: {} with grid size ({}, {}, {}) and threadgroup size ({}, "
+			"{}, {})",
+			kernel_name,
+			grid_config.grid_size.width,
+			grid_config.grid_size.height,
+			grid_config.grid_size.depth,
+			grid_config.threadgroup_size.width,
+			grid_config.threadgroup_size.height,
+			grid_config.threadgroup_size.depth);
 	encoder->dispatchThreads(grid_config.grid_size, grid_config.threadgroup_size);
 	encoder->endEncoding();
 	LOGINFO("Metal kernel dispatch completed for: {}", kernel_name);
@@ -765,7 +769,7 @@ Event launch_metal_kernel(const Resource& resource,
 		LOGINFO("Waiting for Metal command buffer completion for kernel: {}", kernel_name);
 		metal_event.wait();
 		LOGINFO("Metal command buffer completed for kernel: {}", kernel_name);
-		
+
 		// Check for command buffer errors
 		MTL::CommandBuffer* pCmdBuffer = static_cast<MTL::CommandBuffer*>(cmd_buffer_ptr);
 		auto status = pCmdBuffer->status();
@@ -773,7 +777,8 @@ Event launch_metal_kernel(const Resource& resource,
 		if (status == MTL::CommandBufferStatusError) {
 			auto* error = pCmdBuffer->error();
 			if (error) {
-				LOGERROR("Metal command buffer error: {}", error->localizedDescription()->utf8String());
+				LOGERROR("Metal command buffer error: {}",
+						 error->localizedDescription()->utf8String());
 			}
 		}
 	} else {
@@ -785,17 +790,24 @@ Event launch_metal_kernel(const Resource& resource,
 
 template<typename InputBuffer, typename OutputBuffer, typename... Args>
 std::enable_if_t<is_device_buffer_v<OutputBuffer> && !is_device_buffer_v<InputBuffer> &&
-!is_string_v<InputBuffer>,Event> launch_metal_kernel(const Resource& resource,
-						  size_t thread_count,
-						  const InputBuffer& input_buffer,
-						  const OutputBuffer& output_buffer,
-						  const KernelConfig& config,
-						  const std::string& kernel_name,
-						  Args&&... args) {
-	auto input=std::make_tuple(std::ref(input_buffer));
-	auto output=std::make_tuple(std::ref(output_buffer),std::ref(thread_count));
-	return launch_metal_kernel(resource, thread_count, input, output, config, kernel_name, std::forward<Args>(args)...);
-
+					 !is_string_v<InputBuffer>,
+				 Event>
+launch_metal_kernel(const Resource& resource,
+					size_t thread_count,
+					const InputBuffer& input_buffer,
+					const OutputBuffer& output_buffer,
+					const KernelConfig& config,
+					const std::string& kernel_name,
+					Args&&... args) {
+	auto input = std::make_tuple(std::ref(input_buffer));
+	auto output = std::make_tuple(std::ref(output_buffer), std::ref(thread_count));
+	return launch_metal_kernel(resource,
+							   thread_count,
+							   input,
+							   output,
+							   config,
+							   kernel_name,
+							   std::forward<Args>(args)...);
 }
 /*
 template<typename... Args>

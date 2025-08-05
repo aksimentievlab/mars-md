@@ -13,6 +13,7 @@ std::string Exception::type_to_str(ExceptionType type) {
         case ExceptionType::MetalRuntimeError:   return "Metal Runtime Error";
         case ExceptionType::FileIoError:         return "File IO Error";
         case ExceptionType::FileOpenError:       return "File Open Error";
+        case ExceptionType::RuntimeError:        return "Unified Runtime Error";
         default:
             return "Unknown Error Code (" + std::to_string(static_cast<int>(type)) + ")";
     }

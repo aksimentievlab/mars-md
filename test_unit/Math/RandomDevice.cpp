@@ -184,8 +184,8 @@ TEST_CASE_METHOD(RandomTestFixture,
 			Random<Resource> rng(resource, 128);
 			rng.init(98765, 0);
 
-			DeviceBuffer<float> random_buffer(TEST_SIZE);
-			DeviceBuffer<float> processed_buffer(TEST_SIZE);
+			DeviceBuffer<float> random_buffer(TEST_SIZE, resource);
+			DeviceBuffer<float> processed_buffer(TEST_SIZE, resource);
 
 			// Generate random numbers
 			Event random_event = rng.generate_uniform(random_buffer, 0.0f, 1.0f);
@@ -228,9 +228,9 @@ TEST_CASE_METHOD(RandomTestFixture,
 			Random<Resource> rng(resource, 128);
 			rng.init(11223, 0);
 
-			DeviceBuffer<float> uniform_buffer(TEST_SIZE);
-			DeviceBuffer<float> gaussian_buffer(TEST_SIZE);
-			DeviceBuffer<float> combined_buffer(TEST_SIZE);
+			DeviceBuffer<float> uniform_buffer(TEST_SIZE, resource);
+			DeviceBuffer<float> gaussian_buffer(TEST_SIZE, resource);
+			DeviceBuffer<float> combined_buffer(TEST_SIZE, resource);
 
 			// Generate both distributions
 			Event uniform_event = rng.generate_uniform(uniform_buffer, 0.0f, 1.0f);
@@ -350,10 +350,10 @@ TEST_CASE_METHOD(RandomTestFixture,
 
 		SECTION("Device buffer allocation on " + backend_name) {
 			// Create buffers directly on device - NO HOST COPY
-			DeviceBuffer<float> uniform_buffer(TEST_SIZE);
-			DeviceBuffer<double> gaussian_buffer(TEST_SIZE);
-			DeviceBuffer<Vector3> vector3_buffer(TEST_SIZE);
-			DeviceBuffer<int> int_buffer(TEST_SIZE);
+			DeviceBuffer<float> uniform_buffer(TEST_SIZE, resource);
+			DeviceBuffer<double> gaussian_buffer(TEST_SIZE, resource);
+			DeviceBuffer<Vector3> vector3_buffer(TEST_SIZE, resource);
+			DeviceBuffer<int> int_buffer(TEST_SIZE, resource);
 
 			REQUIRE(uniform_buffer.size() == TEST_SIZE);
 			REQUIRE(gaussian_buffer.size() == TEST_SIZE);
@@ -393,7 +393,7 @@ TEST_CASE_METHOD(RandomTestFixture,
 			rng.init(42, 0);
 
 			// Create buffer on device
-			DeviceBuffer<float> device_buffer(TEST_SIZE);
+			DeviceBuffer<float> device_buffer(TEST_SIZE, resource);
 
 			// Generate random numbers directly on device
 			Event generation_event = rng.generate_uniform(device_buffer, 0.0f, 1.0f);
@@ -447,7 +447,7 @@ TEST_CASE_METHOD(RandomTestFixture,
 			Random<Resource> rng(resource, 128);
 			rng.init(12345, 0);
 
-			DeviceBuffer<float> device_buffer(LARGE_TEST_SIZE); // Larger for better statistics
+			DeviceBuffer<float> device_buffer(LARGE_TEST_SIZE,resource); // Larger for better statistics
 
 			Event generation_event = rng.generate_gaussian(device_buffer, 0.0f, 1.0f);
 			generation_event.wait();
@@ -471,7 +471,7 @@ TEST_CASE_METHOD(RandomTestFixture,
 			Random<Resource> rng(resource, 128);
 			rng.init(9876, 0);
 
-			DeviceBuffer<Vector3> device_buffer(TEST_SIZE);
+			DeviceBuffer<Vector3> device_buffer(TEST_SIZE,resource);
 			Vector3 mean_vec(0.0f, 0.0f, 0.0f);
 			Vector3 stddev_vec(1.0f, 1.0f, 1.0f);
 
@@ -501,7 +501,7 @@ TEST_CASE_METHOD(RandomTestFixture,
 			Random<Resource> rng(resource, 128);
 			rng.init(55555, 0);
 
-			DeviceBuffer<int> device_buffer(TEST_SIZE);
+			DeviceBuffer<int> device_buffer(TEST_SIZE, resource);
 
 			Event generation_event = rng.generate_uniform(device_buffer, 1, 100);
 			generation_event.wait();
@@ -555,7 +555,7 @@ TEST_CASE_METHOD(RandomTestFixture,
 			Random<Resource> rng(resource, 128);
 			rng.init(77777, 0);
 
-			DeviceBuffer<float> large_buffer(PERF_SIZE);
+			DeviceBuffer<float> large_buffer(PERF_SIZE, resource);
 
 			auto start = std::chrono::high_resolution_clock::now();
 			Event event = rng.generate_uniform(large_buffer, 0.0f, 1.0f);
@@ -581,8 +581,8 @@ TEST_CASE_METHOD(RandomTestFixture,
 			rng1.init(11111, 0);
 			rng2.init(22222, 0);
 
-			DeviceBuffer<float> buffer1(TEST_SIZE);
-			DeviceBuffer<float> buffer2(TEST_SIZE);
+			DeviceBuffer<float> buffer1(TEST_SIZE, resource);
+			DeviceBuffer<float> buffer2(TEST_SIZE, resource);
 
 			// Generate with both RNGs
 			Event event1 = rng1.generate_uniform(buffer1, 0.0f, 1.0f);
@@ -619,8 +619,8 @@ TEST_CASE_METHOD(RandomTestFixture,
 			rng1.init(SEED, 0);
 			rng2.init(SEED, 0);
 
-			DeviceBuffer<float> buffer1(TEST_SIZE);
-			DeviceBuffer<float> buffer2(TEST_SIZE);
+			DeviceBuffer<float> buffer1(TEST_SIZE, resource);
+			DeviceBuffer<float> buffer2(TEST_SIZE, resource);
 
 			Event event1 = rng1.generate_uniform(buffer1, 0.0f, 1.0f);
 			Event event2 = rng2.generate_uniform(buffer2, 0.0f, 1.0f);
@@ -677,7 +677,7 @@ SECTION("Empty buffer generation") {
 		Random<Resource> rng(cuda_resource, 128);
 		rng.init(42, 0);
 
-		DeviceBuffer<float> empty_buffer(0);
+		DeviceBuffer<float> empty_buffer(0, cuda_resource);
 		REQUIRE(empty_buffer.empty());
 
 		// Should handle gracefully
@@ -690,7 +690,7 @@ SECTION("Extreme parameter ranges") {
 		Random<Resource> rng(cuda_resource, 128);
 		rng.init(42, 0);
 
-		DeviceBuffer<float> buffer(100);
+		DeviceBuffer<float> buffer(100, cuda_resource);
 
 		// Very large range
 		REQUIRE_NOTHROW(rng.generate_uniform(buffer, -1e6f, 1e6f));

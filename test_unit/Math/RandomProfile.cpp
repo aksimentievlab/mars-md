@@ -118,7 +118,7 @@ TEST_CASE_METHOD(ProfiledRandomTestFixture,
 			// Profile memory allocation
 			{
 				PROFILE_RANGE("DeviceBuffer::Allocation", backend_type);
-				DeviceBuffer<float> device_buffer(100000); // 100K elements
+				DeviceBuffer<float> device_buffer(100000, resource); // 100K elements
 
 				PROFILE_MEMORY(backend_type, nullptr);
 
@@ -148,7 +148,7 @@ TEST_CASE_METHOD(ProfiledRandomTestFixture,
 			Random<Resource> rng(resource, 128);
 			rng.init(12345, 0);
 
-			DeviceBuffer<float> device_buffer(50000);
+			DeviceBuffer<float> device_buffer(50000, resource);
 
 			{
 				PROFILE_RANGE("Random::GenerateGaussian", backend_type);
@@ -184,7 +184,7 @@ TEST_CASE_METHOD(ProfiledRandomTestFixture,
 			Random<Resource> rng(resource, 128);
 			rng.init(9876, 0);
 
-			DeviceBuffer<ARBD::Vector3_t<float>> device_buffer(25000);
+			DeviceBuffer<ARBD::Vector3_t<float>> device_buffer(25000,resource);
 			ARBD::Vector3_t<float> mean(0.0f, 0.0f, 0.0f);
 			ARBD::Vector3_t<float> dev(1.0f, 1.0f, 1.0f);
 
@@ -250,7 +250,7 @@ TEST_CASE_METHOD(ProfiledRandomTestFixture,
 			rng.init(314159, 0);
 
 			// First, test if random generation is working as expected
-			DeviceBuffer<float> test_buffer(100);
+			DeviceBuffer<float> test_buffer(100,resource);
 			Event test_event = rng.generate_uniform(test_buffer, -1.0f, 1.0f);
 			test_event.wait();
 
@@ -268,9 +268,9 @@ TEST_CASE_METHOD(ProfiledRandomTestFixture,
 
 			// If this is showing values outside [-1, 1] or mean not near 0, we have found the issue
 
-			DeviceBuffer<float> x_coords(NUM_SAMPLES);
-			DeviceBuffer<float> y_coords(NUM_SAMPLES);
-			DeviceBuffer<int> inside_circle(NUM_SAMPLES);
+			DeviceBuffer<float> x_coords(NUM_SAMPLES, resource);
+			DeviceBuffer<float> y_coords(NUM_SAMPLES, resource);
+			DeviceBuffer<int> inside_circle(NUM_SAMPLES, resource);
 
 			// Generate random coordinates
 			{
@@ -436,9 +436,9 @@ TEST_CASE_METHOD(ProfiledRandomTestFixture,
 			Random<Resource> rng(resource, 128);
 			rng.init(271828, 0);
 
-			DeviceBuffer<Vector3> random_steps(NUM_STEPS);
-			DeviceBuffer<Vector3> walker_positions(NUM_WALKERS);
-			DeviceBuffer<float> final_distances(NUM_WALKERS);
+			DeviceBuffer<Vector3> random_steps(NUM_STEPS, resource);
+			DeviceBuffer<Vector3> walker_positions(NUM_WALKERS, resource);
+			DeviceBuffer<float> final_distances(NUM_WALKERS, resource);
 			Vector3 mean(0.0f, 0.0f, 0.0f);
 			Vector3 dev(1.0f, 1.0f, 1.0f);
 			// Generate random step directions
@@ -539,9 +539,9 @@ TEST_CASE_METHOD(ProfiledRandomTestFixture,
 			Random<Resource> rng(resource, 128);
 			rng.init(161803, 0);
 
-			DeviceBuffer<float> noise_values(TOTAL_POINTS);
-			DeviceBuffer<float> smoothed_noise(TOTAL_POINTS);
-			DeviceBuffer<float> gradient_magnitude(TOTAL_POINTS);
+			DeviceBuffer<float> noise_values(TOTAL_POINTS, resource);
+			DeviceBuffer<float> smoothed_noise(TOTAL_POINTS, resource);
+			DeviceBuffer<float> gradient_magnitude(TOTAL_POINTS, resource);
 
 			// Generate base noise
 			{
@@ -708,7 +708,7 @@ TEST_CASE_METHOD(ProfiledRandomTestFixture,
 
 			// Try a simple kernel launch to see exactly where it fails
 			const size_t test_size = 100;
-			DeviceBuffer<float> test_buffer(test_size);
+			DeviceBuffer<float> test_buffer(test_size, sycl_resource);
 			auto inputs = std::make_tuple(std::ref(test_buffer));
 			auto outputs = std::make_tuple(std::ref(test_buffer));
 
@@ -757,7 +757,7 @@ TEST_CASE_METHOD(ProfiledRandomTestFixture,
 			Random<Resource> rng(resource, 256);
 			rng.init(654321, 0);
 
-			DeviceBuffer<float> device_buffer(PERF_SIZE);
+			DeviceBuffer<float> device_buffer(PERF_SIZE,resource);
 
 			auto start = std::chrono::high_resolution_clock::now();
 
@@ -794,7 +794,7 @@ TEST_CASE_METHOD(ProfiledRandomTestFixture,
 		for (const auto& [resource, backend_name] : available_backends) {
 			PROFILE_RANGE("Bandwidth::" + backend_name, resource.type);
 
-			DeviceBuffer<float> device_buffer(BANDWIDTH_SIZE);
+			DeviceBuffer<float> device_buffer(BANDWIDTH_SIZE, resource);
 			std::vector<float> host_buffer(BANDWIDTH_SIZE, 1.0f);
 
 			// Measure host-to-device bandwidth
@@ -870,7 +870,7 @@ TEST_CASE("SYCL Multi-device parallel random generation with cross-device analys
 			SYCL::Manager::use(static_cast<int>(device_id));
 
 			// Now allocate the buffer on the correct device
-			buffer = DeviceBuffer<float>(buffer_size);
+			buffer = DeviceBuffer<float>(buffer_size, resource);
 
 			// Initialize the RNG for this device
 			rng = std::make_unique<Random<Resource>>(resource, 256);
@@ -1267,7 +1267,7 @@ TEST_CASE("CUDA Multi-device parallel random generation with cross-device analys
 			CUDA::CUDAManager::use(static_cast<int>(device_id));
 
 			// Now allocate the buffer on the correct device
-			buffer = DeviceBuffer<float>(buffer_size);
+			buffer = DeviceBuffer<float>(buffer_size, resource);
 
 			// Initialize the RNG for this device
 			rng = std::make_unique<Random<Resource>>(resource, 256);

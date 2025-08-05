@@ -86,7 +86,7 @@ TEST_CASE_METHOD(BackendInitFixture, "Vector3_t Buffer Creation", "[buffer][vect
     SECTION("Basic Vector3_t<float> buffer creation") {
         Resource resource = Resource::Local();
         
-        DeviceBuffer<Vector3_t<float>> vec_buffer(VECTOR_BUFFER_SIZE);
+        DeviceBuffer<Vector3_t<float>> vec_buffer(VECTOR_BUFFER_SIZE, resource);
         
         REQUIRE(vec_buffer.size() == VECTOR_BUFFER_SIZE);
         REQUIRE_FALSE(vec_buffer.empty());

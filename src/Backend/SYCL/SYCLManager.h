@@ -617,44 +617,6 @@ class Manager {
 	static sycl::info::device_type preferred_type_;
 };
 
-/**
- * @brief Policy for SYCL memory operations.
- */
- struct Policy {
-	static void* allocate(size_t bytes) {
-		auto& queue = Manager::get_current_queue();
-		void* ptr = sycl::malloc_device(bytes, queue.get());
-		LOGTRACE("SYCLPolicy: Allocated {} bytes.", bytes);
-		return ptr;
-	}
-
-	static void deallocate(void* ptr) {
-		if (ptr) {
-			auto& queue = Manager::get_current_queue();
-			LOGTRACE("SYCLPolicy: Deallocating pointer.");
-			sycl::free(ptr, queue.get());
-		}
-	}
-
-	static void copy_to_host(void* host_dst, const void* device_src, size_t bytes) {
-		auto& queue = Manager::get_current_queue();
-		LOGTRACE("SYCLPolicy: Copying {} bytes from device to host.", bytes);
-		queue.get().memcpy(host_dst, device_src, bytes).wait();
-	}
-
-	static void copy_from_host(void* device_dst, const void* host_src, size_t bytes) {
-		auto& queue = 	Manager::get_current_queue();
-		LOGTRACE("SYCLPolicy: Copying {} bytes from host to device.", bytes);
-		queue.get().memcpy(device_dst, host_src, bytes).wait();
-	}
-
-	static void copy_device_to_device(void* device_dst, const void* device_src, size_t bytes) {
-		auto& queue = Manager::get_current_queue();
-		LOGTRACE("SYCLPolicy: Copying {} bytes from device to device.", bytes);
-		queue.get().memcpy(device_dst, device_src, bytes).wait();
-	}
-};
-} // namespace SYCL
-} // namespace ARBD
-
+} 
+}
 #endif // PROJECT_USES_SYCL
