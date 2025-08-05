@@ -1,0 +1,67 @@
+diff arbd.gendocs/src/Configuration.cpp /home/pinyili2/server10/arbd_stable/src/Configuration.cpp
+1047,1050c1047,1050
+< 		// else if (param == String("numberFluct"))
+< 		// 	numberFluct = atoi(value.val());
+< 		// else if (param == String("numberFluctPeriod"))
+< 		// 	numberFluctPeriod = atoi(value.val());
+---
+> 		else if (param == String("numberFluct"))
+> 			numberFluct = atoi(value.val());
+> 		else if (param == String("numberFluctPeriod"))
+> 			numberFluctPeriod = atoi(value.val());
+1073,1076c1073,1076
+< 		// else if (param == String("currentSegmentZ"))
+< 		// 	currentSegmentZ = (float) strtod(value.val(), NULL);
+< 		// else if (param == String("numCap"))
+< 		// 	numCap = atoi(value.val());
+---
+> 		else if (param == String("currentSegmentZ"))
+> 			currentSegmentZ = (float) strtod(value.val(), NULL);
+> 		else if (param == String("numCap"))
+> 			numCap = atoi(value.val());
+1125,1133c1125,1133
+< 		// } else if (param == String("radius")) {
+< 		//     if (currPart < 0) exit(1);
+< 		//     part[currPart].radius = (float) strtod(value.val(), NULL);
+< 		// } else if (param == String("eps")) {
+< 		//     if (currPart < 0) exit(1);
+< 		//     part[currPart].eps = (float) strtod(value.val(), NULL);
+< 		// } else if (param == String("reservoirFile")) {
+< 		//     if (currPart < 0) exit(1);
+< 		//     partReservoirFile[currPart] = value;
+---
+> 		} else if (param == String("radius")) {
+> 		    if (currPart < 0) exit(1);
+> 		    part[currPart].radius = (float) strtod(value.val(), NULL);
+> 		} else if (param == String("eps")) {
+> 		    if (currPart < 0) exit(1);
+> 		    part[currPart].eps = (float) strtod(value.val(), NULL);
+> 		} else if (param == String("reservoirFile")) {
+> 		    if (currPart < 0) exit(1);
+> 		    partReservoirFile[currPart] = value;
+1290c1290,1296
+< 		} else if (param == String("densityGrid")) {
+---
+> 		} else if (param == String("constantTorque"))
+>                         rigidBody[currRB].constantTorque = stringToVector3( value );
+>                 else if (param == String("constantForce"))
+>                         rigidBody[currRB].constantForce = stringToVector3( value );
+>                 else if (param == String("vectorTorque"))
+>                         rigidBody[currRB].vectorTorque = stringToVector3( value ); 
+> 		else if (param == String("densityGrid")) {
+diff arbd.gendocs/src/RigidBodyController.cu /home/pinyili2/server10/arbd_stable/src/RigidBodyController.cu
+578a579,581
+>                         rb.addTorque(rb.t -> constantTorque);
+>                         rb.addForce(rb.t -> constantForce);
+> 
+diff arbd.gendocs/src/RigidBodyType.h /home/pinyili2/server10/arbd_stable/src/RigidBodyType.h
+26c26
+< 	name(name), conf(conf), num(0),
+---
+> 	name(name), conf(conf), num(0),constantTorque(Vector3(0.f)),constantForce(Vector3(0.f)),
+80c80,82
+< 
+---
+>         Vector3 constantTorque;
+>         Vector3 constantForce;
+>         Vector3 vectorTorque;

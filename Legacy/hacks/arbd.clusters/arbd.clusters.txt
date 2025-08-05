@@ -1,0 +1,257 @@
+diff --git a/src/ClusterCompute.cu b/src/ClusterCompute.cu
+index 730c7ba..8c8c035 100644
+--- a/src/ClusterCompute.cu
++++ b/src/ClusterCompute.cu
+@@ -33,7 +33,7 @@ inline void kernelCheckCL(const char* file, int line)
+ // CellDecomposition::CellDecomposition() {};
+ 
+ NonbondedClusterCompute::NonbondedClusterCompute(const Configuration& c, const int num_replicas, const float density_scale) :
+-    cluster_size(32), cutoff2((c.switchLen + c.switchStart) * (c.switchLen + c.switchStart)),
++    cutoff2((c.switchLen + c.switchStart) * (c.switchLen + c.switchStart)),
+     pairlist2((c.switchLen + c.switchStart + c.pairlistDistance) * (c.switchLen + c.switchStart + c.pairlistDistance))
+ {
+     const int& num = c.num;
+@@ -234,25 +234,27 @@ void NonbondedClusterCompute::decompose(const ComputeForce &compute) {
+     // 	// Map particles into order of cluster appearance
+     // }
+ 
+-    // // Sort clusters according to z-order
+-    // {
+-    // 	// First compute z-order of cluster
+-    // 	calc__cluster_zorder_idx<<<dim3(num/BLOCK_SIZE0+1,1,1), dim3(BLOCK_SIZE0,1,1)>>>
+-    // 	    (clusters_d, bb_d, cluster_num_d, math::sqrt(cutoff2), sys_d[0], zorder_idx_d);
+-    // 	gpuKernelCheck();
+-
+-    // 	gpuman.sync(); // need cluster_num
+-    // 	thrust::device_ptr<int> zorder_idx_p = thrust::device_pointer_cast(zorder_idx_d);
+-    // 	thrust:: cluster_idx = thrust::device_vector<int>(cluster_num,0);
+-    // 	gpuman.sync();
+-    // 	thrust::sequence(cluster_idx.begin(), cluster_idx.end());
+-    // 	gpuman.sync();
+-    // 	thrust::sort_by_key( z_order_idx_p, z_order_idx_p + cluster_num, cluster_idx.begin() );
+-	
+-    // 	// Map particles into order of cluster appearance
+-    // 	int* sorted_cluster_idx_d = thrust::raw_pointer_cast( cluster_idx.data() );	
++    // Sort clusters according to z-order
++    {
++	gpuErrchk(cudaMalloc(&cluster_zorder_idx_d, sizeof(int)*cluster_num));
+ 
+-    // }
++	// First compute z-order of cluster
++	calc_cluster_zorder_idx<<<dim3(num/BLOCK_SIZE0+1,1,1), dim3(BLOCK_SIZE0,1,1)>>>
++	    (clusters_d, bb_d, cluster_num_d, sqrt(cutoff2), sys_d[0], cluster_zorder_idx_d);
++	gpuKernelCheck();
++
++	gpuman.sync(); // need cluster_num
++	thrust::device_ptr<int> zorder_idx_p = thrust::device_pointer_cast(cluster_zorder_idx_d);
++	thrust::device_ptr<int2> clusters_p = thrust::device_pointer_cast(clusters_d);
++	cluster_order = thrust::device_vector<int>(cluster_num,0);	
++	gpuman.sync();
++	thrust::sequence(cluster_order.begin(), cluster_order.end());
++	gpuman.sync();
++	thrust::sort_by_key( zorder_idx_p, zorder_idx_p + cluster_num, clusters_p );
++	
++	// // Map particles into order of cluster appearance
++	// int* sorted_cluster_idx_d = thrust::raw_pointer_cast( cluster_idx.data() );
++    }
+ 
+     { // Reorder particles according to pencil z order
+ 	const int* type_d = compute.type_d;
+@@ -304,12 +306,22 @@ void NonbondedClusterCompute::decompose(const ComputeForce &compute) {
+     gpuErrchk(cudaMemcpy(&neighbor_num, neighbor_num_d, sizeof(int), cudaMemcpyDeviceToHost));
+     printf("%d non-self pairs of %d clusters\n", neighbor_num, cluster_num);
+ 
++    size_t free_byte, total_byte;
++    gpuErrchk( cudaMemGetInfo( &free_byte, &total_byte ) );
++    printf("Memory: %d/%d (%d%%)\n", static_cast<int>(total_byte-free_byte), static_cast<int>(total_byte),
++	   static_cast<int>((total_byte-free_byte)*100.f/total_byte));
++    
+     if (mask_d != NULL) {
+ 	BitMask::remove_from_cuda(mask_d);
+     }
+     BitMask bm = BitMask( ((size_t) neighbor_num+cluster_num+1)*cluster_size*cluster_size);
+     mask_d = bm.copy_to_cuda();
+     mask_filled = false;
++
++    gpuErrchk( cudaMemGetInfo( &free_byte, &total_byte ) );
++    printf("Memory: %d/%d (%d%%)\n", static_cast<int>(total_byte-free_byte), static_cast<int>(total_byte),
++	   static_cast<int>((total_byte-free_byte)*100.f/total_byte));
++
+ }
+ 
+ float NonbondedClusterCompute::computeTabulated(bool get_energy, const ComputeForce &compute) {
+@@ -323,7 +335,7 @@ float NonbondedClusterCompute::computeTabulated(bool get_energy, const ComputeFo
+ 
+     std::vector<Vector3*> forceInternal_d = compute.forceInternal_d;
+     // float* energies_d = compute.energies_d;
+-
++    
+     // const std::vector<Vector3*>& pos_d = compute.pos_d;
+     const std::vector<cudaTextureObject_t>& pos_tex = compute.pos_tex;
+ 
+diff --git a/src/ClusterCompute.cuh b/src/ClusterCompute.cuh
+index 0cb287d..6dfe412 100644
+--- a/src/ClusterCompute.cuh
++++ b/src/ClusterCompute.cuh
+@@ -550,7 +550,7 @@ void calculate_force_clusters_kernel(Vector3* force, const BaseGrid* __restrict_
+ 				     const int num_clusters, int2* __restrict__ clusters,
+ 				     const BitMask* __restrict__ mask,
+ 				     const int numParts, const int* __restrict__ type,
+-				     TabulatedPotential** __restrict__ tablePot,
++				     TabulatedPotential* __restrict__ * __restrict__ tablePot,
+ 				     const cudaTextureObject_t PosTex)
+ 				     // Vector3* __restrict__ pos)
+ {
+@@ -592,29 +592,32 @@ void calculate_force_clusters_kernel(Vector3* force, const BaseGrid* __restrict_
+ 	int2& cluster_j = clusters[cidx_j];
+ 	// assert( block_size >= cluster_i.y );
+ 	// assert( block_size >= cluster_j.y );
+-
+ 	const int ai = (tid < cluster_i.y) ? cluster_i.x+tid : -1;
+-
++	
++	// int2 cluster_j = make_int2(0,0);
++	// const int ai = 0;
+         Vector3 force_acc = Vector3(0.0f);
+ 
+ 	// load neighbor particles to shared memory (bottleneck)
+         __syncthreads();
+ 	const int& pj = particle_j[tid] = (tid < cluster_j.y) ? cluster_j.x+tid : -1;
+-	if (particle_j[tid] >= 0) {
+-	    pos_j[tid] = Vector3(tex1Dfetch<float4>(PosTex, particle_j[tid]));
++	// const int& pj = particle_j[tid] = tid + pair_i;
++	if (pj >= 0) {
++	    pos_j[tid] = Vector3(tex1Dfetch<float4>(PosTex, pj));
+ 	    // pos_j[tid] = pos[particle_j[tid]];
+ 	    force_j[tid] = Vector3(0.0f);
+-	    type_j[tid] = type[particle_j[tid]];
++	    type_j[tid] = type[pj] * numParts;
+ 	}
+         __syncthreads();
+ 
+ 
+-	if (false || ai >= 0) {
++	if (ai >= 0) {
+ 	    const int& i = tid;
+-
++	    
+ 	    if (pair_id >= num_cluster_pairs) {
+ 		// cluster self-pair
+ 		Vector3& a = pos_j[i];
++		const int type_a = type[ai];
+ 		for (int j = 0; j < cluster_j.y; ++j) {
+ 		    // const size_t ex_idx = ((size_t) pair_id)*cluster_size*cluster_size + j*cluster_size + i;
+ 		    // if (mask->get_mask( ex_idx )) {
+@@ -625,7 +628,7 @@ void calculate_force_clusters_kernel(Vector3* force, const BaseGrid* __restrict_
+ 		    Vector3 dr = sys->wrapDiff(b-a);
+ 		    float d2 = dr.length2();
+ 
+-		    int ind = type[ai] + type_j[j] * numParts;
++		    int ind = type_a + type_j[j];
+ 		    if (tablePot[ind] != NULL && d2 <= cutoff2) {
+ 			Vector3 f = tablePot[ind]->computef(dr,d2);
+ 			force_acc += f;
+@@ -635,19 +638,20 @@ void calculate_force_clusters_kernel(Vector3* force, const BaseGrid* __restrict_
+ 	    } else {
+ 		// cluster neighbor pair
+ 		Vector3 a(tex1Dfetch<float4>(PosTex, ai));
+-		// Vector3 a(pos[ai]);
++		const int type_a = type[ai];
+ 		for (int j = 0; j < cluster_j.y; ++j) {
+-		    // const size_t ex_idx = ((size_t) pair_id)*cluster_size*cluster_size + j*cluster_size + i;
+-		    // if (mask->get_mask( ex_idx )) {
+-		    // 	continue;
+-		    // }
++		    const size_t ex_idx = ((size_t) pair_id)*cluster_size*cluster_size + j*cluster_size + i;
++		    if (mask->get_mask( ex_idx )) {
++			continue;
++		    }
+ 
+ 		    Vector3& b = pos_j[j];
+ 		    Vector3 dr = sys->wrapDiff(b-a);
+ 		    float d2 = dr.length2();
+ 
+ 		    // TODO: maybe cache pairTabPotType for clusters
+-		    int ind = type[ai] + type_j[j] * numParts;
++		    // int ind = type[ai] + type_j[j] * numParts;
++		    int ind = type_a + type_j[j];
+ 
+ 		    if (tablePot[ind] != NULL && d2 <= cutoff2) {
+ 			Vector3 f = tablePot[ind]->computef(dr,d2);
+@@ -657,13 +661,15 @@ void calculate_force_clusters_kernel(Vector3* force, const BaseGrid* __restrict_
+ 		}
+ 	    }
+ 	    // accumulate force for tid-th particle
+-	    // atomicAdd(&force[ai],  force_acc);
++	    atomicAdd(&force[ai],  force_acc);
+ 	}
+ 	// accumulate force for j-th particle
+ 	//
+-	for (int j = tid; j < cluster_j.y; ++j) {
+-	    int& aj = particle_j[j];
+-	    // if (aj >= 0) atomicAdd(&force[aj],  force_j[j]);
++	// for (int j = tid; j < cluster_j.y; ++j)
++	{
++	    const int& j = tid;
++	    const int& aj = particle_j[j];
++	    if (aj >= 0) atomicAdd(&force[aj],  force_j[j]);
+ 	}
+         pair_id += stride;
+     }
+diff --git a/src/ClusterCompute.h b/src/ClusterCompute.h
+index becc6e6..77cf67d 100644
+--- a/src/ClusterCompute.h
++++ b/src/ClusterCompute.h
+@@ -8,11 +8,12 @@ class BitMask;
+ class Configuration;
+ class NonbondedClusterCompute : public NonbondedCompute {
+ public:
+-    NonbondedClusterCompute(const Configuration &c, const int num_replicas, const float density_scale=0.5);
++    NonbondedClusterCompute(const Configuration &c, const int num_replicas, const float density_scale=1.2);
+     ~NonbondedClusterCompute();
+     const static int BLOCK_SIZE0 = 32;
+-    constexpr static int NUM_THREADS = 32;
+-    const int cluster_size;
++    constexpr static int NUM_THREADS = 64;
++    constexpr static int cluster_size = NUM_THREADS;
++    // const int cluster_size;
+     
+ private:
+     __host__ __device__
+@@ -38,6 +39,8 @@ private:
+     int* pencil_particle_num_d;
+     int* pencil_num_clusters_d;
+     float* pencil_z_coords_d;
++    int* cluster_zorder_idx_d;
++    thrust::device_vector<int> cluster_order;
+     thrust::device_vector<int> particle_idx;
+ 
+     Vector3* mapped_pos_d;	// Arrays to store reorder particle data
+diff --git a/src/TabulatedPotential.h b/src/TabulatedPotential.h
+index e32068a..f1eae0f 100644
+--- a/src/TabulatedPotential.h
++++ b/src/TabulatedPotential.h
+@@ -153,7 +153,7 @@ public:
+ 		Vector3 force = (du*drInv/d)*r;
+ 		return EnergyForce(energy,force);
+ 	}
+-  HOST DEVICE inline Vector3 computef(Vector3 r, float d) {
++  HOST DEVICE inline Vector3 computef(Vector3 r, float d) const {
+ 		d = sqrt(d);
+ 		// float d = r.length();
+ 		// RBTODO: precompute so that initial blocks are zero; reduce computation here
+diff --git a/tests/argon/BrownDyn.bd b/tests/argon/BrownDyn.bd
+index 04dc346..546b9dc 100644
+--- a/tests/argon/BrownDyn.bd
++++ b/tests/argon/BrownDyn.bd
+@@ -2,8 +2,8 @@ timestep 2e-6
+ steps 1000000
+ 
+ temperature 295
+-outputPeriod 1000
+-outputEnergyPeriod 1000
++outputPeriod 100
++outputEnergyPeriod 100
+ decompPeriod 10
+ outputFormat dcd
+ 

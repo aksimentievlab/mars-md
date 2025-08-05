@@ -9,51 +9,100 @@ larger systems and accelerating to the hardware limits, while making
 it easier to maintain diverse features. In particular we are seeking
 speed and good scaling on multi-GPU clusters.
 
-It is currently non-functional as many developments remain.
+
+This development branch of ARBD focuses on scaling simulations to larger systems and accelerating performance to hardware limits, while maintaining code maintainability and diverse feature support. Our primary objectives include:
+
+- **Performance**: Achieve optimal speed and scaling on multi-GPU clusters
+- **Scalability**: Handle larger molecular systems efficiently
+- **Maintainability**: Clean, modular codebase for easier development
+
+> ⚠️ **Development Status**: This is an alpha version under active development. Many features are not yet functional.
+
+## Requirements
+
+### Linux (CUDA)
+- **Operating System**: Linux workstation with CUDA-compatible GPU
+- **Build Tools**: 
+  - CMake ≥ 3.25
+  - GCC ≥ 4.9 or Clang
+- **CUDA Toolkit**: CUDA ≥ 12.0
+- **Compute Capability**: NVIDIA GPU with compute capability ≥ 2.0 (developed and tested on 6.0+)
+
+### Other Systems
+- **Operating System**: macOS with Apple Silicon (M1/M2/M3)
+- **Build Tools**: CMake, Homebrew
+- **Parallel Computing**: OpenMP and OpenCL support
+- **SYCL**: AdaptiveCpp (ACPP) (recommanded for Mac) or Intel DPC++ 
 
 ## Building
 
-### Dependencies
+### Prerequisites
 
-Linux workstation with CUDA-compatible GPU (minimum 3.5 compute capability)
-  - CMake >= 3.9
-  - gcc >= 4.9
-  - cuda >= 9.0  (> 11.5 recommended)
-  - spdlog >= 1.10.0 (note: this is normally installed to extern/spdlog by running `git submodule update --init` from this directory)
-
-### Build process
-
-From the root arbd directory (where this README is found), ensure you have spdlog installed to the extern directory, usually by running `git submodule update --init`.
-
-From the root arbd directory (where this README is found), run:
-```
-## Determine the compute capability of your CUDA-enabled graphics card
-export CMAKE_CUDA_ARCHITECTURES="35;50;75;80"   ;# especially important for CMake < 3.24.0
-## export CUDA_INCLUDE_DIRS="$CUDA_HOME/include" ;# optionally be explicit about cuda include paths; usually not needed
-cmake -S src -B build &&
-(
-  cd build
-  make -j
-)
+Ensure you have the spdlog submodule initialized:
+```bash
+git submodule update --init
 ```
 
-If your CUDA toolkit is installed in a nonstandard location that CMake
-is unable to find, you may provide use the environement variable
-`CMAKE_CUDA_COMPILER` to specify the path to nvcc. You may also find
-it neccesary to set the environment variable `CUDA_INCLUDE_DIRS` if
-compilation fails due to the compiler being unable to find <cuda.h>.
+### Linux with CUDA
 
-Note that ARBD has been developed using CUDA-9.0 and targets NVIDIA
-GPUs featuring 6.0 compute capability. The code should work with
-devices with compute capability >=2.0, but there are no guarantees.
+1. **Set CUDA Architecture** (especially important for CMake < 3.24.0):
+   ```bash
+   export CMAKE_CUDA_ARCHITECTURES="35;50;75;80"
+   ```
+
+2. **Configure and Build**:
+   ```bash
+   mkdir build && cd build
+   cmake ..
+   make -j$(nproc)
+   ```
+
+#### Troubleshooting CUDA Build
+
+If CMake cannot find your CUDA installation:
+- Set the CUDA compiler path: `export CMAKE_CUDA_COMPILER=/path/to/nvcc`
+- Specify CUDA include directory: `export CUDA_INCLUDE_DIRS="$CUDA_HOME/include"`
+
+### macOS-arm64 with SYCL
+
+```bash
+mkdir build && cd build
+/opt/homebrew/bin/cmake \
+  -DCMAKE_OSX_ARCHITECTURES=arm64 \
+  -DUSE_SYCL_ACPP=ON \
+  -DCMAKE_CXX_COMPILER=acpp \
+  ..
+make -j$(sysctl -n hw.ncpu)
+```
+
+> **Note**: Use `-DCMAKE_CXX_COMPILER=icpx` for Intel DPC++ instead of AdaptiveCpp.
+
+### API Reference
+```bash
+doxygen Doxyfile
+```
+
+## Usage
+
+Documentation and usage examples will be provided as development progresses.
+
+## Contributing
+
+We welcome contributions! Please feel free to submit issues, feature requests, or pull requests.
 
 ## Authors
 
-ARBD2 is being developed by the Aksimentiev group
-(http://bionano.physics.illinois.edu).
+ARBD2 is developed by the [Aksimentiev Group](http://bionano.physics.illinois.edu) at the University of Illinois at Urbana-Champaign.
 
-  - Christopher Maffeo <mailto:cmaffeo2@illinois.edu>
-  - Han-yi Chou
-  - Pin-Yi Li <mailto:pinyili2@illinois.edu>
+**Core Development Team:**
+- **Christopher Maffeo** - Lead Developer ([cmaffeo2@illinois.edu](mailto:cmaffeo2@illinois.edu))
+- **Pin-Yi Li** - Developer ([pinyili2@illinois.edu](mailto:pinyili2@illinois.edu))
+- **Han-yi Chou** - Developer
 
-Please direct questions, problems or suggestions to Chris.
+## Support
+
+For questions, problems, or suggestions, please contact Chris Maffeo at [cmaffeo2@illinois.edu](mailto:cmaffeo2@illinois.edu).
+
+## License
+
+This project is licensed under the UIUC License - see the [LICENSE](LICENSE) file for details.

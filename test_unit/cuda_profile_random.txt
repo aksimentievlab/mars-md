@@ -1,0 +1,232 @@
+Filters: [profiling]
+Randomness seeded to: 2597141340
+[INFO] Profiler.h:563 Initializing profiling for all available backends
+[INFO] Profiler.h:115 Initializing CUDA profiler
+[INFO] CUDA/CUDAManager.cpp:98 Found 3 CUDA device(s)
+[INFO] CUDA/CUDAManager.cpp:98 Found 3 CUDA device(s)
+[INFO] CUDA/CUDAManager.cpp:165 Initializing CUDA devices...
+[INFO] CUDA/CUDAManager.cpp:182 Initializing devices: 0, 1, and 2
+[INFO] Tests/Math/RandomProfile.cpp:49 CUDA backend available for profiled Random tests
+[INFO] Profiler.h:167 CUDA Memory: 1063 MB used / 9886 MB total
+[INFO] Tests/Math/RandomProfile.cpp:142 CUDA profiled uniform generation completed
+[INFO] Profiler.h:761 === Profiling Summary ===
+[INFO] Profiler.h:762 Total events: 4
+[INFO] Profiler.h:796 CUDA: 4 events, 6.151 ms total, 1.538 ms avg, 0.432/2.131 ms min/max
+[INFO] Profiler.h:122 Finalizing CUDA profiler
+[INFO] Profiler.h:809 Saving profile data to random_profile_test.json
+[INFO] CUDA/CUDAManager.cpp:269 Finalizing CUDA manager...
+[INFO] CUDA/CUDAManager.cpp:284 CUDA manager finalized
+[INFO] Profiler.h:563 Initializing profiling for all available backends
+[INFO] Profiler.h:115 Initializing CUDA profiler
+[INFO] CUDA/CUDAManager.cpp:98 Found 3 CUDA device(s)
+[INFO] CUDA/CUDAManager.cpp:98 Found 3 CUDA device(s)
+[INFO] CUDA/CUDAManager.cpp:165 Initializing CUDA devices...
+[INFO] CUDA/CUDAManager.cpp:182 Initializing devices: 0, 1, and 2
+[INFO] Tests/Math/RandomProfile.cpp:49 CUDA backend available for profiled Random tests
+[INFO] Tests/Math/RandomProfile.cpp:178 CUDA profiled gaussian generation completed
+[INFO] Profiler.h:761 === Profiling Summary ===
+[INFO] Profiler.h:762 Total events: 3
+[INFO] Profiler.h:796 CUDA: 3 events, 5.036 ms total, 1.679 ms avg, 1.124/2.594 ms min/max
+[INFO] Profiler.h:122 Finalizing CUDA profiler
+[INFO] Profiler.h:809 Saving profile data to random_profile_test.json
+[INFO] CUDA/CUDAManager.cpp:269 Finalizing CUDA manager...
+[INFO] CUDA/CUDAManager.cpp:284 CUDA manager finalized
+[INFO] Profiler.h:563 Initializing profiling for all available backends
+[INFO] Profiler.h:115 Initializing CUDA profiler
+[INFO] CUDA/CUDAManager.cpp:98 Found 3 CUDA device(s)
+[INFO] CUDA/CUDAManager.cpp:98 Found 3 CUDA device(s)
+[INFO] CUDA/CUDAManager.cpp:165 Initializing CUDA devices...
+[INFO] CUDA/CUDAManager.cpp:182 Initializing devices: 0, 1, and 2
+[INFO] Tests/Math/RandomProfile.cpp:49 CUDA backend available for profiled Random tests
+[INFO] Tests/Math/RandomProfile.cpp:214 CUDA profiled Vector3 generation completed
+[INFO] Profiler.h:761 === Profiling Summary ===
+[INFO] Profiler.h:762 Total events: 3
+[INFO] Profiler.h:796 CUDA: 3 events, 3.654 ms total, 1.218 ms avg, 0.649/1.902 ms min/max
+[INFO] Profiler.h:122 Finalizing CUDA profiler
+[INFO] Profiler.h:809 Saving profile data to random_profile_test.json
+[INFO] CUDA/CUDAManager.cpp:269 Finalizing CUDA manager...
+[INFO] CUDA/CUDAManager.cpp:284 CUDA manager finalized
+[INFO] Profiler.h:563 Initializing profiling for all available backends
+[INFO] Profiler.h:115 Initializing CUDA profiler
+[INFO] CUDA/CUDAManager.cpp:98 Found 3 CUDA device(s)
+[INFO] CUDA/CUDAManager.cpp:98 Found 3 CUDA device(s)
+[INFO] CUDA/CUDAManager.cpp:165 Initializing CUDA devices...
+[INFO] CUDA/CUDAManager.cpp:182 Initializing devices: 0, 1, and 2
+[INFO] Tests/Math/RandomProfile.cpp:49 CUDA backend available for profiled Random tests
+[INFO] Tests/Math/RandomProfile.cpp:264 Test random generation: min=-0.987, max=0.990, mean=0.025
+[INFO] Tests/Math/RandomProfile.cpp:316 First 10 x coordinates: 0.372, -0.705, -0.826, -0.034, -0.761, -0.533, 0.927, -0.006, 0.361, 0.508
+[INFO] Tests/Math/RandomProfile.cpp:328 First 10 y coordinates: 0.509, -0.965, 0.287, -0.807, -0.886, 0.339, -0.409, 0.396, -0.112, 0.227
+[INFO] Tests/Math/RandomProfile.cpp:344 X range: [-1.000, 1.000], Y range: [-1.000, 1.000]
+[INFO] Tests/Math/RandomProfile.cpp:353 X mean: 0.001903 (should be ~0.0), Y mean: 0.004489 (should be ~0.0)
+[INFO] Tests/Math/RandomProfile.cpp:374 Point 0: (0.372, 0.509) -> dist_sq=0.398, inside=1
+[INFO] Tests/Math/RandomProfile.cpp:374 Point 1: (-0.705, -0.965) -> dist_sq=1.428, inside=0
+[INFO] Tests/Math/RandomProfile.cpp:374 Point 2: (-0.826, 0.287) -> dist_sq=0.766, inside=1
+[INFO] Tests/Math/RandomProfile.cpp:374 Point 3: (-0.034, -0.807) -> dist_sq=0.653, inside=1
+[INFO] Tests/Math/RandomProfile.cpp:374 Point 4: (-0.761, -0.886) -> dist_sq=1.364, inside=0
+[INFO] Tests/Math/RandomProfile.cpp:374 Point 5: (-0.533, 0.339) -> dist_sq=0.399, inside=1
+[INFO] Tests/Math/RandomProfile.cpp:374 Point 6: (0.927, -0.409) -> dist_sq=1.026, inside=0
+[INFO] Tests/Math/RandomProfile.cpp:374 Point 7: (-0.006, 0.396) -> dist_sq=0.157, inside=1
+[INFO] Tests/Math/RandomProfile.cpp:374 Point 8: (0.361, -0.112) -> dist_sq=0.143, inside=1
+[INFO] Tests/Math/RandomProfile.cpp:374 Point 9: (0.508, 0.227) -> dist_sq=0.309, inside=1
+[INFO] Tests/Math/RandomProfile.cpp:386 Debug: Found 78239 points inside circle out of 100000 samples
+[INFO] Tests/Math/RandomProfile.cpp:389 Positive X: 50153 (should be ~50000), Positive Y: 50450 (should be ~50000)
+[INFO] Tests/Math/RandomProfile.cpp:394 Mean distance squared: 0.669426 (should be ~0.667 for uniform in [-1,1]²)
+[INFO] Tests/Math/RandomProfile.cpp:411 Points inside circle: 78239 out of 100000 (ratio: 0.782390)
+[INFO] Tests/Math/RandomProfile.cpp:421 CUDA Monte Carlo π estimate: 3.12956 (error: 0.01203)
+[INFO] Profiler.h:761 === Profiling Summary ===
+[INFO] Profiler.h:762 Total events: 4
+[INFO] Profiler.h:796 CUDA: 4 events, 26.012 ms total, 6.503 ms avg, 1.194/13.648 ms min/max
+[INFO] Profiler.h:122 Finalizing CUDA profiler
+[INFO] Profiler.h:809 Saving profile data to random_profile_test.json
+[INFO] CUDA/CUDAManager.cpp:269 Finalizing CUDA manager...
+[INFO] CUDA/CUDAManager.cpp:284 CUDA manager finalized
+[INFO] Profiler.h:563 Initializing profiling for all available backends
+[INFO] Profiler.h:115 Initializing CUDA profiler
+[INFO] CUDA/CUDAManager.cpp:98 Found 3 CUDA device(s)
+[INFO] CUDA/CUDAManager.cpp:98 Found 3 CUDA device(s)
+[INFO] CUDA/CUDAManager.cpp:165 Initializing CUDA devices...
+[INFO] CUDA/CUDAManager.cpp:182 Initializing devices: 0, 1, and 2
+[INFO] Tests/Math/RandomProfile.cpp:49 CUDA backend available for profiled Random tests
+[INFO] Tests/Math/RandomProfile.cpp:521 CUDA Random Walk: 1000 walkers, mean distance: 9.340, max distance: 24.486, expected: 10.000
+[INFO] Profiler.h:761 === Profiling Summary ===
+[INFO] Profiler.h:762 Total events: 6
+[INFO] Profiler.h:796 CUDA: 6 events, 9.060 ms total, 1.510 ms avg, 0.052/4.603 ms min/max
+[INFO] Profiler.h:122 Finalizing CUDA profiler
+[INFO] Profiler.h:809 Saving profile data to random_profile_test.json
+[INFO] CUDA/CUDAManager.cpp:269 Finalizing CUDA manager...
+[INFO] CUDA/CUDAManager.cpp:284 CUDA manager finalized
+[INFO] Profiler.h:563 Initializing profiling for all available backends
+[INFO] Profiler.h:115 Initializing CUDA profiler
+[INFO] CUDA/CUDAManager.cpp:98 Found 3 CUDA device(s)
+[INFO] CUDA/CUDAManager.cpp:98 Found 3 CUDA device(s)
+[INFO] CUDA/CUDAManager.cpp:165 Initializing CUDA devices...
+[INFO] CUDA/CUDAManager.cpp:182 Initializing devices: 0, 1, and 2
+[INFO] Tests/Math/RandomProfile.cpp:49 CUDA backend available for profiled Random tests
+[INFO] Tests/Math/RandomProfile.cpp:621 CUDA Noise Pipeline: 256x256 grid, original variance: 1.001, smoothed variance: 0.111, max gradient: 0.885
+[INFO] Profiler.h:761 === Profiling Summary ===
+[INFO] Profiler.h:762 Total events: 5
+[INFO] Profiler.h:796 CUDA: 5 events, 11.450 ms total, 2.290 ms avg, 1.035/5.795 ms min/max
+[INFO] Profiler.h:122 Finalizing CUDA profiler
+[INFO] Profiler.h:809 Saving profile data to random_profile_test.json
+[INFO] CUDA/CUDAManager.cpp:269 Finalizing CUDA manager...
+[INFO] CUDA/CUDAManager.cpp:284 CUDA manager finalized
+[INFO] Profiler.h:563 Initializing profiling for all available backends
+[INFO] Profiler.h:115 Initializing CUDA profiler
+[INFO] CUDA/CUDAManager.cpp:98 Found 3 CUDA device(s)
+[INFO] CUDA/CUDAManager.cpp:98 Found 3 CUDA device(s)
+[INFO] CUDA/CUDAManager.cpp:165 Initializing CUDA devices...
+[INFO] CUDA/CUDAManager.cpp:182 Initializing devices: 0, 1, and 2
+[INFO] Tests/Math/RandomProfile.cpp:49 CUDA backend available for profiled Random tests
+[INFO] Tests/Math/RandomProfile.cpp:720 About to call launch_kernel with SYCL resource...
+[INFO] Profiler.h:757 No profiling events recorded
+[INFO] Profiler.h:122 Finalizing CUDA profiler
+[INFO] Profiler.h:809 Saving profile data to random_profile_test.json
+[INFO] CUDA/CUDAManager.cpp:269 Finalizing CUDA manager...
+[INFO] CUDA/CUDAManager.cpp:284 CUDA manager finalized
+[INFO] Profiler.h:563 Initializing profiling for all available backends
+[INFO] Profiler.h:115 Initializing CUDA profiler
+[INFO] CUDA/CUDAManager.cpp:98 Found 3 CUDA device(s)
+[INFO] CUDA/CUDAManager.cpp:98 Found 3 CUDA device(s)
+[INFO] CUDA/CUDAManager.cpp:165 Initializing CUDA devices...
+[INFO] CUDA/CUDAManager.cpp:182 Initializing devices: 0, 1, and 2
+[INFO] Tests/Math/RandomProfile.cpp:49 CUDA backend available for profiled Random tests
+[INFO] Tests/Math/RandomProfile.cpp:773 CUDA generated 5000000 Gaussian numbers in 1.193 ms (4191.1 M numbers/sec)
+[INFO] Tests/Math/RandomProfile.cpp:786 Fastest backend for Gaussian generation: CUDA (1.193 ms)
+[INFO] Profiler.h:761 === Profiling Summary ===
+[INFO] Profiler.h:762 Total events: 1
+[INFO] Profiler.h:796 CUDA: 1 events, 1.329 ms total, 1.329 ms avg, 1.329/1.329 ms min/max
+[INFO] Profiler.h:122 Finalizing CUDA profiler
+[INFO] Profiler.h:809 Saving profile data to random_profile_test.json
+[INFO] CUDA/CUDAManager.cpp:269 Finalizing CUDA manager...
+[INFO] CUDA/CUDAManager.cpp:284 CUDA manager finalized
+[INFO] Profiler.h:563 Initializing profiling for all available backends
+[INFO] Profiler.h:115 Initializing CUDA profiler
+[INFO] CUDA/CUDAManager.cpp:98 Found 3 CUDA device(s)
+[INFO] CUDA/CUDAManager.cpp:98 Found 3 CUDA device(s)
+[INFO] CUDA/CUDAManager.cpp:165 Initializing CUDA devices...
+[INFO] CUDA/CUDAManager.cpp:182 Initializing devices: 0, 1, and 2
+[INFO] Tests/Math/RandomProfile.cpp:49 CUDA backend available for profiled Random tests
+[INFO] Tests/Math/RandomProfile.cpp:820 CUDA Memory Bandwidth - H2D: 8.04 GB/s, D2H: 11.12 GB/s
+[INFO] Profiler.h:761 === Profiling Summary ===
+[INFO] Profiler.h:762 Total events: 1
+[INFO] Profiler.h:796 CUDA: 1 events, 408.394 ms total, 408.394 ms avg, 408.394/408.394 ms min/max
+[INFO] Profiler.h:122 Finalizing CUDA profiler
+[INFO] Profiler.h:809 Saving profile data to random_profile_test.json
+[INFO] CUDA/CUDAManager.cpp:269 Finalizing CUDA manager...
+[INFO] CUDA/CUDAManager.cpp:284 CUDA manager finalized
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+arbd_test_cuda is a Catch2 v3.8.1 host application.
+Run with -? for options
+
+-------------------------------------------------------------------------------
+SYCL Multi-device parallel random generation with cross-device analysis
+-------------------------------------------------------------------------------
+Tests/Math/RandomProfile.cpp:827
+...............................................................................
+
+Tests/Math/RandomProfile.cpp:1220: SKIPPED:
+explicitly with message:
+  Multi-device test requires SYCL backend to be enabled.
+
+[INFO] CUDA/CUDAManager.cpp:98 Found 3 CUDA device(s)
+[INFO] CUDA/CUDAManager.cpp:98 Found 3 CUDA device(s)
+[INFO] CUDA/CUDAManager.cpp:165 Initializing CUDA devices...
+[INFO] CUDA/CUDAManager.cpp:182 Initializing devices: 0, 1, and 2
+[INFO] Tests/Math/RandomProfile.cpp:1245 === Multi-Device Parallel Random Generation Test ===
+[INFO] Tests/Math/RandomProfile.cpp:1246 Testing 3 CUDA devices with 10000000 numbers per device
+[INFO] Tests/Math/RandomProfile.cpp:1303 Initializing device 0 with 10000000 elements...
+[INFO] Tests/Math/RandomProfile.cpp:1305 Successfully initialized device 0 with seed 323456
+[INFO] Tests/Math/RandomProfile.cpp:1303 Initializing device 1 with 10000000 elements...
+[INFO] Tests/Math/RandomProfile.cpp:1305 Successfully initialized device 1 with seed 324456
+[INFO] Tests/Math/RandomProfile.cpp:1303 Initializing device 2 with 10000000 elements...
+[INFO] Tests/Math/RandomProfile.cpp:1305 Successfully initialized device 2 with seed 325456
+[INFO] Tests/Math/RandomProfile.cpp:1334 Waiting for all 3 async launches to complete...
+[INFO] Tests/Math/RandomProfile.cpp:1339 Launched generation on all 3 devices simultaneously
+[INFO] Tests/Math/RandomProfile.cpp:1404 === CORRECTED PERFORMANCE RESULTS ===
+[INFO] Tests/Math/RandomProfile.cpp:1405 Total numbers generated: 30000000 (10000000 per device)
+[INFO] Tests/Math/RandomProfile.cpp:1406 Wall-clock time: 2.162 ms
+[INFO] Tests/Math/RandomProfile.cpp:1407 Device timings - min: 1.913ms, max: 1.976ms, avg: 1.935ms, stddev: 0.029ms
+[INFO] Tests/Math/RandomProfile.cpp:1412 Timing variation coefficient: 1.5% (lower is better)
+[INFO] Tests/Math/RandomProfile.cpp:1415 === THROUGHPUT ANALYSIS ===
+[INFO] Tests/Math/RandomProfile.cpp:1416 Actual aggregate throughput: 13876.8 M numbers/sec
+[INFO] Tests/Math/RandomProfile.cpp:1417 Sum of individual throughputs: 15507.3 M numbers/sec
+[INFO] Tests/Math/RandomProfile.cpp:1418 Perfect parallel throughput: 15682.2 M numbers/sec
+[INFO] Tests/Math/RandomProfile.cpp:1420 === EFFICIENCY METRICS ===
+[INFO] Tests/Math/RandomProfile.cpp:1421 Capacity efficiency: 89.5% (actual vs sum of individual capacities)
+[INFO] Tests/Math/RandomProfile.cpp:1423 Parallel efficiency: 88.5% (actual vs perfect parallel)
+[INFO] Tests/Math/RandomProfile.cpp:1424 Speedup: 2.7x vs single device (91.4% of ideal 3x)
+[INFO] Tests/Math/RandomProfile.cpp:1430 === BOTTLENECK ANALYSIS ===
+[INFO] Tests/Math/RandomProfile.cpp:1446 Device 0: 1.976ms (5060.7 M numbers/sec)
+[INFO] Tests/Math/RandomProfile.cpp:1446 Device 1: 1.913ms (5227.4 M numbers/sec)
+[INFO] Tests/Math/RandomProfile.cpp:1446 Device 2: 1.916ms (5219.2 M numbers/sec)
+[INFO] Tests/Math/RandomProfile.cpp:1453 === STATISTICAL ANALYSIS ===
+[INFO] Tests/Math/RandomProfile.cpp:1454 Sampling 10000 values from each device for analysis...
+[INFO] Tests/Math/RandomProfile.cpp:1494 Global range across all devices: [0.000084, 0.999995]
+[INFO] Tests/Math/RandomProfile.cpp:1495 Mean of device means: 0.499934 (target: ~0.500)
+[INFO] Tests/Math/RandomProfile.cpp:1496 Mean of device variances: 0.083758 (target: ~0.083 for uniform[0,1])
+[INFO] Tests/Math/RandomProfile.cpp:1501 Device 0: mean=0.501988, var=0.083699, range=[0.000091, 0.999992]
+[INFO] Tests/Math/RandomProfile.cpp:1501 Device 1: mean=0.501043, var=0.082592, range=[0.000109, 0.999831]
+[INFO] Tests/Math/RandomProfile.cpp:1501 Device 2: mean=0.496771, var=0.084984, range=[0.000084, 0.999995]
+[INFO] Tests/Math/RandomProfile.cpp:1519 === QUALITY METRICS ===
+[INFO] Tests/Math/RandomProfile.cpp:1520 Max mean deviation from 0.5: 0.003229 (should be < 0.01)
+[INFO] Tests/Math/RandomProfile.cpp:1521 Variance ratio (max/min): 1.029 (should be < 1.5)
+[INFO] Tests/Math/RandomProfile.cpp:1528 === CROSS-DEVICE CORRELATION ANALYSIS ===
+[INFO] Tests/Math/RandomProfile.cpp:1563 Correlation between device 0 and 1: 0.009642
+[INFO] Tests/Math/RandomProfile.cpp:1563 Correlation between device 0 and 2: 0.013096
+[INFO] Tests/Math/RandomProfile.cpp:1563 Correlation between device 1 and 2: 0.000160
+[INFO] Tests/Math/RandomProfile.cpp:1567 Maximum absolute correlation: 0.013096 (should be < 0.05)
+[INFO] Tests/Math/RandomProfile.cpp:1583 === MULTI-DEVICE TEST SUMMARY ===
+[INFO] Tests/Math/RandomProfile.cpp:1584 ✓ 3 CUDA device(s) generated 30M numbers in 2.162ms
+[INFO] Tests/Math/RandomProfile.cpp:1588 ✓ Aggregate throughput: 13876.8 M numbers/sec
+[INFO] Tests/Math/RandomProfile.cpp:1589 ✓ Parallel efficiency: 88.5%
+[INFO] Tests/Math/RandomProfile.cpp:1590 ✓ All statistical quality metrics passed
+[INFO] Tests/Math/RandomProfile.cpp:1592 ✓ Cross-device correlation < 0.013
+[INFO] Tests/Math/RandomProfile.cpp:1598 Synchronizing all devices before cleanup...
+[INFO] Tests/Math/RandomProfile.cpp:1608 Cleaning up device data...
+[INFO] CUDA/CUDAManager.cpp:269 Finalizing CUDA manager...
+[INFO] CUDA/CUDAManager.cpp:284 CUDA manager finalized
+================================================================================
+test cases:  5 |  4 passed | 1 skipped
+assertions: 15 | 15 passed
+

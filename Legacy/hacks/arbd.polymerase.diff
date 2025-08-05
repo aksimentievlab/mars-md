@@ -1,0 +1,2002 @@
+Only in arbd.polymerase/src: .backup
+diff arbd.polymerase/src/BrownianParticleType.h /home/pinyili2/server10/arbd_stable/src/BrownianParticleType.h
+35c35
+< 				forceXGrid(NULL), forceYGrid(NULL), forceZGrid(NULL) { }
+---
+> 				forceXGrid(NULL), forceYGrid(NULL), forceZGrid(NULL){ }
+diff arbd.polymerase/src/ComputeForce.cu /home/pinyili2/server10/arbd_stable/src/ComputeForce.cu
+11d10
+< #include "PotentialSchedule.h"
+52,53c51
+<     numTabDihedralFiles(c.numTabDihedralFiles), numVecangles(c.numVecangles),
+<     numTabVecangleFiles(c.numTabVecangleFiles), numRestraints(c.numRestraints),
+---
+>     numTabDihedralFiles(c.numTabDihedralFiles), numRestraints(c.numRestraints),
+148,158d145
+< 	// Create the vecangle table
+< 	tableVecangle = new TabulatedVecanglePotential*[numTabVecangleFiles];
+< 	tableVecangle_addr = new TabulatedVecanglePotential*[numTabVecangleFiles];
+< 	vecangleList_d = NULL;
+< 	tableVecangle_d = NULL;
+< 	for (int i = 0; i < numTabVecangleFiles; i++) {
+< 		tableVecangle_addr[i] = NULL;
+< 		tableVecangle[i] = NULL;
+< 	}
+< 	gpuErrchk(cudaMalloc(&tableVecangle_d, sizeof(TabulatedVecanglePotential*) * numTabVecangleFiles));
+< 
+319,323d305
+< 		if (numVecangles > 0) {
+< 			gpuErrchk( cudaFree(vecangles_d) );
+< 			gpuErrchk( cudaFree(vecangleList_d) );
+< 			gpuErrchk( cudaFree(vecanglePotList_d) );
+< 		}
+433,434c415,416
+< 	tableBond[ind] = new TabulatedPotential(fileName);
+<     
+---
+>     tableBond[ind] = new TabulatedPotential(fileName);
+> 
+456c438
+< 		gpuErrchk(cudaFree(tableAngle_addr[ind])); // could be better!
+---
+> 		gpuErrchk(cudaFree(tableAngle_addr[ind]));
+462,463c444,456
+< 	tableAngle_addr[ind] = tableAngle[ind]->copy_to_cuda();
+< 	
+---
+> 	TabulatedAnglePotential *t = new TabulatedAnglePotential(*tableAngle[ind]);
+> 
+> 	// Copy tableAngle[ind] to the device
+> 	float *pot;
+> 	int size = tableAngle[ind]->size;
+> 	gpuErrchk(cudaMalloc(&pot, sizeof(float) * size));
+> 	gpuErrchk(cudaMemcpyAsync(pot, tableAngle[ind]->pot, sizeof(float) * size, cudaMemcpyHostToDevice));
+> 	t->pot = pot;
+> 	gpuErrchk(cudaMalloc(&tableAngle_addr[ind], sizeof(TabulatedAnglePotential)));
+> 	gpuErrchk(cudaMemcpy(tableAngle_addr[ind], t, sizeof(TabulatedAnglePotential), cudaMemcpyHostToDevice));
+> 	t->pot = NULL;
+> 	delete t;
+> 
+484,496d476
+< 	if (tableDihedral[ind] != NULL) {
+< 		delete tableDihedral[ind];
+< 		gpuErrchk(cudaFree(tableDihedral_addr[ind]));
+< 		tableDihedral[ind] = NULL;
+< 		tableDihedral_addr[ind] = NULL;
+< 	}
+< 
+< 	tableDihedral[ind] = new TabulatedDihedralPotential(fileName);
+< 	tableDihedral_addr[ind] = tableDihedral[ind]->copy_to_cuda();
+< 	
+< 	gpuErrchk(cudaMemcpyAsync(tableDihedral_d, tableDihedral_addr,
+< 			sizeof(TabulatedDihedralPotential*) * numTabDihedralFiles, cudaMemcpyHostToDevice));
+< 
+501,511c481
+< 	gpuErrchk(cudaMemcpy(tableDihedral_d, tableDihedral_addr,
+< 			sizeof(TabulatedDihedralPotential*) * numTabDihedralFiles, cudaMemcpyHostToDevice));
+< 	return true;
+< }
+< bool ComputeForce::addVecanglePotential(String fileName, int ind, Vecangle vecangles[])
+< {
+< 	for (int i = 0; i < numVecangles; i++)
+< 		if (vecangles[i].fileName == fileName)
+< 			vecangles[i].tabFileIndex = ind;
+< 
+< 	gpuErrchk(cudaMemcpyAsync(vecangles_d, vecangles, sizeof(Vecangle) * numVecangles,
+---
+> 	gpuErrchk(cudaMemcpyAsync(dihedrals_d, dihedrals, sizeof(Dihedral) * numDihedrals,
+514,518c484,488
+< 	if (tableVecangle[ind] != NULL) {
+< 		delete tableVecangle[ind];
+< 		gpuErrchk(cudaFree(tableVecangle_addr[ind]));
+< 		tableVecangle[ind] = NULL;
+< 		tableVecangle_addr[ind] = NULL;
+---
+> 	if (tableDihedral[ind] != NULL) {
+> 		delete tableDihedral[ind];
+> 		gpuErrchk(cudaFree(tableDihedral_addr[ind]));
+> 		tableDihedral[ind] = NULL;
+> 		tableDihedral_addr[ind] = NULL;
+521,522c491,492
+< 	tableVecangle[ind] = new TabulatedVecanglePotential(fileName,VECANGLE);
+< 	TabulatedVecanglePotential t = TabulatedVecanglePotential(*tableVecangle[ind]);
+---
+> 	tableDihedral[ind] = new TabulatedDihedralPotential(fileName);
+> 	TabulatedDihedralPotential t = TabulatedDihedralPotential(*tableDihedral[ind]);
+526c496
+< 	int size = tableVecangle[ind]->size;
+---
+> 	int size = tableDihedral[ind]->size;
+528c498
+< 	gpuErrchk(cudaMemcpyAsync(pot, tableVecangle[ind]->pot,
+---
+> 	gpuErrchk(cudaMemcpyAsync(pot, tableDihedral[ind]->pot,
+532,536c502,506
+< 	gpuErrchk(cudaMalloc(&tableVecangle_addr[ind], sizeof(TabulatedVecanglePotential)));
+< 	gpuErrchk(cudaMemcpyAsync(tableVecangle_addr[ind], &t,
+< 			sizeof(TabulatedVecanglePotential), cudaMemcpyHostToDevice));
+< 	gpuErrchk(cudaMemcpy(tableVecangle_d, tableVecangle_addr,
+< 			sizeof(TabulatedVecanglePotential*) * numTabVecangleFiles, cudaMemcpyHostToDevice));
+---
+> 	gpuErrchk(cudaMalloc(&tableDihedral_addr[ind], sizeof(TabulatedDihedralPotential)));
+> 	gpuErrchk(cudaMemcpyAsync(tableDihedral_addr[ind], &t,
+> 			sizeof(TabulatedDihedralPotential), cudaMemcpyHostToDevice));
+> 	gpuErrchk(cudaMemcpy(tableDihedral_d, tableDihedral_addr,
+> 			sizeof(TabulatedDihedralPotential*) * numTabDihedralFiles, cudaMemcpyHostToDevice));
+589c559
+<       
+---
+> 
+706c676
+< float ComputeForce::computeTabulated(bool get_energy, size_t step) {
+---
+> float ComputeForce::computeTabulated(bool get_energy) {
+726,727c696,697
+< 		computeTabulatedEnergyKernel<<< nb, numThreads >>>(step, forceInternal_d[0], pos_d[0], sys_d[0],
+< 								   cutoff2, numPairs_d[0], pairLists_d[0], numParts, type_d, alt_type_d, tablePot_d[0], typeSlopes_d, energies_d);
+---
+> 		computeTabulatedEnergyKernel<<< nb, numThreads >>>(forceInternal_d[0], pos_d[0], sys_d[0],
+> 						cutoff2, numPairs_d[0], pairLists_d[0], pairTabPotType_d[0], tablePot_d[0], energies_d);
+741,742c711,712
+< 		    (step, forceInternal_d[i], sys_d[i], cutoff2, numPairs_d[i], pairLists_d[i], pairTabPotType_d[i], tablePot_d[i], typeSlopes_d, pairLists_tex[i], pos_tex[i], numParts, type_d, alt_type_d);
+< 		gpuKernelCheck();
+---
+> 		    (forceInternal_d[i], sys_d[i], cutoff2, numPairs_d[i], pairLists_d[i], pairTabPotType_d[i], tablePot_d[i], pairLists_tex[i], pos_tex[i], pairTabPotType_tex[i]);
+> 
+745d714
+< 		assert(false); // Disabled due to new PotentialSchedule
+781c750
+< 	    computeTabulatedBonds <<<nb, numThreads, 0, gpuman.get_next_stream()>>> ( step, forceInternal_d[0], pos_d[0], sys_d[0], numReplicas*numBonds/2, bondList_d, bondSlopes_d, tableBond_d, energies_d, get_energy);
+---
+> 		computeTabulatedBonds <<<nb, numThreads, 0, gpuman.get_next_stream()>>> ( forceInternal_d[0], pos_d[0], sys_d[0], numReplicas*numBonds/2, bondList_d, tableBond_d, energies_d, get_energy);
+788c757
+< 	    computeTabulatedAngles<<<nb, numThreads, 0, gpuman.get_next_stream()>>>( step, forceInternal_d[0], pos_d[0], sys_d[0], numAngles*numReplicas, angleList_d, angleSlopes_d, tableAngle_d, energies_d, get_energy);
+---
+> 	    computeTabulatedAngles<<<nb, numThreads, 0, gpuman.get_next_stream()>>>(forceInternal_d[0], pos_d[0], sys_d[0], numAngles*numReplicas, angleList_d, tableAngle_d, energies_d, get_energy);
+794,807c763,764
+< 	    computeTabulatedDihedrals<<<nb, numThreads, 0, gpuman.get_next_stream()>>>( step, forceInternal_d[0], pos_d[0], sys_d[0], numDihedrals*numReplicas, 
+<                 dihedralList_d, dihedralSlopes_d, dihedralPotList_d, tableDihedral_d, energies_d, get_energy);
+<         }
+< 	if (vecangleList_d != NULL && tableVecangle_d != NULL)
+<         {
+<             //if(get_energy)
+< 		//computeTabulatedVecangles<<<nb, numThreads>>>(forceInternal_d[0], pos_d[0], sys_d[0], numVecangles*numReplicas, vecangleList_d, vecanglePotList_d, tableVecangle_d);
+< 	    if (get_energy) {
+< 		computeTabulatedVecangles<true><<<nb, numThreads, 0, gpuman.get_next_stream()>>>(forceInternal_d[0], pos_d[0], sys_d[0], numVecangles*numReplicas,
+<                 vecangleList_d, vecanglePotList_d, tableVecangle_d, energies_d);
+< 	    } else {
+< 		computeTabulatedVecangles<false><<<nb, numThreads, 0, gpuman.get_next_stream()>>>(forceInternal_d[0], pos_d[0], sys_d[0], numVecangles*numReplicas,
+<                 vecangleList_d, vecanglePotList_d, tableVecangle_d);
+< 	}
+---
+> 	    computeTabulatedDihedrals<<<nb, numThreads, 0, gpuman.get_next_stream()>>>(forceInternal_d[0], pos_d[0], sys_d[0], numDihedrals*numReplicas, 
+>                 dihedralList_d, dihedralPotList_d, tableDihedral_d, energies_d, get_energy);
+858,867d814
+< 	gpuErrchk(cudaDeviceSynchronize());
+< 	if (get_energy) {
+< 		computeTabulatedVecangles<true><<<numBlocks, numThreads, 0, gpuman.get_next_stream()>>>(forceInternal_d[0], pos_d[0], sys_d[0], numVecangles*numReplicas,
+<                 vecangleList_d, vecanglePotList_d, tableVecangle_d, energies_d);
+< 	    } else {
+< 		computeTabulatedVecangles<false><<<numBlocks, numThreads, 0, gpuman.get_next_stream()>>>(forceInternal_d[0], pos_d[0], sys_d[0], numVecangles*numReplicas,
+<                 vecangleList_d, vecanglePotList_d, tableVecangle_d);
+< 	}
+< 
+< 
+947c894
+< void ComputeForce::copyToCUDA(int simNum, int *type, int *alt_type, Bond* bonds, int2* bondMap, Exclude* excludes, int2* excludeMap, Angle* angles, Dihedral* dihedrals, Vecangle* vecangles, const Restraint* const restraints, const BondAngle* const bondAngles, const XpotMap simple_potential_map, const std::vector<SimplePotential> simple_potentials, const ProductPotentialConf* const product_potential_confs)
+---
+> void ComputeForce::copyToCUDA(int simNum, int *type, Bond* bonds, int2* bondMap, Exclude* excludes, int2* excludeMap, Angle* angles, Dihedral* dihedrals, const Restraint* const restraints, const BondAngle* const bondAngles, const XpotMap simple_potential_map, const std::vector<SimplePotential> simple_potentials, const ProductPotentialConf* const product_potential_confs)
+954d900
+< 	gpuErrchk(cudaMalloc(&alt_type_d, sizeof(int) * tot_num_with_rb));
+956d901
+< 	gpuErrchk(cudaMemcpyAsync(alt_type_d, alt_type, sizeof(int) * tot_num_with_rb, cudaMemcpyHostToDevice));
+997,1003d941
+< 	if (numVecangles > 0) {
+< 		// Vecangles_d
+< 		gpuErrchk(cudaMalloc(&vecangles_d, sizeof(Vecangle) * numVecangles));
+< 		gpuErrchk(cudaMemcpyAsync(vecangles_d, vecangles,
+< 					  sizeof(Vecangle) * numVecangles,
+< 					  cudaMemcpyHostToDevice));
+< 	}
+1144c1082
+< void ComputeForce::copyBondedListsToGPU(int3 *bondList, int4 *angleList, int4 *dihedralList, int *dihedralPotList, int4 *vecangleList, int *vecanglePotList, int4* bondAngleList, int2* restraintList) {
+---
+> void ComputeForce::copyBondedListsToGPU(int3 *bondList, int4 *angleList, int4 *dihedralList, int *dihedralPotList, int4* bondAngleList, int2* restraintList) {
+1169,1178d1106
+< 	if (numVecangles > 0) {
+<     size = numVecangles * numReplicas * sizeof(int4);
+<     gpuErrchk( cudaMalloc( &vecangleList_d, size ) );
+<     gpuErrchk( cudaMemcpyAsync( vecangleList_d, vecangleList, size, cudaMemcpyHostToDevice) );
+< 
+<     size = numVecangles * numReplicas * sizeof(int);
+<     gpuErrchk( cudaMalloc( &vecanglePotList_d, size ) );
+<     gpuErrchk( cudaMemcpyAsync( vecanglePotList_d, vecanglePotList, size, cudaMemcpyHostToDevice) );
+< 	}
+< 
+1191,1219d1118
+< }
+< 
+< void ComputeForce::copyPotentialSlopesToGPU(float2 *typeSlopes, float2 *nonbondedSlopes, float2 *bondSlopes, float2 *angleSlopes, float2 *dihedralSlopes) {
+< 	size_t size;
+< 	{
+< 	    size = (num+num_rb_attached_particles+numGroupSites) * numReplicas * sizeof(float2);
+< 	    gpuErrchk( cudaMalloc( &typeSlopes_d, size ) );
+< 	    gpuErrchk( cudaMemcpyAsync( typeSlopes_d, typeSlopes, size, cudaMemcpyHostToDevice) );
+< 	}
+< 	{
+< 	    size = (numParts*numParts) * sizeof(float2);
+< 	    gpuErrchk( cudaMalloc( &nonbondedSlopes_d, size ) );
+< 	    gpuErrchk( cudaMemcpyAsync( typeSlopes_d, typeSlopes, size, cudaMemcpyHostToDevice) );
+< 	}
+< 	if (numBonds > 0) {
+< 	    size = (numBonds / 2) * numReplicas * sizeof(float2);
+< 	    gpuErrchk( cudaMalloc( &bondSlopes_d, size ) );
+< 	    gpuErrchk( cudaMemcpyAsync( bondSlopes_d, bondSlopes, size, cudaMemcpyHostToDevice) );
+< 	}
+< 	if (numAngles > 0) {
+< 	    size = (numAngles) * numReplicas * sizeof(float2);
+< 	    gpuErrchk( cudaMalloc( &angleSlopes_d, size ) );
+< 	    gpuErrchk( cudaMemcpyAsync( angleSlopes_d, angleSlopes, size, cudaMemcpyHostToDevice) );
+< 	}
+< 	if (numDihedrals > 0) {
+< 	    size = (numDihedrals) * numReplicas * sizeof(float2);
+< 	    gpuErrchk( cudaMalloc( &dihedralSlopes_d, size ) );
+< 	    gpuErrchk( cudaMemcpyAsync( dihedralSlopes_d, dihedralSlopes, size, cudaMemcpyHostToDevice) );
+< 	}
+Only in arbd.polymerase/src: #ComputeForce.cuh#
+diff arbd.polymerase/src/ComputeForce.cuh /home/pinyili2/server10/arbd_stable/src/ComputeForce.cuh
+589d588
+< 
+591c590
+< __device__ inline void _computeTabulatedKernel(size_t step, Vector3* force, const BaseGrid* __restrict__ sys, 
+---
+> __device__ inline void _computeTabulatedKernel(Vector3* force, const BaseGrid* __restrict__ sys, 
+594,596c593,594
+< 					       float2* __restrict__ typeSlopes,
+< 					       cudaTextureObject_t pairListsTex, cudaTextureObject_t PosTex,
+< 					       int num_types, int* __restrict__ type, int* __restrict__ alt_type)
+---
+> 					       cudaTextureObject_t pairListsTex, cudaTextureObject_t PosTex, cudaTextureObject_t pairTabPotTypeTex
+>     )
+620,623c618,619
+< 
+<         // int  ind  = tex1Dfetch<int>(pairTabPotTypeTex,i);
+< 
+<         if (d2 <= cutoff2) 
+---
+>         int  ind  = tex1Dfetch<int>(pairTabPotTypeTex,i);
+>         if (tablePot[ind] != NULL && d2 <= cutoff2) 
+625,657c621,623
+< 	    
+< 	    float s1 = typeSlopes[ai].x * step + typeSlopes[ai].y;
+< 	    float s2 = typeSlopes[aj].x * step + typeSlopes[aj].y;
+< 	    short n_pots = 0;
+< 	    float factors[4];
+< 	    int pot_inds[4];
+< 	    if (s1 != 1) {
+< 		if (s2 != 1) {
+< 		    pot_inds[n_pots] = type[ai] + type[aj] * num_types;
+< 		    factors[n_pots++] = (1.0f-s1)*(1.0f-s2);
+< 		}
+< 		if (s2 != 0 && alt_type[aj] >= 0) {
+< 		    pot_inds[n_pots] = type[ai] + alt_type[aj] * num_types;
+< 		    factors[n_pots++] = (1.0f-s1)*s2;
+< 		}		    
+< 	    }
+< 	    if (s1 != 0 && alt_type[ai] >= 0) {
+< 		if (s2 != 1) {
+< 		    pot_inds[n_pots] = alt_type[ai] + type[aj] * num_types;
+< 		    factors[n_pots++] = s1*(1.0f-s2);
+< 		}
+< 		if (s2 != 0 && alt_type[aj] >= 0) {
+< 		    pot_inds[n_pots] = alt_type[ai] + alt_type[aj] * num_types;
+< 		    factors[n_pots++] = s1*s2;
+< 		}
+< 	    }
+<  	    Vector3 f = Vector3(0.0f);
+< 	    for (int i = 0; i < n_pots; ++i) {
+< 		if (tablePot[pot_inds[i]] != nullptr)
+< 		    f = f + factors[i] * tablePot[pot_inds[i]]->computef(dr, d2);
+< 	    }
+< 	    atomicAdd( &force[ai],  f );
+< 	    atomicAdd( &force[aj], -f );
+---
+>             Vector3 f = tablePot[ind]->computef(dr,d2);
+>             atomicAdd( &force[ai],  f );
+>             atomicAdd( &force[aj], -f );
+663,670c629,633
+< __global__ void computeTabulatedKernel(size_t step, Vector3* force, const BaseGrid* __restrict__ sys, 
+<                                        // float cutoff2, const int* __restrict__ g_numPairs, const int2* __restrict__ g_pair,
+< 				       float cutoff2, int *g_numPairs,
+< 				       const int2* __restrict__ g_pair, 
+< 				       const int* __restrict__ g_pairTabPotType, TabulatedPotential** __restrict__ tablePot, float2* __restrict__ typeSlopes,
+< 				       cudaTextureObject_t pairListsTex, cudaTextureObject_t PosTex, // cudaTextureObject_t pairTabPotTypeTex
+< 				       int num_types, int* __restrict__ type, int* __restrict__ alt_type) {
+<     _computeTabulatedKernel<BlockSize>(step, force,sys,
+---
+> __global__ void computeTabulatedKernel(Vector3* force, const BaseGrid* __restrict__ sys, 
+>                                        float cutoff2, const int* __restrict__ g_numPairs, const int2* __restrict__ g_pair, 
+>                                        const int* __restrict__ g_pairTabPotType, TabulatedPotential** __restrict__ tablePot,
+> 				       cudaTextureObject_t pairListsTex, cudaTextureObject_t PosTex, cudaTextureObject_t pairTabPotTypeTex) {
+>     _computeTabulatedKernel<BlockSize>(force,sys,
+672,673c635,636
+< 				       g_pairTabPotType, tablePot, typeSlopes,
+< 				       pairListsTex, PosTex, num_types, type, alt_type);
+---
+> 				       g_pairTabPotType, tablePot,
+> 				       pairListsTex, PosTex, pairTabPotTypeTex);
+680c643
+< 				       cudaTextureObject_t pairListsTex, cudaTextureObject_t PosTex,  cudaTextureObject_t pairTabPotTypeTex,
+---
+> 				       cudaTextureObject_t pairListsTex, cudaTextureObject_t PosTex, cudaTextureObject_t pairTabPotTypeTex,
+682,685c645,648
+<     // _computeTabulatedKernel<BlockSize>(force,sys,
+<     // 				       cutoff2, numPairs, g_pair+start,
+<     // 				       g_pairTabPotType+start, tablePot,
+<     // 				       pairListsTex, PosTex, pairTabPotTypeTex);
+---
+>     _computeTabulatedKernel<BlockSize>(force,sys,
+> 				       cutoff2, numPairs, g_pair+start,
+> 				       g_pairTabPotType+start, tablePot,
+> 				       pairListsTex, PosTex, pairTabPotTypeTex);
+694c657
+< __global__ void computeTabulatedEnergyKernel(size_t step, Vector3* force, const Vector3* __restrict__ pos,
+---
+> __global__ void computeTabulatedEnergyKernel(Vector3* force, const Vector3* __restrict__ pos,
+696c659
+< 					     const int* __restrict__ g_numPairs,	const int2* __restrict__ g_pair, int num_types, const int* __restrict__ type, const int* __restrict__ alt_type, TabulatedPotential** __restrict__ tablePot, const float2* __restrict__ typeSlopes, float* g_energies) {
+---
+> 				const int* __restrict__ g_numPairs,	const int2* __restrict__ g_pair, const int* __restrict__ g_pairTabPotType, 	TabulatedPotential** __restrict__ tablePot, float* g_energies) {
+702c665
+< 		// const int ind = g_pairTabPotType[i];
+---
+> 		const int ind = g_pairTabPotType[i];
+710,746c673,679
+< 		if (d2 <= cutoff2) {
+< 		    float s1 = typeSlopes[ai].x * step + typeSlopes[ai].y;
+< 		    float s2 = typeSlopes[aj].x * step + typeSlopes[aj].y;
+< 		    short n_pots = 0;
+< 		    float factors[4];
+< 		    int pot_inds[4];
+< 		    if (s1 != 1) {
+< 			if (s2 != 1) {
+< 			    pot_inds[n_pots] = type[ai] + type[aj] * num_types;
+< 			    factors[n_pots++] = (1.0f-s1)*(1.0f-s2);
+< 			}
+< 			if (s2 != 0 && alt_type[aj] >= 0) {
+< 			    pot_inds[n_pots] = type[ai] + alt_type[aj] * num_types;
+< 			    factors[n_pots++] = (1.0f-s1)*s2;
+< 			}		    
+< 		    }
+< 		    if (s1 != 0 && alt_type[ai] >= 0) {
+< 			if (s2 != 1) {
+< 			    pot_inds[n_pots] = alt_type[ai] + type[aj] * num_types;
+< 			    factors[n_pots++] = s1*(1.0f-s2);
+< 			}
+< 			if (s2 != 0 && alt_type[aj] >= 0) {
+< 			    pot_inds[n_pots] = alt_type[ai] + alt_type[aj] * num_types;
+< 			    factors[n_pots++] = s1*s2;
+< 			}
+< 		    }
+< 		    EnergyForce fe = EnergyForce(0.0f);
+< 		    for (int i = 0; i < n_pots; ++i) {
+< 			EnergyForce tmp = tablePot[pot_inds[i]]->compute(dr, d2);
+< 			fe.f = fe.f + factors[i] * tmp.f;
+< 			fe.e = fe.e + factors[i] * tmp.e;
+< 		    }
+< 		    atomicAdd( &force[ai],  fe.f );
+< 		    atomicAdd( &force[aj], -fe.f );
+< 		    // RBTODO: reduce energies
+< 		    atomicAdd( &(g_energies[ai]), fe.e*0.5f );
+< 		    atomicAdd( &(g_energies[aj]), fe.e*0.5f );
+---
+> 		if (tablePot[ind] != NULL && d2 <= cutoff2) { 
+> 			EnergyForce fe = tablePot[ind]->compute(dr,d2);
+> 			atomicAdd( &force[ai],  fe.f );
+> 			atomicAdd( &force[aj], -fe.f );
+> 			// RBTODO: reduce energies
+> 			atomicAdd( &(g_energies[ai]), fe.e*0.5f );
+> 			atomicAdd( &(g_energies[aj]), fe.e*0.5f );
+888,889c821,822
+< void computeTabulatedBonds(size_t step, Vector3* force, Vector3* __restrict__ pos, BaseGrid* __restrict__ sys, 
+< 			   int numBonds, int3* __restrict__ bondList_d, float2* __restrict__ bondSlopes_d, TabulatedPotential** tableBond, float* energy, bool get_energy)
+---
+> void computeTabulatedBonds(Vector3* force, Vector3* __restrict__ pos, BaseGrid* __restrict__ sys, 
+> int numBonds, int3* __restrict__ bondList_d, TabulatedPotential** tableBond, float* energy, bool get_energy)
+894a828
+> 		
+903,904c837
+< 		float s = bondSlopes_d[bid].x * step + bondSlopes_d[bid].y;
+< 	        EnergyForce fe_local = tableBond[ bondList_d[bid].z ]->compute(dr,dr.length2(), s);
+---
+> 	        EnergyForce fe_local = tableBond[ bondList_d[bid].z ]->compute(dr,dr.length2());	
+920c853
+< void computeTabulatedAngles(size_t step, Vector3* force,
+---
+> void computeTabulatedAngles(Vector3* force,
+923,924c856
+< 			    int numAngles, int4* __restrict__ angleList_d, float2* __restrict__ angleSlopes_d,
+< 			    TabulatedAnglePotential** tableAngle, float* energy, bool get_energy) {
+---
+> 				int numAngles, int4* __restrict__ angleList_d, TabulatedAnglePotential** tableAngle, float* energy, bool get_energy) {
+928,929c860
+< 		float s = angleSlopes_d[i].x * step + angleSlopes_d[i].y;
+< 		computeAngle(tableAngle[ ids.w ], sys, force, pos, ids.x, ids.y, ids.z, energy, get_energy, s);
+---
+> 		computeAngle(tableAngle[ ids.w ], sys, force, pos, ids.x, ids.y, ids.z, energy, get_energy);
+1115c1046
+< void computeTabulatedDihedrals(size_t step, Vector3* force, const Vector3* __restrict__ pos,
+---
+> void computeTabulatedDihedrals(Vector3* force, const Vector3* __restrict__ pos,
+1117c1048
+< 			       int numDihedrals, const int4* const __restrict__ dihedralList_d,  float2* __restrict__ dihedralSlopes_d,
+---
+> 			       int numDihedrals, const int4* const __restrict__ dihedralList_d,
+1126,1127c1057
+< 		float s = dihedralSlopes_d[i].x * step + dihedralSlopes_d[i].y;
+< 		computeDihedral(tableDihedral[ id ], sys, force, pos, ids.x, ids.y, ids.z, ids.w, energy, get_energy, s);
+---
+> 		computeDihedral(tableDihedral[ id ], sys, force, pos, ids.x, ids.y, ids.z, ids.w, energy, get_energy);
+1136,1160d1065
+< }
+< template<bool get_energy>
+< __global__
+< void computeTabulatedVecangles(Vector3* force, const Vector3* __restrict__ pos,
+< 			       const BaseGrid* __restrict__ sys,
+< 			       int numVecangles, const int4* const __restrict__ vecangleList_d,
+< 			       const int* __restrict__ vecanglePotList_d, TabulatedVecanglePotential** tableVecangle, float* energy=nullptr) {
+< 
+< 	// int currVecangle = blockIdx.x * blockDim.x + threadIdx.x; // first particle ID
+< 
+<     // Loop over ALL vecangles in ALL replicas
+< 	for (int i = threadIdx.x+blockIdx.x*blockDim.x; i < numVecangles; i+=blockDim.x*gridDim.x) {
+< 		const int4& ids = vecangleList_d[i];
+< 		const int& id = vecanglePotList_d[i];
+< 		TabulatedVecanglePotential* __restrict__ p = tableVecangle[ id ];
+< 		float tmp = p->compute_value( pos, sys, ids);
+< 		float2 ef = p->compute_energy_and_deriv(tmp);
+< 		p->apply_force(pos,sys,force, ids, ef.y);
+< 		if (get_energy) {
+< 		    atomicAdd( &energy[ids.x], ef.x*0.25 );
+< 		    atomicAdd( &energy[ids.y], ef.x*0.25 );
+< 		    atomicAdd( &energy[ids.z], ef.x*0.25 );
+< 		    atomicAdd( &energy[ids.w], ef.x*0.25 );
+< 		}
+< 	}
+diff arbd.polymerase/src/ComputeForce.h /home/pinyili2/server10/arbd_stable/src/ComputeForce.h
+68c68
+<         bool addTabulatedPotential(String fileName, int type0, int type1);
+---
+> 	bool addTabulatedPotential(String fileName, int type0, int type1);
+72d71
+< 	bool addVecanglePotential(String fileName, int ind, Vecangle* vecangles);
+94c93
+<         float computeTabulated(bool get_energy, size_t step);
+---
+> 	float computeTabulated(bool get_energy);
+99c98
+<         void copyToCUDA(int simNum, int *type, int *alt_type, Bond* bonds, int2* bondMap, Exclude* excludes, int2* excludeMap, Angle* angles, Dihedral* dihedrals, Vecangle* vecangles, const Restraint* const restraints, const BondAngle* const bondAngles,
+---
+> 	void copyToCUDA(int simNum, int *type, Bond* bonds, int2* bondMap, Exclude* excludes, int2* excludeMap, Angle* angles, Dihedral* dihedrals, const Restraint* const restraints, const BondAngle* const bondAngles,
+107,109c106
+<     void copyBondedListsToGPU(int3 *bondList, int4 *angleList, int4 *dihedralList, int *dihedralPotList, int4 *vecangleList, int *vecanglePotList, int4 *bondAngleList, int2 *restraintList);
+< 
+<     void copyPotentialSlopesToGPU(float2 *typeSlopes, float2 *nonbondedSlopes, float2 *bondSlopes, float2 *angleSlopes, float2 *dihedralSlopes);
+---
+>     void copyBondedListsToGPU(int3 *bondList, int4 *angleList, int4 *dihedralList, int *dihedralPotList, int4 *bondAngleList, int2 *restraintList);
+135,138d131
+< 	int* getAltType_d()
+< 	{
+< 		return alt_type_d;
+< 	}
+170,174d162
+< 	Vecangle* getVecangles_d()
+< 	{
+< 		return vecangles_d;
+< 	}
+< 
+185,205d172
+<         float2* getTypeSlopes_d()
+< 	{
+< 		return typeSlopes_d;
+< 	}
+<         float2* getNonbondedSlopes_d()
+< 	{
+< 		return nonbondedSlopes_d;
+< 	}
+<         float2* getBondSlopes_d()
+< 	{
+< 		return bondSlopes_d;
+< 	}
+<         float2* getAngleSlopes_d()
+< 	{
+< 		return angleSlopes_d;
+< 	}
+<         float2* getDihedralSlopes_d()
+< 	{
+< 		return dihedralSlopes_d;
+< 	}
+< 
+243,244d209
+< 	int numVecangles;
+< 	int numTabVecangleFiles;
+255d219
+< 	TabulatedVecanglePotential **tableVecangle;
+276d239
+< 	TabulatedVecanglePotential **tableVecangle_d, **tableVecangle_addr;
+303,304c266
+< 	int* type_d;
+<  	int* alt_type_d; 
+---
+> 	int* type_d; 
+314d275
+< 	Vecangle* vecangles_d;
+332,333d292
+< 	int4* vecangleList_d;
+< 	int* vecanglePotList_d;
+341,345c300
+<     float2* typeSlopes_d;
+<     float2* nonbondedSlopes_d;
+<     float2* bondSlopes_d;
+<     float2* angleSlopes_d;
+<     float2* dihedralSlopes_d;
+---
+>     
+diff arbd.polymerase/src/Configuration.cpp /home/pinyili2/server10/arbd_stable/src/Configuration.cpp
+276d275
+< 
+289d287
+< 	if (readVecanglesFromFile) readVecangles();
+293c291
+< 	if (readPotentialScheduleFromFile) readPotentialSchedule();
+---
+> 
+665d662
+< 	if (vecangles != NULL) delete[] vecangles;
+681d677
+< 	delete[] vecangleTableFile;
+784d779
+< 	
+847d841
+< 	firststep = 0;
+893,894c887
+< 	readPotentialScheduleFromFile = false;
+< 	potential_schedule = std::vector<PotentialSchedule>();
+---
+> 
+914,918d906
+< 	readVecanglesFromFile = false;
+< 	numVecangles = 0;
+< 	vecangles = NULL;
+< 	numTabVecangleFiles = 0;
+< 
+957,958d944
+< 	alt_types = new String[numParts];
+< 	for (int i = 0; i < numParts; ++i) alt_types[i] = String();
+1009,1011d994
+< 	int vatfcap = 10;
+< 	vecangleTableFile = new String[vatfcap];
+< 
+1017d999
+< 	int currVecangle = -1;
+1038,1039d1019
+< 		else if (param == String("firststep"))
+< 			firststep = atol(value.val());
+1154,1156d1133
+< 		} else if (param == String("switchType")) {
+< 		    if (currPart < 0) exit(1);
+< 		    alt_types[currPart] = value;
+1255,1272d1231
+< 		} else if (param == String("inputVecangles")) {
+< 			if (readVecanglesFromFile) {
+< 				printf("WARNING: More than one vecangle file specified. Ignoring new vecangle file.\n");
+< 			} else {
+< 				vecangleFile = value;
+< 				readVecanglesFromFile = true;
+< 			}
+< 		} else if (param == String("tabulatedVecangleFile")) {
+< 			if (numTabVecangleFiles >= dtfcap) {
+< 				String * temp = vecangleTableFile;
+< 				dtfcap *= 2;
+< 				vecangleTableFile = new String[dtfcap];
+< 				for (int j = 0; j < numTabVecangleFiles; j++)
+< 					vecangleTableFile[j] = temp[j];
+< 				delete[] temp;
+< 			}
+< 			if (readVecangleFile(value, ++currVecangle))
+< 				numTabVecangleFiles++;
+1280,1286d1238
+< 		} else if (param == String("inputPotentialSchedule")) {
+< 		    if (readPotentialScheduleFromFile) {
+< 			printf("WARNING: More than one potential schedule file specified. Ignoring new file.\n");
+< 		    } else {
+< 			potentialScheduleFile = value;
+< 			readPotentialScheduleFromFile = true;
+< 		    }
+1338c1290,1296
+< 		} else if (param == String("densityGrid")) {
+---
+> 		} else if (param == String("constantTorque"))
+>                         rigidBody[currRB].constantTorque = stringToVector3( value );
+>                 else if (param == String("constantForce"))
+>                         rigidBody[currRB].constantForce = stringToVector3( value );
+>                 else if (param == String("vectorTorque"))
+>                         rigidBody[currRB].vectorTorque = stringToVector3( value ); 
+> 		else if (param == String("densityGrid")) {
+1726d1683
+< 	size_t counter = 0;
+1792d1748
+< 		b->tabFileIndex = counter; // Temporarily track bond reading order for potential schedule
+1795d1750
+< 		b->tabFileIndex = counter;
+1797d1751
+< 		++counter;
+1985d1938
+< 		a.tabFileIndex = numAngles; // temporarily store angle order from file for potential schedule
+2050d2002
+< 		d.tabFileIndex = numDihedrals; // temporarily store dihedral order from file for potential schedule
+2060,2123d2011
+< void Configuration::readVecangles() {
+< 	FILE* inp = fopen(vecangleFile.val(), "r");
+< 	char line[256];
+< 	int capacity = 256;
+< 	numVecangles = 0;
+< 	vecangles = new Vecangle[capacity];
+< 
+< 	// If the vecangle file cannot be found, exit the program
+< 	if (inp == NULL) {
+< 		printf("WARNING: Could not open `%s'.\n", vecangleFile.val());
+< 		printf("This simulation will not use vecangles.\n");
+< 		return;
+< 	}
+< 
+< 	while(fgets(line, 256, inp)) {
+< 		if (line[0] == '#') continue;
+< 		String s(line);
+< 		int numTokens = s.tokenCount();
+< 		String* tokenList = new String[numTokens];
+< 		s.tokenize(tokenList);
+< 
+< 		// Legitimate VECANGLE inputs have 6 tokens
+< 		// VECANGLE | INDEX1 | INDEX2 | INDEX3 | INDEX4 | FILENAME
+< 		// Any angle input line without exactly 6 tokens should be discarded
+< 		if (numTokens != 6) {
+< 			printf("WARNING: Invalid vecangle input line: %s\n", line);
+< 			continue;
+< 		}
+< 
+< 		// Discard any empty line
+< 		if (tokenList == NULL)
+< 			continue;
+< 
+< 		int ind1 = atoi(tokenList[1].val());
+< 		int ind2 = atoi(tokenList[2].val());
+< 		int ind3 = atoi(tokenList[3].val());
+< 		int ind4 = atoi(tokenList[4].val());
+< 		String file_name = tokenList[5];
+< 		//printf("file_name %s\n", file_name.val());
+< 		if (ind1 >= num+num_rb_attached_particles+numGroupSites or
+< 		    ind2 >= num+num_rb_attached_particles+numGroupSites or
+< 		    ind3 >= num+num_rb_attached_particles+numGroupSites or
+< 		    ind4 >= num+num_rb_attached_particles+numGroupSites)
+< 			continue;
+< 
+< 		if (numVecangles >= capacity) {
+< 			Vecangle* temp = vecangles;
+< 			capacity *= 2;
+< 			vecangles = new Vecangle[capacity];
+< 			for (int i = 0; i < numVecangles; ++i)
+< 				vecangles[i] = temp[i];
+< 			delete[] temp;
+< 		}
+< 
+< 		Vecangle d(ind1, ind2, ind3, ind4, file_name);
+< 		vecangles[numVecangles++] = d;
+< 		delete[] tokenList;
+< 	}
+< 	std::sort(vecangles, vecangles + numVecangles, compare());
+< 
+< 	// for(int i = 0; i < numVecangles; i++)
+< 	// 	vecangles[i].print();
+< }
+< 
+2186,2296d2073
+< void Configuration::readPotentialSchedule() {
+< 	FILE* inp = fopen(potentialScheduleFile.val(), "r");
+< 	char line[256];
+< 	// int capacity = 256;
+< 	// numBondAngles = 0;
+< 	// bondAngles = new BondAngle[capacity];
+< 
+< 	// If the file cannot be found, exit the program
+< 	if (inp == NULL) {
+< 		printf("WARNING: Could not open `%s'.\n", potentialScheduleFile.val());
+< 		printf("This simulation will not use potential swapping\n");
+< 		return;
+< 	}
+< 
+< 	while(fgets(line, 256, inp)) {
+< 		if (line[0] == '#') continue;
+< 		String s(line);
+< 		int numTokens = s.tokenCount();
+< 		String* tokenList = new String[numTokens];
+< 		s.tokenize(tokenList);
+< 
+< 		// Legitimate inputs have at least 4 tokens and and even number
+< 		// PotentialType | PotentialIndex | Step1 | Value1 | [Step2 | Value2] ...
+< 		if (numTokens < 4 || 2*(numTokens/2) != numTokens) {
+< 			printf("WARNING: Invalid potential schedule input line: %s\n", line);
+< 			continue;
+< 		}
+< 
+< 		// Discard any empty line
+< 		if (tokenList == NULL) continue;
+< 
+< 		PotentialSchedule::PotentialType type;
+< 		if (tokenList[0] == "TYPE") {
+< 		    type = PotentialSchedule::TYPE;
+< 		// } else if (tokenList[0] == "NONBONDED") {
+< 		//     type = PotentialSchedule::NONBONDED;
+< 		} else if (tokenList[0] == "BOND") {
+< 		    type = PotentialSchedule::BOND;
+< 		} else if (tokenList[0] == "ANGLE") {
+< 		    type = PotentialSchedule::ANGLE;
+< 		} else if (tokenList[0] == "DIHEDRAL") {
+< 		    type = PotentialSchedule::DIHEDRAL;
+< 		} else {
+< 		    printf("Error reading potential type in potential schedule; exiting\n");
+< 		    exit(-1);
+< 		}
+< 
+< 		size_t idx = -1;
+< 
+< 		{
+< 		    String* idx_tokens;
+< 		    int nidx,a,b;
+< 		    switch (type) {
+< 		    case PotentialSchedule::NONBONDED:
+< 			//
+< 			nidx = tokenList[1].tokenCount('@');
+< 			assert(nidx == 2);
+< 			idx_tokens = new String[nidx];
+< 			a = atoi(idx_tokens[0]);
+< 			b = atoi(idx_tokens[1]);
+< 			
+< 			for (int i = 0; i < numParts*numParts; ++i) {
+< 			    if (partTableIndex0[i] == a && partTableIndex1[i] == b ) {
+< 				idx = i;
+< 				break;
+< 			    }
+< 			}
+< 			delete[] idx_tokens;
+< 			break;
+< 		    default:
+< 			idx = atoi(tokenList[1]);
+< 			break;
+< 		    }
+< 		    switch (type) {
+< 		    case PotentialSchedule::TYPE:
+< 			assert(idx < num); // could add RB-attached and group sites
+< 			break;
+< 		    case PotentialSchedule::BOND:
+< 			assert(idx < numBonds);
+< 			break;
+< 		    case PotentialSchedule::ANGLE:
+< 			assert(idx < numAngles);
+< 			break;
+< 		    case PotentialSchedule::DIHEDRAL:
+< 			assert(idx < numDihedrals);
+< 			break;
+< 		    }
+< 		}
+< 		PotentialSchedule sched(type, idx);
+< 		
+< 		for (int i = 2; i < numTokens-1; i+=2) {
+< 		    size_t step;
+< 		    try {
+< 			step = std::stoul(tokenList[i].val());
+< 		    } catch (const std::exception& e) {
+< 			// Handle exception (e.g., invalid_argument, out_of_range)
+< 			printf("Error: Potential schedule file had unrepresentably large step.\n");
+< 			exit(1);
+< 		    }
+< 		    float val = atof(tokenList[i+1]);
+< 		    if (step < 1) {
+< 			printf("Error: PotentialSchedule steps should not be less than one. exiting\n");
+< 			exit(-1);
+< 		    }
+< 		    sched.add_control_point(step,val);
+< 		}
+< 
+< 		potential_schedule.push_back(sched);
+< 	}
+< }
+< 
+2542,2561d2318
+< bool Configuration::readVecangleFile(const String& value, int currVecangle) {
+< 	int numTokens = value.tokenCount();
+< 	if (numTokens != 1) {
+< 		printf("ERROR: Invalid tabulatedVecangleFile: %s, numTokens = %d\n", value.val(), numTokens);
+< 		return false;
+< 	}
+< 
+< 	String* tokenList = new String[numTokens];
+< 	value.tokenize(tokenList);
+< 	if (tokenList == NULL) {
+< 		printf("ERROR: Invalid tabulatedVecangleFile: %s; tokenList is NULL\n", value.val());
+< 		return false;
+< 	}
+< 
+< 	vecangleTableFile[currVecangle] = tokenList[0];
+< 
+< 	// printf("Tabulated Vecangle Potential: %s\n", vecangleTableFile[currVecangle].val() );
+< 
+< 	return true;
+< }
+2869c2626
+< 	
+---
+> 
+diff arbd.polymerase/src/Configuration.h /home/pinyili2/server10/arbd_stable/src/Configuration.h
+32d31
+< #include "PotentialSchedule.h"
+44d42
+< using Vecangle = Dihedral;
+54d51
+< 	    // bool operator()(const Vecangle& lhs, const Vecangle& rhs);
+72d68
+< 	void readVecangles();
+75d70
+< 	void readPotentialSchedule();
+82d76
+< 	bool readVecangleFile(const String& value, int currVecangle);
+169d162
+<         size_t firststep;
+217d209
+< 	int numVecangles;
+226d217
+< 	String vecangleFile;
+229d219
+< 	String potentialScheduleFile;
+236d225
+< 	bool readVecanglesFromFile;
+239d227
+<     bool readPotentialScheduleFromFile;
+279,282d266
+<         Vecangle* vecangles;
+< 	String* vecangleTableFile;
+< 	int numTabVecangleFiles;
+< 
+295,297d278
+<     std::vector<PotentialSchedule>potential_schedule;
+<     String *alt_types;
+<     
+diff arbd.polymerase/src/Dihedral.h /home/pinyili2/server10/arbd_stable/src/Dihedral.h
+31,32d30
+< using Vecangle = Dihedral;
+< 
+diff arbd.polymerase/src/GrandBrownTown.cu /home/pinyili2/server10/arbd_stable/src/GrandBrownTown.cu
+104,105d103
+< 	potential_schedule = c.potential_schedule;
+< 	
+193d190
+< 	vecangleTableFile = c.vecangleTableFile;
+207d203
+< 	numVecangles = c.numVecangles;
+227d222
+< 	vecangles = c.vecangles;
+229d223
+< 	numTabVecangleFiles = c.numTabVecangleFiles;
+270,345c264,265
+< 	assert(c.tabulatedPotential);
+< 
+< 	
+< 	// Get bond order
+< 	bondSlopeIds = new int[numBonds];
+< 	for (size_t i = 0; i < numBonds; ++i) {
+< 	    bondSlopeIds[i] = -1;
+< 	}
+< 
+< 	{
+< 	    int counter = 0;
+< 	    for (size_t i = 0; i < numBonds; ++i) {
+< 		if (bonds[i].ind1 < bonds[i].ind2) {
+< 		    bondSlopeIds[bonds[i].tabFileIndex] = counter;
+< 		    counter++;
+< 		}
+< 		bonds[i].tabFileIndex = -1; // reset
+< 	    }
+< 	}
+< 
+< 	// Get angle order
+< 	angleSlopeIds = new int[numAngles];
+< 	for (size_t i = 0; i < numAngles; ++i) {
+< 	    angleSlopeIds[i] = -1;
+< 	}
+< 
+< 	{
+< 	    for (size_t i = 0; i < numAngles; ++i) {
+< 		angleSlopeIds[angles[i].tabFileIndex] = i;
+< 		angles[i].tabFileIndex = -1; // reset
+< 	    }
+< 	}
+< 
+< 	// Get dihedral order
+< 	dihedralSlopeIds = new int[numDihedrals];
+< 	for (size_t i = 0; i < numDihedrals; ++i) {
+< 	    dihedralSlopeIds[i] = -1;
+< 	}
+< 
+< 	{
+< 	    for (size_t i = 0; i < numDihedrals; ++i) {
+< 		dihedralSlopeIds[dihedrals[i].tabFileIndex] = i;
+< 		dihedrals[i].tabFileIndex = -1; // reset
+< 	    }
+< 	}
+< 	
+< 	
+< 	// // Get nonbonded order
+< 	// nonbondedSlopeIds = new int2[numParts*numParts]; // a bit redundant
+< 	// for (size_t i = 0; i < numParts*numParts; ++i) {
+< 	//     nonbondedSlopeIds[i] = make_int2(-1,-1);
+< 	// }
+< 	// for (int p = 0; p < numParts*numParts; p++) {
+< 	//     if (partTableFile[p].length() > 0) {
+< 	// 	int type0 = partTableIndex0[p];
+< 	// 	int type1 = partTableIndex1[p];
+< 	// 	int ind = type0 + type1 * numParts;
+< 	// 	int ind1 = type1 + type0 * numParts;
+< 	// 	nonbondedSlopeIds[p] = make_int2(ind,ind1);
+< 	//     }
+< 	// }
+< 		
+< 		//MLog: I did the other halve of the copyToCUDA function from the Configuration class here, keep an eye on any mistakes that may occur due to the location.
+< 	{
+< 	    int* alt_type = new int[(num+num_rb_attached_particles)*numReplicas];
+< 	    for (int i = 0; i < num+num_rb_attached_particles; ++i) {
+< 		int alt_i = -1;
+< 		int j = c.type[i];
+< 		if (c.alt_types[j].length() > 0) alt_i = c.find_particle_type(c.alt_types[j]);
+< 		for (int k = 0; k < numReplicas; ++k) {
+< 		    alt_type[i+(num+num_rb_attached_particles)*k] = alt_i;
+< 		}
+< 	    }
+< 	    internal -> copyToCUDA(c.simNum, c.type, alt_type, c.bonds, c.bondMap, c.excludes, c.excludeMap, c.angles, c.dihedrals, c.vecangles, c.restraints, c.bondAngles, c.simple_potential_ids, c.simple_potentials, c.productPotentials );
+< 	    delete [] alt_type;
+< 	}
+---
+> 	//MLog: I did the other halve of the copyToCUDA function from the Configuration class here, keep an eye on any mistakes that may occur due to the location.
+> 	internal -> copyToCUDA(c.simNum, c.type, c.bonds, c.bondMap, c.excludes, c.excludeMap, c.angles, c.dihedrals, c.restraints, c.bondAngles, c.simple_potential_ids, c.simple_potentials, c.productPotentials );
+396,402d315
+< 	if (c.readVecanglesFromFile) {
+< 		printf("Loading %d tabulated vecangle potentials...\n", numTabVecangleFiles);
+< 		for (int p = 0; p < numTabVecangleFiles; p++)
+< 			if (vecangleTableFile[p].length() > 0)
+< 				internal->addVecanglePotential(vecangleTableFile[p].val(), p, vecangles);
+< 	}
+< 
+414,435d326
+< 	float2 *typeSlopes, *nonbondedSlopes, *bondSlopes, *angleSlopes, *dihedralSlopes;
+< 
+< 	typeSlopes = new float2[(num+num_rb_attached_particles+numGroupSites)*numReplicas];
+< 	for(int k = 0 ; k < numReplicas; k++)
+< 	{
+< 	    for(int i = 0; i < (num+num_rb_attached_particles+numGroupSites); ++i)
+< 	    {
+< 		typeSlopes[i+k*numReplicas] = make_float2( 0.0f, 0.0f );
+< 	    }
+< 	}
+< 
+<  	nonbondedSlopes = new float2[numParts*numParts];
+< 	for (int p = 0; p < numParts*numParts; p++) {
+< 	    if (partTableFile[p].length() > 0) {
+< 		// int type0 = partTableIndex0[p];
+< 		// int type1 = partTableIndex1[p];
+< 		// int ind = type0 + type1 * numParts;
+< 		// int ind1 = type1 + type0 * numParts;	
+< 		nonbondedSlopes[p] = make_float2( 0.0f, 0.0f );
+< 	    }
+< 	}
+< 	
+438,441c329,330
+< 	    bondList = new int3[ (numBonds / 2) * numReplicas ];
+< 	    bondSlopes = new float2[ (numBonds / 2) * numReplicas ];
+< 
+< 	    int j = 0;
+---
+> 		bondList = new int3[ (numBonds / 2) * numReplicas ];
+> 		int j = 0;
+454d342
+< 					bondSlopes[j] = make_float2(0.0f,0.0f);
+461d348
+< 			if (k == 0) assert( j == (numBonds/2) ); // Assume all bonds have been assigned for bondSlopeIds
+468d354
+< 	angleSlopes = new float2[ (numAngles) * numReplicas ];
+476d361
+< 			angleSlopes[i+k*numAngles] = make_float2(0.0f,0.0f);
+483d367
+< 	dihedralSlopes = new float2[ (numDihedrals) * numReplicas ];
+492d375
+< 			dihedralSlopes[i+k*numDihedrals] = make_float2(0.0f,0.0f);
+497,510d379
+< 	if (numVecangles > 0) {
+< 	vecangleList = new int4[ (numVecangles) * numReplicas ];
+< 	vecanglePotList = new  int[ (numVecangles) * numReplicas ];
+< 	for(int k = 0 ; k < numReplicas; k++) {
+< 	    for(int i = 0; i < numVecangles; ++i) {
+< 			if (vecangles[i].tabFileIndex == -1) {
+< 				fprintf(stderr,"Error: vecanglefile '%s' was not read with tabulatedVecangleFile command.\n", vecangles[i].fileName.val());
+< 				exit(1);
+< 			}
+< 			vecangleList[i+k*numVecangles] = make_int4( _get_index(vecangles[i].ind1,k), _get_index(vecangles[i].ind2,k), _get_index(vecangles[i].ind3,k), _get_index(vecangles[i].ind4,k) );
+< 		vecanglePotList[i+k*numVecangles] = vecangles[i].tabFileIndex;
+< 	    }
+< 	}
+< 	}
+556,557c425
+< 	internal->copyBondedListsToGPU(bondList,angleList,dihedralList,dihedralPotList,vecangleList,vecanglePotList,bondAngleList,restraintList);
+< 	internal->copyPotentialSlopesToGPU(typeSlopes, nonbondedSlopes, bondSlopes, angleSlopes, dihedralSlopes);
+---
+> 	internal->copyBondedListsToGPU(bondList,angleList,dihedralList,dihedralPotList,bondAngleList,restraintList);
+617,620d484
+< 	if (numVecangles > 0) {
+< 		delete[] vecangleList;
+< 		delete[] vecanglePotList;
+< 	}
+686,783d549
+< void GrandBrownTown::initialize_potential_slopes(size_t first_step) {
+<     // Loop over potential switch schedules and update values
+<     size_t next_step;
+<     do {
+< 	next_step = SIZE_MAX;
+< 	for (auto& ps: potential_schedule) {
+< 	    if (ps.next_step == 0) continue;
+< 	    if (ps.next_step < next_step) {
+< 		next_step = ps.next_step;
+< 	    }
+< 	}
+< 	if (next_step < first_step) {
+< 	    // printf("Initializing potentials at step %zu\n", next_step);
+< 	    update_potential_slopes(next_step);
+< 	}
+<     } while (next_step < first_step);
+< }
+< 
+< void GrandBrownTown::update_potential_slopes(size_t step, size_t first_step) {
+<     step += first_step;
+<     // Loop over potential switch schedules and update values
+<     float any_schedule_updates = false;
+<     for (auto& ps: potential_schedule) {
+< 	// printf( "\n  step %zu: Checking for ps.next_step %zu (%d)\n", step, ps.next_step, ps.next_step == step);
+< 	if (ps.next_step == step) {
+< 	    // printf( "\n  step %zu: Found ps.next_step\n", step);
+< 	    
+< 	    if (!any_schedule_updates) {
+< 		any_schedule_updates = true;
+< 		gpuman.sync();
+< 	    }
+< 	    ps.get_value(step);
+< 	    // printf( "  ps.(slope,int): %g %0.2f\n", ps.slope, ps.intercept);
+< 
+< 	    float2 tmp = make_float2(ps.slope,ps.intercept);
+< 
+< 	    assert( gpuman.gpus.size() == 1 ); // Single GPU implementation only
+< 		  
+< 	    float2* dest;
+< 	    switch (ps.potential_type) {
+< 	    case PotentialSchedule::TYPE:
+< 		dest = internal->getTypeSlopes_d();
+< 		{
+< 		int _offset = ps.potential_index; // actually atom index
+< 		assert( _offset != -1 );
+< 		// printf("   Updating type %d slope to (%g,%.2f)\n", _offset, tmp.x, tmp.y);
+< 		gpuErrchk( cudaMemcpyAsync( dest+_offset, &tmp, sizeof(float2), cudaMemcpyHostToDevice) );
+< 		}
+< 		break;
+< 	    case PotentialSchedule::NONBONDED:
+< 		dest = internal->getNonbondedSlopes_d();
+< 		{
+< 		    int2 offsets =  nonbondedSlopeIds[ps.potential_index];
+< 		assert( offsets.x != -1 );
+< 		assert( offsets.y != -1 );
+< 		// printf("   Updating bond potential %d slope to (%g,%.2f)\n", idx, tmp.x, tmp.y);
+< 		gpuErrchk( cudaMemcpyAsync( dest+offsets.x, &tmp, sizeof(float2), cudaMemcpyHostToDevice) );
+< 		gpuErrchk( cudaMemcpyAsync( dest+offsets.y, &tmp, sizeof(float2), cudaMemcpyHostToDevice) );
+< 		}
+< 		break;
+< 	    case PotentialSchedule::BOND:
+< 		dest = internal->getBondSlopes_d();
+< 		for(int k = 0 ; k < numReplicas; k++) {
+< 		    int _offset =  bondSlopeIds[ps.potential_index];
+< 		    assert( _offset != -1 );
+< 		    size_t idx = k * (numBonds/2) + _offset;
+< 		    // printf("   Updating bond potential %d slope to (%g,%.2f)\n", idx, tmp.x, tmp.y);
+< 		    gpuErrchk( cudaMemcpyAsync( dest+idx, &tmp, sizeof(float2), cudaMemcpyHostToDevice) );
+< 		}
+< 		break;
+< 	    case PotentialSchedule::ANGLE:
+< 		dest = internal->getAngleSlopes_d();
+< 		for(int k = 0 ; k < numReplicas; k++) {
+< 		    int _offset =  angleSlopeIds[ps.potential_index];
+< 		    assert( _offset != -1 );
+< 		    size_t idx = k * (numAngles) + _offset;
+< 		    // printf("   Updating angle potential %d slope to (%g,%.2f)\n", idx, tmp.x, tmp.y);
+< 		    gpuErrchk( cudaMemcpyAsync( dest+idx, &tmp, sizeof(float2), cudaMemcpyHostToDevice) );
+< 		}
+< 		break;
+< 	    case PotentialSchedule::DIHEDRAL:
+< 		dest = internal->getDihedralSlopes_d();
+< 		for(int k = 0 ; k < numReplicas; k++) {
+< 		    int _offset =  dihedralSlopeIds[ps.potential_index];
+< 		    assert( _offset != -1 );
+< 		    size_t idx = k * (numDihedrals) + _offset;
+< 		    // printf("   Updating dihedral potential %d slope to (%g,%.2f)\n", idx, tmp.x, tmp.y);
+< 		    gpuErrchk( cudaMemcpyAsync( dest+idx, &tmp, sizeof(float2), cudaMemcpyHostToDevice) );
+< 		}
+< 		break;
+< 	    default:
+< 		throw("ERROR");
+< 	    }
+< 	}
+<     }
+<     if (any_schedule_updates) gpuman.sync();
+< };
+< 
+889,892d654
+< 
+<     if (conf.firststep > 0) {
+< 	initialize_potential_slopes(conf.firststep);
+<     }
+896,898c658
+< 	PUSH_NVTX("Main loop timestep",0)
+< 	    update_potential_slopes(s, conf.firststep);
+< 	  
+---
+>       PUSH_NVTX("Main loop timestep",0)
+953c713
+<                             internal -> computeTabulated(get_energy, s+conf.firststep);
+---
+>                             internal -> computeTabulated(get_energy);
+1049c809
+< 		updateKernelBAOAB<true><<< numBlocks, NUM_THREADS >>>(s+conf.firststep, internal->getPos_d()[0], internal->getMom_d(), internal->getForceInternal_d()[0], internal->getType_d(), internal->getAltType_d(), part_d, kT, kTGrid_d, electricField, tl, timestep, num, num_rb_attached_particles, sys_d, randoGen_d, numReplicas, ParticleInterpolationType, internal->getTypeSlopes_d() );
+---
+> 		updateKernelBAOAB<true><<< numBlocks, NUM_THREADS >>>(internal->getPos_d()[0], internal->getMom_d(), internal->getForceInternal_d()[0], internal->getType_d(), part_d, kT, kTGrid_d, electricField, tl, timestep, num, num_rb_attached_particles, sys_d, randoGen_d, numReplicas, ParticleInterpolationType);
+1051c811
+< 		updateKernelBAOAB<false><<< numBlocks, NUM_THREADS >>>(s+conf.firststep, internal->getPos_d()[0], internal->getMom_d(), internal->getForceInternal_d()[0], internal->getType_d(), internal->getAltType_d(), part_d, kT, kTGrid_d, electricField, tl, timestep, num, num_rb_attached_particles, sys_d, randoGen_d, numReplicas, ParticleInterpolationType, internal->getTypeSlopes_d() );
+---
+> 		updateKernelBAOAB<false><<< numBlocks, NUM_THREADS >>>(internal->getPos_d()[0], internal->getMom_d(), internal->getForceInternal_d()[0], internal->getType_d(), part_d, kT, kTGrid_d, electricField, tl, timestep, num, num_rb_attached_particles, sys_d, randoGen_d, numReplicas, ParticleInterpolationType);
+1056c816
+< 		updateKernelNoseHooverLangevin<true><<< numBlocks, NUM_THREADS >>>(s+conf.firststep, internal -> getPos_d()[0], internal -> getMom_d(), internal -> getRan_d(), internal -> getForceInternal_d()[0], internal -> getType_d(), internal->getAltType_d(), part_d, kT, kTGrid_d, electricField, tl, timestep, num, num_rb_attached_particles, sys_d, randoGen_d, numReplicas, ParticleInterpolationType, internal->getTypeSlopes_d() );
+---
+> 		updateKernelNoseHooverLangevin<true><<< numBlocks, NUM_THREADS >>>(internal -> getPos_d()[0], internal -> getMom_d(), internal -> getRan_d(), internal -> getForceInternal_d()[0], internal -> getType_d(), part_d, kT, kTGrid_d, electricField, tl, timestep, num, num_rb_attached_particles, sys_d, randoGen_d, numReplicas, ParticleInterpolationType);
+1058c818
+< 		updateKernelNoseHooverLangevin<false><<< numBlocks, NUM_THREADS >>>(s+conf.firststep, internal -> getPos_d()[0], internal -> getMom_d(), internal -> getRan_d(), internal -> getForceInternal_d()[0], internal -> getType_d(), internal->getAltType_d(), part_d, kT, kTGrid_d, electricField, tl, timestep, num, num_rb_attached_particles, sys_d, randoGen_d, numReplicas, ParticleInterpolationType, internal->getTypeSlopes_d() );
+---
+> 		updateKernelNoseHooverLangevin<false><<< numBlocks, NUM_THREADS >>>(internal -> getPos_d()[0], internal -> getMom_d(), internal -> getRan_d(), internal -> getForceInternal_d()[0], internal -> getType_d(), part_d, kT, kTGrid_d, electricField, tl, timestep, num, num_rb_attached_particles, sys_d, randoGen_d, numReplicas, ParticleInterpolationType);
+1062c822
+<             updateKernel<<< numBlocks, NUM_THREADS >>>(s+conf.firststep, internal -> getPos_d()[0], internal -> getForceInternal_d()[0], internal -> getType_d(), internal->getAltType_d(),
+---
+>             updateKernel<<< numBlocks, NUM_THREADS >>>(internal -> getPos_d()[0], internal -> getForceInternal_d()[0], internal -> getType_d(),
+1064c824
+<                                                        internal->getEnergy(), get_energy, ParticleInterpolationType, internal->getTypeSlopes_d() );
+---
+>                                                        internal->getEnergy(), get_energy, ParticleInterpolationType);
+1265c1025
+< 			    internal -> computeTabulated(get_energy, s+conf.firststep);
+---
+>                         internal -> computeTabulated(get_energy);
+1355,1357c1115,1117
+<             LastUpdateKernelBAOAB<<< numBlocks, NUM_THREADS >>>(s+conf.firststep, internal -> getPos_d()[0], internal -> getMom_d(), internal -> getForceInternal_d()[0], 
+<             internal -> getType_d(), internal->getAltType_d(),  part_d, kT, kTGrid_d, electricField, tl, timestep, num, num_rb_attached_particles, sys_d, randoGen_d, numReplicas, internal->getEnergy(), get_energy,
+<             ParticleInterpolationType, internal->getTypeSlopes_d() );
+---
+>             LastUpdateKernelBAOAB<<< numBlocks, NUM_THREADS >>>(internal -> getPos_d()[0], internal -> getMom_d(), internal -> getForceInternal_d()[0], 
+>             internal -> getType_d(), part_d, kT, kTGrid_d, electricField, tl, timestep, num, num_rb_attached_particles, sys_d, randoGen_d, numReplicas, internal->getEnergy(), get_energy,
+>             ParticleInterpolationType);
+diff arbd.polymerase/src/GrandBrownTown.cuh /home/pinyili2/server10/arbd_stable/src/GrandBrownTown.cuh
+18c18
+< ForceEnergy compute_position_dependent_force(size_t step,
+---
+> ForceEnergy compute_position_dependent_force(
+20,22c20,21
+<     const int* __restrict__ type, const int* __restrict__ alt_type, BrownianParticleType** part,
+<     const float electricField, const int scheme, const int idx,
+<     const float2* __restrict__ switch_slope = nullptr)
+---
+>     const int* __restrict__ type, BrownianParticleType** part,
+>     const float electricField, const int scheme, const int idx)
+23a23
+>     int t = type[idx];
+25c25
+<     const BrownianParticleType& pt = *part[type[idx]];
+---
+>     const BrownianParticleType& pt = *part[t];
+59,75d58
+< 
+<     if (switch_slope != nullptr && alt_type[idx] >= 0) {
+< 	float s = switch_slope[idx].x * step + switch_slope[idx].y;
+< 	if (s != 0) {
+< 	    // Note that it is possible to make a recurrence here
+< 	    ForceEnergy tmp = compute_position_dependent_force(step,
+< 							       pos, forceInternal,
+< 							       alt_type, alt_type, part,
+< 							       electricField, scheme, idx);
+< 	    // if (step % 50 == 1)
+< 	    // printf("  step %d, idx %d, type %d, alt_type %d, slope %.6f, intercept %.6f, scale %.2f, en0 %.2f, en1 %.2f\n",
+< 	    // 	   step, idx, type[idx], alt_type[idx], switch_slope[idx].x, switch_slope[idx].y, s, fe.e, tmp.e);
+< 	    fe.f = (1.0f-s)*fe.f + s*tmp.f;
+< 	    fe.e = (1.0f-s)*fe.e + s*tmp.e;
+< 	}
+<     }		
+<     
+83,84c66,67
+< updateKernelNoseHooverLangevin(size_t step, Vector3* __restrict__ pos, Vector3* __restrict__ momentum, float* random, 
+<                                Vector3* __restrict__ forceInternal, int type[], int* __restrict__ alt_type, BrownianParticleType* part[], 
+---
+> updateKernelNoseHooverLangevin(Vector3* __restrict__ pos, Vector3* __restrict__ momentum, float* random, 
+>                                Vector3* __restrict__ forceInternal, int type[], BrownianParticleType* part[], 
+86c69
+<                                int num, int num_rb_attached_particles, BaseGrid* sys, Random* randoGen, int numReplicas, int scheme, const float2* __restrict__ switch_slope)
+---
+>                                int num, int num_rb_attached_particles, BaseGrid* sys, Random* randoGen, int numReplicas, int scheme)
+96c79
+< 		step, pos, forceInternal, type, alt_type, part, electricField, scheme, idx, switch_slope );
+---
+> 		pos, forceInternal, type, part, electricField, scheme, idx );
+126,135d108
+< 	if (alt_type[idx] >= 0) {
+< 	    float s = switch_slope[idx].x * step + switch_slope[idx].y;
+< 	    if (s != 0) {
+< 		const BrownianParticleType& pt2 = *part[alt_type[idx]];
+< 		mass = (1.0f-s)*mass + s*pt2.mass;
+< 		mu = (1.0f-s)*mu + s*pt2.mu;
+< 		gamma = (1.0f-s)*gamma + s*pt2.transDamping;
+< 	    }
+< 	}
+< 	    
+140,141c113
+< 	    assert( alt_type[idx] < 0 ); // not implemented for switchable types
+< 	    
+---
+> 
+191,192c163,164
+< __global__ void updateKernelBAOAB(size_t step, Vector3* pos, Vector3* momentum, Vector3* __restrict__ forceInternal,
+<                                   int type[], int* alt_type, BrownianParticleType* part[], float kT, BaseGrid* kTGrid, 
+---
+> __global__ void updateKernelBAOAB(Vector3* pos, Vector3* momentum, Vector3* __restrict__ forceInternal,
+>                                   int type[], BrownianParticleType* part[], float kT, BaseGrid* kTGrid, 
+195,196c167
+<                                   Random* randoGen, int numReplicas, int scheme,
+< 				  const float2* __restrict__ switch_slope)
+---
+>                                   Random* randoGen, int numReplicas, int scheme)
+208c179
+< 		step, pos, forceInternal, type, alt_type, part, electricField, scheme, idx, switch_slope );
+---
+> 		pos, forceInternal, type, part, electricField, scheme, idx );
+237,246d207
+< 
+< 	if (alt_type[idx] >= 0) {
+< 	    float s = switch_slope[idx].x * step + switch_slope[idx].y;
+< 	    if (s != 0) {
+< 		const BrownianParticleType& pt2 = *part[alt_type[idx]];
+< 		mass = (1.0f-s)*mass + s*pt2.mass;
+< 		gamma = (1.0f-s)*gamma + s*pt2.transDamping;
+< 	    }
+< 	}
+< 
+250d210
+< 	    assert( alt_type[idx] < 0 ); // not implemented for switchable types
+288,289c248,249
+< __global__ void LastUpdateKernelBAOAB(size_t step, Vector3* pos,Vector3* momentum, Vector3* __restrict__ forceInternal,
+<                                       int type[], int * __restrict__ alt_type, BrownianParticleType* part[], float kT, BaseGrid* kTGrid, 
+---
+> __global__ void LastUpdateKernelBAOAB(Vector3* pos,Vector3* momentum, Vector3* __restrict__ forceInternal,
+>                                       int type[], BrownianParticleType* part[], float kT, BaseGrid* kTGrid, 
+291,293c251
+<                                       BaseGrid* sys, Random* randoGen, int numReplicas, float* __restrict__ energy, bool get_energy,int scheme,
+< 				      const float2* __restrict__ switch_slope)
+< 
+---
+>                                       BaseGrid* sys, Random* randoGen, int numReplicas, float* __restrict__ energy, bool get_energy,int scheme)
+302c260
+< 	    step, pos, forceInternal, type, alt_type, part, electricField, scheme, idx, switch_slope );
+---
+> 	    pos, forceInternal, type, part, electricField, scheme, idx );
+325c283
+< void updateKernel(size_t current_step, Vector3* pos, Vector3* __restrict__ forceInternal, int type[], int* __restrict__ alt_type,
+---
+> void updateKernel(Vector3* pos, Vector3* __restrict__ forceInternal, int type[], 
+328,329c286
+< 		  Random* randoGen, int numReplicas, float* energy, bool get_energy, int scheme,
+< 		  const float2* __restrict__ switch_slope)
+---
+> 		  Random* randoGen, int numReplicas, float* energy, bool get_energy, int scheme) 
+342,345d298
+< 		// if (threadIdx.x % 50 < 2)
+< 		// printf("  sanity: bidx %d, tidx %d, step %d, idx %d, type %d\n",
+< 		//        blockIdx.x, threadIdx.x, current_step, idx, type[idx]);
+< 
+351c304
+< 		    current_step, pos, forceInternal, type, alt_type, part, electricField, scheme, idx, switch_slope );
+---
+> 		    pos, forceInternal, type, part, electricField, scheme, idx );
+372,379d324
+< 		if (alt_type[idx] >= 0) {
+< 		    float s = switch_slope[idx].x * current_step + switch_slope[idx].y;
+< 		    if (s != 0) {
+< 			const BrownianParticleType& pt2 = *part[alt_type[idx]];
+< 			diffusion = (1.0f-s)*diffusion + s*pt2.diffusion;
+< 		    }
+< 		}
+< 
+386,388c331,332
+<                 {	
+< 		    assert( alt_type[idx] < 0 ); // not implemented for switchable types
+< 		    // printf("atom %d: pos: %f %f %f\n", idx, p.x, p.y, p.z);
+---
+>                 {
+> 			// printf("atom %d: pos: %f %f %f\n", idx, p.x, p.y, p.z);
+429d372
+< 			en_local += en_tmp;
+431,448d373
+< 		    if (alt_type[idx] >= 0) {
+< 			float s = switch_slope[idx].x * current_step + switch_slope[idx].y;
+< 			if (s != 0) {
+< 			    en_local = en_local*(1-s);
+< 			    const BrownianParticleType& pt2 = *part[alt_type[idx]];
+< 
+< 			    for(int i = 0; i < pt2.numPartGridFiles; ++i)
+< 			    {
+< 				float en_tmp = 0.0f;
+< 				if(!scheme)
+< 				    en_tmp = pt2.pmf[i]->interpolatePotentialLinearly(tmp);
+< 				else
+< 				    en_tmp = pt2.pmf[i]->interpolatePotential(tmp);
+< 				en_tmp *= pt2.pmf_scale[i];
+< 				en_local += en_tmp*s;
+< 			    }
+< 			}
+< 		    }
+608d532
+< 
+612d535
+< 	assert( false ); // not implemented for switchable types
+615c538
+< 	    0, pos, forceInternal, type, type, part, electricField, scheme, idx );
+---
+> 	    pos, forceInternal, type, part, electricField, scheme, idx );
+630d552
+< 	assert( false ); // not implemented for switchable types
+633c555
+< 	    0, pos, forceInternal, type, type, part, electricField, scheme, idx );
+---
+> 	    pos, forceInternal, type, part, electricField, scheme, idx );
+diff arbd.polymerase/src/GrandBrownTown.h /home/pinyili2/server10/arbd_stable/src/GrandBrownTown.h
+40d39
+< #include "TabulatedPotential.h"
+70,72d68
+<     void initialize_potential_slopes(size_t firststep);
+<     void update_potential_slopes(size_t step, size_t firststep = 0);
+<     
+235d230
+< 	int numVecangles;
+247d241
+< 	String vecangleFile;
+253d246
+< 	bool readVecanglesFromFile;
+269,275d261
+<         std::vector<PotentialSchedule> potential_schedule;
+< 
+<         int2 *nonbondedSlopeIds;
+<         int *bondSlopeIds;
+<         int *angleSlopeIds;    
+<         int *dihedralSlopeIds;    
+<     
+291,296d276
+< 
+< 	Vecangle* vecangles;
+< 	String* vecangleTableFile;
+< 	int numTabVecangleFiles;
+< 	int4 *vecangleList;
+< 	int  *vecanglePotList;
+diff arbd.polymerase/src/JamesBond.cu /home/pinyili2/server10/arbd_stable/src/JamesBond.cu
+8c8
+<     ind1(ind1), ind2(ind2), fileName(fileName) {
+---
+> 		ind1(ind1), ind2(ind2), fileName(fileName) {
+23c23
+<     printf("BOND %s %d %d %s %s\n", flags[flag].val(), ind1, ind2, fileName.val());
+---
+> 	printf("BOND %s %d %d %s\n", flags[flag].val(), ind1, ind2, fileName.val());
+27c27
+<     return "BOND " + flags[flag] + " " + ind1 + " " + ind2 + " " + fileName;
+---
+> 	return "BOND " + flags[flag] + " " + ind1 + " " + ind2 + " " + fileName;
+diff arbd.polymerase/src/JamesBond.h /home/pinyili2/server10/arbd_stable/src/JamesBond.h
+30c30
+<     Bond() : flag(DEFAULT), ind1(-1), ind2(-1) { }
+---
+> 	Bond() : flag(DEFAULT), ind1(-1), ind2(-1) { }
+32c32
+<     Bond(int flag, int ind1, int ind2, String fileName) :
+---
+> 	Bond(int flag, int ind1, int ind2, String fileName) :
+37c37
+<     Bond(String strflag, int ind1, int ind2, String fileName);
+---
+> 	Bond(String strflag, int ind1, int ind2, String fileName);
+Only in arbd.polymerase/src: PotentialSchedule.h
+diff arbd.polymerase/src/Reader.h /home/pinyili2/server10/arbd_stable/src/Reader.h
+13c13
+< 		char line[maxchar];
+---
+> 		char line[256];
+25,26c25,26
+< 		while (fgets(line, maxchar, inp) != NULL) {
+< 		        // Ignore comments.
+---
+> 		while (fgets(line, 256, inp) != NULL) {
+> 			// Ignore comments.
+28,32d27
+< 			if (len > maxchar-1) {
+< 			    printf("Error! Reader: line was longer than maxchar %d. Line follows.\n", maxchar);
+< 			    printf("%s\n", line);
+< 			    exit(1);
+< 			}
+78c73
+< 		char line[maxchar];
+---
+> 		char line[256];
+81c76
+< 		while (fgets(line, maxchar, inp) != NULL) {
+---
+> 		while (fgets(line, 256, inp) != NULL) {
+129d123
+<     static const size_t maxchar = 1024;
+diff arbd.polymerase/src/RigidBodyController.cu /home/pinyili2/server10/arbd_stable/src/RigidBodyController.cu
+578a579,581
+>                         rb.addTorque(rb.t -> constantTorque);
+>                         rb.addForce(rb.t -> constantForce);
+> 
+diff arbd.polymerase/src/RigidBodyType.h /home/pinyili2/server10/arbd_stable/src/RigidBodyType.h
+26c26
+< 	name(name), conf(conf), num(0),
+---
+> 	name(name), conf(conf), num(0),constantTorque(Vector3(0.f)),constantForce(Vector3(0.f)),
+80c80,82
+< 
+---
+>         Vector3 constantTorque;
+>         Vector3 constantForce;
+>         Vector3 vectorTorque;
+diff arbd.polymerase/src/TabulatedAngle.cu /home/pinyili2/server10/arbd_stable/src/TabulatedAngle.cu
+4d3
+< #include <cassert>
+12d10
+< 	switch_potential = nullptr;
+17,29c15,19
+<     FILE* inp;
+<     String s[2];
+<     if (fileName.tokenCount('&') == 1) {
+< 	inp = fopen(fileName.val(), "r");
+<     } else {
+< 	assert( fileName.tokenCount('&') == 2 );
+< 	fileName.tokenize(s, '&');
+< 	inp = fopen(s[0].val(), "r");
+<     }
+<     if (inp == NULL) {
+< 	printf("TabulatedAnglePotential: could not open file '%s'\n", fileName.val());
+< 	exit(-1);
+<     }
+---
+> 	FILE* inp = fopen(fileName.val(), "r");
+> 	if (inp == NULL) {
+> 		printf("TabulatedAnglePotential: could not open file '%s'\n", fileName.val());
+> 		exit(-1);
+> 	}
+75,78d64
+< 	switch_potential = nullptr;
+< 	if (fileName.tokenCount('&') == 2) {
+< 	    switch_potential = new TabulatedAnglePotential(s[1]);
+< 	}
+89,94d74
+<     if (tab.switch_potential == nullptr) {
+< 	switch_potential = nullptr;
+<     } else {
+< 	switch_potential = new TabulatedAnglePotential(*(tab.switch_potential));
+<     }
+< 	
+98,100d77
+<     if (switch_potential != nullptr) {
+< 	delete switch_potential;
+<     }
+diff arbd.polymerase/src/TabulatedAngle.h /home/pinyili2/server10/arbd_stable/src/TabulatedAngle.h
+25d24
+<     TabulatedAnglePotential* switch_potential;
+27,48d25
+<     HOST TabulatedAnglePotential* copy_to_cuda() {
+< 	TabulatedAnglePotential* dev_ptr;
+< 	TabulatedAnglePotential tmp(*this); // TODO consider avoiding allocating v0
+< 
+< 	float *v;
+< 	{
+< 	    size_t sz = sizeof(float) * size;
+< 	    gpuErrchk(cudaMalloc(&v, sz));
+< 	    gpuErrchk(cudaMemcpy(v, pot, sz, cudaMemcpyHostToDevice));
+< 	}
+< 	delete [] tmp.pot;
+< 	tmp.pot = v;
+< 	if (switch_potential != nullptr) 
+< 	    tmp.switch_potential = switch_potential->copy_to_cuda();
+< 	    
+< 	size_t sz = sizeof(TabulatedAnglePotential);
+< 	gpuErrchk(cudaMalloc(&dev_ptr, sz));
+< 	gpuErrchk(cudaMemcpy(dev_ptr, &tmp, sz, cudaMemcpyHostToDevice));
+< 	tmp.pot = NULL;
+< 	tmp.switch_potential = nullptr;
+< 	return dev_ptr;
+<     }
+diff arbd.polymerase/src/TabulatedDihedral.cu /home/pinyili2/server10/arbd_stable/src/TabulatedDihedral.cu
+8c8
+<     pot(NULL), size(0), fileName(""), switch_potential(nullptr) {}
+---
+> 		pot(NULL), size(0), fileName("") {}
+11,20c11
+< 	FILE* inp;
+< 	String s[2];
+< 	if (fileName.tokenCount('&') == 1) {
+< 	    inp = fopen(fileName.val(), "r");
+< 	} else {
+< 	    assert( fileName.tokenCount('&') == 2 );
+< 	    fileName.tokenize(s, '&');
+< 	    inp = fopen(s[0].val(), "r");
+< 	}
+< 	
+---
+> 	FILE* inp = fopen(fileName.val(), "r");
+87,91d77
+< 	switch_potential = nullptr;
+<         if (fileName.tokenCount('&') == 2) {
+<             switch_potential = new TabulatedDihedralPotential(s[1]);
+<         }
+< 
+99,103d84
+< 	if (src.switch_potential == nullptr) {
+< 	    switch_potential = nullptr;
+< 	} else {
+< 	    switch_potential = new TabulatedDihedralPotential(*(src.switch_potential));
+< 	}
+107,109d87
+<     if (switch_potential != nullptr) {
+<         delete switch_potential;
+<     }
+diff arbd.polymerase/src/TabulatedDihedral.h /home/pinyili2/server10/arbd_stable/src/TabulatedDihedral.h
+28,52d27
+<     TabulatedDihedralPotential* switch_potential;
+< 
+<     HOST TabulatedDihedralPotential* copy_to_cuda() {
+<         TabulatedDihedralPotential* dev_ptr;
+<         TabulatedDihedralPotential tmp(*this); // TODO consider avoiding allocating v0
+< 
+<         float *v;
+<         {
+<             size_t sz = sizeof(float) * size;
+<             gpuErrchk(cudaMalloc(&v, sz));
+<             gpuErrchk(cudaMemcpy(v, pot, sz, cudaMemcpyHostToDevice));
+<         }
+<         delete [] tmp.pot;
+<         tmp.pot = v;
+<         if (switch_potential != nullptr) 
+<             tmp.switch_potential = switch_potential->copy_to_cuda();
+<             
+<         size_t sz = sizeof(TabulatedDihedralPotential);
+<         gpuErrchk(cudaMalloc(&dev_ptr, sz));
+<         gpuErrchk(cudaMemcpy(dev_ptr, &tmp, sz, cudaMemcpyHostToDevice));
+<         tmp.pot = NULL;
+<         tmp.switch_potential = nullptr;
+<         return dev_ptr;
+<     }
+< 
+diff arbd.polymerase/src/TabulatedMethods.cuh /home/pinyili2/server10/arbd_stable/src/TabulatedMethods.cuh
+13,51d12
+< __device__ inline float2 get_angle_force_energy (const TabulatedAnglePotential* __restrict__ a, const float angle0, const float cos,
+< 						 const bool& get_energy, const float& s) {
+<     	
+< 	// transform angle to units of tabulated array index
+< 	float angle = angle0 * a->angle_step_inv;
+< 
+< 	// tableAngle[0] stores the potential at angle_step
+< 	// tableAngle[1] stores the potential at angle_step * 2, etc.
+< 	// 'home' is the index after which 'convertedAngle' would appear if it were stored in the table	
+< 	int home = int(floorf(angle));
+<         home =  (home >= a->size) ? (a->size)-1 : home; 
+< 	//assert(home >= 0);
+< 	//assert(home+1 < a->size);
+< 
+< 	// // Make angle the distance from [0,1) from the first index in the potential array index
+< 	// angle -= home;
+< 		
+< 	// Linearly interpolate the potential	
+< 	float U0 = a->pot[home];
+< 	float dUdx = (a->pot[(((home+1)==(a->size)) ? (a->size)-1 : home+1)] - U0) * a->angle_step_inv;
+< 	float e = 0.0f;
+<         if(get_energy)
+<         {
+< 	    e = ((dUdx * (angle-home)) + U0)*0.3333333333;          
+<         }
+< 	float sin = sqrtf(1.0f - cos*cos);
+< 	dUdx /= abs(sin) > 1e-3 ? sin : 1e-3; // avoid singularity
+< 
+< 	if (a->switch_potential != nullptr && s != 0.0f) {
+< 	    
+< 	    float2 tmp = get_angle_force_energy( a->switch_potential, angle0, cos, get_energy, 0);
+< 	    dUdx = (1.0f-s)*dUdx + s*tmp.x;
+< 	    e = (1.0f-s)*e + s*tmp.y;
+< 	}
+< 
+< 	return make_float2(dUdx,e);    
+< }
+< 
+< 
+53c14
+< 				    const int& i, const int& j, const int& k, float* energy, bool get_energy, float s) {
+---
+> 				const int& i, const int& j, const int& k, float* energy, bool get_energy) {
+87,89c48,57
+< 	float2 fe = get_angle_force_energy(a, angle, cos, get_energy, s);
+< 	float& dUdx = fe.x;
+< 	float& e = fe.y;
+---
+> 	// transform angle to units of tabulated array index
+> 	angle *= a->angle_step_inv;
+> 
+> 	// tableAngle[0] stores the potential at angle_step
+> 	// tableAngle[1] stores the potential at angle_step * 2, etc.
+> 	// 'home' is the index after which 'convertedAngle' would appear if it were stored in the table	
+> 	int home = int(floorf(angle));
+>         home =  (home >= a->size) ? (a->size)-1 : home; 
+> 	//assert(home >= 0);
+> 	//assert(home+1 < a->size);
+91,92c59,68
+< 	if (get_energy) {
+< 	    atomicAdd( &energy[i], e);
+---
+> 	// // Make angle the distance from [0,1) from the first index in the potential array index
+> 	// angle -= home;
+> 		
+> 	// Linearly interpolate the potential	
+> 	float U0 = a->pot[home];
+> 	float dUdx = (a->pot[(((home+1)==(a->size)) ? (a->size)-1 : home+1)] - U0) * a->angle_step_inv;
+>         if(get_energy)
+>         {
+> 	    float e = ((dUdx * (angle-home)) + U0)*0.3333333333;
+>             atomicAdd( &energy[i], e);
+95,96c71,75
+< 	}
+< 	
+---
+>             
+>         }
+> 	float sin = sqrtf(1.0f - cos*cos);
+> 	dUdx /= abs(sin) > 1e-3 ? sin : 1e-3; // avoid singularity 
+> 
+212,252d190
+< __device__ inline float2 get_dihedral_force_energy (const TabulatedDihedralPotential* __restrict__ d, const float angle,
+< 						 const bool& get_energy, const float& s) {
+<     	
+< 
+<     	// Shift "angle" by "PI" since    -PI < dihedral < PI
+< 	// And our tabulated potential data: 0 < angle < 2 PI
+< 	float t = (angle + BD_PI) * d->angle_step_inv;
+< 	int home = (int) floorf(t);
+< 	t = t - home;
+<         //home = home % (d->size);
+<         home = (home < d->size) ? home : d->size-1;
+<         int home1 = (home + 1) >= d->size ? (home+1-d->size) : home+1;
+< 
+< 	//assert(home >= 0);
+< 	//assert(home < d->size);
+< 	// home = home % size;
+< 	//int home1 = (home + 1) >= d->size ? (home+1-d->size) : home+1;
+< 
+< 	//assert(home1 >= 0);
+< 	//assert(home1 < d->size);
+< 
+< 	//================================================
+< 	// Linear interpolation
+< 	float U0 = d->pot[home];       // Potential
+< 	float dUdx = (d->pot[home1] - U0); // Change in potential
+< 
+< 	float e = 0.0f;
+<         if(get_energy)
+<         {
+< 	    e = ((dUdx * (angle-home)) + U0)*0.25;
+<         }
+< 	dUdx = -dUdx * d->angle_step_inv;
+< 
+< 	if (d->switch_potential != nullptr && s != 0.0f) {
+< 	    float2 tmp = get_dihedral_force_energy( d->switch_potential, angle, get_energy, 0);
+< 	    dUdx = (1.0f-s)*dUdx + s*tmp.x;
+< 	    e = (1.0f-s)*e + s*tmp.y;
+< 	}
+< 	return make_float2(dUdx,e);    
+< }
+< 
+255c193
+< 				const int& i, const int& j, const int& k, const int& l, float* energy, bool get_energy, float s) {
+---
+> 				const int& i, const int& j, const int& k, const int& l, float* energy, bool get_energy) {
+295c233,253
+< 	float2 fe = get_dihedral_force_energy(d, angle, get_energy, s);
+---
+> 	// Shift "angle" by "PI" since    -PI < dihedral < PI
+> 	// And our tabulated potential data: 0 < angle < 2 PI
+> 	float t = (angle + BD_PI) * d->angle_step_inv;
+> 	int home = (int) floorf(t);
+> 	t = t - home;
+>         //home = home % (d->size);
+>         home = (home < d->size) ? home : d->size-1;
+>         int home1 = (home + 1) >= d->size ? (home+1-d->size) : home+1;
+> 
+> 	//assert(home >= 0);
+> 	//assert(home < d->size);
+> 	// home = home % size;
+> 	//int home1 = (home + 1) >= d->size ? (home+1-d->size) : home+1;
+> 
+> 	//assert(home1 >= 0);
+> 	//assert(home1 < d->size);
+> 
+> 	//================================================
+> 	// Linear interpolation
+> 	float U0 = d->pot[home];       // Potential
+> 	float dU = d->pot[home1] - U0; // Change in potential
+298c256
+< 	    float& e_local = fe.y;
+---
+> 	    float e_local = (dU * t + U0)*0.25f;
+304c262,267
+< 	force = (ab.length2()*bc.length2()*crossABC.rLength2() > 100.0f || bc.length2()*cd.length2()*crossBCD.rLength2() > 100.0f) ? 0.0f : fe.x;
+---
+> 	force = -dU * d->angle_step_inv;
+> 	// if (i >= 8738)  printf("Dihedral (angle,U0,dUdT): (%f,%f,%f)\n", angle*180.0f/BD_PI, U0, force);
+> 
+> 	// avoid singularity when one angle is straight 
+> 	// force = (distbc*distbc*crossABC.rLength2() > 1000.0f || distbc*distbc*crossBCD.rLength2() > 1000.0f) ? 0.0f : force;
+> 	force = (ab.length2()*bc.length2()*crossABC.rLength2() > 100.0f || bc.length2()*cd.length2()*crossBCD.rLength2() > 100.0f) ? 0.0f : force;
+diff arbd.polymerase/src/TabulatedPotential.cu /home/pinyili2/server10/arbd_stable/src/TabulatedPotential.cu
+14d13
+<     switch_potential = nullptr;
+24d22
+< 	switch_potential = nullptr;
+27d24
+< 
+34,65c31
+<     if (tab.switch_potential == nullptr) {
+< 	switch_potential = nullptr;
+<     } else {
+< 	switch_potential = new TabulatedPotential(*(tab.switch_potential));
+<     }
+< }
+< TabulatedPotential::TabulatedPotential(const TabulatedPotential& tab1, const TabulatedPotential& tab2) : TabulatedPotential(tab1) {
+<     switch_potential = new TabulatedPotential(tab2);
+< }    
+< TabulatedPotential::TabulatedPotential(const char* filename) {
+<     String fileName(filename);
+<     TabulatedPotential* tmp;
+<     if (fileName.tokenCount('&') == 1) {
+< 	tmp = new TabulatedPotential(FullTabulatedPotential(filename));
+<     } else if (fileName.tokenCount('&') == 2) {
+< 	String s[2];
+< 	fileName.tokenize(s, '&');
+< 	tmp = new TabulatedPotential(s[0].val());
+< 	tmp->switch_potential = new TabulatedPotential(s[1].val());
+<     }
+<     n = tmp->n;
+<     drInv = tmp->drInv;
+<     r0 = tmp->r0;
+< 
+<     v0 = new float[n];
+<     for (int i = 0; i < n; i++) v0[i] = tmp->v0[i];
+<     switch_potential = tmp->switch_potential;
+<     // delete[] tmp->v0;
+<     // tmp->v0 = NULL;
+<     tmp->switch_potential = nullptr;
+<     delete tmp;
+< }    
+---
+> }
+67d32
+<     
+69,74c34
+<     if (v0 != NULL) {
+< 	delete [] v0;
+<     }
+<     if (switch_potential != nullptr) {
+< 	delete switch_potential;
+<     }
+---
+>     if (v0 != NULL) delete [] v0;
+83d42
+< 	if (switch_potential != nullptr) switch_potential->truncate(cutoff);
+91,95c50,51
+< 	if (indSwitch > n) {
+< 	    if (switch_potential != nullptr) switch_potential->truncate(switchDist, cutoff, value);
+< 	    return false;
+< 	}
+< 	
+---
+> 	if (indSwitch > n) return false;
+> 
+105d60
+< 	if (switch_potential != nullptr) switch_potential->truncate(switchDist, cutoff, value);
+108d62
+< 
+diff arbd.polymerase/src/TabulatedPotential.h /home/pinyili2/server10/arbd_stable/src/TabulatedPotential.h
+46d45
+< 
+84c83
+<     TabulatedPotential();
+---
+>   TabulatedPotential();
+86d84
+<     TabulatedPotential(const TabulatedPotential& tab1, const TabulatedPotential& tab2);
+88,90c86,87
+<     TabulatedPotential(const FullTabulatedPotential& tab) : TabulatedPotential(*(tab.pot)) {}
+<     TabulatedPotential(const char* filename);
+<     // : TabulatedPotential(FullTabulatedPotential(filename)) {}
+---
+>     TabulatedPotential(const FullTabulatedPotential& tab) : TabulatedPotential(*tab.pot) {}
+>     TabulatedPotential(const char* filename) : TabulatedPotential(FullTabulatedPotential(filename)) {}
+100c97
+<   TabulatedPotential* copy_to_cuda() const {
+---
+>     TabulatedPotential* copy_to_cuda() const {
+113,115c110
+< 	if (switch_potential != nullptr) 
+< 	    tmp.switch_potential = switch_potential->copy_to_cuda();
+< 	    
+---
+> 
+120d114
+< 	tmp.switch_potential = nullptr;
+127,129d120
+< 	if (tmp.switch_potential != nullptr)
+< 	    tmp.free_from_cuda(tmp.switch_potential);
+< 	gpuErrchk(cudaFree(tmp.v0));
+130a122
+> 	gpuErrchk(cudaFree(tmp.v0));
+132d123
+< 	tmp.switch_potential = nullptr;
+136c127
+<     HOST DEVICE inline EnergyForce compute(Vector3 r) {
+---
+>   HOST DEVICE inline EnergyForce compute(Vector3 r) {
+151,155d141
+< 		// if (switch_potential != nullptr && s != 0.0f) {
+< 		//     EnergyForce ef = switch_potential->compute(r);
+< 		//     energy = (1.0f-s)*energy + s*ef.e;
+< 		//     force  = (1.0f-s)*force  + s*ef.f;
+< 		// }
+159,160c145,146
+<     HOST DEVICE inline EnergyForce compute(const Vector3 r, float d2, float s=0) const {
+< 	float d = sqrt(d2);
+---
+>   HOST DEVICE inline EnergyForce compute(const Vector3 r, float d) const {
+> 		d = sqrt(d);
+175,183d160
+< 		if (switch_potential != nullptr) {
+< 		    if (s > 0) {
+< 			EnergyForce ef = switch_potential->compute(r,d2);
+< 			// printf("SwitchForce %f: %.2f %f %f\n", s, d,
+< 			//        (r.dot(force) > 0 ? 1 : -1) * force.length(), (r.dot(ef.f) > 0 ? 1 : -1) * (ef.f).length());
+< 			energy = (1.0f-s)*energy + s*ef.e;
+< 			force  = (1.0f-s)*force  + s*ef.f;
+< 		    }
+< 		}
+186,187c163,164
+<     HOST DEVICE inline Vector3 computef(const Vector3 r, float d2, float s=0) const {
+< 	float d = sqrt(d2);
+---
+>   HOST DEVICE inline Vector3 computef(const Vector3 r, float d) const {
+> 		d = sqrt(d);
+195,196c172,173
+< 
+< 		Vector3 ret = Vector3(0.0f);
+---
+> 		if (home >= n) return Vector3(0.0f);
+> 		
+198,203c175,177
+< 		    ret = ((v0[home+1]-v0[home])*drInv/d)*r;
+< 		if (switch_potential != nullptr && s != 0.0f) {
+< 		    Vector3 f = switch_potential->computef(r,d2);
+< 		    ret = (1.0f-s)*ret + s*f;
+< 		}
+< 		return ret;
+---
+> 		    return ((v0[home+1]-v0[home])*drInv/d)*r;
+> 		else
+> 		    return Vector3(0.0f);
+212,215d185
+<   TabulatedPotential* switch_potential;
+<   // float s; // switching parameter; if switch_potential is not null,
+< 	     // s=0 would return this, s=1 would return
+< 	     // switch_potential force/energy
+218d187
+<     
+288,301d256
+<     HOST DEVICE inline float compute_value(const Vector3* __restrict__ pos,
+< 					   const BaseGrid* __restrict__ sys,
+< 					   const int4& particles) const {
+< 	float val;
+< 	if (type == BOND)
+< 	    val = compute_bond(pos, sys, particles.x, particles.y);
+< 	else if (type == ANGLE)
+< 	    val = compute_angle(pos, sys, particles.x, particles.y, particles.z);
+< 	else if (type == DIHEDRAL)
+< 	    val = compute_dihedral(pos, sys, particles.x, particles.y, particles.z, particles.w);
+< 	else if (type == VECANGLE)
+< 	    val = compute_vecangle(pos, sys, particles.x, particles.y, particles.z, particles.w);
+< 	return val;
+<     }
+333,341c288,289
+< 	const Vector3 ac = bc-ab;
+< 	float tmp = compute_angle( ab.length2(), bc.length2(), ac.length2() );
+< 	// printf("i,j,r_ij: %d %d %f %f %f\n",
+< 	//        i,j, ab.x,ab.y,ab.z);
+< 	// printf("k,l,r_kl: %d %d %f %f %f\n",
+< 	//        k,l, bc.x,bc.y,bc.z);
+< 	// printf("i,j,k,l, theta: %d %d %d %d %f\n",
+< 	//        i,j,k,l, tmp);
+< 	return tmp;
+---
+> 	const Vector3 ac = bc+ab;
+> 	return compute_angle( ab.length2(), bc.length2(), ac.length2() );
+413,428d360
+<     DEVICE inline void apply_force(const Vector3* __restrict__ pos,
+< 				   const BaseGrid* __restrict__ sys,
+< 				   Vector3* __restrict__ forces,
+< 				   const int4& particles, float energy_deriv) const {
+< 	if (type == BOND)
+< 	    apply_bond_force(pos, sys, forces, particles.x, particles.y, energy_deriv);
+< 	else if (type == ANGLE)
+< 	    apply_angle_force(pos, sys, forces, particles.x, particles.y,
+< 			     particles.z, energy_deriv);
+< 	else if (type == DIHEDRAL)
+< 	    apply_dihedral_force(pos, sys, forces, particles.x, particles.y,
+< 				 particles.z, particles.w, energy_deriv);
+< 	else if (type == VECANGLE)
+< 	    apply_vecangle_force(pos, sys, forces, particles.x, particles.y,
+< 				 particles.z, particles.w, energy_deriv);
+<     }
+468,471c400,402
+< 	if (abs(sin) <= 1e-3) {
+< 	    printf("BAD ANGLE: sin, cos, energy_deriv, distab, distbc, distac2: (%f %f %f %f %f %f)\n",
+< 		   sin,cos,energy_deriv,ab.length(),bc.length(),sqrt(distac2));
+< 	}
+---
+> 	if (abs(sin) < 1e-3) {
+> 	    printf("BAD ANGLE: sin, cos, energy_deriv, distab, distbc, distac2: (%f %f %f %f %f)\n",
+> 		   sin,cos,energy_deriv,distab,distbc);	}
+576,577c507,508
+< 	const Vector3 ab = sys->wrapDiff(pos[j] - pos[i]);
+< 	const Vector3 cd = -sys->wrapDiff(pos[l] - pos[k]);
+---
+> 	const Vector3 ab = -sys->wrapDiff(pos[j] - pos[i]);
+> 	const Vector3 bc = -sys->wrapDiff(pos[k] - pos[j]);
+580c511
+< 	TwoVector3 f = get_angle_force(ab,cd, energy_deriv);
+---
+> 	TwoVector3 f = get_angle_force(ab,bc, energy_deriv);
+582,583d512
+< 	// printf("i,j,k,l, df, f1, f2: %d %d %d %d %f (%f %f %f) (%f %f %f)\n",
+< 	//        i,j,k,l, energy_deriv, f.v1.x, f.v1.y, f.v1.z, f.v2.x, f.v2.y, f.v2.z);
+586,587c515,516
+< 	atomicAdd( &force[k], f.v2 );
+< 	atomicAdd( &force[l], -f.v2 );
+---
+> 	atomicAdd( &force[k], -f.v2 );
+> 	atomicAdd( &force[l], f.v2 );
+592,593d520
+< 
+< using TabulatedVecanglePotential = SimplePotential;

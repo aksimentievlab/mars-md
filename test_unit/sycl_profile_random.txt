@@ -1,0 +1,264 @@
+Filters: [profiling]
+Randomness seeded to: 3566764901
+[INFO] Profiler.h:563 Initializing profiling for all available backends
+[INFO] Profiler.h:265 Initializing SYCL profiler
+[WARN] SYCLManager.cpp:245 No devices of preferred type 4 found, using all available devices
+[INFO] SYCLManager.cpp:176 Found 3 SYCL device(s)
+[WARN] SYCLManager.cpp:245 No devices of preferred type 4 found, using all available devices
+[INFO] SYCLManager.cpp:176 Found 3 SYCL device(s)
+[INFO] SYCLManager.cpp:303 Initializing SYCL devices...
+[INFO] SYCLManager.cpp:321 Initialized SYCL devices: 0, 1 and 2
+[INFO] RandomProfile.cpp:58 SYCL backend available for profiled Random tests
+[INFO] Profiler.h:296 SYCL Range 'Random::GenerateUniform': 0.445 ms
+[INFO] Profiler.h:296 SYCL Range 'Buffer::CopyToHost': 0.240 ms
+[INFO] Profiler.h:303 SYCL Mark: Uniform generation completed
+[INFO] Profiler.h:296 SYCL Range 'DeviceBuffer::Allocation': 0.914 ms
+[INFO] RandomProfile.cpp:142 SYCL profiled uniform generation completed
+[INFO] Profiler.h:296 SYCL Range 'RandomGenerator::Creation': 0.927 ms
+[INFO] Profiler.h:761 === Profiling Summary ===
+[INFO] Profiler.h:762 Total events: 4
+[INFO] Profiler.h:802 SYCL: 4 events, 2.525 ms total, 0.631 ms avg, 0.240/0.928 ms min/max
+[INFO] Profiler.h:271 Finalizing SYCL profiler
+[INFO] Profiler.h:809 Saving profile data to random_profile_test.json
+[INFO] Profiler.h:563 Initializing profiling for all available backends
+[INFO] Profiler.h:265 Initializing SYCL profiler
+[WARN] SYCLManager.cpp:245 No devices of preferred type 4 found, using all available devices
+[INFO] SYCLManager.cpp:176 Found 3 SYCL device(s)
+[WARN] SYCLManager.cpp:245 No devices of preferred type 4 found, using all available devices
+[INFO] SYCLManager.cpp:176 Found 3 SYCL device(s)
+[INFO] SYCLManager.cpp:303 Initializing SYCL devices...
+[INFO] SYCLManager.cpp:321 Initialized SYCL devices: 0, 1 and 2
+[INFO] RandomProfile.cpp:58 SYCL backend available for profiled Random tests
+[INFO] Profiler.h:296 SYCL Range 'Random::GenerateGaussian': 0.253 ms
+[INFO] Profiler.h:296 SYCL Range 'Statistical::Validation': 0.111 ms
+[INFO] Profiler.h:303 SYCL Mark: Gaussian generation validated
+[INFO] RandomProfile.cpp:178 SYCL profiled gaussian generation completed
+[INFO] Profiler.h:296 SYCL Range 'RandomGenerator::GaussianTest': 0.526 ms
+[INFO] Profiler.h:761 === Profiling Summary ===
+[INFO] Profiler.h:762 Total events: 3
+[INFO] Profiler.h:802 SYCL: 3 events, 0.890 ms total, 0.297 ms avg, 0.111/0.526 ms min/max
+[INFO] Profiler.h:271 Finalizing SYCL profiler
+[INFO] Profiler.h:809 Saving profile data to random_profile_test.json
+[INFO] Profiler.h:563 Initializing profiling for all available backends
+[INFO] Profiler.h:265 Initializing SYCL profiler
+[WARN] SYCLManager.cpp:245 No devices of preferred type 4 found, using all available devices
+[INFO] SYCLManager.cpp:176 Found 3 SYCL device(s)
+[WARN] SYCLManager.cpp:245 No devices of preferred type 4 found, using all available devices
+[INFO] SYCLManager.cpp:176 Found 3 SYCL device(s)
+[INFO] SYCLManager.cpp:303 Initializing SYCL devices...
+[INFO] SYCLManager.cpp:321 Initialized SYCL devices: 0, 1 and 2
+[INFO] RandomProfile.cpp:58 SYCL backend available for profiled Random tests
+[INFO] Profiler.h:296 SYCL Range 'Random::GenerateVector3': 0.224 ms
+[INFO] Profiler.h:296 SYCL Range 'Vector3::Validation': 0.269 ms
+[INFO] Profiler.h:303 SYCL Mark: Vector3 generation validated
+[INFO] RandomProfile.cpp:214 SYCL profiled Vector3 generation completed
+[INFO] Profiler.h:296 SYCL Range 'RandomGenerator::Vector3Test': 0.649 ms
+[INFO] Profiler.h:761 === Profiling Summary ===
+[INFO] Profiler.h:762 Total events: 3
+[INFO] Profiler.h:802 SYCL: 3 events, 1.142 ms total, 0.381 ms avg, 0.224/0.649 ms min/max
+[INFO] Profiler.h:271 Finalizing SYCL profiler
+[INFO] Profiler.h:809 Saving profile data to random_profile_test.json
+[INFO] Profiler.h:563 Initializing profiling for all available backends
+[INFO] Profiler.h:265 Initializing SYCL profiler
+[WARN] SYCLManager.cpp:245 No devices of preferred type 4 found, using all available devices
+[INFO] SYCLManager.cpp:176 Found 3 SYCL device(s)
+[WARN] SYCLManager.cpp:245 No devices of preferred type 4 found, using all available devices
+[INFO] SYCLManager.cpp:176 Found 3 SYCL device(s)
+[INFO] SYCLManager.cpp:303 Initializing SYCL devices...
+[INFO] SYCLManager.cpp:321 Initialized SYCL devices: 0, 1 and 2
+[INFO] RandomProfile.cpp:58 SYCL backend available for profiled Random tests
+[INFO] RandomProfile.cpp:267 Test random generation: min=-0.987, max=0.990, mean=0.025
+[INFO] Profiler.h:296 SYCL Range 'Random::GenerateCoordinates': 0.270 ms
+[INFO] RandomProfile.cpp:327 First 10 x coordinates: 0.372, -0.705, -0.826, -0.034, -0.761, -0.533, 0.927, -0.006, 0.361, 0.508
+[INFO] RandomProfile.cpp:339 First 10 y coordinates: 0.509, -0.965, 0.287, -0.807, -0.886, 0.339, -0.409, 0.396, -0.112, 0.227
+[INFO] RandomProfile.cpp:348 X range: [-1.000, 1.000], Y range: [-1.000, 1.000]
+[INFO] RandomProfile.cpp:355 X mean: 0.001903 (should be ~0.0), Y mean: 0.004489 (should be ~0.0)
+[INFO] RandomProfile.cpp:379 Point 0: (0.372, 0.509) -> dist_sq=0.398, inside=1
+[INFO] RandomProfile.cpp:379 Point 1: (-0.705, -0.965) -> dist_sq=1.428, inside=0
+[INFO] RandomProfile.cpp:379 Point 2: (-0.826, 0.287) -> dist_sq=0.766, inside=1
+[INFO] RandomProfile.cpp:379 Point 3: (-0.034, -0.807) -> dist_sq=0.653, inside=1
+[INFO] RandomProfile.cpp:379 Point 4: (-0.761, -0.886) -> dist_sq=1.364, inside=0
+[INFO] RandomProfile.cpp:379 Point 5: (-0.533, 0.339) -> dist_sq=0.399, inside=1
+[INFO] RandomProfile.cpp:379 Point 6: (0.927, -0.409) -> dist_sq=1.026, inside=0
+[INFO] RandomProfile.cpp:379 Point 7: (-0.006, 0.396) -> dist_sq=0.157, inside=1
+[INFO] RandomProfile.cpp:379 Point 8: (0.361, -0.112) -> dist_sq=0.143, inside=1
+[INFO] RandomProfile.cpp:379 Point 9: (0.508, 0.227) -> dist_sq=0.309, inside=1
+[INFO] RandomProfile.cpp:388 Debug: Found 78239 points inside circle out of 100000 samples
+[INFO] RandomProfile.cpp:393 Positive X: 50153 (should be ~50000), Positive Y: 50450 (should be ~50000)
+[INFO] RandomProfile.cpp:395 Mean distance squared: 0.669426 (should be ~0.667 for uniform in [-1,1]²)
+[INFO] Profiler.h:296 SYCL Range 'Kernel::CircleTest': 1.384 ms
+[INFO] RandomProfile.cpp:414 Points inside circle: 78239 out of 100000 (ratio: 0.782390)
+[INFO] RandomProfile.cpp:424 SYCL Monte Carlo π estimate: 3.12956 (error: 0.01203)
+[INFO] Profiler.h:296 SYCL Range 'MonteCarlo::PiEstimation': 0.192 ms
+[INFO] Profiler.h:303 SYCL Mark: Monte Carlo simulation completed
+[INFO] Profiler.h:296 SYCL Range 'MonteCarlo::Simulation': 2.265 ms
+[INFO] Profiler.h:761 === Profiling Summary ===
+[INFO] Profiler.h:762 Total events: 4
+[INFO] Profiler.h:802 SYCL: 4 events, 4.112 ms total, 1.028 ms avg, 0.193/2.265 ms min/max
+[INFO] Profiler.h:271 Finalizing SYCL profiler
+[INFO] Profiler.h:809 Saving profile data to random_profile_test.json
+[INFO] Profiler.h:563 Initializing profiling for all available backends
+[INFO] Profiler.h:265 Initializing SYCL profiler
+[WARN] SYCLManager.cpp:245 No devices of preferred type 4 found, using all available devices
+[INFO] SYCLManager.cpp:176 Found 3 SYCL device(s)
+[WARN] SYCLManager.cpp:245 No devices of preferred type 4 found, using all available devices
+[INFO] SYCLManager.cpp:176 Found 3 SYCL device(s)
+[INFO] SYCLManager.cpp:303 Initializing SYCL devices...
+[INFO] SYCLManager.cpp:321 Initialized SYCL devices: 0, 1 and 2
+[INFO] RandomProfile.cpp:58 SYCL backend available for profiled Random tests
+[INFO] Profiler.h:296 SYCL Range 'Random::GenerateSteps': 0.224 ms
+[INFO] Profiler.h:296 SYCL Range 'Kernel::InitializeWalkers': 0.157 ms
+[INFO] Profiler.h:296 SYCL Range 'Kernel::RandomWalk': 0.128 ms
+[INFO] Profiler.h:296 SYCL Range 'Kernel::CalculateDistances': 0.081 ms
+[INFO] RandomProfile.cpp:527 SYCL Random Walk: 1000 walkers, mean distance: 9.340, max distance: 24.486, expected: 10.000
+[INFO] Profiler.h:296 SYCL Range 'RandomWalk::Analysis': 0.024 ms
+[INFO] Profiler.h:303 SYCL Mark: Random walk simulation completed
+[INFO] Profiler.h:296 SYCL Range 'RandomWalk::Simulation': 0.801 ms
+[INFO] Profiler.h:761 === Profiling Summary ===
+[INFO] Profiler.h:762 Total events: 6
+[INFO] Profiler.h:802 SYCL: 6 events, 1.415 ms total, 0.236 ms avg, 0.024/0.801 ms min/max
+[INFO] Profiler.h:271 Finalizing SYCL profiler
+[INFO] Profiler.h:809 Saving profile data to random_profile_test.json
+[INFO] Profiler.h:563 Initializing profiling for all available backends
+[INFO] Profiler.h:265 Initializing SYCL profiler
+[WARN] SYCLManager.cpp:245 No devices of preferred type 4 found, using all available devices
+[INFO] SYCLManager.cpp:176 Found 3 SYCL device(s)
+[WARN] SYCLManager.cpp:245 No devices of preferred type 4 found, using all available devices
+[INFO] SYCLManager.cpp:176 Found 3 SYCL device(s)
+[INFO] SYCLManager.cpp:303 Initializing SYCL devices...
+[INFO] SYCLManager.cpp:321 Initialized SYCL devices: 0, 1 and 2
+[INFO] RandomProfile.cpp:58 SYCL backend available for profiled Random tests
+[INFO] Profiler.h:296 SYCL Range 'Random::GenerateNoise': 0.215 ms
+[INFO] Profiler.h:296 SYCL Range 'Kernel::SmoothingFilter': 0.117 ms
+[INFO] Profiler.h:296 SYCL Range 'Kernel::GradientCalculation': 0.088 ms
+[INFO] RandomProfile.cpp:628 SYCL Noise Pipeline: 256x256 grid, original variance: 1.001, smoothed variance: 0.111, max gradient: 0.885
+[INFO] Profiler.h:296 SYCL Range 'NoiseGeneration::Validation': 0.417 ms
+[INFO] Profiler.h:303 SYCL Mark: Noise generation pipeline completed
+[INFO] Profiler.h:296 SYCL Range 'NoiseGeneration::Pipeline': 1.020 ms
+[INFO] Profiler.h:761 === Profiling Summary ===
+[INFO] Profiler.h:762 Total events: 5
+[INFO] Profiler.h:802 SYCL: 5 events, 1.857 ms total, 0.371 ms avg, 0.088/1.020 ms min/max
+[INFO] Profiler.h:271 Finalizing SYCL profiler
+[INFO] Profiler.h:809 Saving profile data to random_profile_test.json
+[INFO] Profiler.h:563 Initializing profiling for all available backends
+[INFO] Profiler.h:265 Initializing SYCL profiler
+[WARN] SYCLManager.cpp:245 No devices of preferred type 4 found, using all available devices
+[INFO] SYCLManager.cpp:176 Found 3 SYCL device(s)
+[WARN] SYCLManager.cpp:245 No devices of preferred type 4 found, using all available devices
+[INFO] SYCLManager.cpp:176 Found 3 SYCL device(s)
+[INFO] SYCLManager.cpp:303 Initializing SYCL devices...
+[INFO] SYCLManager.cpp:321 Initialized SYCL devices: 0, 1 and 2
+[INFO] RandomProfile.cpp:58 SYCL backend available for profiled Random tests
+[INFO] RandomProfile.cpp:720 About to call launch_kernel with SYCL resource...
+[INFO] Profiler.h:757 No profiling events recorded
+[INFO] Profiler.h:271 Finalizing SYCL profiler
+[INFO] Profiler.h:809 Saving profile data to random_profile_test.json
+[INFO] Profiler.h:563 Initializing profiling for all available backends
+[INFO] Profiler.h:265 Initializing SYCL profiler
+[WARN] SYCLManager.cpp:245 No devices of preferred type 4 found, using all available devices
+[INFO] SYCLManager.cpp:176 Found 3 SYCL device(s)
+[WARN] SYCLManager.cpp:245 No devices of preferred type 4 found, using all available devices
+[INFO] SYCLManager.cpp:176 Found 3 SYCL device(s)
+[INFO] SYCLManager.cpp:303 Initializing SYCL devices...
+[INFO] SYCLManager.cpp:321 Initialized SYCL devices: 0, 1 and 2
+[INFO] RandomProfile.cpp:58 SYCL backend available for profiled Random tests
+[INFO] RandomProfile.cpp:777 SYCL generated 5000000 Gaussian numbers in 0.288 ms (17361.1 M numbers/sec)
+[INFO] Profiler.h:296 SYCL Range 'Comparative::Gaussian::SYCL': 0.460 ms
+[INFO] RandomProfile.cpp:788 Fastest backend for Gaussian generation: SYCL (0.288 ms)
+[INFO] Profiler.h:761 === Profiling Summary ===
+[INFO] Profiler.h:762 Total events: 1
+[INFO] Profiler.h:802 SYCL: 1 events, 0.460 ms total, 0.460 ms avg, 0.460/0.460 ms min/max
+[INFO] Profiler.h:271 Finalizing SYCL profiler
+[INFO] Profiler.h:809 Saving profile data to random_profile_test.json
+[INFO] Profiler.h:563 Initializing profiling for all available backends
+[INFO] Profiler.h:265 Initializing SYCL profiler
+[WARN] SYCLManager.cpp:245 No devices of preferred type 4 found, using all available devices
+[INFO] SYCLManager.cpp:176 Found 3 SYCL device(s)
+[WARN] SYCLManager.cpp:245 No devices of preferred type 4 found, using all available devices
+[INFO] SYCLManager.cpp:176 Found 3 SYCL device(s)
+[INFO] SYCLManager.cpp:303 Initializing SYCL devices...
+[INFO] SYCLManager.cpp:321 Initialized SYCL devices: 0, 1 and 2
+[INFO] RandomProfile.cpp:58 SYCL backend available for profiled Random tests
+[INFO] RandomProfile.cpp:823 SYCL Memory Bandwidth - H2D: 7.92 GB/s, D2H: 10.98 GB/s
+[INFO] Profiler.h:296 SYCL Range 'Bandwidth::SYCL': 211.097 ms
+[INFO] Profiler.h:761 === Profiling Summary ===
+[INFO] Profiler.h:762 Total events: 1
+[INFO] Profiler.h:802 SYCL: 1 events, 211.097 ms total, 211.097 ms avg, 211.097/211.097 ms min/max
+[INFO] Profiler.h:271 Finalizing SYCL profiler
+[INFO] Profiler.h:809 Saving profile data to random_profile_test.json
+[WARN] SYCLManager.cpp:245 No devices of preferred type 4 found, using all available devices
+[INFO] SYCLManager.cpp:176 Found 3 SYCL device(s)
+[WARN] SYCLManager.cpp:245 No devices of preferred type 4 found, using all available devices
+[INFO] SYCLManager.cpp:176 Found 3 SYCL device(s)
+[INFO] SYCLManager.cpp:303 Initializing SYCL devices...
+[INFO] SYCLManager.cpp:321 Initialized SYCL devices: 0, 1 and 2
+[INFO] RandomProfile.cpp:848 === Multi-Device Parallel Random Generation Test ===
+[INFO] RandomProfile.cpp:849 Testing 3 SYCL devices with 10000000 numbers per device
+[INFO] RandomProfile.cpp:906 Initializing device 0 with 10000000 elements...
+[INFO] RandomProfile.cpp:908 Successfully initialized device 0 with seed 323456
+[INFO] RandomProfile.cpp:906 Initializing device 1 with 10000000 elements...
+[INFO] RandomProfile.cpp:908 Successfully initialized device 1 with seed 324456
+[INFO] RandomProfile.cpp:906 Initializing device 2 with 10000000 elements...
+[INFO] RandomProfile.cpp:908 Successfully initialized device 2 with seed 325456
+[INFO] RandomProfile.cpp:937 Waiting for all 3 async launches to complete...
+[INFO] RandomProfile.cpp:942 Launched generation on all 3 devices simultaneously
+[INFO] RandomProfile.cpp:1006 === CORRECTED PERFORMANCE RESULTS ===
+[INFO] RandomProfile.cpp:1007 Total numbers generated: 30000000 (10000000 per device)
+[INFO] RandomProfile.cpp:1008 Wall-clock time: 1.371 ms
+[INFO] RandomProfile.cpp:1013 Device timings - min: 1.168ms, max: 1.244ms, avg: 1.195ms, stddev: 0.035ms
+[INFO] RandomProfile.cpp:1015 Timing variation coefficient: 2.9% (lower is better)
+[INFO] RandomProfile.cpp:1017 === THROUGHPUT ANALYSIS ===
+[INFO] RandomProfile.cpp:1018 Actual aggregate throughput: 21877.2 M numbers/sec
+[INFO] RandomProfile.cpp:1019 Sum of individual throughputs: 25132.7 M numbers/sec
+[INFO] RandomProfile.cpp:1020 Perfect parallel throughput: 25684.9 M numbers/sec
+[INFO] RandomProfile.cpp:1022 === EFFICIENCY METRICS ===
+[INFO] RandomProfile.cpp:1024 Capacity efficiency: 87.0% (actual vs sum of individual capacities)
+[INFO] RandomProfile.cpp:1025 Parallel efficiency: 85.2% (actual vs perfect parallel)
+[INFO] RandomProfile.cpp:1029 Speedup: 2.7x vs single device (90.7% of ideal 3x)
+[INFO] RandomProfile.cpp:1032 === BOTTLENECK ANALYSIS ===
+[INFO] RandomProfile.cpp:1051 Device 0: 1.244ms (8038.6 M numbers/sec)
+[INFO] RandomProfile.cpp:1051 Device 1: 1.168ms (8561.6 M numbers/sec)
+[INFO] RandomProfile.cpp:1051 Device 2: 1.172ms (8532.4 M numbers/sec)
+[INFO] RandomProfile.cpp:1055 === STATISTICAL ANALYSIS ===
+[INFO] RandomProfile.cpp:1056 Sampling 10000 values from each device for analysis...
+[INFO] RandomProfile.cpp:1096 Global range across all devices: [0.000084, 0.999995]
+[INFO] RandomProfile.cpp:1097 Mean of device means: 0.499934 (target: ~0.500)
+[INFO] RandomProfile.cpp:1099 Mean of device variances: 0.083758 (target: ~0.083 for uniform[0,1])
+[INFO] RandomProfile.cpp:1108 Device 0: mean=0.501988, var=0.083699, range=[0.000091, 0.999992]
+[INFO] RandomProfile.cpp:1108 Device 1: mean=0.501043, var=0.082592, range=[0.000109, 0.999831]
+[INFO] RandomProfile.cpp:1108 Device 2: mean=0.496771, var=0.084984, range=[0.000084, 0.999995]
+[INFO] RandomProfile.cpp:1121 === QUALITY METRICS ===
+[INFO] RandomProfile.cpp:1122 Max mean deviation from 0.5: 0.003229 (should be < 0.01)
+[INFO] RandomProfile.cpp:1123 Variance ratio (max/min): 1.029 (should be < 1.5)
+[INFO] RandomProfile.cpp:1130 === CROSS-DEVICE CORRELATION ANALYSIS ===
+[INFO] RandomProfile.cpp:1165 Correlation between device 0 and 1: 0.009642
+[INFO] RandomProfile.cpp:1165 Correlation between device 0 and 2: 0.013096
+[INFO] RandomProfile.cpp:1165 Correlation between device 1 and 2: 0.000160
+[INFO] RandomProfile.cpp:1169 Maximum absolute correlation: 0.013096 (should be < 0.05)
+[INFO] RandomProfile.cpp:1185 === MULTI-DEVICE TEST SUMMARY ===
+[INFO] RandomProfile.cpp:1189 ✓ 3 SYCL device(s) generated 30M numbers in 1.371ms
+[INFO] RandomProfile.cpp:1190 ✓ Aggregate throughput: 21877.2 M numbers/sec
+[INFO] RandomProfile.cpp:1191 ✓ Parallel efficiency: 85.2%
+[INFO] RandomProfile.cpp:1192 ✓ All statistical quality metrics passed
+[INFO] RandomProfile.cpp:1194 ✓ Cross-device correlation < 0.013
+[INFO] RandomProfile.cpp:1200 Synchronizing all devices before cleanup...
+[INFO] RandomProfile.cpp:1210 Cleaning up device data...
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+arbd_test_sycl_math is a Catch2 v3.8.1 host application.
+Run with -? for options
+
+-------------------------------------------------------------------------------
+CUDA Multi-device parallel random generation with cross-device analysis
+-------------------------------------------------------------------------------
+/home/pinyili2/server10/arbd2v/src/Tests/Math/RandomProfile.cpp:1225
+...............................................................................
+
+/home/pinyili2/server10/arbd2v/src/Tests/Math/RandomProfile.cpp:1618: SKIPPED:
+explicitly with message:
+  Multi-device test requires CUDA backend to be enabled.
+
+================================================================================
+test cases:  5 |  4 passed | 1 skipped
+assertions: 15 | 15 passed
+

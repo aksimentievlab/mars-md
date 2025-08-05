@@ -5,8 +5,14 @@
 TAGS
 .dir-locals.el
 BD_example*
-arbd
 runBrownCUDA
-!arbd.cpp
-arbd*
+arbd
 *.tar
+build
+.DS_Store
+doxy
+.cache
+.vscode
+.clangd
+.cursorignore
+.cursor

@@ -1,0 +1,939 @@
+diff arbd.smd_bond/src/ComputeForce.cu /home/pinyili2/server10/arbd_stable/src/ComputeForce.cu
+51,52c51
+<     numTabDihedralFiles(c.numTabDihedralFiles), numVecangles(c.numVecangles),
+<     numTabVecangleFiles(c.numTabVecangleFiles), numRestraints(c.numRestraints),
+---
+>     numTabDihedralFiles(c.numTabDihedralFiles), numRestraints(c.numRestraints),
+54,55d52
+<     num_smd_bonds(c.smd_bond_particles.size()),
+<     num_smd_dihedrals(c.smd_dihedral_particles.size()),
+149,189d145
+< 	if (num_smd_bonds > 0) {
+< 	    smd_bond_particles = new int2[num_smd_bonds];
+< 	    smd_bond_params = new float4[num_smd_bonds];
+< 	    gpuErrchk(cudaMalloc(&smd_bond_particles_d, sizeof(int2) * num_smd_bonds));
+< 	    gpuErrchk(cudaMalloc(&smd_bond_params_d, sizeof(float4) * num_smd_bonds));
+< 	    int i = 0;
+< 	    for (auto& p : c.smd_bond_particles) smd_bond_particles[i++] = p;
+< 	    i = 0;
+< 	    for (auto& p : c.smd_bond_params) smd_bond_params[i++] = p;
+< 	    gpuErrchk(cudaMemcpy(smd_bond_particles_d, smd_bond_particles, sizeof(int2)*num_smd_bonds,
+< 				 cudaMemcpyHostToDevice));
+< 	    gpuErrchk(cudaMemcpy(smd_bond_params_d, smd_bond_params, sizeof(float4)*num_smd_bonds,
+< 				 cudaMemcpyHostToDevice));
+< 	}
+< 	if (num_smd_dihedrals > 0) {
+< 	    smd_dihedral_particles = new int4[num_smd_dihedrals];
+< 	    smd_dihedral_params = new float4[num_smd_dihedrals];
+< 	    gpuErrchk(cudaMalloc(&smd_dihedral_particles_d, sizeof(int4) * num_smd_dihedrals));
+< 	    gpuErrchk(cudaMalloc(&smd_dihedral_params_d, sizeof(float4) * num_smd_dihedrals));
+< 	    int i = 0;
+< 	    for (auto& p : c.smd_dihedral_particles) smd_dihedral_particles[i++] = p;
+< 	    i = 0;
+< 	    for (auto& p : c.smd_dihedral_params) smd_dihedral_params[i++] = p;
+< 	    gpuErrchk(cudaMemcpy(smd_dihedral_particles_d, smd_dihedral_particles, sizeof(int4)*num_smd_dihedrals,
+< 				 cudaMemcpyHostToDevice));
+< 	    gpuErrchk(cudaMemcpy(smd_dihedral_params_d, smd_dihedral_params, sizeof(float4)*num_smd_dihedrals,
+< 				 cudaMemcpyHostToDevice));
+< 	}	
+< 
+< 
+< 	// Create the vecangle table
+< 	tableVecangle = new TabulatedVecanglePotential*[numTabVecangleFiles];
+< 	tableVecangle_addr = new TabulatedVecanglePotential*[numTabVecangleFiles];
+< 	vecangleList_d = NULL;
+< 	tableVecangle_d = NULL;
+< 	for (int i = 0; i < numTabVecangleFiles; i++) {
+< 		tableVecangle_addr[i] = NULL;
+< 		tableVecangle[i] = NULL;
+< 	}
+< 	gpuErrchk(cudaMalloc(&tableVecangle_d, sizeof(TabulatedVecanglePotential*) * numTabVecangleFiles));
+< 
+350,366d305
+< 		if (numVecangles > 0) {
+< 			gpuErrchk( cudaFree(vecangles_d) );
+< 			gpuErrchk( cudaFree(vecangleList_d) );
+< 			gpuErrchk( cudaFree(vecanglePotList_d) );
+< 		}
+< 		if (num_smd_bonds > 0) {
+< 		    delete [] smd_bond_particles;
+< 		    delete [] smd_bond_params;
+< 		    gpuErrchk(cudaFree(smd_bond_particles_d));
+< 		    gpuErrchk(cudaFree(smd_bond_params_d ));
+< 		}
+< 		if (num_smd_dihedrals > 0) {
+< 		    delete [] smd_dihedral_particles;
+< 		    delete [] smd_dihedral_params;
+< 		    gpuErrchk(cudaFree(smd_dihedral_particles_d));
+< 		    gpuErrchk(cudaFree(smd_dihedral_params_d ));
+< 		}	
+571,605d509
+< bool ComputeForce::addVecanglePotential(String fileName, int ind, Vecangle vecangles[])
+< {
+< 	for (int i = 0; i < numVecangles; i++)
+< 		if (vecangles[i].fileName == fileName)
+< 			vecangles[i].tabFileIndex = ind;
+< 
+< 	gpuErrchk(cudaMemcpyAsync(vecangles_d, vecangles, sizeof(Vecangle) * numVecangles,
+< 			cudaMemcpyHostToDevice));
+< 
+< 	if (tableVecangle[ind] != NULL) {
+< 		delete tableVecangle[ind];
+< 		gpuErrchk(cudaFree(tableVecangle_addr[ind]));
+< 		tableVecangle[ind] = NULL;
+< 		tableVecangle_addr[ind] = NULL;
+< 	}
+< 
+< 	tableVecangle[ind] = new TabulatedVecanglePotential(fileName,VECANGLE);
+< 	TabulatedVecanglePotential t = TabulatedVecanglePotential(*tableVecangle[ind]);
+< 
+< 	// Copy tableAngle[ind] to the device
+< 	float *pot;
+< 	int size = tableVecangle[ind]->size;
+< 	gpuErrchk(cudaMalloc(&pot, sizeof(float) * size));
+< 	gpuErrchk(cudaMemcpyAsync(pot, tableVecangle[ind]->pot,
+< 			sizeof(float) * size, cudaMemcpyHostToDevice));
+< 	t.pot = pot;
+< 
+< 	gpuErrchk(cudaMalloc(&tableVecangle_addr[ind], sizeof(TabulatedVecanglePotential)));
+< 	gpuErrchk(cudaMemcpyAsync(tableVecangle_addr[ind], &t,
+< 			sizeof(TabulatedVecanglePotential), cudaMemcpyHostToDevice));
+< 	gpuErrchk(cudaMemcpy(tableVecangle_d, tableVecangle_addr,
+< 			sizeof(TabulatedVecanglePotential*) * numTabVecangleFiles, cudaMemcpyHostToDevice));
+< 	t.pot = NULL;
+< 	return true;
+< }
+772c676
+< float ComputeForce::computeTabulated(bool get_energy, const long int step) {
+---
+> float ComputeForce::computeTabulated(bool get_energy) {
+862,896d765
+< 	if (vecangleList_d != NULL && tableVecangle_d != NULL)
+<         {
+<             //if(get_energy)
+< 		//computeTabulatedVecangles<<<nb, numThreads>>>(forceInternal_d[0], pos_d[0], sys_d[0], numVecangles*numReplicas, vecangleList_d, vecanglePotList_d, tableVecangle_d);
+< 	    if (get_energy) {
+< 		computeTabulatedVecangles<true><<<nb, numThreads, 0, gpuman.get_next_stream()>>>(forceInternal_d[0], pos_d[0], sys_d[0], numVecangles*numReplicas,
+<                 vecangleList_d, vecanglePotList_d, tableVecangle_d, energies_d);
+< 	    } else {
+< 		computeTabulatedVecangles<false><<<nb, numThreads, 0, gpuman.get_next_stream()>>>(forceInternal_d[0], pos_d[0], sys_d[0], numVecangles*numReplicas,
+<                 vecangleList_d, vecanglePotList_d, tableVecangle_d);
+< 	}
+<         }
+< 	if (num_smd_bonds > 0)
+<         {
+< 	    // TODO: Add support for replicas
+< 	    // TODO: expose print period to user
+< 	    if ((step % 1000) == 0) {
+< 		computeSMDBonds<true><<<1+(num_smd_bonds/32), 32, 0, gpuman.get_next_stream()>>>(forceInternal_d[0], pos_d[0], sys_d[0], num_smd_bonds, smd_bond_particles_d, smd_bond_params_d, step);
+< 	    } else {
+< 		computeSMDBonds<false><<<1+(num_smd_bonds/32), 32, 0, gpuman.get_next_stream()>>>(forceInternal_d[0], pos_d[0], sys_d[0], num_smd_bonds, smd_bond_particles_d, smd_bond_params_d, step);
+< 	    }
+<         }
+< 	if (num_smd_dihedrals > 0)
+<         {
+< 	    // TODO: Add support for replicas
+< 	    // TODO: expose print period to user
+< 	    if ((step % 1000) == 0) { 
+< 		computeSMDDihedrals<true><<<1+(num_smd_dihedrals/32), 32, 0, gpuman.get_next_stream()>>>(forceInternal_d[0], pos_d[0], sys_d[0], num_smd_dihedrals,
+< 													 smd_dihedral_particles_d, smd_dihedral_params_d, step);
+< 	    } else {
+< 		computeSMDDihedrals<false><<<1+(num_smd_dihedrals/32), 32, 0, gpuman.get_next_stream()>>>(forceInternal_d[0], pos_d[0], sys_d[0], num_smd_dihedrals,
+< 													  smd_dihedral_particles_d, smd_dihedral_params_d, step);
+< 	    }
+<         }
+< 
+946,955d814
+< 	gpuErrchk(cudaDeviceSynchronize());
+< 	if (get_energy) {
+< 		computeTabulatedVecangles<true><<<numBlocks, numThreads, 0, gpuman.get_next_stream()>>>(forceInternal_d[0], pos_d[0], sys_d[0], numVecangles*numReplicas,
+<                 vecangleList_d, vecanglePotList_d, tableVecangle_d, energies_d);
+< 	    } else {
+< 		computeTabulatedVecangles<false><<<numBlocks, numThreads, 0, gpuman.get_next_stream()>>>(forceInternal_d[0], pos_d[0], sys_d[0], numVecangles*numReplicas,
+<                 vecangleList_d, vecanglePotList_d, tableVecangle_d);
+< 	}
+< 
+< 
+1035c894
+< void ComputeForce::copyToCUDA(int simNum, int *type, Bond* bonds, int2* bondMap, Exclude* excludes, int2* excludeMap, Angle* angles, Dihedral* dihedrals, Vecangle* vecangles, const Restraint* const restraints, const BondAngle* const bondAngles, const XpotMap simple_potential_map, const std::vector<SimplePotential> simple_potentials, const ProductPotentialConf* const product_potential_confs)
+---
+> void ComputeForce::copyToCUDA(int simNum, int *type, Bond* bonds, int2* bondMap, Exclude* excludes, int2* excludeMap, Angle* angles, Dihedral* dihedrals, const Restraint* const restraints, const BondAngle* const bondAngles, const XpotMap simple_potential_map, const std::vector<SimplePotential> simple_potentials, const ProductPotentialConf* const product_potential_confs)
+1083,1089d941
+< 	if (numVecangles > 0) {
+< 		// Vecangles_d
+< 		gpuErrchk(cudaMalloc(&vecangles_d, sizeof(Vecangle) * numVecangles));
+< 		gpuErrchk(cudaMemcpyAsync(vecangles_d, vecangles,
+< 					  sizeof(Vecangle) * numVecangles,
+< 					  cudaMemcpyHostToDevice));
+< 	}
+1230c1082
+< void ComputeForce::copyBondedListsToGPU(int3 *bondList, int4 *angleList, int4 *dihedralList, int *dihedralPotList, int4 *vecangleList, int *vecanglePotList, int4* bondAngleList, int2* restraintList) {
+---
+> void ComputeForce::copyBondedListsToGPU(int3 *bondList, int4 *angleList, int4 *dihedralList, int *dihedralPotList, int4* bondAngleList, int2* restraintList) {
+1253,1262d1104
+< 	}
+< 
+< 	if (numVecangles > 0) {
+<     size = numVecangles * numReplicas * sizeof(int4);
+<     gpuErrchk( cudaMalloc( &vecangleList_d, size ) );
+<     gpuErrchk( cudaMemcpyAsync( vecangleList_d, vecangleList, size, cudaMemcpyHostToDevice) );
+< 
+<     size = numVecangles * numReplicas * sizeof(int);
+<     gpuErrchk( cudaMalloc( &vecanglePotList_d, size ) );
+<     gpuErrchk( cudaMemcpyAsync( vecanglePotList_d, vecanglePotList, size, cudaMemcpyHostToDevice) );
+diff arbd.smd_bond/src/ComputeForce.cuh /home/pinyili2/server10/arbd_stable/src/ComputeForce.cuh
+1038,1075d1037
+< template<const bool print>
+< __global__
+< void computeSMDBonds(Vector3* force, const Vector3* __restrict__ pos,
+< 			 const BaseGrid* __restrict__ sys,
+< 			 int numBonds, const int2* const __restrict__ bondList,
+< 			 const float4* __restrict__ bondPotParams, const long int timestep) {
+<     
+<     for (int i = threadIdx.x+blockIdx.x*blockDim.x; i < numBonds; i+=blockDim.x*gridDim.x) {
+< 	const int2& ids = bondList[i];
+< 	const float4& pot = bondPotParams[i];
+< 	const float r_0_0 = pot.x;
+< 	const float k = pot.y;
+< 	const float v = pot.z;
+< 	
+< 	const float r_0 = r_0_0+v*timestep;
+< 
+< 	computeBond<print,false>(r_0, k, sys, force, pos, ids.x, ids.y, i, timestep);
+<     }
+< }
+< template<const bool print>
+< __global__
+< void computeSMDDihedrals(Vector3* force, const Vector3* __restrict__ pos,
+< 			 const BaseGrid* __restrict__ sys,
+< 			 int numDihedrals, const int4* const __restrict__ dihedralList,
+< 			 const float4* __restrict__ dihedralPotParams, const long int timestep) {
+<     
+<     for (int i = threadIdx.x+blockIdx.x*blockDim.x; i < numDihedrals; i+=blockDim.x*gridDim.x) {
+< 	const int4& ids = dihedralList[i];
+< 	const float4& pot = dihedralPotParams[i];
+< 	const float theta_0_0 = pot.x;
+< 	const float k = pot.y;
+< 	const float v = pot.z;
+< 	
+< 	const float theta_0 = theta_0_0+v*timestep;
+< 
+< 	computeDihedral<print,false>(theta_0, k, sys, force, pos, ids.x, ids.y, ids.z, ids.w, i, timestep);
+<     }
+< }
+1104,1128d1065
+< }
+< template<bool get_energy>
+< __global__
+< void computeTabulatedVecangles(Vector3* force, const Vector3* __restrict__ pos,
+< 			       const BaseGrid* __restrict__ sys,
+< 			       int numVecangles, const int4* const __restrict__ vecangleList_d,
+< 			       const int* __restrict__ vecanglePotList_d, TabulatedVecanglePotential** tableVecangle, float* energy=nullptr) {
+< 
+< 	// int currVecangle = blockIdx.x * blockDim.x + threadIdx.x; // first particle ID
+< 
+<     // Loop over ALL vecangles in ALL replicas
+< 	for (int i = threadIdx.x+blockIdx.x*blockDim.x; i < numVecangles; i+=blockDim.x*gridDim.x) {
+< 		const int4& ids = vecangleList_d[i];
+< 		const int& id = vecanglePotList_d[i];
+< 		TabulatedVecanglePotential* __restrict__ p = tableVecangle[ id ];
+< 		float tmp = p->compute_value( pos, sys, ids);
+< 		float2 ef = p->compute_energy_and_deriv(tmp);
+< 		p->apply_force(pos,sys,force, ids, ef.y);
+< 		if (get_energy) {
+< 		    atomicAdd( &energy[ids.x], ef.x*0.25 );
+< 		    atomicAdd( &energy[ids.y], ef.x*0.25 );
+< 		    atomicAdd( &energy[ids.z], ef.x*0.25 );
+< 		    atomicAdd( &energy[ids.w], ef.x*0.25 );
+< 		}
+< 	}
+diff arbd.smd_bond/src/ComputeForce.h /home/pinyili2/server10/arbd_stable/src/ComputeForce.h
+72d71
+< 	bool addVecanglePotential(String fileName, int ind, Vecangle* vecangles);
+94c93
+< 	float computeTabulated(bool get_energy, const long int step);
+---
+> 	float computeTabulated(bool get_energy);
+99c98
+< 	void copyToCUDA(int simNum, int *type, Bond* bonds, int2* bondMap, Exclude* excludes, int2* excludeMap, Angle* angles, Dihedral* dihedrals, Vecangle* vecangles, const Restraint* const restraints, const BondAngle* const bondAngles,
+---
+> 	void copyToCUDA(int simNum, int *type, Bond* bonds, int2* bondMap, Exclude* excludes, int2* excludeMap, Angle* angles, Dihedral* dihedrals, const Restraint* const restraints, const BondAngle* const bondAngles,
+107c106
+<     void copyBondedListsToGPU(int3 *bondList, int4 *angleList, int4 *dihedralList, int *dihedralPotList, int4 *vecangleList, int *vecanglePotList, int4 *bondAngleList, int2 *restraintList);
+---
+>     void copyBondedListsToGPU(int3 *bondList, int4 *angleList, int4 *dihedralList, int *dihedralPotList, int4 *bondAngleList, int2 *restraintList);
+164,168d162
+< 	Vecangle* getVecangles_d()
+< 	{
+< 		return vecangles_d;
+< 	}
+< 
+216,227d209
+< 	int numVecangles;
+< 	int numTabVecangleFiles;
+< 	int num_smd_bonds;
+< 	int2* smd_bond_particles;
+< 	int2* smd_bond_particles_d;
+< 	float4* smd_bond_params;
+< 	float4* smd_bond_params_d;
+< 	int num_smd_dihedrals;
+< 	int4* smd_dihedral_particles;
+< 	int4* smd_dihedral_particles_d;
+< 	float4* smd_dihedral_params;
+< 	float4* smd_dihedral_params_d;
+238d219
+< 	TabulatedVecanglePotential **tableVecangle;
+259d239
+< 	TabulatedVecanglePotential **tableVecangle_d, **tableVecangle_addr;
+296d275
+< 	Vecangle* vecangles_d;
+314,315d292
+< 	int4* vecangleList_d;
+< 	int* vecanglePotList_d;
+diff arbd.smd_bond/src/Configuration.cpp /home/pinyili2/server10/arbd_stable/src/Configuration.cpp
+24,28d23
+< #ifndef PI
+< // TODO: move to some commmon header, consolidate with similar defs
+< #define PI	3.141592653589793f
+< #endif
+< 
+293d287
+< 	if (readVecanglesFromFile) readVecangles();
+669d662
+< 	if (vecangles != NULL) delete[] vecangles;
+685d677
+< 	delete[] vecangleTableFile;
+915,919d906
+< 	readVecanglesFromFile = false;
+< 	numVecangles = 0;
+< 	vecangles = NULL;
+< 	numTabVecangleFiles = 0;
+< 
+1008,1010d994
+< 	int vatfcap = 10;
+< 	vecangleTableFile = new String[vatfcap];
+< 
+1016d999
+< 	int currVecangle = -1;
+1249,1266d1231
+< 		} else if (param == String("inputVecangles")) {
+< 			if (readVecanglesFromFile) {
+< 				printf("WARNING: More than one vecangle file specified. Ignoring new vecangle file.\n");
+< 			} else {
+< 				vecangleFile = value;
+< 				readVecanglesFromFile = true;
+< 			}
+< 		} else if (param == String("tabulatedVecangleFile")) {
+< 			if (numTabVecangleFiles >= dtfcap) {
+< 				String * temp = vecangleTableFile;
+< 				dtfcap *= 2;
+< 				vecangleTableFile = new String[dtfcap];
+< 				for (int j = 0; j < numTabVecangleFiles; j++)
+< 					vecangleTableFile[j] = temp[j];
+< 				delete[] temp;
+< 			}
+< 			if (readVecangleFile(value, ++currVecangle))
+< 				numTabVecangleFiles++;
+1325c1290,1296
+< 		} else if (param == String("densityGrid")) {
+---
+> 		} else if (param == String("constantTorque"))
+>                         rigidBody[currRB].constantTorque = stringToVector3( value );
+>                 else if (param == String("constantForce"))
+>                         rigidBody[currRB].constantForce = stringToVector3( value );
+>                 else if (param == String("vectorTorque"))
+>                         rigidBody[currRB].vectorTorque = stringToVector3( value ); 
+> 		else if (param == String("densityGrid")) {
+1638c1609
+<     const size_t line_char = 65536;
+---
+>     const size_t line_char = 16384;
+1658c1629
+< 	while (fgets(line, line_char, inp) != NULL) { // TODO: write a templated parser that can handle arbitrarily long lines
+---
+> 	while (fgets(line, line_char, inp) != NULL) {
+1677,1681d1647
+< 		if (tokenList[0] != "GROUP") {
+< 		    printf("Error: Invalid group file line: %s\n", line);
+< 		    exit(-1);
+< 		}
+< 
+1731,1733c1697,1702
+< 		if (numTokens < 4) {
+< 		    printf("WARNING: Invalid bond file line: %s\n", line);
+< 		    continue;
+---
+> 		// Legitimate BOND input lines have 4 tokens: 
+> 		// BOND | OPERATION_FLAG | INDEX1 | INDEX2 | FILENAME 
+> 		// A line without exactly five tokens should be discarded.
+> 		if (numTokens != 5) {
+> 			printf("WARNING: Invalid bond file line: %s\n", line);
+> 			continue;
+1735c1704
+< 		
+---
+> 
+1738a1708
+> 		String file_name = tokenList[4];
+1743a1714
+> 
+1750,1773d1720
+< 		if (tokenList[0] == "SMDBOND") {
+< 		    if (numTokens != 7) {
+< 			printf("WARNING: Invalid bond file line: %s\n", line);
+< 			continue;
+< 		    }
+<  		    float r0 = (float) strtod(tokenList[4].val(),NULL);
+< 		    float k  = (float) strtod(tokenList[5].val(),NULL);
+< 		    float v  = (float) strtod(tokenList[6].val(),NULL);
+< 
+< 		    int2 ids = make_int2(ind1,ind2);
+< 		    float4 p = make_float4( r0, k, v, 0.0f );
+< 		    smd_bond_particles.push_back(ids);
+< 		    smd_bond_params.push_back(p);
+< 
+< 		} else {
+< 		// Legitimate BOND input lines have 4 tokens: 
+< 		// BOND | OPERATION_FLAG | INDEX1 | INDEX2 | FILENAME 
+< 		// A line without exactly five tokens should be discarded.
+< 		if (numTokens != 5) {
+< 			printf("WARNING: Invalid bond file line: %s\n", line);
+< 			continue;
+< 		}
+< 
+< 		String file_name = tokenList[4];
+1796a1744,1747
+> 
+> 		if (op == "REPLACE")
+> 		    addExclusion(ind1, ind2);
+> 
+1802,1807d1752
+< 		}
+< 
+< 		if (op == "REPLACE")
+< 		    addExclusion(ind1, ind2);
+< 
+< 
+2004d1948
+<     const size_t max_char_per_line = 256;
+2006c1950
+< 	char line[max_char_per_line];
+---
+> 	char line[256];
+2018c1962
+< 	while(fgets(line, max_char_per_line, inp)) {
+---
+> 	while(fgets(line, 256, inp)) {
+2028,2048d1971
+< 		if (tokenList[0] == "SMDDIHEDRAL") {
+< 		    if (numTokens != 8) {
+< 			printf("WARNING: Invalid dihedral input line: %s\n", line);
+< 			continue;
+< 		    }
+< 		    int ind1 = atoi(tokenList[1].val());
+< 		    int ind2 = atoi(tokenList[2].val());
+< 		    int ind3 = atoi(tokenList[3].val());
+< 		    int ind4 = atoi(tokenList[4].val());
+<  		    float r0 = (float) strtod(tokenList[5].val(),NULL);
+< 		    float k  = (float) strtod(tokenList[6].val(),NULL);
+< 		    float v  = (float) strtod(tokenList[7].val(),NULL);
+< 		    r0 *= PI/180; // convert degrees to radian
+< 		    k  *= (180.0f/PI)*(180.0f/PI); // convert kcal_mol/degrees**2 to radian**2
+< 		    v  *= (PI/180) * timestep; // convert deg/ns to rad/timestep
+< 
+< 		    int4 ids = make_int4(ind1,ind2,ind3,ind4);
+< 		    float4 p = make_float4( r0, k, v, 0.0f );
+< 		    smd_dihedral_particles.push_back(ids);
+< 		    smd_dihedral_params.push_back(p);
+< 		} else {
+2082c2005
+< 	}}
+---
+> 	}
+2089,2152d2011
+< void Configuration::readVecangles() {
+< 	FILE* inp = fopen(vecangleFile.val(), "r");
+< 	char line[256];
+< 	int capacity = 256;
+< 	numVecangles = 0;
+< 	vecangles = new Vecangle[capacity];
+< 
+< 	// If the vecangle file cannot be found, exit the program
+< 	if (inp == NULL) {
+< 		printf("WARNING: Could not open `%s'.\n", vecangleFile.val());
+< 		printf("This simulation will not use vecangles.\n");
+< 		return;
+< 	}
+< 
+< 	while(fgets(line, 256, inp)) {
+< 		if (line[0] == '#') continue;
+< 		String s(line);
+< 		int numTokens = s.tokenCount();
+< 		String* tokenList = new String[numTokens];
+< 		s.tokenize(tokenList);
+< 
+< 		// Legitimate VECANGLE inputs have 6 tokens
+< 		// VECANGLE | INDEX1 | INDEX2 | INDEX3 | INDEX4 | FILENAME
+< 		// Any angle input line without exactly 6 tokens should be discarded
+< 		if (numTokens != 6) {
+< 			printf("WARNING: Invalid vecangle input line: %s\n", line);
+< 			continue;
+< 		}
+< 
+< 		// Discard any empty line
+< 		if (tokenList == NULL)
+< 			continue;
+< 
+< 		int ind1 = atoi(tokenList[1].val());
+< 		int ind2 = atoi(tokenList[2].val());
+< 		int ind3 = atoi(tokenList[3].val());
+< 		int ind4 = atoi(tokenList[4].val());
+< 		String file_name = tokenList[5];
+< 		//printf("file_name %s\n", file_name.val());
+< 		if (ind1 >= num+num_rb_attached_particles+numGroupSites or
+< 		    ind2 >= num+num_rb_attached_particles+numGroupSites or
+< 		    ind3 >= num+num_rb_attached_particles+numGroupSites or
+< 		    ind4 >= num+num_rb_attached_particles+numGroupSites)
+< 			continue;
+< 
+< 		if (numVecangles >= capacity) {
+< 			Vecangle* temp = vecangles;
+< 			capacity *= 2;
+< 			vecangles = new Vecangle[capacity];
+< 			for (int i = 0; i < numVecangles; ++i)
+< 				vecangles[i] = temp[i];
+< 			delete[] temp;
+< 		}
+< 
+< 		Vecangle d(ind1, ind2, ind3, ind4, file_name);
+< 		vecangles[numVecangles++] = d;
+< 		delete[] tokenList;
+< 	}
+< 	std::sort(vecangles, vecangles + numVecangles, compare());
+< 
+< 	// for(int i = 0; i < numVecangles; i++)
+< 	// 	vecangles[i].print();
+< }
+< 
+2457,2476d2315
+< 
+< 	return true;
+< }
+< bool Configuration::readVecangleFile(const String& value, int currVecangle) {
+< 	int numTokens = value.tokenCount();
+< 	if (numTokens != 1) {
+< 		printf("ERROR: Invalid tabulatedVecangleFile: %s, numTokens = %d\n", value.val(), numTokens);
+< 		return false;
+< 	}
+< 
+< 	String* tokenList = new String[numTokens];
+< 	value.tokenize(tokenList);
+< 	if (tokenList == NULL) {
+< 		printf("ERROR: Invalid tabulatedVecangleFile: %s; tokenList is NULL\n", value.val());
+< 		return false;
+< 	}
+< 
+< 	vecangleTableFile[currVecangle] = tokenList[0];
+< 
+< 	// printf("Tabulated Vecangle Potential: %s\n", vecangleTableFile[currVecangle].val() );
+diff arbd.smd_bond/src/Configuration.h /home/pinyili2/server10/arbd_stable/src/Configuration.h
+43d42
+< using Vecangle = Dihedral;
+53d51
+< 	    // bool operator()(const Vecangle& lhs, const Vecangle& rhs);
+71d68
+< 	void readVecangles();
+80d76
+< 	bool readVecangleFile(const String& value, int currVecangle);
+166c162
+< 	long unsigned int steps;
+---
+> 	long int steps;
+214d209
+< 	int numVecangles;
+216,220d210
+< 	std::vector<int2> smd_bond_particles;
+< 	std::vector<float4> smd_bond_params;
+< 	std::vector<int4> smd_dihedral_particles;
+< 	std::vector<float4> smd_dihedral_params;
+< 
+228d217
+< 	String vecangleFile;
+237d225
+< 	bool readVecanglesFromFile;
+278,281d265
+< 
+<         Vecangle* vecangles;
+< 	String* vecangleTableFile;
+< 	int numTabVecangleFiles;
+diff arbd.smd_bond/src/Dihedral.h /home/pinyili2/server10/arbd_stable/src/Dihedral.h
+31,32d30
+< using Vecangle = Dihedral;
+< 
+diff arbd.smd_bond/src/GrandBrownTown.cu /home/pinyili2/server10/arbd_stable/src/GrandBrownTown.cu
+191d190
+< 	vecangleTableFile = c.vecangleTableFile;
+205d203
+< 	numVecangles = c.numVecangles;
+225d222
+< 	vecangles = c.vecangles;
+227d223
+< 	numTabVecangleFiles = c.numTabVecangleFiles;
+269c265
+< 	internal -> copyToCUDA(c.simNum, c.type, c.bonds, c.bondMap, c.excludes, c.excludeMap, c.angles, c.dihedrals, c.vecangles, c.restraints, c.bondAngles, c.simple_potential_ids, c.simple_potentials, c.productPotentials );
+---
+> 	internal -> copyToCUDA(c.simNum, c.type, c.bonds, c.bondMap, c.excludes, c.excludeMap, c.angles, c.dihedrals, c.restraints, c.bondAngles, c.simple_potential_ids, c.simple_potentials, c.productPotentials );
+320,326d315
+< 	if (c.readVecanglesFromFile) {
+< 		printf("Loading %d tabulated vecangle potentials...\n", numTabVecangleFiles);
+< 		for (int p = 0; p < numTabVecangleFiles; p++)
+< 			if (vecangleTableFile[p].length() > 0)
+< 				internal->addVecanglePotential(vecangleTableFile[p].val(), p, vecangles);
+< 	}
+< 
+391,404d379
+< 	if (numVecangles > 0) {
+< 	vecangleList = new int4[ (numVecangles) * numReplicas ];
+< 	vecanglePotList = new  int[ (numVecangles) * numReplicas ];
+< 	for(int k = 0 ; k < numReplicas; k++) {
+< 	    for(int i = 0; i < numVecangles; ++i) {
+< 			if (vecangles[i].tabFileIndex == -1) {
+< 				fprintf(stderr,"Error: vecanglefile '%s' was not read with tabulatedVecangleFile command.\n", vecangles[i].fileName.val());
+< 				exit(1);
+< 			}
+< 			vecangleList[i+k*numVecangles] = make_int4( _get_index(vecangles[i].ind1,k), _get_index(vecangles[i].ind2,k), _get_index(vecangles[i].ind3,k), _get_index(vecangles[i].ind4,k) );
+< 		vecanglePotList[i+k*numVecangles] = vecangles[i].tabFileIndex;
+< 	    }
+< 	}
+< 	}
+450c425
+< 	internal->copyBondedListsToGPU(bondList,angleList,dihedralList,dihedralPotList,vecangleList,vecanglePotList,bondAngleList,restraintList);
+---
+> 	internal->copyBondedListsToGPU(bondList,angleList,dihedralList,dihedralPotList,bondAngleList,restraintList);
+510,513d484
+< 	if (numVecangles > 0) {
+< 		delete[] vecangleList;
+< 		delete[] vecanglePotList;
+< 	}
+742c713
+<                             internal -> computeTabulated(get_energy, s);
+---
+>                             internal -> computeTabulated(get_energy);
+818,819c789,790
+<                     // RBC[i]->SetRandomTorques();
+<                     // RBC[i]->AddLangevin();
+---
+>                     RBC[i]->SetRandomTorques();
+>                     RBC[i]->AddLangevin();
+1054c1025
+< 			    internal -> computeTabulated(get_energy, s);
+---
+>                         internal -> computeTabulated(get_energy);
+1159,1160c1130,1131
+<                 // RBC[i]->SetRandomTorques();
+<                 // RBC[i]->AddLangevin();
+---
+>                 RBC[i]->SetRandomTorques();
+>                 RBC[i]->AddLangevin();
+diff arbd.smd_bond/src/GrandBrownTown.h /home/pinyili2/server10/arbd_stable/src/GrandBrownTown.h
+40d39
+< #include "TabulatedPotential.h"
+232d230
+< 	int numVecangles;
+244d241
+< 	String vecangleFile;
+250d246
+< 	bool readVecanglesFromFile;
+281,286d276
+< 
+< 	Vecangle* vecangles;
+< 	String* vecangleTableFile;
+< 	int numTabVecangleFiles;
+< 	int4 *vecangleList;
+< 	int  *vecanglePotList;
+diff arbd.smd_bond/src/RigidBodyController.cu /home/pinyili2/server10/arbd_stable/src/RigidBodyController.cu
+578a579,581
+>                         rb.addTorque(rb.t -> constantTorque);
+>                         rb.addForce(rb.t -> constantForce);
+> 
+663,703c666
+< void RigidBodyController::print_rb_force(const RigidBody& rb, int& rb_idx, long int step) {
+<     // printf("%ld %d %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f\n", step, rb_idx++, 
+<     // 	   rb.position.x, rb.position.y, rb.position.z,
+<     // 	   rb.force.x, rb.force.y, rb.force.z,
+<     // 	   orientation.x, rb.position.y, rb.position.z,
+< 
+<             // printf("%ld %d %f %f %f %f %f %f\n", step, rb_idx++, 
+< 	    // 	   rb.position.x, rb.position.y, rb.position.z,
+< 	    // 	   rb.force.x, rb.force.y, rb.force.z);
+< 
+<     Vector3 transForceCoeff = Vector3::element_sqrt( 2. * rb.Temp * rb.t->mass*rb.t->transDamping / rb.timestep );
+<     Vector3  rotTorqueCoeff = Vector3::element_sqrt( 2. * rb.Temp * Vector3::element_mult( rb.t->inertia,rb.t->rotDamping) / rb.timestep );
+< 
+<     Force f = Vector3::element_mult(transForceCoeff,rb.W1) -
+<               Vector3::element_mult(rb.t->transDamping, rb.orientation.transpose()*rb.momentum) * 10000;
+<     
+<     Force torq = Vector3::element_mult(rotTorqueCoeff,rb.W2) -
+<                  Vector3::element_mult(rb.t->rotDamping, rb.angularMomentum) * 10000;
+< 
+<     f = rb.orientation * f;
+<     torq = rb.orientation * torq;
+< 
+<     printf("%ld ", step);
+<     rb.getKey().printInline();
+<     printf(" ");    
+<     rb.getPosition().toString().printInline();
+<     printf(" ");
+<     rb.force.toString().printInline();
+<     printf(" ");
+<     rb.getOrientation().toString1().printInline();
+<     printf(" ");
+<     rb.torque.toString().printInline();
+<     printf(" ");
+<     f.toString().printInline();
+<     printf(" ");
+<     torq.toString().printInline();
+<     
+<     printf("\n");
+< }
+< 
+< void RigidBodyController::integrateDLM(BaseGrid* sys, long int step) 
+---
+> void RigidBodyController::integrateDLM(BaseGrid* sys, int step) 
+706d668
+<     int rb_idx = 0;
+712,719d673
+< 	    if (step == 2) {
+< 		rb.W1 = random->gaussian_vector();
+< 		rb.W2 = random->gaussian_vector();
+< 		print_rb_force(rb, rb_idx, step);
+< 		rb.addLangevin(rb.W1,rb.W2);
+< 		// RBC[i]->SetRandomTorques();
+< 		// RBC[i]->AddLangevin();
+< 	    }
+727c681
+< void RigidBodyController::integrate(BaseGrid* sys, long int step)
+---
+> void RigidBodyController::integrate(BaseGrid* sys, int step) 
+729d682
+<     int rb_idx = 0;
+741d693
+< 					print_rb_force(rb, rb_idx, step);
+748c700
+< 		for (int i = 0; i < rigidBodyByType.size(); i++)
+---
+> 			for (int i = 0; i < rigidBodyByType.size(); i++)
+753d704
+< 					print_rb_force(rb, rb_idx, step);
+778d728
+< 					print_rb_force(rb, rb_idx, step);
+790d739
+< 					print_rb_force(rb, rb_idx, step);
+diff arbd.smd_bond/src/RigidBodyController.h /home/pinyili2/server10/arbd_stable/src/RigidBodyController.h
+109,111c109,110
+< 	void print_rb_force(const RigidBody& rb, int& rb_idx, long int step);
+< 	void integrate(BaseGrid* sys, long step);
+<         void integrateDLM(BaseGrid* sys, long step);
+---
+> 	void integrate(BaseGrid* sys, int step);
+>         void integrateDLM(BaseGrid* sys, int step);
+diff arbd.smd_bond/src/RigidBodyType.h /home/pinyili2/server10/arbd_stable/src/RigidBodyType.h
+26c26
+< 	name(name), conf(conf), num(0),
+---
+> 	name(name), conf(conf), num(0),constantTorque(Vector3(0.f)),constantForce(Vector3(0.f)),
+80c80,82
+< 
+---
+>         Vector3 constantTorque;
+>         Vector3 constantForce;
+>         Vector3 vectorTorque;
+diff arbd.smd_bond/src/TabulatedMethods.cuh /home/pinyili2/server10/arbd_stable/src/TabulatedMethods.cuh
+5,35d4
+< template<bool print, bool get_energy>
+< // TODO: move to a more approriate location, reuse code with coputeDihedral
+< __device__ inline void computeBond(const float r_0, const float spring_k,
+< 				const BaseGrid* __restrict__ sys, Vector3* forces, const Vector3* __restrict__ pos,
+< 				const int& i, const int& j, int bond_idx, int timestep, float* energy=NULL) {
+< 	const Vector3 posa = pos[i];
+< 	const Vector3 posb = pos[j];
+< 		
+< 	const Vector3 rvec = sys->wrapDiff(posb - posa);
+< 	float r = rvec.length();
+< 	float dr = r-r_0;
+< 	
+< 	if (get_energy) {
+< 	    float e_local = 0.5 * 0.5 * spring_k* dr*dr;
+<             atomicAdd( &energy[i], e_local );
+<             atomicAdd( &energy[j], e_local );
+< 	}
+<        
+< 	float force = -spring_k * dr;
+< 
+< 	// TODO: fix this ugly hack
+< 	if (print) printf("SMDBOND %d step %d (r0,r,force): %f %f %f\n", 
+< 			  bond_idx, timestep, r_0, r, force);
+< 	
+< 	Vector3 f1 = (force/r) * rvec ;
+< 
+< 	atomicAdd( &forces[i], -f1 );
+< 	atomicAdd( &forces[j],  f1 );
+< }
+< 
+< 
+320,397d288
+< 
+< 	atomicAdd( &forces[i], f1 );
+< 	atomicAdd( &forces[j], f2-f1 );
+< 	atomicAdd( &forces[k], f3-f2 );
+< 	atomicAdd( &forces[l], -f3 );
+< }
+< 
+< template<bool print, bool get_energy>
+< // TODO: move to a more approriate location, reuse code with coputeDihedral
+< __device__ inline void computeDihedral(const float theta_0, const float spring_k,
+< 				const BaseGrid* __restrict__ sys, Vector3* forces, const Vector3* __restrict__ pos,
+< 				const int& i, const int& j, const int& k, const int& l, int dihed_idx, int timestep, float* energy=NULL) {
+< 	const Vector3 posa = pos[i];
+< 	const Vector3 posb = pos[j];
+< 	const Vector3 posc = pos[k];
+< 	const Vector3 posd = pos[l];
+< 
+< 		
+< 	const Vector3 ab = sys->wrapDiff(posa - posb);
+< 	const Vector3 bc = sys->wrapDiff(posb - posc);
+< 	const Vector3 cd = sys->wrapDiff(posc - posd);
+< 		
+< 	//const float distab = ab.length();
+< 	const float distbc = bc.length();
+< 	//const float distcd = cd.length();
+< 	
+< 	Vector3 crossABC = ab.cross(bc);
+< 	Vector3 crossBCD = bc.cross(cd);
+< 	Vector3 crossX = bc.cross(crossABC);
+< 	// assert( crossABC.rLength2() <= 1.0f );
+< 	// assert( crossBCD.rLength2() <= 1.0f );
+< 
+< 	
+< 	const float cos_phi = crossABC.dot(crossBCD) / (crossABC.length() * crossBCD.length());
+< 	const float sin_phi = crossX.dot(crossBCD) / (crossX.length() * crossBCD.length());
+< 		
+< 	const float angle = -atan2(sin_phi, cos_phi);
+< 	float dangle = (angle-theta_0);
+< 	dangle = fmod(dangle, 2*BD_PI);
+< 	dangle =				 \
+< 	    dangle < -BD_PI ? dangle + 2*BD_PI : \
+< 	    dangle >  BD_PI ? dangle - 2*BD_PI : dangle;		
+< 	
+< 	    
+< 	
+< 	if (get_energy) {
+< 	    float e_local = 0.25 * 0.5 * spring_k* dangle*dangle;
+<             atomicAdd( &energy[i], e_local );
+<             atomicAdd( &energy[j], e_local );
+<             atomicAdd( &energy[k], e_local );
+<             atomicAdd( &energy[l], e_local );
+< 	}
+<        
+< 	// float energy = 0.0f;
+< 	float force = - spring_k * dangle;
+< 
+< 	// TODO: fix this ugly hack
+< 	if (print) printf("SMDDIHEDRAL %d step %d (angle0,angle,torque): %f %f %f\n", 
+< 			  dihed_idx, timestep, theta_0, angle, force);
+< 	
+< 	Vector3 f1, f2, f3; // forces
+< 	f1 = -distbc * crossABC.rLength2() * crossABC;
+< 	f3 = -distbc * crossBCD.rLength2() * crossBCD;
+< 	f2 = -(ab.dot(bc) * bc.rLength2()) * f1 - (bc.dot(cd) * bc.rLength2()) * f3;
+< 	
+< 	// avoid singularity when one angle is straight 
+< 	// force = (distbc*distbc*crossABC.rLength2() > 1000.0f || distbc*distbc*crossBCD.rLength2() > 1000.0f) ? 0.0f : force;
+< 	force = (ab.length2()*bc.length2()*crossABC.rLength2() > 100.0f || bc.length2()*cd.length2()*crossBCD.rLength2() > 100.0f) ? 0.0f : force;
+< 
+<         assert(force == force);
+< 	if ( force > 1000.0f ) 
+< 	    force = 1000.0f;
+< 	if ( force < -1000.0f ) 
+< 	    force = -1000.0f;
+< 
+< 	f1 *= force;
+< 	f2 *= force;
+< 	f3 *= force;
+diff arbd.smd_bond/src/TabulatedPotential.h /home/pinyili2/server10/arbd_stable/src/TabulatedPotential.h
+257,270d256
+<     HOST DEVICE inline float compute_value(const Vector3* __restrict__ pos,
+< 					   const BaseGrid* __restrict__ sys,
+< 					   const int4& particles) const {
+< 	float val;
+< 	if (type == BOND)
+< 	    val = compute_bond(pos, sys, particles.x, particles.y);
+< 	else if (type == ANGLE)
+< 	    val = compute_angle(pos, sys, particles.x, particles.y, particles.z);
+< 	else if (type == DIHEDRAL)
+< 	    val = compute_dihedral(pos, sys, particles.x, particles.y, particles.z, particles.w);
+< 	else if (type == VECANGLE)
+< 	    val = compute_vecangle(pos, sys, particles.x, particles.y, particles.z, particles.w);
+< 	return val;
+<     }
+302,310c288,289
+< 	const Vector3 ac = bc-ab;
+< 	float tmp = compute_angle( ab.length2(), bc.length2(), ac.length2() );
+< 	// printf("i,j,r_ij: %d %d %f %f %f\n",
+< 	//        i,j, ab.x,ab.y,ab.z);
+< 	// printf("k,l,r_kl: %d %d %f %f %f\n",
+< 	//        k,l, bc.x,bc.y,bc.z);
+< 	// printf("i,j,k,l, theta: %d %d %d %d %f\n",
+< 	//        i,j,k,l, tmp);
+< 	return tmp;
+---
+> 	const Vector3 ac = bc+ab;
+> 	return compute_angle( ab.length2(), bc.length2(), ac.length2() );
+382,397d360
+<     DEVICE inline void apply_force(const Vector3* __restrict__ pos,
+< 				   const BaseGrid* __restrict__ sys,
+< 				   Vector3* __restrict__ forces,
+< 				   const int4& particles, float energy_deriv) const {
+< 	if (type == BOND)
+< 	    apply_bond_force(pos, sys, forces, particles.x, particles.y, energy_deriv);
+< 	else if (type == ANGLE)
+< 	    apply_angle_force(pos, sys, forces, particles.x, particles.y,
+< 			     particles.z, energy_deriv);
+< 	else if (type == DIHEDRAL)
+< 	    apply_dihedral_force(pos, sys, forces, particles.x, particles.y,
+< 				 particles.z, particles.w, energy_deriv);
+< 	else if (type == VECANGLE)
+< 	    apply_vecangle_force(pos, sys, forces, particles.x, particles.y,
+< 				 particles.z, particles.w, energy_deriv);
+<     }
+437,440c400,402
+< 	if (abs(sin) <= 1e-3) {
+< 	    printf("BAD ANGLE: sin, cos, energy_deriv, distab, distbc, distac2: (%f %f %f %f %f %f)\n",
+< 		   sin,cos,energy_deriv,ab.length(),bc.length(),sqrt(distac2));
+< 	}
+---
+> 	if (abs(sin) < 1e-3) {
+> 	    printf("BAD ANGLE: sin, cos, energy_deriv, distab, distbc, distac2: (%f %f %f %f %f)\n",
+> 		   sin,cos,energy_deriv,distab,distbc);	}
+545,546c507,508
+< 	const Vector3 ab = sys->wrapDiff(pos[j] - pos[i]);
+< 	const Vector3 cd = -sys->wrapDiff(pos[l] - pos[k]);
+---
+> 	const Vector3 ab = -sys->wrapDiff(pos[j] - pos[i]);
+> 	const Vector3 bc = -sys->wrapDiff(pos[k] - pos[j]);
+549c511
+< 	TwoVector3 f = get_angle_force(ab,cd, energy_deriv);
+---
+> 	TwoVector3 f = get_angle_force(ab,bc, energy_deriv);
+551,552d512
+< 	// printf("i,j,k,l, df, f1, f2: %d %d %d %d %f (%f %f %f) (%f %f %f)\n",
+< 	//        i,j,k,l, energy_deriv, f.v1.x, f.v1.y, f.v1.z, f.v2.x, f.v2.y, f.v2.z);
+555,556c515,516
+< 	atomicAdd( &force[k], f.v2 );
+< 	atomicAdd( &force[l], -f.v2 );
+---
+> 	atomicAdd( &force[k], -f.v2 );
+> 	atomicAdd( &force[l], f.v2 );
+561,562d520
+< 
+< using TabulatedVecanglePotential = SimplePotential;
