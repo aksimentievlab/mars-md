@@ -40,10 +40,10 @@ struct ProfiledRandomTestFixture {
 		// Initialize only one backend at a time as per project rules
 		try {
 #ifdef USE_CUDA
-			CUDA::CUDAManager::init();
-			CUDA::CUDAManager::load_info();
-			if (!CUDA::CUDAManager::devices().empty()) {
-				CUDA::CUDAManager::use(0);
+			CUDA::Manager::init();
+			CUDA::Manager::load_info();
+			if (!CUDA::Manager::devices().empty()) {
+				CUDA::Manager::use(0);
 				cuda_resource = Resource(ResourceType::CUDA, 0);
 				cuda_available = true;
 				LOGINFO("CUDA backend available for profiled Random tests");
@@ -58,10 +58,10 @@ struct ProfiledRandomTestFixture {
 				LOGINFO("SYCL backend available for profiled Random tests");
 			}
 #elif defined(USE_METAL)
-			METAL::METALManager::init();
-			METAL::METALManager::load_info();
-			if (!METAL::METALManager::devices().empty()) {
-				METAL::METALManager::use(0);
+			METAL::Manager::init();
+			METAL::Manager::load_info();
+			if (!METAL::Manager::devices().empty()) {
+				METAL::Manager::use(0);
 				metal_resource = Resource(ResourceType::METAL, 0);
 				metal_available = true;
 				LOGINFO("Metal backend available for profiled Random tests");
@@ -79,13 +79,13 @@ struct ProfiledRandomTestFixture {
 		try {
 #ifdef USE_CUDA
 			if (cuda_available)
-				CUDA::CUDAManager::finalize();
+				CUDA::Manager::finalize();
 #elif defined(USE_SYCL)
 			if (sycl_available)
 				SYCL::Manager::finalize();
 #elif defined(USE_METAL)
 			if (metal_available)
-				METAL::METALManager::finalize();
+				METAL::Manager::finalize();
 #endif
 		} catch (const std::exception& e) {
 			std::cerr << "Error during ProfiledRandomTestFixture cleanup: " << e.what()
@@ -184,7 +184,7 @@ TEST_CASE_METHOD(ProfiledRandomTestFixture,
 			Random<Resource> rng(resource, 128);
 			rng.init(9876, 0);
 
-			DeviceBuffer<ARBD::Vector3_t<float>> device_buffer(25000,resource);
+			DeviceBuffer<ARBD::Vector3_t<float>> device_buffer(25000, resource);
 			ARBD::Vector3_t<float> mean(0.0f, 0.0f, 0.0f);
 			ARBD::Vector3_t<float> dev(1.0f, 1.0f, 1.0f);
 
@@ -250,7 +250,7 @@ TEST_CASE_METHOD(ProfiledRandomTestFixture,
 			rng.init(314159, 0);
 
 			// First, test if random generation is working as expected
-			DeviceBuffer<float> test_buffer(100,resource);
+			DeviceBuffer<float> test_buffer(100, resource);
 			Event test_event = rng.generate_uniform(test_buffer, -1.0f, 1.0f);
 			test_event.wait();
 
@@ -757,7 +757,7 @@ TEST_CASE_METHOD(ProfiledRandomTestFixture,
 			Random<Resource> rng(resource, 256);
 			rng.init(654321, 0);
 
-			DeviceBuffer<float> device_buffer(PERF_SIZE,resource);
+			DeviceBuffer<float> device_buffer(PERF_SIZE, resource);
 
 			auto start = std::chrono::high_resolution_clock::now();
 
@@ -1226,8 +1226,8 @@ TEST_CASE("CUDA Multi-device parallel random generation with cross-device analys
 #ifdef USE_CUDA
 	// Manually manage SYCL lifetime for this specific multi-device test
 	try {
-		CUDA::CUDAManager::init();
-		CUDA::CUDAManager::load_info();
+		CUDA::Manager::init();
+		CUDA::Manager::load_info();
 	} catch (const std::exception& e) {
 		SKIP("SYCL backend initialization failed: " << e.what());
 	}
@@ -1235,7 +1235,7 @@ TEST_CASE("CUDA Multi-device parallel random generation with cross-device analys
 	constexpr size_t NUMBERS_PER_DEVICE = 10000000; // 10M per device
 	constexpr size_t SAMPLE_SIZE = 10000;			// Sample for analysis
 
-	const auto& cuda_devices = CUDA::CUDAManager::devices();
+	const auto& cuda_devices = CUDA::Manager::devices();
 	const size_t num_devices = cuda_devices.size();
 
 	if (num_devices == 0) {
@@ -1264,7 +1264,7 @@ TEST_CASE("CUDA Multi-device parallel random generation with cross-device analys
 		DeviceData(size_t device_id, size_t buffer_size)
 			: resource(ResourceType::CUDA, device_id), sample(SAMPLE_SIZE) {
 			// Set this device as current before allocating any memory
-			CUDA::CUDAManager::use(static_cast<int>(device_id));
+			CUDA::Manager::use(static_cast<int>(device_id));
 
 			// Now allocate the buffer on the correct device
 			buffer = DeviceBuffer<float>(buffer_size, resource);
@@ -1283,7 +1283,7 @@ TEST_CASE("CUDA Multi-device parallel random generation with cross-device analys
 				}
 
 				// Set this device as current before deallocating
-				CUDA::CUDAManager::use(static_cast<int>(resource.id));
+				CUDA::Manager::use(static_cast<int>(resource.id));
 
 				// Reset RNG first to free any device resources
 				rng.reset();
@@ -1318,7 +1318,7 @@ TEST_CASE("CUDA Multi-device parallel random generation with cross-device analys
 		// Launch each device's work in a separate thread
 		auto future = std::async(std::launch::async, [&device, &global_start]() {
 			// Set device context in this thread
-			CUDA::CUDAManager::use(static_cast<int>(device->resource.id));
+			CUDA::Manager::use(static_cast<int>(device->resource.id));
 
 			// Record start time
 			device->start_time = std::chrono::high_resolution_clock::now();
@@ -1456,7 +1456,7 @@ TEST_CASE("CUDA Multi-device parallel random generation with cross-device analys
 	// Extract samples from each device and calculate statistics
 	for (auto& device : devices) {
 		// Ensure we're using the correct device for memory operations
-		CUDA::CUDAManager::use(static_cast<int>(device->resource.id));
+		CUDA::Manager::use(static_cast<int>(device->resource.id));
 
 		device->buffer.copy_to_host(device->sample.data(), SAMPLE_SIZE);
 
@@ -1598,7 +1598,7 @@ TEST_CASE("CUDA Multi-device parallel random generation with cross-device analys
 	LOGINFO("Synchronizing all devices before cleanup...");
 	for (size_t i = 0; i < devices.size(); ++i) {
 		try {
-			CUDA::CUDAManager::sync(static_cast<int>(i));
+			CUDA::Manager::sync(static_cast<int>(i));
 		} catch (const std::exception& e) {
 			LOGWARN("Warning: Failed to sync device {}: {}", i, e.what());
 		}
@@ -1610,7 +1610,7 @@ TEST_CASE("CUDA Multi-device parallel random generation with cross-device analys
 
 	// Manually finalize SYCL at the end of the test
 	try {
-		CUDA::CUDAManager::finalize();
+		CUDA::Manager::finalize();
 	} catch (const std::exception& e) {
 		FAIL("SYCL finalization failed: " << e.what());
 	}

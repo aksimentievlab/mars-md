@@ -25,29 +25,29 @@ class CUDAKernelTestFixture {
   public:
 	CUDAKernelTestFixture() {
 		try {
-			CUDA::CUDAManager::init();
-			CUDA::CUDAManager::load_info();
+			CUDA::Manager::init();
+			CUDA::Manager::load_info();
 
-			if (CUDA::CUDAManager::devices().empty()) {
+			if (CUDA::Manager::devices().empty()) {
 				SKIP("No CUDA devices available. Skipping CUDA kernel tests.");
 				return;
 			}
 
 			CUDA_resource = Resource(ResourceType::CUDA, 0);
-			CUDA::CUDAManager::use(0);
+			CUDA::Manager::use(0);
 			CUDA_available = true;
 
 		} catch (const std::exception& e) {
-			FAIL("Failed to initialize CUDAManager for kernel tests: " << e.what());
+			FAIL("Failed to initialize Manager for kernel tests: " << e.what());
 		}
 	}
 
 	~CUDAKernelTestFixture() {
 		if (CUDA_available) {
 			try {
-				CUDA::CUDAManager::finalize();
+				CUDA::Manager::finalize();
 			} catch (const std::exception& e) {
-				std::cerr << "Error during CUDAManager finalization: " << e.what() << std::endl;
+				std::cerr << "Error during Manager finalization: " << e.what() << std::endl;
 			}
 		}
 	}
