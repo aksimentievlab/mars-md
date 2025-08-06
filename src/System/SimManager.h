@@ -16,9 +16,7 @@
 // Patch to Patch data exchange should not require explicit scheduling by SimManager
 
 // Load balancing?
-class LoadBalancer {
-    // nothing for now
-};
+namespace ARBD {
 
 class SimManager {
 
@@ -29,10 +27,11 @@ private:
     LoadBalancer load_balancer;
     SimSystem sys;	// make it a list for replicas
     Decomposer decomp;
-    std::vector<SymbolicOp> sym_ops;
-    std::vector<PatchOp>  ops;
+    //std::vector<SymbolicOp> sym_ops;
+    //std::vector<PatchOp>  ops;
     
 public:
 
     void run();    
 };
+}

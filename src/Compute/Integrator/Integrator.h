@@ -1,6 +1,6 @@
 /*********************************************************************
  * @file  Integrator.h
- * 
+ *
  * @brief Declaration of Integrator class with factory-like method
  * GetIntegrator()
  *
@@ -11,36 +11,39 @@
  *********************************************************************/
 #pragma once
 
+#include "PatchOp.h"
 #include <cassert>
 #include <iostream>
 #include <map>
-#include "PatchOp.h"
 
 class Integrator : public PatchOp {
-public:
-    virtual void compute(Patch* patch) = 0;
-    int num_patches() const { return 1; };
+  public:
+	virtual void compute(Patch* patch) = 0;
+	int num_patches() const {
+		return 1;
+	};
 
-    // Following relates to lazy initialized factory method
-    struct Conf {
-	enum Object   { Particle, RigidBody };
-	enum Algorithm { BD, MD };
-	enum Backend   { Default, CUDA, CPU };    
+	// Following relates to lazy initialized factory method
+	struct Conf {
+		enum Object { Particle, RigidBody };
+		enum Algorithm { BD, MD };
+		enum Backend { CUDA, SYCL, METAL, CPU };
 
-	Object object_type;
-	Algorithm algorithm;
-	Backend backend;
+		Object object_type;
+		Algorithm algorithm;
+		Backend backend;
 
-	explicit operator int() const {return object_type*16 + algorithm*4 + backend;};
-    };
-        
-    static Integrator* GetIntegrator(Conf& conf);
-	    	
-protected:
-    static std::map<Conf, Integrator*> _integrators;
+		explicit operator int() const {
+			return object_type * 16 + algorithm * 4 + backend;
+		};
+	};
 
+	static Integrator* GetIntegrator(Conf& conf);
+
+  protected:
+	static std::map<Conf, Integrator*> _integrators;
 };
 
-#include "Integrator/kernels.h"
-#include "Integrator/CUDA.h"
 #include "Integrator/CPU.h"
+#include "Integrator/CUDA.h"
+#include "Integrator/kernels.h"

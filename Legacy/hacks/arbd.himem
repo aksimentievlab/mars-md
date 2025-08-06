@@ -1,0 +1,242 @@
+diff --git a/src/ComputeForce.cu b/src/ComputeForce.cu
+index 6ef01fa..f875951 100644
+--- a/src/ComputeForce.cu
++++ b/src/ComputeForce.cu
+@@ -169,45 +169,47 @@ ComputeForce::ComputeForce(const Configuration& c, const int numReplicas = 1) :
+ 		}
+ 
+ 		// create texture object
+-		for (std::size_t i = 0; i < gpuman.gpus.size(); ++i) {
+-		    gpuman.use(i);
+-		    cudaResourceDesc resDesc;
+-		    memset(&resDesc, 0, sizeof(resDesc));
+-		    resDesc.resType = cudaResourceTypeLinear;
+-		    resDesc.res.linear.devPtr = pairLists_d[i];
+-		    resDesc.res.linear.desc.f = cudaChannelFormatKindSigned;
+-		    resDesc.res.linear.desc.x = 32; // bits per channel
+-		    resDesc.res.linear.desc.y = 32; // bits per channel
+-		    resDesc.res.linear.sizeInBytes = maxPairs*sizeof(int2);
+-
+-		    cudaTextureDesc texDesc;
+-		    memset(&texDesc, 0, sizeof(texDesc));
+-		    texDesc.readMode = cudaReadModeElementType;
+-
+-		    // create texture object: we only have to do this once!
+-		    pairLists_tex[i]=0;
+-		    cudaCreateTextureObject(&pairLists_tex[i], &resDesc, &texDesc, NULL);
+-		}
++		if (MAX_NLIST_PAIRS <= (1<<27)) {
++		    for (std::size_t i = 0; i < gpuman.gpus.size(); ++i) {
++			gpuman.use(i);
++			cudaResourceDesc resDesc;
++			memset(&resDesc, 0, sizeof(resDesc));
++			resDesc.resType = cudaResourceTypeLinear;
++			resDesc.res.linear.devPtr = pairLists_d[i];
++			resDesc.res.linear.desc.f = cudaChannelFormatKindSigned;
++			resDesc.res.linear.desc.x = 32; // bits per channel
++			resDesc.res.linear.desc.y = 32; // bits per channel
++			resDesc.res.linear.sizeInBytes = maxPairs*sizeof(int2);
+ 
+-		// create texture object
+-		for (std::size_t i = 0; i < gpuman.gpus.size(); ++i) {
+-		    gpuman.use(i);
+-		    cudaResourceDesc resDesc;
+-		    memset(&resDesc, 0, sizeof(resDesc));
+-		    resDesc.resType = cudaResourceTypeLinear;
+-		    resDesc.res.linear.devPtr = pairTabPotType_d[i];
+-		    resDesc.res.linear.desc.f = cudaChannelFormatKindSigned;
+-		    resDesc.res.linear.desc.x = 32; // bits per channel
+-		    resDesc.res.linear.sizeInBytes = maxPairs*sizeof(int);
+-
+-		    cudaTextureDesc texDesc;
+-		    memset(&texDesc, 0, sizeof(texDesc));
+-		    texDesc.readMode = cudaReadModeElementType;
+-
+-		    // create texture object: we only have to do this once!
+-		    pairTabPotType_tex[i] = 0;
+-		    cudaCreateTextureObject(&pairTabPotType_tex[i], &resDesc, &texDesc, NULL);
++			cudaTextureDesc texDesc;
++			memset(&texDesc, 0, sizeof(texDesc));
++			texDesc.readMode = cudaReadModeElementType;
++
++			// create texture object: we only have to do this once!
++			pairLists_tex[i]=0;
++			gpuErrchk(cudaCreateTextureObject(&pairLists_tex[i], &resDesc, &texDesc, NULL));
++		    }
++
++		    // create texture object
++		    for (std::size_t i = 0; i < gpuman.gpus.size(); ++i) {
++			gpuman.use(i);
++			cudaResourceDesc resDesc;
++			memset(&resDesc, 0, sizeof(resDesc));
++			resDesc.resType = cudaResourceTypeLinear;
++			resDesc.res.linear.devPtr = pairTabPotType_d[i];
++			resDesc.res.linear.desc.f = cudaChannelFormatKindSigned;
++			resDesc.res.linear.desc.x = 32; // bits per channel
++			resDesc.res.linear.sizeInBytes = maxPairs*sizeof(int);
++
++			cudaTextureDesc texDesc;
++			memset(&texDesc, 0, sizeof(texDesc));
++			texDesc.readMode = cudaReadModeElementType;
++
++			// create texture object: we only have to do this once!
++			pairTabPotType_tex[i] = 0;
++			cudaCreateTextureObject(&pairTabPotType_tex[i], &resDesc, &texDesc, NULL);
+ 
++		    }
+ 		}
+ 		gpuman.use(0);
+ 
+@@ -628,6 +630,14 @@ void ComputeForce::decompose() {
+       gpuKernelCheck();
+       gpuErrchk(cudaDeviceSynchronize()); /* RBTODO: sync needed here? */
+ 
++      // 
++      // 	  const int maxPairs = MAX_NLIST_PAIRS;
++      // 	  int2 gpuErrchk(cudaMalloc(&pairLists_d[i],      sizeof(int2)*maxPairs));
++      // }
++      // if (ai == 0 || aj == 0)
++	    // 	printf("tabForce %d %d: %f %f %f\n", ai, aj, f.x, f.y, f.z);
++
++      
+       #ifdef USE_NCCL
+       if (gpuman.gpus.size() > 1) {
+ 	  // Currently we don't use numPairs_d[i] for i > 0... might be able to reduce data transfer with some kind nccl scatter, and in that case we'd prefer to use all numPairs_d[i]
+@@ -779,7 +789,11 @@ float ComputeForce::computeTabulated(bool get_energy) {
+ 	    if (ngpu == 1) {
+ 		int i = 0;
+ 		computeTabulatedKernel<64><<< dim3(2048,1,1), dim3(64,1,1), 0, gpuman.gpus[i].get_next_stream() >>>
+-		    (forceInternal_d[i], sys_d[i], cutoff2, numPairs_d[i], pairLists_d[i], pairTabPotType_d[i], tablePot_d[i], pairLists_tex[i], pos_tex[i], pairTabPotType_tex[i]);
++		    (forceInternal_d[i], sys_d[i], cutoff2, numPairs_d[i], pairLists_d[i], pairTabPotType_d[i], tablePot_d[i], pos_tex[i]
++#if MAX_NLIST_PAIRS <= MAX_TEX_SIZE
++		     , pairLists_tex[i], pairTabPotType_tex[i]
++#endif
++			);
+ 
+ 	    } else {
+ 	    for (size_t i = 0; i < ngpu; ++i) {
+@@ -788,8 +802,12 @@ float ComputeForce::computeTabulated(bool get_energy) {
+ 		int end   = i < ngpu-1 ? floor( ((float) numPairs*(i+1))/ngpu ) : numPairs;
+ 		
+ 		if (i == ngpu-1) assert(end == numPairs);
+-		computeTabulatedKernel<64><<< dim3(2048,1,1), dim3(64,1,1), 0, gpuman.gpus[i].get_next_stream() >>>(forceInternal_d[i], sys_d[i],
+-														    cutoff2, pairLists_d[i], pairTabPotType_d[i], tablePot_d[i], pairLists_tex[i], pos_tex[i], pairTabPotType_tex[i], start, end-start);
++		computeTabulatedKernel<64><<< dim3(2048,1,1), dim3(64,1,1), 0, gpuman.gpus[i].get_next_stream() >>>
++		    (forceInternal_d[i], sys_d[i], cutoff2, pairLists_d[i], pairTabPotType_d[i], tablePot_d[i], pos_tex[i],
++#if MAX_NLIST_PAIRS <= MAX_TEX_SIZE
++		     pairLists_tex[i], pairTabPotType_tex[i],
++#endif
++		     start, end-start);
+                   gpuKernelCheck();
+ 	    }
+ 	    gpuman.use(0);
+diff --git a/src/ComputeForce.cuh b/src/ComputeForce.cuh
+index 70eac7f..39c5972 100644
+--- a/src/ComputeForce.cuh
++++ b/src/ComputeForce.cuh
+@@ -10,7 +10,10 @@
+ 
+ // From TabulatedMethods.cuh: constexpr float BD_PI = 3.1415927f; 
+ constexpr size_t MAX_CELLS_FOR_CELLNEIGHBORLIST = 1<<25;
+-constexpr size_t MAX_NLIST_PAIRS = 1<<27; // Reduce if ARBD crashes immediately with GPU memory allocation error
++#define MAX_TEX_SIZE (1u << 27)	// read that this is the maximum
++#define MAX_NLIST_PAIRS (1u<<30)
++
++// constexpr size_t MAX_NLIST_PAIRS = 1<<30; // Reduce if ARBD crashes immediately with GPU memory allocation error
+ 
+ // texture<int,    1, cudaReadModeElementType>      NeighborsTex;
+ // texture<int,    1, cudaReadModeElementType> pairTabPotTypeTex;
+@@ -589,8 +592,12 @@ __global__ void printPairForceCounter() {
+ template<const int BlockSize>
+ __device__ inline void _computeTabulatedKernel(Vector3* force, const BaseGrid* __restrict__ sys, 
+ 					       float cutoff2, const int numPairs, const int2* __restrict__ g_pair, 
+-					       const int* __restrict__ g_pairTabPotType, TabulatedPotential** __restrict__ tablePot,
+-					       cudaTextureObject_t pairListsTex, cudaTextureObject_t PosTex, cudaTextureObject_t pairTabPotTypeTex
++					       const int* __restrict__ g_pairTabPotType, TabulatedPotential* __restrict__ * __restrict__ tablePot,
++					       cudaTextureObject_t PosTex
++#if MAX_NLIST_PAIRS <= MAX_TEX_SIZE
++					       , cudaTextureObject_t pairListsTex,
++					       cudaTextureObject_t pairTabPotTypeTex
++#endif
+     )
+ {
+     const int tid = threadIdx.x + blockDim.x * threadIdx.y
+@@ -602,23 +609,31 @@ __device__ inline void _computeTabulatedKernel(Vector3* force, const BaseGrid* _
+     for (int i = tid; i < numPairs; i += TotalThreads) 
+     {
+         //int2 pair = g_pair[i];
++#if MAX_NLIST_PAIRS > MAX_TEX_SIZE
++        const int2& pair = g_pair[i];
++#else
+         int2 pair = tex1Dfetch<int2>(pairListsTex,i);
+-        //int  ind  = tex1Dfetch(pairTabPotTypeTex,i); 
++#endif
+ 
+         int ai = pair.x;
+         int aj = pair.y;
+                         
+-        //int ind = g_pairTabPotType[i];
+ 
+         Vector3 a(tex1Dfetch<float4>(PosTex, ai));
+         Vector3 b(tex1Dfetch<float4>(PosTex, aj));
+         Vector3 dr = sys->wrapDiff(b-a);
+         
+         float d2 = dr.length2();
++#if MAX_NLIST_PAIRS > MAX_TEX_SIZE
++        const int& ind = g_pairTabPotType[i];
++#else
+         int  ind  = tex1Dfetch<int>(pairTabPotTypeTex,i);
++#endif
+         if (tablePot[ind] != NULL && d2 <= cutoff2) 
+         {
+             Vector3 f = tablePot[ind]->computef(dr,d2);
++	    // if (ai == 0 || aj == 0)
++	    // 	printf("tabForce %d %d: %f %f %f\n", ai, aj, f.x, f.y, f.z);
+             atomicAdd( &force[ai],  f );
+             atomicAdd( &force[aj], -f );
+         }
+@@ -629,23 +644,40 @@ template<const int BlockSize>
+ __global__ void computeTabulatedKernel(Vector3* force, const BaseGrid* __restrict__ sys, 
+                                        float cutoff2, const int* __restrict__ g_numPairs, const int2* __restrict__ g_pair, 
+                                        const int* __restrict__ g_pairTabPotType, TabulatedPotential** __restrict__ tablePot,
+-				       cudaTextureObject_t pairListsTex, cudaTextureObject_t PosTex, cudaTextureObject_t pairTabPotTypeTex) {
++				       cudaTextureObject_t PosTex
++#if MAX_NLIST_PAIRS <= MAX_TEX_SIZE
++				       , cudaTextureObject_t pairListsTex,
++				       cudaTextureObject_t pairTabPotTypeTex
++#endif
++    ) {
+     _computeTabulatedKernel<BlockSize>(force,sys,
+ 				       cutoff2, *g_numPairs, g_pair,
+ 				       g_pairTabPotType, tablePot,
+-				       pairListsTex, PosTex, pairTabPotTypeTex);
++				       PosTex
++#if MAX_NLIST_PAIRS <= MAX_TEX_SIZE
++				       , pairListsTex, pairTabPotTypeTex
++#endif
++	);
+ }
+ 
+ template<const int BlockSize>
+ __global__ void computeTabulatedKernel(Vector3* force, const BaseGrid* __restrict__ sys, 
+                                        float cutoff2, const int2* __restrict__ g_pair, 
+                                        const int* __restrict__ g_pairTabPotType, TabulatedPotential** __restrict__ tablePot,
+-				       cudaTextureObject_t pairListsTex, cudaTextureObject_t PosTex, cudaTextureObject_t pairTabPotTypeTex,
++				       cudaTextureObject_t PosTex,
++#if MAX_NLIST_PAIRS <= MAX_TEX_SIZE
++				       cudaTextureObject_t pairListsTex,
++				       cudaTextureObject_t pairTabPotTypeTex,
++#endif
+ 				       int start, int numPairs) {
+     _computeTabulatedKernel<BlockSize>(force,sys,
+ 				       cutoff2, numPairs, g_pair+start,
+ 				       g_pairTabPotType+start, tablePot,
+-				       pairListsTex, PosTex, pairTabPotTypeTex);
++				       PosTex
++#if MAX_NLIST_PAIRS <= MAX_TEX_SIZE
++				       , pairListsTex, pairTabPotTypeTex
++#endif
++	);
+ } 
+ 
+ __global__ void clearEnergies(float* __restrict__  g_energies, int num) {

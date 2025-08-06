@@ -410,26 +410,26 @@ class Event {
  * @example Basic Usage:
  * ```cpp
  * // Initialize SYCL system
- * ARBD::SYCLManager::init();
+ * ARBD::Manager::init();
  *
  * // Select specific devices
  * std::vector<unsigned int> device_ids = {0, 1};
- * ARBD::SYCLManager::select_devices(device_ids);
+ * ARBD::Manager::select_devices(device_ids);
  *
  * // Use a specific device
- * ARBD::SYCLManager::use(0);
+ * ARBD::Manager::use(0);
  *
  * // Get current queue
- * auto& queue = ARBD::SYCLManager::get_current_queue();
+ * auto& queue = ARBD::Manager::get_current_queue();
  *
  * // Synchronize all devices
- * ARBD::SYCLManager::sync();
+ * ARBD::Manager::sync();
  * ```
  *
  * @example Multi-Device Operations:
  * ```cpp
  * // Get device properties
- * const auto& device = ARBD::SYCLManager::devices[0];
+ * const auto& device = ARBD::Manager::devices[0];
  * const auto& props = device.properties();
  *
  * // Submit work to specific device
@@ -442,7 +442,7 @@ class Event {
  * @note The class uses static methods for global device management.
  * All operations are thread-safe and exception-safe.
  */
-class SYCLManager {
+class Manager {
   public:
 	static constexpr size_t NUM_QUEUES = 8;
 
@@ -461,7 +461,7 @@ class SYCLManager {
 	 * @example Basic Usage:
 	 * ```cpp
 	 * // Get device properties
-	 * const auto& device = ARBD::SYCLManager::devices[0];
+	 * const auto& device = ARBD::Manager::devices[0];
 	 * const auto& props = device.properties();
 	 *
 	 * // Get a queue
@@ -563,8 +563,8 @@ class SYCLManager {
 		bool is_gpu_;
 		bool is_accelerator_;
 
-		// Friend class to allow SYCLManager to access private members
-		friend class SYCLManager;
+		// Friend class to allow Manager to access private members
+		friend class Manager;
 	};
 
 	// Static interface
@@ -616,7 +616,7 @@ class SYCLManager {
 	static int current_device_;
 	static sycl::info::device_type preferred_type_;
 };
-} // namespace SYCL
-} // namespace ARBD
 
+} 
+}
 #endif // PROJECT_USES_SYCL

@@ -419,7 +419,8 @@ class METALProfiler {
 
 // Enable GPU timeline capture if available
 #if TARGET_OS_MAC
-		if (@available(macOS 10.15, *)) {
+		// Check for macOS 10.15+ availability using compile-time version check
+		if (__MAC_OS_X_VERSION_MAX_ALLOWED >= __MAC_10_15) {
 			// Metal Performance Shaders Graph profiling setup could go here
 		}
 #endif

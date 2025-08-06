@@ -9,12 +9,6 @@
 #include "Backend/Buffer.h"
 #include "Backend/Resource.h"
 #include "TypeName.h"
-#include <cassert>
-#include <compare>
-#include <cstdlib>
-#include <cstring>
-#include <new>
-#include <type_traits>
 
 namespace ARBD {
 template<typename T>

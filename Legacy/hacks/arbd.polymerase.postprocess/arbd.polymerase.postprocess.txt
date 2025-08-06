@@ -1,0 +1,128 @@
+diff --git a/src/ComputeForce.cu b/src/ComputeForce.cu
+index 4256676..f5bec6a 100644
+--- a/src/ComputeForce.cu
++++ b/src/ComputeForce.cu
+@@ -397,13 +397,13 @@ void ComputeForce::makeTables(const BrownianParticleType part[]) {
+ 
+ bool ComputeForce::addTabulatedPotential(String fileName, int type0, int type1) {
+     if (type0 < 0 or type0 >= numParts) {
+-	printf("ERROR: Attempted to add tabulated potential to nonexistent particle type %d.\n", type0);
+-	exit(1);
++	printf("WARNING: Attempted to add tabulated potential to nonexistent particle type %d.\n", type0);
++	// exit(1);
+ 	return false;
+     }
+     if (type1 < 0 or type1 >= numParts) {
+-	printf("ERROR: Attempted to add tabulated potential to nonexistent particle type %d.\n", type0);
+-	exit(1);
++	printf("WARNING: Attempted to add tabulated potential to nonexistent particle type %d.\n", type0);
++	// exit(1);
+ 	return false;
+     }
+ 
+diff --git a/src/Configuration.cpp b/src/Configuration.cpp
+index 20ca19e..91d055a 100644
+--- a/src/Configuration.cpp
++++ b/src/Configuration.cpp
+@@ -2860,19 +2860,19 @@ bool Configuration::readTableFile(const String& value, int currTab) {
+ 		return false;
+ 	}
+ 
+-	if (currTab >= numParts*numParts) {
+-	    printf("ERROR: Number of tabulatedFile entries exceeded %d*%d particle types.\n", numParts,numParts);
+-	    exit(1);
+-	}
++	// if (currTab >= numParts*numParts) {
++	//     printf("ERROR: Number of tabulatedFile entries exceeded %d*%d particle types.\n", numParts,numParts);
++	//     exit(1);
++	// }
+ 	
+ 	partTableIndex0[currTab] = atoi(tokenList[0]);
+ 	partTableIndex1[currTab] = atoi(tokenList[1]);
+ 	partTableFile[currTab] = tokenList[2];
+ 
+-	if ((partTableIndex0[currTab] >= numParts) || (partTableIndex1[currTab] >= numParts)) {
+-	    printf("ERROR: TabulatedFile entry '%s' contains particle type index that exceeds the number of types, %d.\n", value.val(), numParts);
+-	    exit(1);
+-	}
++	// if ((partTableIndex0[currTab] >= numParts) || (partTableIndex1[currTab] >= numParts)) {
++	//     printf("ERROR: TabulatedFile entry '%s' contains particle type index that exceeds the number of types, %d.\n", value.val(), numParts);
++	//     exit(1);
++	// }
+ 	
+ 
+ 	// printf("Tabulated Potential: %d %d %s\n", partTableIndex0[currTab],
+diff --git a/src/GrandBrownTown.cu b/src/GrandBrownTown.cu
+index 41833f0..a0514f4 100644
+--- a/src/GrandBrownTown.cu
++++ b/src/GrandBrownTown.cu
+@@ -1667,7 +1667,7 @@ void GrandBrownTown::parse_dcd(std::string input_file, int stride) {
+ 	internal -> copyToCUDA(forceInternal, coords);
+ 
+ 	float pressure = 0.0f;
+-	for (int s = 0; s < 1000; ++s) {
++	for (int sub_s = 0; sub_s < 1000; ++sub_s) {
+ 	
+ #ifdef USE_NCCL
+ 	if (gpuman.gpus.size() > 1) {
+@@ -1703,7 +1703,7 @@ void GrandBrownTown::parse_dcd(std::string input_file, int stride) {
+                     switch (fullLongRange)
+                     {
+ 		    case 0: // [ N*log(N) ] interactions, + cutoff | decomposition
+-			if (s == 0) {
++			if (sub_s == 0) {
+ 			    internal -> decompose();
+ 			}
+ 			internal -> computeTabulated(get_energy, s+conf.firststep);
+@@ -1719,7 +1719,7 @@ void GrandBrownTown::parse_dcd(std::string input_file, int stride) {
+                     switch (fullLongRange)
+                     {
+                         case 0: // Use cutoff | cell decomposition.
+-			if (s == 0) {
++			if (sub_s == 0) {
+ 			    internal->decompose();
+ 			}
+ 			    internal->compute(get_energy);
+@@ -1774,10 +1774,10 @@ void GrandBrownTown::parse_dcd(std::string input_file, int stride) {
+ 	for (int i=0; i < numBlocks; ++i) {
+ 	    pressure += block_pressure[i];
+ 	}
+-	if (s == 999) printf("Pressure: %0.12f\n", pressure/1000);
++	if (sub_s == 999) printf("Pressure: %0.12f\n", pressure/1000);
+ 
+ 
+-	if (s == 0) {
++	if (sub_s == 0) {
+ 	    // Copy energies and write out energy dcd
+ 	    gpuErrchk(cudaMemcpy(energies, internal->getEnergy(), sizeof(float) * num * numReplicas, cudaMemcpyDeviceToHost));
+ 	    gpuErrchk(cudaMemcpy(bond_energies, internal->bond_energies_d, sizeof(float) * num * numReplicas, cudaMemcpyDeviceToHost));
+@@ -1811,7 +1811,6 @@ void GrandBrownTown::parse_dcd(std::string input_file, int stride) {
+ 	    writers[1]->appendDcd(writer_data);
+ 	}
+ 	
+-	internal->clear_force();
+ 	
+ 	    if (!writers_are_open) {
+ 		//writers[2]->newFile(writer_data, name+".parse_dcd.bonded_energy", 0.0f, num);
+@@ -1820,9 +1819,11 @@ void GrandBrownTown::parse_dcd(std::string input_file, int stride) {
+ 	    } else {
+ 		writers[2]->appendDcd(writer_data);
+ 	    }
+-	    internal->clear_force();
+ 	}
++		
++	internal->clear_force();
+ 	}
++	
+ 	// internal -> copyToCUDA(forceInternal, pos);
+ 	for (int i=1; i < stride; ++i) {
+ 	    if (!reader.skip_step()) {
+@@ -1844,7 +1845,7 @@ void GrandBrownTown::parse_dcd(std::string input_file, int stride) {
+ 		//     s += 1;
+ 		// }
+ 		// s += 1;
+-		s += (stride*outputPeriod);
++		s+=stride*outputPeriod;
+ 		update_potential_slopes(s, conf.firststep);
+ 	    }
+ 	}

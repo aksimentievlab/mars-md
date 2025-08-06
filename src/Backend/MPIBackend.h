@@ -5,6 +5,7 @@
 #include <future>
 #include <mpi.h>
 
+
 /**
  * @brief MPI/Distributed Computing Backend
  *
@@ -16,7 +17,6 @@
  */
 
 namespace ARBD {
-
 /**
  * @brief MPI Resource for distributed computing
  */

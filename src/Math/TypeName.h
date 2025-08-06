@@ -1,5 +1,5 @@
 #pragma once
-
+#if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__) && !defined(__METAL_VERSION__)
 #include <cstdlib>
 #include <memory>
 #include <string>
@@ -11,9 +11,7 @@
 #else
 #define HAS_CXXABI 0
 #endif
-#include "ARBDException.h"
-#include "ARBDLogger.h"
-#include "Backend/Resource.h"
+#include "Backend/Header.h"
 
 namespace ARBD {
 template<typename T>
@@ -23,6 +21,7 @@ template<typename T>
 concept HasTypeid = requires {
 	typename T::value_type; // Example: for container types
 } || std::is_fundamental_v<T>;
+
 
 namespace detail {
 template<typename T>
@@ -198,3 +197,5 @@ std::string pretty_type_name() {
 }
 
 } // namespace ARBD
+
+#endif

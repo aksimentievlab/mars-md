@@ -17,6 +17,11 @@
 #include <cuda.h>
 #include <cuda_runtime.h>
 #include <cuda_runtime_api.h>
+
+// Include NCCL if available
+#ifdef USE_NCCL
+#include "NCCLManager.h"
+#endif
 /**
  * @brief Modern RAII wrapper for CUDA device memory
  */
@@ -413,26 +418,26 @@ class Event {
  * @example Basic Usage:
  * ```cpp
  * // Initialize device system
- * ARBD::CUDA::CUDAManager::init();
+ * ARBD::CUDA::Manager::init();
  *
  * // Select specific devices
  * std::vector<unsigned int> device_ids = {0, 1};
- * ARBD::CUDA::CUDAManager::select_devices(device_ids);
+ * ARBD::CUDA::Manager::select_devices(device_ids);
  *
  * // Use a specific device
- * ARBD::CUDA::CUDAManager::use(0);
+ * ARBD::CUDA::Manager::use(0);
  *
  * // Get current device
- * auto& device = ARBD::CUDA::CUDAManager::get_current_device();
+ * auto& device = ARBD::CUDA::Manager::get_current_device();
  *
  * // Finalize when done
- * ARBD::CUDA::CUDAManager::finalize();
+ * ARBD::CUDA::Manager::finalize();
  * ```
  *
  * @note The class uses static methods for global device management.
  *       All operations are thread-safe and exception-safe.
  */
-class CUDAManager {
+class Manager {
   public:
 	static constexpr size_t NUM_STREAMS = 8;
 
@@ -451,7 +456,7 @@ class CUDAManager {
 	 * @example Basic Usage:
 	 * ```cpp
 	 * // Get device properties
-	 * const auto& device = ARBD::CUDA::CUDAManager::devices()[0];
+	 * const auto& device = ARBD::CUDA::Manager::devices()[0];
 	 * const auto& props = device.properties();
 	 *
 	 * // Get a stream

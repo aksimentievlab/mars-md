@@ -1,5 +1,5 @@
 #pragma once
-
+#ifndef __METAL_VERSION__
 #include "ARBDException.h"
 #include <chrono>
 #include <cstdio>
@@ -126,3 +126,4 @@ inline LogLevel Logger::current_level = LogLevel::INFO;
 #define DEVICEWARN(fmt, ...) printf("[CUDA-WARN]: " fmt "\n", ##__VA_ARGS__)
 #define DEVICEERROR(fmt, ...) printf("[CUDA-ERROR]: " fmt "\n", ##__VA_ARGS__)
 #define DEVICECRITICAL(fmt, ...) printf("[CUDA-CRITICAL]: " fmt "\n", ##__VA_ARGS__)
+#endif // __METAL_VERSION__

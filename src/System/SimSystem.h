@@ -3,14 +3,17 @@
 #include "ARBDException.h"
 #include "ARBDLogger.h"
 #include "Backend/Buffer.h"
+#include "Math/IndexList.h"
+#include "Objects/BasePatch.h"
+//#include "Objects/Particles/ParticlePatch.h"
 #include "Math/Types.h"
-#include "System/IndexList.h"
 
 // Class providing a description of a simulation system, including composition, coordinates,
-// interactions, state parameters (temperature, boundary conditions, etc) Also includes RNG state
+// interactions, state parameters (temperature, boundary conditions, etc) + RNG counter
 
 //   Although only one instance of this should be created per replica of the system, it should be
 //   possible to distribute (at least parts of) the description of the system
+
 namespace ARBD {
 struct Temperature {
 	float value;
@@ -18,22 +21,24 @@ struct Temperature {
 struct Length {
 	float value;
 };
-
-class SimSystem;
+struct ResourceCollection {
+	std::vector<Resource> resources;
+};
+class Patch;
 
 class BoundaryConditions {
-	friend class Decomposer;
 
   public:
 	BoundaryConditions()
-		: origin(0), basis{Vector3(5000, 0, 0), Vector3(0, 5000, 0), Vector3(0, 0, 5000)}, periodic{true, true, true} {
+		: origin(0,0,0), basis{Vector3(5000, 0, 0), Vector3(0, 5000, 0), Vector3(0, 0, 5000)},
+		  periodic{true, true, true} {
 		// do things
 		LOGINFO("BoundaryConditions()");
 	}
 	BoundaryConditions(Vector3 basis1,
 					   Vector3 basis2,
 					   Vector3 basis3,
-					   Vector3 origin = Vector3(0),
+					   Vector3 origin = Vector3(0.0f, 0.0f, 0.0f),
 					   bool periodic1 = true,
 					   bool periodic2 = true,
 					   bool periodic3 = true) {
@@ -47,90 +52,42 @@ class BoundaryConditions {
 	bool periodic[dim];
 };
 
-// class ProxyPatch : public Proxy<Patch>, public BasePatch {
-// public:
-//     ProxyPatch(Resource& r, Patch* obj) : location(&r), addr(obj) { };
-//     Resource* location;
-//     Patch* addr;
-//     size_t num;
-//     Vector3 min;
-//     Vector3 max;
-// };
+/**
+ * Class that operates on sys and its data, creating Patch objects and moving data as needed
+ *
+ * Q1: Should this normally only happen at initialization? Future decompositions should probably
+ * be expressed as a series of PatchOp objects
+ *
+ * Q2: Should this also be the object that converts
+ * SymbolicPatchOps to concrete PatchOp? Probably because this object should be the only one aware
+ * of the details of the decomposition
+ */
 
-struct ResourceCollection {
-
-	// // Not sure yet what all will go here
-
-	// `send_to` functionality below already implemented with templated `send`
-	// template<typename T>
-	// Proxy<T> send_to(Resource& r, T* obj) {
-	// 	// ...
-	// 	Proxy<T> obj_proxy(r, nullptr);
-	// 	if (r.type == Resource::CPU) {
-	// 	    // obj_proxy.addr =
-	// 	    //...
-	// 	} else if (r.type == Resource::GPU) {
-	// 	    // obj_proxy.addr =
-	// 	    // ...
-	// 	}
-	// }
-
-	std::vector<Resource> resources;
-};
-
-// Class that operates on sys and its data, creating Patch objects and moving data as needed
-//   Q1: Should this normally only happen at initialization? Future decompositions should probably
-//   be expressed as a series of PatchOp objects Q2: Should this also be the object that converts
-//   SymbolicPatchOps to concrete PatchOp? Probably because this object should be the only one aware
-//   of the details of the decomposition
-class Decomposer {
-	// Make virtual?
-	inline void decompose(SimSystem& sys, ResourceCollection& resources);
-
-	// Also update PatchOp objects...
-	void concretize_symbolic_ops(SimSystem& sys) {}
-};
-
-class CellDecomposer : public Decomposer {
-	inline void decompose(SimSystem& sys, ResourceCollection& resources);
-	struct Worker {
-		Length cutoff;
-	};
-};
 
 class SimSystem {
-	friend class Decomposer;
-	friend class CellDecomposer;
-	friend class SimManager;
-
+//friend class CellDecomposer;
   public:
 	struct Conf {
 		enum Decomposer { CellDecomp };
-		enum Periodicity { AllPeriodic };
-		// enum Algorithm { BD, MD };
-		// enum Backend   { Default, CUDA, CPU };
+		enum Periodicity { AllPeriodic, Free, OneDimensional, TwoDimensional };
+		enum Algorithm { BD, MD };
 
 		Temperature temperature;
 		Decomposer decomp;
 		Periodicity periodicity;
-		Length cell_lengths[3];
-		Length cutoff; // not sure this belongs here
-					   // Object object_type;
-					   // Algorithm algorithm;
-					   // Backend backend;
+		const float cell_lengths[3];
+		const float cutoff;
 
 		// explicit operator int() const {return object_type*16 + algorithm*4 + backend;};
 	};
 
-	inline // C++17 feature needed for compilation... unsure of why
-		static constexpr Conf default_conf =
-			Conf{291.0f, Conf::CellDecomp, Conf::AllPeriodic, {5000.0f, 5000.0f, 5000.0f}, 50.0f};
+	inline static constexpr Conf default_conf =
+		Conf{290.0f, Conf::CellDecomp, Conf::AllPeriodic, {5000.0f, 5000.0f, 5000.0f}, 50.0f};
 
 	SimSystem() : SimSystem(default_conf) {}
 	// temperature(291.0f), decomp(), boundary_conditions() {}
 	SimSystem(const Conf& conf) : temperature(conf.temperature), cutoff(conf.cutoff) {
 
-		// Set up decomposition
 		switch (conf.decomp) {
 		case Conf::CellDecomp:
 			CellDecomposer _d;
@@ -138,9 +95,6 @@ class SimSystem {
 			break;
 		default:
 			throw_value_error("SimSystem::GetIntegrator: Unrecognized CellDecomp type; exiting");
-			// std::cerr << "Error: SimSystem::GetIntegrator: "
-			// 	      << "Unrecognized CellDecomp type; exiting" << std::endl;
-			// assert(false);
 		}
 
 		// Set up boundary_conditions
@@ -152,9 +106,6 @@ class SimSystem {
 			break;
 		default:
 			throw_value_error("Integrator::GetIntegrator: Unrecognized algorithm type; exiting");
-			// std::cerr << "Error: Integrator::GetIntegrator: "
-			// 	      << "Unrecognized algorithm type; exiting" << std::endl;
-			// assert(false);
 		}
 
 		// decomp = static_cast<Decomposer>( CellDecompser() );
@@ -162,6 +113,8 @@ class SimSystem {
 	}
 	SimSystem(Temperature& temp, Decomposer& decomp, BoundaryConditions boundary_conditions)
 		: temperature(temp), decomp(decomp), boundary_conditions(boundary_conditions) {}
+	
+    Patch patches; // TODO: should this be a vector?
 
 	const Vector3 get_min() const {
 		Vector3 min(Vector3::highest());

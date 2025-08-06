@@ -8,18 +8,11 @@ endif()
 
 # Single project() call
 if(USE_CUDA)
-    if(USE_METAL)
-        project("${PROJECT_NAME}" VERSION 1.2 LANGUAGES CXX CUDA OBJCXX)
-    else()
-        project("${PROJECT_NAME}" VERSION 1.2 LANGUAGES CXX CUDA)
-    endif()
+    project("${PROJECT_NAME}" VERSION 2.0 LANGUAGES CXX CUDA)
 else()
-    if(USE_METAL)
-        project("${PROJECT_NAME}" VERSION 1.2 LANGUAGES CXX OBJCXX)
-    else()
-        project("${PROJECT_NAME}" VERSION 1.2 LANGUAGES CXX)
-    endif()
+    project("${PROJECT_NAME}" VERSION 2.0 LANGUAGES CXX)
 endif()
+
 
 # --- Project Options ---
 option(USE_CUDA "Use CUDA" OFF)
@@ -30,6 +23,30 @@ option(USE_NCCL "Use NCCL for single node GPU peer communication" OFF)
 option(USE_NVTX "Build with NVTX profiling ranges" OFF)
 option(USE_PYBIND "Build Python bindings" OFF)
 option(USE_METAL "Use Apple Silicon Metal" OFF)
+
+# --- Backend Selection Validation ---
+# Ensure only one backend is selected
+set(BACKEND_COUNT 0)
+if(USE_CUDA)
+    math(EXPR BACKEND_COUNT "${BACKEND_COUNT} + 1")
+endif()
+if(USE_METAL)
+    math(EXPR BACKEND_COUNT "${BACKEND_COUNT} + 1")
+endif()
+if(USE_SYCL_ACPP OR USE_SYCL_ICPX)
+    math(EXPR BACKEND_COUNT "${BACKEND_COUNT} + 1")
+endif()
+
+if(BACKEND_COUNT EQUAL 0)
+    message(FATAL_ERROR "No backend selected. Please enable exactly one of: USE_CUDA, USE_METAL, USE_SYCL_ACPP, or USE_SYCL_ICPX")
+elseif(BACKEND_COUNT GREATER 1)
+    message(FATAL_ERROR "Multiple backends selected. Please enable exactly one of: USE_CUDA, USE_METAL, USE_SYCL_ACPP, or USE_SYCL_ICPX")
+endif()
+
+# Validate SYCL options (only one SYCL variant should be selected)
+if(USE_SYCL_ACPP AND USE_SYCL_ICPX)
+    message(FATAL_ERROR "Both USE_SYCL_ACPP and USE_SYCL_ICPX are ON. Please choose only one SYCL implementation.")
+endif()
 
 # --- Basic CMake Setup ---
 set(CMAKE_CXX_STANDARD 20)
@@ -45,7 +62,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # Find threading library for use across the project
 find_package(Threads REQUIRED)
 
-include_directories(${CMAKE_SOURCE_DIR}/extern/OpenRAND/include)
+include_directories(${CMAKE_SOURCE_DIR}/extern)
 
 if(USE_CUDA)
     set(CMAKE_CUDA_STANDARD 20)
@@ -73,8 +90,6 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     "Debug" "Release" "RelWithDebInfo" "MinSizeRel")
 endif()
 
-# --- Optimization Flags Configuration ---
-# Set optimization level (can be overridden with -DOPT_LEVEL=2 or -DOPT_LEVEL=3)
 if(NOT DEFINED OPT_LEVEL)
     set(OPT_LEVEL 3)
 endif()
@@ -177,9 +192,6 @@ message(STATUS "C++ General flags: ${CMAKE_CXX_FLAGS}")
 if(USE_CUDA)
     message(STATUS "CUDA Release flags: ${CMAKE_CUDA_FLAGS_RELEASE}")
 endif()
-if(USE_METAL)
-    message(STATUS "Objective-C++ Release flags: ${CMAKE_OBJCXX_FLAGS_RELEASE}")
-endif()
 
 # Metal specific setup
 if(USE_METAL AND APPLE)
@@ -193,9 +205,6 @@ if(USE_METAL AND APPLE)
 endif()
 
 # --- SYCL Configuration (Explicit ACPP or ICPX) ---
-if(USE_SYCL_ACPP AND USE_SYCL_ICPX)
-    message(FATAL_ERROR "Both USE_SYCL_ACPP and USE_SYCL_ICPX are ON. Please choose only one SYCL implementation for this build.")
-endif()
 
 if(USE_SYCL_ACPP OR USE_SYCL_ICPX)
     message(STATUS "SYCL support is requested.")
@@ -360,7 +369,7 @@ if(USE_METAL)
 
     # Add framework path for Metal.framework
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -F${ARBD_METAL_FRAMEWORK_PATH}")
-    set(CMAKE_OBJCXX_FLAGS "${CMAKE_OBJCXX_FLAGS} -F${ARBD_METAL_FRAMEWORK_PATH}")
+    #set(CMAKE_OBJCXX_FLAGS "${CMAKE_OBJCXX_FLAGS} -F${ARBD_METAL_FRAMEWORK_PATH}")
 endif()
 # --- End Metal Configuration ---
 
@@ -396,7 +405,7 @@ if(USE_CUDA)
 endif()
 
 add_subdirectory(src)
-add_subdirectory(src/Tests)
+add_subdirectory(test_unit)
 
 add_executable("${PROJECT_NAME}" src/arbd.cpp)
 
@@ -443,6 +452,7 @@ endif()
 if(USE_METAL)
     target_link_libraries("${PROJECT_NAME}"
         PRIVATE
+        METAL_CPP
         ${METAL_FRAMEWORK}
         ${FOUNDATION_FRAMEWORK}
         ${QUARTZCORE_FRAMEWORK}
@@ -455,5 +465,5 @@ if(USE_METAL)
         ${CMAKE_SOURCE_DIR}/extern/metal-cpp-cmake/metal-cmake/metal-cpp-extensions
     )
 
-    message(STATUS "Linked Metal frameworks and headers")
+    message(STATUS "Linked Metal frameworks, Metal-cpp library, and headers")
 endif()

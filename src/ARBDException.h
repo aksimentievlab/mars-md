@@ -79,7 +79,7 @@
  * }
  * ```
  */
-
+#ifndef __METAL_VERSION__
 #include <cstdio>
 #include <exception>
 #include <iostream>
@@ -109,7 +109,8 @@ enum class ExceptionType {
   SYCLRuntimeError = 5,
   MetalRuntimeError = 6,
   FileIoError = 7,
-  FileOpenError = 8
+  FileOpenError = 8,
+  RuntimeError = 9
 };
 
 class Exception : public std::exception {
@@ -230,3 +231,4 @@ template <typename... Args>
 } // namespace ARBD
 #define ARBD_Exception(type, ...)                                              \
   throw ARBD::Exception(type, ARBD::SourceLocation(), __VA_ARGS__)
+#endif // __METAL_VERSION__

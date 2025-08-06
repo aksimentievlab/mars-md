@@ -1,10 +1,5 @@
 #pragma once
-
-#include "Backend/Resource.h" 
-#include "ARBDLogger.h"
-#include "ARBDException.h"
-#include <string>
-#include <sstream>
+#include "Math/Types.h"
 
 namespace ARBD {
 
@@ -89,11 +84,13 @@ public:
     HOST DEVICE void set_energy(float energy) { e = energy; }
     
     // String representation (host-only)
+    #if !defined(__CUDACC__) && !defined(__SYCL_DEVICE_ONLY__) && !defined(__METAL_VERSION__)
     std::string to_string() const {
         std::ostringstream oss;
         oss << "ForceEnergy(f=" << f << ", e=" << e << ")";
         return oss.str();
     }
+    #endif
     
     // Reset to zero
     HOST DEVICE void reset() {

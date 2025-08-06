@@ -1,10 +1,11 @@
 #pragma once
-
+#if !defined(__SYCL_DEVICE_ONLY__) && !defined(__CUDA_ARCH__) && !defined(__METAL_VERSION__)
 #include "ARBDException.h"
 #include "ARBDLogger.h"
 #include <cstdio>
 #include <cstring>
 #include <string>
+#include <filesystem>
 
 namespace ARBD {
 /**
@@ -53,12 +54,31 @@ public:
   FileHandle(const char *filename, const char *mode)
       : m_file(std::fopen(filename, mode)) {
     if (!m_file) {
-      throw ARBD::Exception(ARBD::ExceptionType::FileOpenError,
-                            std::string("FileHandle: Failed to open file '") +
-                                filename + "' with mode '" + mode + "'.",
-                            ARBD::SourceLocation(__builtin_FILE(),
-                                                 __builtin_LINE(),
-                                                 __builtin_FUNCTION()));
+      // For write modes, try to create parent directories
+      if (std::strchr(mode, 'w') || std::strchr(mode, 'a')) {
+        std::string path(filename);
+        size_t last_slash = path.find_last_of("/\\");
+        if (last_slash != std::string::npos) {
+          std::string dir_path = path.substr(0, last_slash);
+          try {
+            if (std::filesystem::create_directories(dir_path)) {
+              // Try opening again after creating directories
+              m_file = std::fopen(filename, mode);
+            }
+          } catch (const std::filesystem::filesystem_error&) {
+            // If directory creation fails, don't retry - let the original error be thrown
+          }
+        }
+      }
+      
+      if (!m_file) {
+        throw ARBD::Exception(ARBD::ExceptionType::FileOpenError,
+                              std::string("FileHandle: Failed to open file '") +
+                                  filename + "' with mode '" + mode + "'.",
+                              ARBD::SourceLocation(__builtin_FILE(),
+                                                   __builtin_LINE(),
+                                                   __builtin_FUNCTION()));
+      }
     }
   }
   ~FileHandle() {
@@ -90,3 +110,4 @@ public:
 };
 // Usage: FileHandle my_file("data.txt", "r"); // Automatically closes
 } // namespace ARBD
+#endif

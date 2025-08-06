@@ -13,15 +13,15 @@ namespace ARBD {
 namespace CUDA {
 
 // Static member initialization
-std::vector<CUDAManager::Device> CUDAManager::all_devices_;
-std::vector<CUDAManager::Device> CUDAManager::devices_;
-std::vector<CUDAManager::Device> CUDAManager::safe_devices_;
-std::vector<std::vector<bool>> CUDAManager::peer_access_matrix_;
-bool CUDAManager::prefer_safe_{false};
-int CUDAManager::current_device_{0};
+std::vector<Manager::Device> Manager::all_devices_;
+std::vector<Manager::Device> Manager::devices_;
+std::vector<Manager::Device> Manager::safe_devices_;
+std::vector<std::vector<bool>> Manager::peer_access_matrix_;
+bool Manager::prefer_safe_{false};
+int Manager::current_device_{0};
 
 // Device class implementation
-CUDAManager::Device::Device(unsigned int id) : id_(id) {
+Manager::Device::Device(unsigned int id) : id_(id) {
 	CUDA_CHECK(cudaSetDevice(id_));
 
 #if CUDART_VERSION >= 12000
@@ -46,11 +46,11 @@ CUDAManager::Device::Device(unsigned int id) : id_(id) {
 	create_streams();
 }
 
-CUDAManager::Device::~Device() {
+Manager::Device::~Device() {
 	destroy_streams();
 }
 
-void CUDAManager::Device::create_streams() {
+void Manager::Device::create_streams() {
 	int curr;
 	CUDA_CHECK(cudaGetDevice(&curr));
 	CUDA_CHECK(cudaSetDevice(id_));
@@ -69,7 +69,7 @@ void CUDAManager::Device::create_streams() {
 	CUDA_CHECK(cudaSetDevice(curr));
 }
 
-void CUDAManager::Device::destroy_streams() {
+void Manager::Device::destroy_streams() {
 	int curr;
 	LOGTRACE("Destroying streams for device %d", id_);
 
@@ -80,7 +80,7 @@ void CUDAManager::Device::destroy_streams() {
 	}
 }
 
-void CUDAManager::Device::synchronize_all_streams() {
+void Manager::Device::synchronize_all_streams() {
 	int curr;
 	CUDA_CHECK(cudaGetDevice(&curr));
 	CUDA_CHECK(cudaSetDevice(id_));
@@ -91,8 +91,8 @@ void CUDAManager::Device::synchronize_all_streams() {
 	CUDA_CHECK(cudaSetDevice(curr));
 }
 
-// CUDAManager static methods implementation
-void CUDAManager::init() {
+// Manager static methods implementation
+void Manager::init() {
 	int num_devices;
 	CUDA_CHECK(cudaGetDeviceCount(&num_devices));
 	LOGINFO("Found {} CUDA device(s)", num_devices);
@@ -115,7 +115,7 @@ void CUDAManager::init() {
 	query_peer_access();
 }
 
-void CUDAManager::select_devices(const std::vector<unsigned int>& device_ids) {
+void Manager::select_devices(const std::vector<unsigned int>& device_ids) {
 	devices_.clear();
 	devices_.reserve(device_ids.size());
 
@@ -142,7 +142,7 @@ void CUDAManager::select_devices(const std::vector<unsigned int>& device_ids) {
 	init_devices();
 }
 
-void CUDAManager::load_info() {
+void Manager::load_info() {
 	init();
 	devices_.clear();
 	if (prefer_safe_) {
@@ -161,7 +161,7 @@ void CUDAManager::load_info() {
 	}
 }
 
-void CUDAManager::init_devices() {
+void Manager::init_devices() {
 	LOGINFO("Initializing CUDA devices...");
 	std::string msg;
 
@@ -184,7 +184,7 @@ void CUDAManager::init_devices() {
 	CUDA_CHECK(cudaDeviceSynchronize());
 }
 
-void CUDAManager::use(int device_id) {
+void Manager::use(int device_id) {
 	if (devices_.empty()) {
 		ARBD_Exception(ExceptionType::ValueError, "No devices selected");
 	}
@@ -193,7 +193,7 @@ void CUDAManager::use(int device_id) {
 	CUDA_CHECK(cudaSetDevice(devices_[device_id].id()));
 }
 
-void CUDAManager::sync(int device_id) {
+void Manager::sync(int device_id) {
 	if (device_id >= static_cast<int>(devices_.size())) {
 		ARBD_Exception(ExceptionType::ValueError, "Invalid device index: {}", device_id);
 	}
@@ -205,17 +205,17 @@ void CUDAManager::sync(int device_id) {
 	CUDA_CHECK(cudaSetDevice(curr));
 }
 
-void CUDAManager::sync() {
+void Manager::sync() {
 	for (size_t i = 0; i < devices_.size(); ++i) {
 		sync(static_cast<int>(i));
 	}
 }
 
-int CUDAManager::current() {
+int Manager::current() {
 	return current_device_;
 }
 
-CUDAManager::Device& CUDAManager::get_current_device() {
+Manager::Device& Manager::get_current_device() {
 	if (devices_.empty()) {
 		ARBD_Exception(ExceptionType::ValueError, "No devices available");
 	}
@@ -227,7 +227,7 @@ CUDAManager::Device& CUDAManager::get_current_device() {
 	return devices_[current_device_];
 }
 
-void CUDAManager::prefer_safe_devices(bool safe) {
+void Manager::prefer_safe_devices(bool safe) {
 	prefer_safe_ = safe;
 
 	if (safe && safe_devices_.empty()) {
@@ -252,7 +252,7 @@ void CUDAManager::prefer_safe_devices(bool safe) {
 	}
 }
 
-int CUDAManager::get_safest_device() {
+int Manager::get_safest_device() {
 	if (!safe_devices_.empty()) {
 		return safe_devices_[0].id();
 	}
@@ -265,7 +265,7 @@ int CUDAManager::get_safest_device() {
 	ARBD_Exception(ExceptionType::ValueError, "No devices available");
 }
 
-void CUDAManager::finalize() {
+void Manager::finalize() {
 	LOGINFO("Finalizing CUDA manager...");
 
 	// Synchronize all devices
@@ -284,7 +284,7 @@ void CUDAManager::finalize() {
 	LOGINFO("CUDA manager finalized");
 }
 
-void CUDAManager::enable_peer_access() {
+void Manager::enable_peer_access() {
 	if (devices_.size() < 2) {
 		LOGINFO("Peer access not needed with fewer than 2 devices");
 		return;
@@ -313,7 +313,7 @@ void CUDAManager::enable_peer_access() {
 	}
 }
 
-bool CUDAManager::can_access_peer(int device1, int device2) {
+bool Manager::can_access_peer(int device1, int device2) {
 	if (device1 >= static_cast<int>(peer_access_matrix_.size()) ||
 		device2 >= static_cast<int>(peer_access_matrix_[device1].size())) {
 		return false;
@@ -321,21 +321,21 @@ bool CUDAManager::can_access_peer(int device1, int device2) {
 	return peer_access_matrix_[device1][device2];
 }
 
-void CUDAManager::set_cache_config(cudaFuncCache config) {
+void Manager::set_cache_config(cudaFuncCache config) {
 	for (size_t i = 0; i < devices_.size(); ++i) {
 		use(static_cast<int>(i));
 		CUDA_CHECK(cudaDeviceSetCacheConfig(config));
 	}
 }
 
-cudaStream_t CUDAManager::get_stream(int device_id, size_t stream_id) {
+cudaStream_t Manager::get_stream(int device_id, size_t stream_id) {
 	if (device_id >= static_cast<int>(devices_.size())) {
 		ARBD_Exception(ExceptionType::ValueError, "Invalid device index: {}", device_id);
 	}
 	return devices_[device_id].get_stream(stream_id);
 }
 
-void CUDAManager::query_peer_access() {
+void Manager::query_peer_access() {
 	size_t num_devices = all_devices_.size();
 	peer_access_matrix_.resize(num_devices, std::vector<bool>(num_devices, false));
 

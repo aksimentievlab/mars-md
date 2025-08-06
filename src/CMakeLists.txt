@@ -2,6 +2,7 @@
 set(LIB_SOURCES
     ARBDException.cpp
     SignalManager.cpp
+    Math/BaseGrid.cpp
 )
 
 # Conditionally add SYCL specific source files to the library

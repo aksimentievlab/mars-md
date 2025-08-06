@@ -1,8 +1,11 @@
 CompileFlags:
   Add:
-    - -I/opt/homebrew/Cellar/adaptivecpp/24.10.0_1/include/AdaptiveCpp
     - -I/Users/pinyi/Documents/research/arbd2v/src
-    - -I/Users/pinyi/Documents/research/arbd2v/extern
+    - -I/Users/pinyi/Documents/research/arbd2v/extern/
+    - -I/Users/pinyi/Documents/research/arbd2v/extern/neighbor/include
+    - -I/Users/pinyi/Documents/research/arbd2v/extern/metal-cpp-cmake/metal-cmake/metal-cpp/
+    - -I/Users/pinyi/Documents/research/arbd2v/extern/fmt/include
+    - -I/Users/pinyi/Documents/research/arbd2v/extern/pybind11/include
     - -I.
     - -DUSE_METAL
     - -std=c++20
@@ -15,8 +18,4 @@ CompileFlags:
     - -Wno-unknown-cuda-version
     - DUSE_SYCL_ACPP
     - -DUSE_SYCL
-    - 
-Diagnostics:
-  Suppress:
-    - drv_unknown_argument
-    - unused-command-line-argument-hard-error-in-future
+    - -DUSE_CUDA

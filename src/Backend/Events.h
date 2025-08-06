@@ -1,5 +1,5 @@
 #pragma once
-
+#ifndef __METAL_VERSION__
 #include "ARBDException.h"
 #include "ARBDLogger.h"
 #include "Resource.h"
@@ -48,9 +48,9 @@ class Event {
 #endif
 
 #ifdef USE_METAL
-	Event(const ARBD::METAL::Event& metal_event, const Resource& res)
-		: resource_(res), event_impl_(std::make_shared<ARBD::METAL::Event>(
-							  std::move(const_cast<ARBD::METAL::Event&>(metal_event)))) {}
+	Event(ARBD::METAL::Event metal_event, const Resource& res)
+		: resource_(res),
+		  event_impl_(std::make_shared<ARBD::METAL::Event>(std::move(metal_event))) {}
 #endif
 
 	void wait() const {
@@ -60,11 +60,11 @@ class Event {
 		// Use resource type to determine which backend implementation to use
 		if (resource_.is_device()) {
 #ifdef USE_CUDA
-			cudaDeviceSynchronize();
-			// if (auto* cuda_event_ptr = static_cast<cudaEvent_t*>(event_impl_.get())) {
-			// 	cudaEventSynchronize(*cuda_event_ptr);
-			// 	return;
-			// }
+			// cudaDeviceSynchronize();
+			if (auto* cuda_event_ptr = static_cast<cudaEvent_t*>(event_impl_.get())) {
+				cudaEventSynchronize(*cuda_event_ptr);
+				return;
+			}
 #endif
 #ifdef USE_SYCL
 			// Try SYCL implementation if available
@@ -76,9 +76,9 @@ class Event {
 #ifdef USE_METAL
 			// Try Metal implementation if available
 			if (auto* metal_event = static_cast<ARBD::METAL::Event*>(event_impl_.get())) {
-				if (!metal_event->is_complete()) {
-					metal_event->wait();
-				}
+				// The wait() method in the underlying Metal event should handle
+				// checking if it's already complete. No need to check here.
+				metal_event->wait();
 				return;
 			}
 #endif
@@ -216,10 +216,11 @@ class EventList {
 	}
 #endif
 };
-} // namespace BACKEND
+}; // namespace BACKEND
 
 // Make Event and EventList directly accessible from ARBD namespace
 using Event = BACKEND::Event;
 using EventList = BACKEND::EventList;
 
 } // namespace ARBD
+#endif // __METAL_VERSION__

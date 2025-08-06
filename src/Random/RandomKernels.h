@@ -1,9 +1,7 @@
 #pragma once
-#include "Backend/Buffer.h"
-#include "Backend/Events.h"
-#include "Backend/Resource.h"
+#include "Backend/Header.h"
 #include "Math/Vector3.h"
-#include "openrand/philox.h"
+#include "random/philox.h"
 #ifdef __CUDACC__
 #include <cuda_runtime.h>
 using namespace thrust;
@@ -100,24 +98,19 @@ struct GaussianFunctor<ARBD::Vector3_t<T>> {
 		uint32_t i2 = rng.draw();
 		uint32_t i3 = rng.draw();
 		uint32_t i4 = rng.draw();
-		uint32_t i5 = rng.draw();
-		uint32_t i6 = rng.draw();
 
 		// Generate three Gaussian values using Box-Muller (needs 3 uniform values)
 		float u1_x = (int2float(i1) < 1e-7f) ? 1e-7f : int2float(i1);
 		float u2_x = (int2float(i2) < 1e-7f) ? 1e-7f : int2float(i2);
 		float u1_y = (int2float(i3) < 1e-7f) ? 1e-7f : int2float(i3);
 		float u2_y = (int2float(i4) < 1e-7f) ? 1e-7f : int2float(i4);
-		float u1_z = (int2float(i5) < 1e-7f) ? 1e-7f : int2float(i5);
-		float u2_z = (int2float(i6) < 1e-7f) ? 1e-7f : int2float(i6);
 
 		ARBD::Vector3_t<T> gauss_pair1 = box_muller(u1_x, u2_x);
 		ARBD::Vector3_t<T> gauss_pair2 = box_muller(u1_y, u2_y);
-		ARBD::Vector3_t<T> gauss_pair3 = box_muller(u1_z, u2_z);
 
 		output[i] = ARBD::Vector3_t<T>(mean.x + stddev.x * gauss_pair1.x,
-									   mean.y + stddev.y * gauss_pair2.x,
-									   mean.z + stddev.z * gauss_pair3.x);
+									   mean.y + stddev.y * gauss_pair2.y,
+									   mean.z + stddev.z * gauss_pair2.x);
 	}
 };
 } // namespace ARBD

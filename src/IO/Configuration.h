@@ -1,37 +1,43 @@
-// Configuration.h (2013)
-// Loads .brown config file that can be shared between simulations
-// To be used by GrandBrownTown to initialize its members
-//
-// Authors: Terrance Howward <howard33@illinois.edu>
-//          Justin Dufresne <jdufres1@friars.providence.edu>
-//
+/*********************************************************************
+ * Configuration.h (2013)
+ *     Loads .brown config file that can be shared between simulations
+ *     To be used by GrandBrownTown to initialize its members
+ *
+ * Authors: Terrance Howward <howard33@illinois.edu>
+ *          Justin Dufresne <jdufres1@friars.providence.edu>
+ *
+ * V2 Port: Pin-Yi Li with Claude 4.0 Sonnet <pinyili2@illinois.edu>
+ *********************************************************************/
+#pragma once
 
-#ifndef CONFIGURATION_H
-#define CONFIGURATION_H
+#if !defined(__METAL_VERSION__) && !defined(__SYCL_DEVICE_ONLY__) && !defined(__CUDA_ARCH__)
+#include "ARBDException.h"
+#include "ARBDLogger.h"
+#include "IO/FileHandle.h"
+#include "IO/Reader.h"
+#include "Math/BaseGrid.h"
+#include "Math/Types.h"
+#include "Math/Vector3.h"
 
 #include <algorithm> // sort
-#include <vector>
 #include <map>
-#include <string>
 #include <sstream>
+#include <string>
 #include <string_view>
-#include "ARBDLogger.h"
-#include "ARBDException.h"
-#include "Math/Types.h"
-#include "Math/Vector3.h" 
+#include <vector>
 
-//#include "BrownianParticleType.h"
-//#include "BaseGrid.h"
-//#include "OverlordGrid.h"
-//#include "ComputeForce.h"
-//#include "Reader.h"
-//#include "TrajectoryWriter.h"
-//#include "TabulatedPotential.h"
-//#include "TabulatedAngle.h"
-//#include "ProductPotential.h"
-//#include "GPUManager.h"
-//#include "RigidBodyType.h"
-//#include "RigidBody.h"
+// #include "BrownianParticleType.h"
+// #include "BaseGrid.h"
+// #include "OverlordGrid.h"
+// #include "ComputeForce.h"
+// #include "Reader.h"
+// #include "TrajectoryWriter.h"
+// #include "TabulatedPotential.h"
+// #include "TabulatedAngle.h"
+// #include "ProductPotential.h"
+// #include "GPUManager.h"
+// #include "RigidBodyType.h"
+// #include "RigidBody.h"
 
 // Units:
 //    Energy: kcal/mol (6.947694e-24 kJ)
@@ -42,7 +48,7 @@
 
 // Forward declerations
 using String = std::string;
-namespace ARBD{
+namespace ARBD {
 class Angle;
 class Dihedral;
 using Vecangle = Dihedral;
@@ -51,13 +57,13 @@ struct Restraint;
 class Configuration {
 	struct compare {
 		bool operator()(const std::string& lhs, const std::string& rhs);
-		//bool operator()(const Bond& lhs, const Bond& rhs);
-		//bool operator()(const Exclude& lhs, const Exclude& rhs);
-		//bool operator()(const Angle& lhs, const Angle& rhs);
-		//bool operator()(const Dihedral& lhs, const Dihedral& rhs);
-	    // bool operator()(const Vecangle& lhs, const Vecangle& rhs);
-		//bool operator()(const BondAngle& lhs, const BondAngle& rhs);
-		//bool operator()(const ProductPotentialConf& lhs, const ProductPotentialConf& rhs);
+		// bool operator()(const Bond& lhs, const Bond& rhs);
+		// bool operator()(const Exclude& lhs, const Exclude& rhs);
+		// bool operator()(const Angle& lhs, const Angle& rhs);
+		// bool operator()(const Dihedral& lhs, const Dihedral& rhs);
+		//  bool operator()(const Vecangle& lhs, const Vecangle& rhs);
+		// bool operator()(const BondAngle& lhs, const BondAngle& rhs);
+		// bool operator()(const ProductPotentialConf& lhs, const ProductPotentialConf& rhs);
 	};
 
 	void setDefaults();
@@ -77,14 +83,16 @@ class Configuration {
 	void readRestraints();
 	void readBondAngles();
 
-
 	bool readTableFile(const String& value, int currTab);
 	bool readBondFile(const String& value, int currBond);
 	bool readAngleFile(const String& value, int currAngle);
 	bool readDihedralFile(const String& value, int currDihedral);
 	bool readVecangleFile(const String& value, int currVecangle);
 
-	bool readBondAngleFile(const String& value, const String& bondfile1, const String& bondfile2, int currBondAngle);
+	bool readBondAngleFile(const String& value,
+						   const String& bondfile1,
+						   const String& bondfile2,
+						   int currBondAngle);
 
 	// Given the numbers of each particle, populate the type list.
 	void populate();
@@ -95,47 +103,44 @@ class Configuration {
 
 	void getDebugForce();
 
-        //Han-Yi Chou
-        bool Boltzmann(const Vector3& com_v,int N);
-        bool loadMomentum(const char* file_name);
-        void loadRestartMomentum(const char* file_name);
-        void Print();
-        void PrintMomentum();
-public:
-	Configuration(const char * config_file, int simNum = 0, bool debug=false);
+	// Han-Yi Chou
+	bool Boltzmann(const Vector3& com_v, int N);
+	bool loadMomentum(const char* file_name);
+	void loadRestartMomentum(const char* file_name);
+	void Print();
+	void PrintMomentum();
+
+  public:
+	Configuration(const char* config_file, int simNum = 0, bool debug = false);
 	~Configuration();
 
-    int find_particle_type(const char* s) const {
-	for (int j = 0; j < numParts; j++) {
-	    // printf("Searching particle %d (%s) =? %s\n", j, part[j].name.val(), s);
-	    if (strcmp(s,part[j].name.val()) == 0)
-		return j;
-	}
-	return -1;
-    }
-
-	void copyToCUDA();
+	/*int find_particle_type(const char* s) const {
+		for (int j = 0; j < numParts; j++) {
+			// printf("Searching particle %d (%s) =? %s\n", j, part[j].name.val(), s);
+			if (strcmp(s, part[j].name.val()) == 0)
+				return j;
+		}
+		return -1;
+	}*/
 
 	// Output variables
 	Vector3 sysDim;
-	//BaseGrid* sys;
-	// temporary variables
+	BaseGrid<float>* sys;
 	Vector3 origin, size, basis1, basis2, basis3;
 
-
 	bool loadedCoordinates;
-        bool loadedMomentum;
+	bool loadedMomentum;
 
 	// Device Variables
-	//int *type_d;
-	//BrownianParticleType **part_d;
-	//BaseGrid *sys_d, *kTGrid_d;
-	//Bond* bonds_d;
-	//int2* bondMap_d;
-	//Exclude* excludes_d;
-	//int2* excludeMap_d;
-	//Angle* angles_d;
-	//Dihedral* dihedrals_d;
+	// int *type_d;
+	// BrownianParticleType **part_d;
+	// BaseGrid *sys_d, *kTGrid_d;
+	// Bond* bonds_d;
+	// int2* bondMap_d;
+	// Exclude* excludes_d;
+	// int2* excludeMap_d;
+	// Angle* angles_d;
+	// Dihedral* dihedrals_d;
 
 	// number of simulations
 	int simNum;
@@ -144,41 +149,40 @@ public:
 	String* partsFromFile;
 	int* indices;
 	int numPartsFromFile;
-	//Bond* bonds;
+	// Bond* bonds;
 	int numCap; // max number of particles
-	int num; // current number of particles
-    int num_rb_attached_particles;
-        Vector3* pos; //  position of each particle
-        Vector3* momentum; //momentum of each brownian particles Han-Yi Chou
-        Vector3  COM_Velocity; //center of mass velocity Han-Yi Chou
-	int* type; // type of each particle
-	int* serial; // serial number of each particle
-	int currSerial; // the serial number of the next new particle
-	String* name; // name of each particle
-	Vector3* posLast; // used for current computation
-        Vector3* momLast; //used for Lagevin dynamics
-	float timeLast; // used with posLast
-	float minimumSep; // minimum separation allowed with placing new particles
-
+	int num;	// current number of particles
+	int num_rb_attached_particles;
+	Vector3* pos;		  //  position of each particle
+	Vector3* momentum;	  // momentum of each brownian particles Han-Yi Chou
+	Vector3 COM_Velocity; // center of mass velocity Han-Yi Chou
+	int* type;			  // type of each particle
+	int* serial;		  // serial number of each particle
+	int currSerial;		  // the serial number of the next new particle
+	String* name;		  // name of each particle
+	Vector3* posLast;	  // used for current computation
+	Vector3* momLast;	  // used for Lagevin dynamics
+	float timeLast;		  // used with posLast
+	float minimumSep;	  // minimum separation allowed with placing new particles
 
 	// RigidBody variables
 	/* int numRB; */
 	/* std::vector< std::vector<RigidBody> > rbs; */
-	
+
 	// System parameters
 	String outputName;
 	float timestep;
 	long int steps;
 	long int seed;
-	// String kTGridFile;
+	String kTGridFile;
 	String temperatureGridFile;
 	String inputCoordinates;
-    String inputMomentum; //Han-Yi Chou
+	String inputMomentum; // Han-Yi Chou
 	String inputRBCoordinates;
 	String restartRBCoordinates;
 	int copyReplicaCoordinates;
 	String restartCoordinates;
-    String restartMomentum; //Han-Yi Chou
+	String restartMomentum; // Han-Yi Chou
 	int numberFluct;
 	int interparticleForce;
 	int tabulatedPotential;
@@ -198,9 +202,9 @@ public:
 	int numberFluctPeriod;
 	int decompPeriod;
 	int numCapFactor;
-	//BaseGrid* kTGrid;
-	//BaseGrid* tGrid;
-	//BaseGrid* sigmaT;
+	BaseGrid<float>* kTGrid;
+	BaseGrid<float>* tGrid;
+	BaseGrid<float>* sigmaT;
 	unsigned long randoSeed;
 
 	// Other parameters.
@@ -210,7 +214,7 @@ public:
 	float initialZ;
 
 	// Particle parameters.
-	//BrownianParticleType* part;
+	// BrownianParticleType* part;
 	int numParts;
 	int numBonds;
 	int numExcludes;
@@ -237,19 +241,19 @@ public:
 	bool readVecanglesFromFile;
 	bool readBondAnglesFromFile;
 	bool readRestraintsFromFile;
-	//String* partGridFile;
-	String **partGridFile;
-	//float* partGridFileScale;
-	float **partGridFileScale;
-        //int *numPartGridFiles;
-    std::map<std::string,BaseGrid> part_grid_dictionary;
-    std::map<std::string,BaseGrid*> part_grid_dictionary_d;
-	std::vector< std::vector<String> > partRigidBodyGrid;
+	// String* partGridFile;
+	String** partGridFile;
+	// float* partGridFileScale;
+	float** partGridFileScale;
+	// int *numPartGridFiles;
+	std::map<std::string, BaseGrid<float>> part_grid_dictionary;
+	std::map<std::string, BaseGrid<float>*> part_grid_dictionary_d;
+	std::vector<std::vector<String>> partRigidBodyGrid;
 	String* partDiffusionGridFile;
 	String* partForceXGridFile;
 	String* partForceYGridFile;
 	String* partForceZGridFile;
-	float **partForceGridScale;
+	float** partForceGridScale;
 	String* partTableFile;
 	String* partReservoirFile;
 	int* partTableIndex0;
@@ -261,10 +265,10 @@ public:
 
 	String* bondTableFile;
 	int numTabBondFiles;
-	//int2* bondMap;
-	
-	//Exclude* excludes;
-	//int2* excludeMap;
+	// int2* bondMap;
+
+	// Exclude* excludes;
+	// int2* excludeMap;
 	String excludeRule;
 	int excludeCapacity;
 
@@ -276,11 +280,11 @@ public:
 	String* dihedralTableFile;
 	int numTabDihedralFiles;
 
-    Vecangle* vecangles;
+	Vecangle* vecangles;
 	String* vecangleTableFile;
 	int numTabVecangleFiles;
 
-	BondAngle* bondAngles;
+	// BondAngle* bondAngles;
 
 	Restraint* restraints;
 
@@ -288,20 +292,19 @@ public:
 	String productPotentialFile;
 	int numProductPotentials;
 	bool readProductPotentialsFromFile;
-    //ProductPotentialConf* productPotentials;
-	//XpotMap simple_potential_ids;
-    //std::vector<SimplePotential> simple_potentials;
+	// ProductPotentialConf* productPotentials;
+	// XpotMap simple_potential_ids;
+	// std::vector<SimplePotential> simple_potentials;
 
-        //Han-Yi Chou
-    String ParticleDynamicType;
-    String RigidBodyDynamicType;
-    String ParticleLangevinIntegrator;
+	// Han-Yi Chou
+	String ParticleDynamicType;
+	String RigidBodyDynamicType;
+	String ParticleLangevinIntegrator;
 	// RigidBody parameters.
-	//RigidBodyType* rigidBody;
+	// RigidBodyType* rigidBody;
 	int numRigidTypes;
-    int ParticleInterpolationType;
-    int RigidBodyInterpolationType;
+	int ParticleInterpolationType;
+	int RigidBodyInterpolationType;
 };
-
-#endif
 }
+#endif

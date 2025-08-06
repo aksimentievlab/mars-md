@@ -1,370 +1,454 @@
 #pragma once
-#include "ARBDLogger.h"
-#include <type_traits>
 
-// Define HOST and DEVICE macros
-#ifdef __CUDACC__
-#define HOST __host__
-#define DEVICE __device__
-#else
-#define HOST
-#define DEVICE
-#endif
-
+#include "Header.h"
 #ifdef USE_CUDA
 #include "Backend/CUDA/CUDAManager.h"
 #endif
 
 #ifdef USE_SYCL
 #include "Backend/SYCL/SYCLManager.h"
+#include <sycl/sycl.hpp>
 #endif
 
 #ifdef USE_METAL
 #include "Backend/METAL/METALManager.h"
 #endif
 
-/**
- * @brief Get current device ID for device computing backends
- */
-inline size_t get_device_id() {
-#ifdef USE_CUDA
-  if (cudaGetDevice(nullptr) == cudaSuccess) {
-    int device;
-    cudaGetDevice(&device);
-    return static_cast<size_t>(device);
-  }
+#ifndef __METAL_VERSION__
+#include "ARBDException.h"
+#include <string>
+#include <cstddef>
 #endif
 
-#ifdef USE_SYCL
-  try {
-    return static_cast<size_t>(
-        ARBD::SYCL::SYCLManager::get_current_device().id());
-  } catch (...) {
-    return 0;
-  }
-#endif
 
-#ifdef USE_METAL
-  try {
-    return static_cast<size_t>(
-        ARBD::METAL::METALManager::get_current_device().id());
-  } catch (...) {
-    return 0;
-  }
-#endif
-
-  return 0;
-}
-
-/**
- * @brief Resource representation for heterogeneous computing
- * Supports CUDA, SYCL, and MPI resource types
- */
 namespace ARBD {
 
-enum class ResourceType {CPU, CUDA, SYCL, METAL };
-
 /**
- * @brief Memory transfer policies
+ * @brief Enumeration of supported compute resource types.
  */
-enum class TransferType {
-  HOST_TO_DEVICE,
-  DEVICE_TO_HOST,
-  DEVICE_TO_DEVICE,
-  HOST_TO_HOST
+enum class ResourceType : uint8_t {
+    CPU = 0,    ///< CPU resource (default)
+    CUDA = 1,   ///< NVIDIA CUDA GPU
+    SYCL = 2,   ///< SYCL-compatible device
+    METAL = 3   ///< Apple Metal GPU
 };
 
 /**
- * @brief Backend capability traits for compile-time feature detection
+ * @brief A production-ready resource identifier that explicitly specifies
+ * compute devices for thread-safe, multi-GPU operations.
+ * 
+ * This class eliminates the global state dependency that causes race conditions
+ * in multi-threaded environments by requiring explicit resource specification
+ * for all memory and compute operations.
  */
-template <typename Backend> struct BackendTraits {
-  static constexpr bool supports_device_memory = false;
-  static constexpr bool supports_async_execution = false;
-  static constexpr bool supports_peer_access = false;
-  static constexpr bool requires_explicit_sync = false;
+class Resource {
+  public:
+    ResourceType type{ResourceType::CPU}; ///< Resource type (defaults to CPU)
+    size_t id{0};                         ///< Device ID within the resource type
 
-  using context_type = void;
-  using event_type = void;
-  using stream_type = void;
-};
+    /**
+     * @brief Default constructor creates a CPU resource.
+     */
+    HOST DEVICE constexpr Resource() = default;
 
-/**
- * @brief CUDA Backend Traits
- */
-struct CUDABackend {
-  static constexpr const char *name = "CUDA";
-  static constexpr ResourceType resource_type = ResourceType::CUDA;
-};
+    /**
+     * @brief Construct a resource with specified type and optional ID.
+     * 
+     * @param resource_type The type of compute resource
+     * @param device_id The device ID within that resource type (defaults to 0)
+     */
+    HOST DEVICE constexpr Resource(ResourceType resource_type, size_t device_id = 0)
+        : type(resource_type), id(device_id) {}
 
-template <> struct BackendTraits<CUDABackend> {
-  static constexpr bool supports_device_memory = true;
-  static constexpr bool supports_async_execution = true;
-  static constexpr bool supports_peer_access = true;
-  static constexpr bool requires_explicit_sync = true;
+    /**
+     * @brief Check if this resource is valid (always true since CPU is always available).
+     */
+    HOST DEVICE constexpr bool is_valid() const {
+        return true; // CPU is always available, so all resources are valid
+    }
+
+    /**
+     * @brief Get a human-readable string for the resource type.
+     */
+    HOST DEVICE constexpr const char* getTypeString() const {
+        switch (type) {
+        case ResourceType::CPU:
+            return "CPU, refrain from using this";
+        case ResourceType::CUDA:
+            return "CUDA";
+        case ResourceType::SYCL:
+            return "SYCL";
+        case ResourceType::METAL:
+            return "METAL";
+        default:
+            return "No Device Selected"; // Fallback to CPU
+        }
+    }
+
+    /**
+     * @brief Check if this resource is currently active/set as the current device.
+     * 
+     * This method provides a way to verify that operations will execute on the
+     * intended device, which is crucial for debugging and validation in
+     * multi-device environments.
+     * 
+     * @return true if this resource matches the currently active device context
+     */
+    HOST DEVICE bool is_current() const {
+#if defined(__CUDA_ARCH__) || defined(__SYCL_DEVICE_ONLY__) || defined(__METAL_VERSION__)
+        // On device: assume we're on the right device if code is executing
+        // A more robust implementation might be needed for cross-device kernels
+        return true;
+#else
+        // Host-side validation
+        if (type == ResourceType::CPU) {
+            return true; // CPU is always "current" on host
+        }
+
+        bool is_current_device = false;
 
 #ifdef USE_CUDA
-  using context_type = int; // CUDA device ID
-  using event_type = cudaEvent_t;
-  using stream_type = cudaStream_t;
-#else
-  using context_type = void;
-  using event_type = void;
-  using stream_type = void;
+        if (type == ResourceType::CUDA) {
+            int current_device;
+            if (cudaGetDevice(&current_device) == cudaSuccess) {
+                is_current_device = (current_device == static_cast<int>(id));
+            }
+        }
 #endif
-};
-
-/**
- * @brief SYCL Backend Traits
- */
-struct SYCLBackend {
-  static constexpr const char *name = "SYCL";
-  static constexpr ResourceType resource_type = ResourceType::SYCL;
-};
-
-template <> struct BackendTraits<SYCLBackend> {
-  static constexpr bool supports_device_memory = true;
-  static constexpr bool supports_async_execution = true;
-  static constexpr bool supports_peer_access = false;
-  static constexpr bool requires_explicit_sync = false;
 
 #ifdef USE_SYCL
-  using context_type = sycl::queue*; // void*
-  using event_type = sycl::event*;   // void*
-  using stream_type = sycl::queue*;  // void*
-#else
-  using context_type = void;
-  using event_type = void;
-  using stream_type = void;
-#endif
-};
-
-/**
- * @brief METAL Backend Traits
- */
-struct METALBackend {
-  static constexpr const char *name = "METAL";
-  static constexpr ResourceType resource_type = ResourceType::METAL;
-};
-
-template <> struct BackendTraits<METALBackend> {
-  static constexpr bool supports_device_memory = true;
-  static constexpr bool supports_async_execution = true;
-  static constexpr bool supports_peer_access = false;
-  static constexpr bool requires_explicit_sync = false;
-
-  using context_type = void; // METAL doesn't expose contexts directly
-  using event_type = void;   // METAL command buffer events
-  using stream_type = void;  // METAL command queues
-};
-
-/**
- * @brief Concept to check if a type is a valid backend
- */
-template <typename T>
-concept ValidBackend = requires {
-  typename BackendTraits<T>;
-  { T::name } -> std::convertible_to<const char *>;
-  { T::resource_type } -> std::same_as<ResourceType>;
-};
-
-/**
- * @brief Resource representation for device computing environments
- *
- * The Resource class provides a unified interface for representing and managing
- * computational resources for device computing (CUDA, SYCL, METAL).
- * For distributed computing (MPI), use MPIResource from MPIBackend.h instead.
- *
- * @details This class manages different compute devices on a single machine:
- * - CUDA GPU devices for NVIDIA GPU computing
- * - SYCL devices for cross-platform parallel computing
- * - METAL devices for Apple GPU computing
- *
- * @example Basic Usage:
- * ```cpp
- * // Create a CUDA resource for device 0
- * ARBD::Resource cuda_res(ARBD::Resource::CUDA, 0);
- *
- * // Create a SYCL resource for device 1
- * ARBD::Resource sycl_res(ARBD::Resource::SYCL, 1);
- *
- * // Check if resource is local to current execution context
- * if (cuda_res.is_local()) {
- *     // Perform local operations
- * }
- * ```
- *
- * @see MPIBackend.h for distributed computing resources
- * @see ResourceType for available device resource types
- * @see is_local() for locality checking
- * @see getTypeString() for human-readable type names
- */
-
-struct Resource {
-#ifdef USE_CUDA
-  static constexpr ResourceType DEFAULT_DEVICE = ResourceType::CUDA;
-#elif defined(USE_SYCL)
-  static constexpr ResourceType DEFAULT_DEVICE = ResourceType::SYCL;
-#elif defined(USE_METAL)
-  static constexpr ResourceType DEFAULT_DEVICE = ResourceType::METAL;
-#else 
-  LOGERROR("Resource::Resource(): No device backend defined, using HOST only");
+        if (type == ResourceType::SYCL) {
+            try {
+                auto& current_device = ARBD::SYCL::Manager::get_current_device();
+                is_current_device = (current_device.id() == id);
+            } catch (...) {
+                is_current_device = false;
+            }
+        }
 #endif
 
-  ResourceType type;
-  size_t id;
-  Resource *parent;
-
-  HOST DEVICE Resource() : type(DEFAULT_DEVICE), id(0), parent(nullptr) {}
-  HOST DEVICE Resource(ResourceType t, size_t i)
-      : type(t), id(i), parent(nullptr) {}
-  HOST DEVICE Resource(ResourceType t, size_t i, Resource *p)
-      : type(t), id(i), parent(p) {}
-
-  HOST DEVICE constexpr const char *getTypeString() const {
-    switch (type) {
-    case ResourceType::CUDA:
-      return "CUDA";
-    case ResourceType::SYCL:
-      return "SYCL";
-    case ResourceType::METAL:
-      return "METAL";
-    default:
-      return "Unknown";
-    }
-  }
-
-  HOST DEVICE bool is_local() const {
-#if defined(__CUDA_ARCH__) || defined(__SYCL_DEVICE_ONLY__)
-    // We are executing on a device
-    if (type == ResourceType::CPU) {
-      return false;
-    }
-    // Check if the resource's device type and ID match the current device
-    // This part requires device-specific ways to get current device ID,
-    // which can be complex. Assuming for now that if it's not CPU,
-    // and we are on a device, we are on the right one if the code is launched correctly.
-    // A more robust implementation might be needed here.
-    return true; // Simplified for device code
-#else
-    // We are executing on the host
-    if (type == ResourceType::CPU) {
-      return true;
-    }
-
-    bool ret = false;
-#ifdef USE_CUDA
-    if (type == ResourceType::CUDA) {
-      int current_device;
-      if (cudaGetDevice(&current_device) == cudaSuccess) {
-        ret = (current_device == static_cast<int>(id));
-      }
-    }
-#endif
-#ifdef USE_SYCL
-    if (type == ResourceType::SYCL) {
-      try {
-        auto &current_device = ARBD::SYCL::SYCLManager::get_current_device();
-        ret = (current_device.id() == id);
-      } catch (...) {
-        ret = false;
-      }
-    }
-#endif
 #ifdef USE_METAL
-    if (type == ResourceType::METAL) {
-          try {
-      auto &current_device = ARBD::METAL::METALManager::get_current_device();
-      ret = (current_device.id() == id);
-    } catch (...) {
-      ret = false;
-    }
-    }
+        if (type == ResourceType::METAL) {
+            try {
+                auto& current_device = ARBD::METAL::Manager::get_current_device();
+                is_current_device = (current_device.id() == id);
+            } catch (...) {
+                is_current_device = false;
+            }
+        }
 #endif
-    return ret;
-#endif
-  }
 
-  static Resource Local() {
+        return is_current_device;
+#endif
+    }
+
+    /**
+     * @brief Create a Resource representing the currently active device.
+     * 
+     * This method queries the backend to determine which device is currently
+     * active and returns a Resource representing that device. This is useful
+     * for creating buffers that should be allocated on "whatever device is
+     * currently active" while still maintaining explicit resource tracking.
+     * 
+     * @return Resource representing the currently active device
+     */
+    static Resource Local() {
 #ifdef USE_CUDA
-    int device;
-    if (cudaGetDevice(&device) == cudaSuccess) {
-      return Resource{ResourceType::CUDA, static_cast<size_t>(device)};
-    }
+        int device;
+        if (cudaGetDevice(&device) == cudaSuccess) {
+            return Resource{ResourceType::CUDA, static_cast<size_t>(device)};
+        }
 #endif
+
 #ifdef USE_SYCL
-    try {
-      auto &current_device = ARBD::SYCL::SYCLManager::get_current_device();
-      return Resource{ResourceType::SYCL, static_cast<size_t>(current_device.id())};
-    } catch (...) {
-    }
+        try {
+            auto& current_device = ARBD::SYCL::Manager::get_current_device();
+            return Resource{ResourceType::SYCL, static_cast<size_t>(current_device.id())};
+        } catch (...) {
+            // Fall through to CPU default
+        }
 #endif
+
 #ifdef USE_METAL
-    try {
-      auto &current_device = ARBD::METAL::METALManager::get_current_device();
-      return Resource{ResourceType::METAL,
-                      static_cast<size_t>(current_device.id())};
-    } catch (...) {
+        try {
+            auto& current_device = ARBD::METAL::Manager::get_current_device();
+            return Resource{ResourceType::METAL, static_cast<size_t>(current_device.id())};
+        } catch (...) {
+            // Fall through to CPU default
+        }
+#endif
+
+        // Default to CPU if no device context is active
+        return Resource{ResourceType::CPU, 0};
+    }
+
+    /**
+     * @brief Create a CPU resource.
+     * 
+     * @param cpu_id The CPU ID (typically 0 for single-socket systems)
+     * @return Resource representing the specified CPU
+     */
+    static constexpr Resource CPU(size_t cpu_id = 0) {
+        return Resource{ResourceType::CPU, cpu_id};
+    }
+
+#ifdef USE_CUDA
+    /**
+     * @brief Create a CUDA resource.
+     * 
+     * @param device_id The CUDA device ID (defaults to 0)
+     * @return Resource representing the specified CUDA device
+     */
+    static constexpr Resource CUDA(size_t device_id = 0) {
+        return Resource{ResourceType::CUDA, device_id};
     }
 #endif
-    // Default to HOST if no device context is active.
-    return Resource{ResourceType::CPU, 0};
-  }
 
-  HOST DEVICE bool operator==(const Resource &other) const {
-    return type == other.type && id == other.id;
-  }
-
-  HOST std::string toString() const {
-    return std::string(getTypeString()) + "[" + std::to_string(id) + "]";
-  }
-
-  /**
-   * @brief Check if the resource supports asynchronous operations
-   */
-  HOST DEVICE bool supports_async() const {
-    switch (type) {
-    case ResourceType::CUDA:
-    case ResourceType::SYCL:
-      return true;
-
-    default:
-      return false;
+#ifdef USE_SYCL
+    /**
+     * @brief Create a SYCL resource.
+     * 
+     * @param device_id The SYCL device ID (defaults to 0)
+     * @return Resource representing the specified SYCL device
+     */
+    static constexpr Resource SYCL(size_t device_id = 0) {
+        return Resource{ResourceType::SYCL, device_id};
     }
-  }
+#endif
 
-  /**
-   * @brief Get the memory space type for this resource
-   */
-  HOST DEVICE constexpr const char *getMemorySpace() const {
-    switch (type) {
-    case ResourceType::CPU:
-      return "host";
-    case ResourceType::CUDA:
-      return "device";
-    case ResourceType::SYCL:
-      return "device";
-
-    case ResourceType::METAL:
-      return "device";
-    default:
-      return "host";
+#ifdef USE_METAL
+    /**
+     * @brief Create a Metal resource.
+     * 
+     * @param device_id The Metal device ID (defaults to 0)
+     * @return Resource representing the specified Metal device
+     */
+    static constexpr Resource METAL(size_t device_id = 0) {
+        return Resource{ResourceType::METAL, device_id};
     }
-  }
+#endif
 
-  /**
-   * @brief Check if this resource represents a device (GPU)
-   */
-  HOST DEVICE bool is_device() const {
-    return type == ResourceType::CUDA || type == ResourceType::SYCL ||
-           type == ResourceType::METAL;
-  }
+    /**
+     * @brief Equality comparison operator.
+     */
+    HOST DEVICE constexpr bool operator==(const Resource& other) const {
+        return type == other.type && id == other.id;
+    }
 
-  /**
-   * @brief Check if this resource represents a host (CPU)
-   * @note Always returns false since Resource only handles device computing.
-   *       For distributed computing, use MPIResource from MPIBackend.h
-   */
-  HOST DEVICE bool is_host() const { return type == ResourceType::CPU; }
+    /**
+     * @brief Inequality comparison operator.
+     */
+    HOST DEVICE constexpr bool operator!=(const Resource& other) const {
+        return !(*this == other);
+    }
+
+    /**
+     * @brief Less-than comparison for use in containers.
+     */
+    HOST DEVICE constexpr bool operator<(const Resource& other) const {
+        if (type != other.type) {
+            return static_cast<uint8_t>(type) < static_cast<uint8_t>(other.type);
+        }
+        return id < other.id;
+    }
+
+#if !defined(__METAL_VERSION__) && !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__)
+    /**
+     * @brief Get a string representation of this resource.
+     * 
+     * @return String in format "TYPE[ID]" (e.g., "CUDA[0]", "METAL[1]")
+     */
+    std::string toString() const {
+        return std::string(getTypeString()) + "[" + std::to_string(id) + "]";
+    }
+#endif
+
+    /**
+     * @brief Check if the resource supports asynchronous operations.
+     */
+    HOST DEVICE constexpr bool supports_async() const {
+        switch (type) {
+        case ResourceType::CUDA:
+        case ResourceType::SYCL:
+        case ResourceType::METAL:
+            return true;
+        case ResourceType::CPU:
+        default:
+            return false;
+        }
+    }
+
+    /**
+     * @brief Get the memory space type for this resource.
+     */
+    HOST DEVICE constexpr const char* getMemorySpace() const {
+        switch (type) {
+        case ResourceType::CPU:
+            return "host";
+        case ResourceType::CUDA:
+        case ResourceType::SYCL:
+        case ResourceType::METAL:
+            return "device";
+        default:
+            return "host"; // Fallback to host
+        }
+    }
+
+    /**
+     * @brief Check if this resource represents a device (GPU).
+     */
+    HOST DEVICE constexpr bool is_device() const {
+        return type == ResourceType::CUDA || 
+               type == ResourceType::SYCL || 
+               type == ResourceType::METAL;
+    }
+
+    /**
+     * @brief Check if this resource represents a host (CPU).
+     */
+    HOST DEVICE constexpr bool is_host() const {
+        return type == ResourceType::CPU;
+    }
+
+    /**
+     * @brief Check if this resource can access peer memory from another resource.
+     * 
+     * This method helps determine if direct device-to-device memory transfers
+     * are possible between two resources, which is important for optimization
+     * in multi-GPU scenarios.
+     * 
+     * @param other The other resource to check peer access with
+     * @return true if peer access is supported and enabled
+     */
+    bool can_access_peer(const Resource& other) const {
+        // Same resource can always access itself
+        if (*this == other) {
+            return true;
+        }
+
+        // CPU can access all resources (through host memory)
+        if (type == ResourceType::CPU || other.type == ResourceType::CPU) {
+            return true;
+        }
+
+        // Cross-backend peer access is not supported
+        if (type != other.type) {
+            return false;
+        }
+
+#ifdef USE_CUDA
+        if (type == ResourceType::CUDA) {
+            try {
+                return ARBD::CUDA::Manager::can_access_peer(
+                    static_cast<int>(id), static_cast<int>(other.id));
+            } catch (...) {
+                return false;
+            }
+        }
+#endif
+
+        // For SYCL and Metal, assume no peer access for now
+        // This could be extended with backend-specific peer access queries
+        return false;
+    }
+
+    /**
+     * @brief Validate that this resource exists and is accessible.
+     * 
+     * This method performs runtime validation to ensure the resource
+     * represents a real, accessible device. Useful for debugging and
+     * error checking in production code.
+     * 
+     * @throws ARBDException if the resource is invalid or inaccessible
+     */
+    void validate() const {
+#if !defined(__METAL_VERSION__) && !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__)
+        if (type == ResourceType::CPU) {
+            // CPU resources are always valid
+            return;
+        }
+
+#ifdef USE_CUDA
+        if (type == ResourceType::CUDA) {
+            int device_count;
+            if (cudaGetDeviceCount(&device_count) != cudaSuccess || 
+                static_cast<int>(id) >= device_count) {
+                ARBD_Exception(ExceptionType::ValueError, 
+                              "Resource validation failed: CUDA device {} does not exist (count: {})", 
+                              id, device_count);
+            }
+            return;
+        }
+#endif
+
+#ifdef USE_SYCL
+        if (type == ResourceType::SYCL) {
+            try {
+                auto& device_manager = ARBD::SYCL::Manager::get_device(id);
+                // If we can get the device, it exists
+                return;
+            } catch (...) {
+                ARBD_Exception(ExceptionType::ValueError, 
+                              "Resource validation failed: SYCL device {} does not exist", id);
+            }
+        }
+#endif
+
+#ifdef USE_METAL
+        if (type == ResourceType::METAL) {
+            try {
+                auto& device_manager = ARBD::METAL::Manager::get_device(id);
+                // If we can get the device, it exists
+                return;
+            } catch (...) {
+                ARBD_Exception(ExceptionType::ValueError, 
+                              "Resource validation failed: Metal device {} does not exist", id);
+            }
+        }
+#endif
+
+        ARBD_Exception(ExceptionType::ValueError, 
+                      "Resource validation failed: Unsupported resource type {}", 
+                      static_cast<int>(type));
+#endif
+    }
+
+    /**
+     * @brief Get the compute capability or performance tier of this resource.
+     * 
+     * Returns a relative performance indicator where higher numbers indicate
+     * more capable devices. Useful for load balancing and device selection.
+     * 
+     * @return Performance tier (0 = lowest, higher = better)
+     
+    uint32_t get_compute_capability() const {
+#if !defined(__METAL_VERSION__) && !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__)
+        if (type == ResourceType::CPU) {
+            return 1; // Baseline performance
+        }
+
+#ifdef USE_CUDA
+        if (type == ResourceType::CUDA) {
+            try {
+                cudaDeviceProp prop;
+                if (cudaGetDeviceProperties(&prop, static_cast<int>(id)) == cudaSuccess) {
+                    // Combine major and minor compute capability
+                    return static_cast<uint32_t>(prop.major * 10 + prop.minor);
+                }
+            } catch (...) {
+                // Fall through to default
+            }
+        }
+#endif
+
+        // For SYCL and Metal, return a generic "device" tier for now
+        // This could be extended with backend-specific capability queries
+        return 10; // Higher than CPU but lower than modern CUDA
+#else
+        return 0; // Device code doesn't have access to capability queries
+#endif
+    }
+	*/
 };
 
 } // namespace ARBD

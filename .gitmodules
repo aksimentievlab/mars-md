@@ -11,9 +11,6 @@
 [submodule "extern/neighbor"]
 	path = extern/neighbor
 	url = https://github.com/mphowardlab/neighbor.git
-[submodule "extern/OpenRAND"]
-	path = extern/OpenRAND
-	url = https://github.com/glotzerlab/OpenRAND.git
 [submodule "extern/metal-cpp-cmake"]
 	path = extern/metal-cpp-cmake
 	url = https://github.com/pinyili2/metal-cpp-cmake.git
