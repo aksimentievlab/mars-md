@@ -458,13 +458,31 @@ class Buffer {
 	 */
 	void resize(size_t count, const Resource& resource = Resource{}) {
 		Resource target_resource = (resource == Resource{}) ? resource_ : resource;
-		if (count != count_ || !(target_resource == resource_)) {
-			deallocate();
-			resource_ = target_resource;
-			if (count > 0) {
-				allocate_on_resource(resource_, count);
+		if (count == count_ && target_resource == resource_) {
+			return; // No change needed
+		}
+
+		// First, try to allocate the new buffer.
+		T* new_ptr = nullptr;
+		if (count > 0) {
+			new_ptr = static_cast<T*>(Policy::allocate(target_resource, count * sizeof(T)));
+			if (!new_ptr) {
+				// Allocation failed. The original buffer is untouched.
+				// You could throw an exception here to signal the failure.
+				// For now, we'll just return, preserving the original buffer.
+				return;
 			}
 		}
+
+		// The new allocation was successful, so it's now safe to deallocate the old buffer.
+		if (device_ptr_) {
+			Policy::deallocate(device_ptr_);
+		}
+
+		// Finally, update the buffer's state to point to the new memory.
+		device_ptr_ = new_ptr;
+		count_ = count;
+		resource_ = target_resource;
 	}
 
 	/**
