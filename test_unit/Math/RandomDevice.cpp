@@ -111,8 +111,9 @@ struct RandomTestFixture {
 	RandomTestFixture() {
 		try {
 #ifdef USE_CUDA
-			CUDA::Manager::init();
-			CUDA::Manager::load_info();
+			// Use the same initialization pattern as RandomProfile.cpp
+			extern void ensure_cuda_initialized();
+			ensure_cuda_initialized();
 			if (!CUDA::Manager::devices().empty()) {
 				CUDA::Manager::use(0);
 				cuda_resource = Resource(ResourceType::CUDA, 0);
@@ -122,8 +123,8 @@ struct RandomTestFixture {
 #endif
 
 #ifdef USE_SYCL
-			SYCL::Manager::init();
-			SYCL::Manager::load_info();
+			extern void ensure_sycl_initialized();
+			ensure_sycl_initialized();
 			if (!SYCL::Manager::devices().empty()) {
 				SYCL::Manager::use(0);
 				sycl_resource = Resource(ResourceType::SYCL, 0);
@@ -133,8 +134,8 @@ struct RandomTestFixture {
 #endif
 
 #ifdef USE_METAL
-			METAL::Manager::init();
-			METAL::Manager::load_info();
+			extern void ensure_metal_initialized();
+			ensure_metal_initialized();
 			if (!METAL::Manager::devices().empty()) {
 				METAL::Manager::use(0);
 				metal_resource = Resource(ResourceType::METAL, 0);
@@ -148,22 +149,9 @@ struct RandomTestFixture {
 	}
 
 	~RandomTestFixture() {
-		try {
-#ifdef USE_CUDA
-			if (cuda_available)
-				CUDA::Manager::finalize();
-#endif
-#ifdef USE_SYCL
-			if (sycl_available)
-				SYCL::Manager::finalize();
-#endif
-#ifdef USE_METAL
-			if (metal_available)
-				METAL::Manager::finalize();
-#endif
-		} catch (const std::exception& e) {
-			std::cerr << "Error during RandomTestFixture cleanup: " << e.what() << std::endl;
-		}
+		// Note: We do NOT finalize the backend managers here
+		// as they are shared across multiple test fixtures
+		// and should only be finalized once at the end of the test suite
 	}
 };
 
@@ -287,8 +275,9 @@ TEST_CASE_METHOD(RandomTestFixture,
 
 			// Simple combination: 70% uniform + 30% gaussian
 			Event combine_event;
-			
-				combine_event = launch_kernel(resource, TEST_SIZE, config, inputs, outputs, CombineKernel{});
+
+			combine_event =
+				launch_kernel(resource, TEST_SIZE, config, inputs, outputs, CombineKernel{});
 
 			combine_event.wait();
 
@@ -447,7 +436,8 @@ TEST_CASE_METHOD(RandomTestFixture,
 			Random<Resource> rng(resource, 128);
 			rng.init(12345, 0);
 
-			DeviceBuffer<float> device_buffer(LARGE_TEST_SIZE,resource); // Larger for better statistics
+			DeviceBuffer<float> device_buffer(LARGE_TEST_SIZE,
+											  resource); // Larger for better statistics
 
 			Event generation_event = rng.generate_gaussian(device_buffer, 0.0f, 1.0f);
 			generation_event.wait();
@@ -471,7 +461,7 @@ TEST_CASE_METHOD(RandomTestFixture,
 			Random<Resource> rng(resource, 128);
 			rng.init(9876, 0);
 
-			DeviceBuffer<Vector3> device_buffer(TEST_SIZE,resource);
+			DeviceBuffer<Vector3> device_buffer(TEST_SIZE, resource);
 			Vector3 mean_vec(0.0f, 0.0f, 0.0f);
 			Vector3 stddev_vec(1.0f, 1.0f, 1.0f);
 
