@@ -39,7 +39,16 @@ class Event {
 	// Backend-specific constructors (only available if backend is enabled)
 #ifdef USE_CUDA
 	Event(cudaEvent_t cuda_event, const Resource& res)
-		: resource_(res), event_impl_(std::make_shared<cudaEvent_t>(cuda_event)) {}
+		: resource_(res), event_impl_(
+							  // Store CUDA event with a custom deleter that destroys the CUDA event
+							  std::shared_ptr<void>(new cudaEvent_t(cuda_event), [](void* p) {
+								  if (p) {
+									  cudaEvent_t* evt = static_cast<cudaEvent_t*>(p);
+									  // Destroy the CUDA event and free the heap memory
+									  cudaEventDestroy(*evt);
+									  delete evt;
+								  }
+							  })) {}
 #endif
 
 #ifdef USE_SYCL

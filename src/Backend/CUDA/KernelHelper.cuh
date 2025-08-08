@@ -64,20 +64,36 @@ Event launch_cuda_kernel_impl(const Resource& resource,
 	dim3 block(local_config.block_size.x, local_config.block_size.y, local_config.block_size.z);
 
 	// Ensure grid dimensions are valid (CUDA requires all dimensions >= 1)
-	if (grid.x == 0){
+	if (grid.x == 0) {
 		grid.x = 1;
 	}
-	if (grid.y == 0){
+	if (grid.y == 0) {
 		grid.y = 1;
 	}
-	if (grid.z == 0){
+	if (grid.z == 0) {
 		grid.z = 1;
 	}
 
 	// Get device and stream
-	auto& device =
-		const_cast<CUDA::Manager::Device&>(CUDA::Manager::devices()[resource.id]);
+	auto& device = const_cast<CUDA::Manager::Device&>(CUDA::Manager::devices()[resource.id]);
+
+	// Ensure the correct CUDA device context is active for this device/stream
+	int previous_device = -1;
+	CUDA_CHECK(cudaGetDevice(&previous_device));
+	CUDA_CHECK(cudaSetDevice(static_cast<int>(device.id())));
+
 	cudaStream_t stream = device.get_next_stream();
+
+	// Honor dependency events by making the stream wait on them
+	for (cudaEvent_t dep_evt : config.dependencies.get_cuda_events()) {
+		cudaError_t wait_err = cudaStreamWaitEvent(stream, dep_evt, 0);
+		if (wait_err != cudaSuccess) {
+			// Restore previous device before throwing
+			cudaSetDevice(previous_device);
+			throw std::runtime_error(std::string("Failed to wait on dependency event: ") +
+									 cudaGetErrorString(wait_err));
+		}
+	}
 
 	// Extract buffer pointers for kernel invocation
 	auto input_pointers = get_buffer_pointers(inputs);
@@ -101,6 +117,8 @@ Event launch_cuda_kernel_impl(const Resource& resource,
 	// Check for kernel launch errors
 	cudaError_t error = cudaGetLastError();
 	if (error != cudaSuccess) {
+		// Restore previous device before throwing
+		cudaSetDevice(previous_device);
 		throw std::runtime_error("CUDA kernel launch failed: " +
 								 std::string(cudaGetErrorString(error)));
 	}
@@ -108,14 +126,20 @@ Event launch_cuda_kernel_impl(const Resource& resource,
 	// Synchronize to catch any runtime errors
 	error = cudaStreamSynchronize(stream);
 	if (error != cudaSuccess) {
+		// Restore previous device before throwing
+		cudaSetDevice(previous_device);
 		throw std::runtime_error("CUDA kernel execution failed: " +
 								 std::string(cudaGetErrorString(error)));
 	}
 
-	// Create and record completion event
-	CUDA::Event event;
-	event.record(stream);
-	return Event(event.get(), resource);
+	// Create a raw CUDA event that outlives the local RAII wrapper
+	cudaEvent_t completion_event;
+	CUDA_CHECK(cudaEventCreateWithFlags(&completion_event, cudaEventDisableTiming));
+	CUDA_CHECK(cudaEventRecord(completion_event, stream));
+
+	// Restore previous device context
+	cudaSetDevice(previous_device);
+	return Event(completion_event, resource);
 #else
 	// Fallback for non-CUDA compilation - should not be reached
 	throw_not_implemented("launch_cuda_kernel_impl can only be used in CUDA compilation units");

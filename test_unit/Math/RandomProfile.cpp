@@ -18,11 +18,8 @@ using Catch::Approx;
 using Catch::Matchers::WithinAbs;
 
 // Backend initialization helper - only initialize if not already done
-namespace {
-bool cuda_initialized = false;
-bool sycl_initialized = false;
-bool metal_initialized = false;
-
+#ifdef USE_CUDA
+static bool cuda_initialized = false;
 void ensure_cuda_initialized() {
 	if (!cuda_initialized) {
 		try {
@@ -34,8 +31,10 @@ void ensure_cuda_initialized() {
 		}
 	}
 }
+#endif
 
 #ifdef USE_SYCL
+static bool sycl_initialized = false;
 void ensure_sycl_initialized() {
 	if (!sycl_initialized) {
 		try {
@@ -50,6 +49,7 @@ void ensure_sycl_initialized() {
 #endif
 
 #ifdef USE_METAL
+static bool metal_initialized = false;
 void ensure_metal_initialized() {
 	if (!metal_initialized) {
 		try {
@@ -62,7 +62,6 @@ void ensure_metal_initialized() {
 	}
 }
 #endif
-} // namespace
 
 // ============================================================================
 // Profiled Random Test Fixture
