@@ -8,6 +8,7 @@ struct Particle {
 	int type_id;
 	Vector3 position;
 	Vector3 momentum;
+	Vector3 force;
 	bool is_dummy = false;
 	bool has_orientation = false;
 };
@@ -34,4 +35,3 @@ class ParticleType {
 	using props = Properties;
 };
 } // namespace ARBD
-

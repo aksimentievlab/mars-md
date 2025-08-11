@@ -5,7 +5,7 @@
 #include "Backend/Buffer.h"
 #include "Math/IndexList.h"
 #include "Objects/BasePatch.h"
-//#include "Objects/Particles/ParticlePatch.h"
+// #include "Objects/Particles/ParticlePatch.h"
 #include "Math/Types.h"
 
 // Class providing a description of a simulation system, including composition, coordinates,
@@ -30,7 +30,7 @@ class BoundaryConditions {
 
   public:
 	BoundaryConditions()
-		: origin(0,0,0), basis{Vector3(5000, 0, 0), Vector3(0, 5000, 0), Vector3(0, 0, 5000)},
+		: origin(0, 0, 0), basis{Vector3(5000, 0, 0), Vector3(0, 5000, 0), Vector3(0, 0, 5000)},
 		  periodic{true, true, true} {
 		// do things
 		LOGINFO("BoundaryConditions()");
@@ -63,12 +63,11 @@ class BoundaryConditions {
  * of the details of the decomposition
  */
 
-
 class SimSystem {
-//friend class CellDecomposer;
+	// friend class CellDecomposer;
   public:
 	struct Conf {
-		enum Decomposer { CellDecomp };
+		enum Decomposer { CellDecomp, LoadBalance, AMR };
 		enum Periodicity { AllPeriodic, Free, OneDimensional, TwoDimensional };
 		enum Algorithm { BD, MD };
 
@@ -90,8 +89,8 @@ class SimSystem {
 
 		switch (conf.decomp) {
 		case Conf::CellDecomp:
-			CellDecomposer _d;
-			decomp = static_cast<Decomposer>(_d);
+			CellDecomposer CellDecomp;
+			decomp = static_cast<Decomposer>(CellDecomp);
 			break;
 		default:
 			throw_value_error("SimSystem::GetIntegrator: Unrecognized CellDecomp type; exiting");
@@ -113,38 +112,6 @@ class SimSystem {
 	}
 	SimSystem(Temperature& temp, Decomposer& decomp, BoundaryConditions boundary_conditions)
 		: temperature(temp), decomp(decomp), boundary_conditions(boundary_conditions) {}
-	
-    Patch patches; // TODO: should this be a vector?
-
-	const Vector3 get_min() const {
-		Vector3 min(Vector3::highest());
-		for (auto& p : patches) {
-			if (min.x > p.metadata->min.x)
-				min.x = p.metadata->min.x;
-			if (min.y > p.metadata->min.y)
-				min.y = p.metadata->min.y;
-			if (min.z > p.metadata->min.z)
-				min.z = p.metadata->min.z;
-			if (min.w > p.metadata->min.w)
-				min.w = p.metadata->min.w;
-		}
-		return min;
-	}
-
-	const Vector3 get_max() const {
-		Vector3 max(Vector3::lowest());
-		for (auto& p : patches) {
-			if (max.x < p.metadata->max.x)
-				max.x = p.metadata->max.x;
-			if (max.y < p.metadata->max.y)
-				max.y = p.metadata->max.y;
-			if (max.z < p.metadata->max.z)
-				max.z = p.metadata->max.z;
-			if (max.w < p.metadata->max.w)
-				max.w = p.metadata->max.w;
-		}
-		return max;
-	}
 
 	void use_decomposer(Decomposer& d) {
 		decomp = d;

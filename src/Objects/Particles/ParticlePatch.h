@@ -5,10 +5,10 @@
 #include <vector> // std::vector
 
 #include "Math/Types.h"
-#include "Objects/Patch/Patch.h"
 #include "ParticleType.h"
+#include "System/SimSystem.h"
 
-namespace ARBD{
+namespace ARBD {
 
 template<typename Pos, typename Force>
 class Patch {
@@ -99,20 +99,6 @@ class Patch : public BasePatch {
 	};
 
 	// Metadata stored on host even if Data is on device
-	struct Metadata {
-		Metadata() : num(0), capacity(0), min(0), max(0), data(){};
-		Metadata(const Patch& p)
-			: num(p.metadata.num), capacity(p.metadata.capacity), min(p.metadata.min),
-			  max(p.metadata.max), data(p.metadata.data){};
-		Metadata(const Metadata& other)
-			: num(other.num), capacity(other.capacity), min(other.min), max(other.max),
-			  data(other.data){};
-		size_t num;
-		size_t capacity;
-		Vector3 min;
-		Vector3 max;
-		Proxy<Data> data; // actual data may be found elsewhere
-	};
 
 	// void deleteParticles(IndexList& p);
 	// void addParticles(size_t n, size_t typ);
@@ -180,4 +166,3 @@ class Patch : public BasePatch {
 	size_t num_group_sites;
 };
 } // namespace ARBD
-
