@@ -8,8 +8,10 @@
 // #include "Objects/Particles/ParticlePatch.h"
 #include "Math/Types.h"
 
-// Class providing a description of a simulation system, including composition, coordinates,
-// interactions, state parameters (temperature, boundary conditions, etc) + RNG counter
+// Check parilist distance
+// Bond check
+//  Class providing a description of a simulation system, including composition, coordinates,
+//  interactions, state parameters (temperature, boundary conditions, etc) + RNG counter
 
 //   Although only one instance of this should be created per replica of the system, it should be
 //   possible to distribute (at least parts of) the description of the system
