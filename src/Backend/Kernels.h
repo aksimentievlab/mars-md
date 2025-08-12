@@ -28,6 +28,7 @@
 #include "ARBDLogger.h"
 #include "Buffer.h"
 #include "Events.h"
+#include "Header.h"
 #include "Resource.h"
 
 namespace ARBD {
@@ -37,7 +38,7 @@ namespace ARBD {
 // ============================================================================
 
 struct kerneldim3 {
-	size_t x = 1, y = 1, z = 1;
+	idx_t x = 1, y = 1, z = 1;
 };
 
 /**
@@ -53,7 +54,7 @@ struct KernelConfig {
 							0,
 							0}; // Grid dimensions. A zero value in x signals auto-calculation.
 	kerneldim3 block_size = {256, 1, 1}; // Block/Work-group dimensions.
-	size_t shared_memory = 0;			 // Shared memory in bytes (primarily for CUDA).
+	idx_t shared_memory = 0;			 // Shared memory in bytes (primarily for CUDA).
 	bool async = true;					 // If false, the host will wait for completion.
 	EventList dependencies;				 // Events this kernel must wait for.
 	int stream_id = 0;
@@ -63,26 +64,26 @@ struct KernelConfig {
 		if (resource.type == ResourceType::SYCL) {
 			try {
 				auto& device = SYCL::Manager::get_device(resource.id);
-				size_t max_work_group_size =
+				idx_t max_work_group_size =
 					device.get_device().get_info<sycl::info::device::max_work_group_size>();
 
 				auto max_work_item_sizes =
 					device.get_device().get_info<sycl::info::device::max_work_item_sizes<3>>();
 
 				// Clamp each dimension to device limits
-				block_size.x = std::min(block_size.x, static_cast<size_t>(max_work_item_sizes[0]));
-				block_size.y = std::min(block_size.y, static_cast<size_t>(max_work_item_sizes[1]));
-				block_size.z = std::min(block_size.z, static_cast<size_t>(max_work_item_sizes[2]));
+				block_size.x = std::min(block_size.x, static_cast<idx_t>(max_work_item_sizes[0]));
+				block_size.y = std::min(block_size.y, static_cast<idx_t>(max_work_item_sizes[1]));
+				block_size.z = std::min(block_size.z, static_cast<idx_t>(max_work_item_sizes[2]));
 
 				// Ensure total work-group size doesn't exceed device limit
-				size_t total_work_items = block_size.x * block_size.y * block_size.z;
+				idx_t total_work_items = block_size.x * block_size.y * block_size.z;
 				if (total_work_items > max_work_group_size) {
 					// Scale down proportionally
 					double scale_factor =
 						std::sqrt(static_cast<double>(max_work_group_size) / total_work_items);
-					block_size.x = std::max(1UL, static_cast<size_t>(block_size.x * scale_factor));
-					block_size.y = std::max(1UL, static_cast<size_t>(block_size.y * scale_factor));
-					block_size.z = std::max(1UL, static_cast<size_t>(block_size.z * scale_factor));
+					block_size.x = std::max(1UL, static_cast<idx_t>(block_size.x * scale_factor));
+					block_size.y = std::max(1UL, static_cast<idx_t>(block_size.y * scale_factor));
+					block_size.z = std::max(1UL, static_cast<idx_t>(block_size.z * scale_factor));
 				}
 
 				LOGDEBUG("SYCL block size clamped to ({}, {}, {}) for device with max work-group "
@@ -108,18 +109,18 @@ struct KernelConfig {
 				CUDA_CHECK(cudaGetDeviceProperties(&prop, device.id()));
 
 				// Clamp each dimension to CUDA limits
-				block_size.x = std::min(block_size.x, static_cast<size_t>(prop.maxThreadsDim[0]));
-				block_size.y = std::min(block_size.y, static_cast<size_t>(prop.maxThreadsDim[1]));
-				block_size.z = std::min(block_size.z, static_cast<size_t>(prop.maxThreadsDim[2]));
+				block_size.x = std::min(block_size.x, static_cast<idx_t>(prop.maxThreadsDim[0]));
+				block_size.y = std::min(block_size.y, static_cast<idx_t>(prop.maxThreadsDim[1]));
+				block_size.z = std::min(block_size.z, static_cast<idx_t>(prop.maxThreadsDim[2]));
 
 				// Ensure total threads per block doesn't exceed limit
-				size_t total_threads = block_size.x * block_size.y * block_size.z;
-				if (total_threads > static_cast<size_t>(prop.maxThreadsPerBlock)) {
+				idx_t total_threads = block_size.x * block_size.y * block_size.z;
+				if (total_threads > static_cast<idx_t>(prop.maxThreadsPerBlock)) {
 					double scale_factor =
 						std::sqrt(static_cast<double>(prop.maxThreadsPerBlock) / total_threads);
-					block_size.x = std::max(1UL, static_cast<size_t>(block_size.x * scale_factor));
-					block_size.y = std::max(1UL, static_cast<size_t>(block_size.y * scale_factor));
-					block_size.z = std::max(1UL, static_cast<size_t>(block_size.z * scale_factor));
+					block_size.x = std::max(1UL, static_cast<idx_t>(block_size.x * scale_factor));
+					block_size.y = std::max(1UL, static_cast<idx_t>(block_size.y * scale_factor));
+					block_size.z = std::max(1UL, static_cast<idx_t>(block_size.z * scale_factor));
 				}
 
 				LOGDEBUG("CUDA block size clamped to ({}, {}, {}) for device with max threads per "
@@ -138,8 +139,8 @@ struct KernelConfig {
 
 		// For CPU, any block size is technically fine since we use std::thread
 		if (resource.type == ResourceType::CPU) {
-			const size_t max_cpu_threads = std::thread::hardware_concurrency() * 4;
-			size_t total_threads = block_size.x * block_size.y * block_size.z;
+			const idx_t max_cpu_threads = std::thread::hardware_concurrency() * 4;
+			idx_t total_threads = block_size.x * block_size.y * block_size.z;
 			if (total_threads > max_cpu_threads) {
 				block_size.x = std::min(block_size.x, max_cpu_threads);
 				block_size.y = 1;
@@ -148,7 +149,7 @@ struct KernelConfig {
 		}
 	}
 
-	void auto_configure(size_t thread_count, const Resource& resource) {
+	void auto_configure(idx_t thread_count, const Resource& resource) {
 // Backend-specific auto-configuration
 #ifdef USE_CUDA
 		if (resource.type == ResourceType::CUDA) {
@@ -177,7 +178,7 @@ struct KernelConfig {
 };
 
 template<typename... Args>
-using KernelFunction = std::function<void(size_t, Args...)>;
+using KernelFunction = std::function<void(idx_t, Args...)>;
 
 // ============================================================================
 // Type Traits for Buffer Detection
@@ -224,7 +225,7 @@ constexpr bool is_string_v = is_string<std::decay_t<T>>::value;
 template<typename InputTuple, typename OutputTuple, typename Functor, typename... Args>
 std::enable_if_t<!is_device_buffer_v<InputTuple> && !is_device_buffer_v<OutputTuple>, Event>
 launch_kernel(const Resource& resource,
-			  size_t thread_count,
+			  idx_t thread_count,
 			  const KernelConfig& config,
 			  InputTuple& inputs,
 			  OutputTuple& outputs,
@@ -271,7 +272,7 @@ launch_kernel(const Resource& resource,
 /*
 template<typename InputTuple, typename OutputTuple, typename KernelName, typename... Args>
 std::enable_if_t<is_string_v<KernelName>, Event> launch_kernel(const Resource& resource,
-															   size_t thread_count,
+															   idx_t thread_count,
 															   const InputTuple& inputs,
 															   const OutputTuple& outputs,
 															   const KernelConfig& config,
@@ -306,7 +307,7 @@ std::enable_if_t<is_device_buffer_v<OutputBuffer> && !is_device_buffer_v<Functor
 					 !is_string_v<Functor>,
 				 Event>
 launch_kernel(const Resource& resource,
-			  size_t thread_count,
+			  idx_t thread_count,
 			  const KernelConfig& config,
 			  OutputBuffer& output_buffer,
 			  Functor&& kernel_func,
@@ -332,7 +333,7 @@ std::enable_if_t<is_device_buffer_v<InputBuffer> && is_device_buffer_v<OutputBuf
 					 !is_device_buffer_v<Functor> && !is_string_v<Functor>,
 				 Event>
 launch_kernel(const Resource& resource,
-			  size_t thread_count,
+			  idx_t thread_count,
 			  const KernelConfig& config,
 			  InputBuffer& input_buffer,
 			  OutputBuffer& output_buffer,
@@ -364,7 +365,7 @@ std::enable_if_t<is_device_buffer_v<InputBuffer1> && is_device_buffer_v<InputBuf
 					 !is_string_v<Functor>,
 				 Event>
 launch_kernel(const Resource& resource,
-			  size_t thread_count,
+			  idx_t thread_count,
 			  const KernelConfig& config,
 			  InputBuffer1& input_buffer1,
 			  InputBuffer2& input_buffer2,
@@ -393,7 +394,7 @@ launch_kernel(const Resource& resource,
  */
 template<typename InputTuple, typename OutputTuple, typename Functor, typename... Args>
 Event launch_cpu_kernel(const Resource& resource,
-						size_t thread_count,
+						idx_t thread_count,
 						const InputTuple& inputs,
 						const OutputTuple& outputs,
 						const KernelConfig& config,
@@ -411,13 +412,13 @@ Event launch_cpu_kernel(const Resource& resource,
 	}
 
 	std::vector<std::thread> threads;
-	size_t chunk_size = (thread_count + num_threads - 1) / num_threads;
+	idx_t chunk_size = (thread_count + num_threads - 1) / num_threads;
 
 	for (unsigned int t = 0; t < num_threads; ++t) {
 		threads.emplace_back([=]() {
-			size_t start = t * chunk_size;
-			size_t end = std::min(start + chunk_size, thread_count);
-			for (size_t i = start; i < end; ++i) {
+			idx_t start = t * chunk_size;
+			idx_t end = std::min(start + chunk_size, thread_count);
+			for (idx_t i = start; i < end; ++i) {
 				auto all_args = std::tuple_cat(input_ptrs, output_ptrs);
 				std::apply([&](auto&&... unpacked_args) { kernel_func(i, unpacked_args...); },
 						   all_args);
@@ -439,7 +440,7 @@ Event launch_cpu_kernel(const Resource& resource,
  */
 template<typename OutputBuffer, typename Functor, typename... Args>
 Event launch_cpu_kernel(const Resource& resource,
-						size_t thread_count,
+						idx_t thread_count,
 						const KernelConfig& config,
 						OutputBuffer& output_buffer,
 						Functor&& kernel_func,
@@ -462,7 +463,7 @@ Event launch_cpu_kernel(const Resource& resource,
  */
 template<typename InputBuffer, typename OutputBuffer, typename Functor, typename... Args>
 Event launch_cpu_kernel(const Resource& resource,
-						size_t thread_count,
+						idx_t thread_count,
 						const KernelConfig& config,
 						InputBuffer& input_buffer,
 						OutputBuffer& output_buffer,
@@ -488,11 +489,11 @@ Event launch_cpu_kernel(const Resource& resource,
 #ifdef USE_CUDA
 // Forward declarations
 template<typename Functor, typename... Args>
-__global__ void cuda_kernel_wrapper(size_t n, Functor kernel, Args... args);
+__global__ void cuda_kernel_wrapper(idx_t n, Functor kernel, Args... args);
 
 template<typename InputTuple, typename OutputTuple, typename Functor, typename... Args>
 Event launch_cuda_kernel_impl(const Resource& resource,
-							  size_t thread_count,
+							  idx_t thread_count,
 							  const InputTuple& inputs,
 							  const OutputTuple& outputs,
 							  const KernelConfig& config,
@@ -502,7 +503,7 @@ Event launch_cuda_kernel_impl(const Resource& resource,
 // Implementation
 template<typename InputTuple, typename OutputTuple, typename Functor, typename... Args>
 Event launch_cuda_kernel(const Resource& resource,
-						 size_t thread_count,
+						 idx_t thread_count,
 						 const InputTuple& inputs,
 						 const OutputTuple& outputs,
 						 const KernelConfig& config,
@@ -522,7 +523,7 @@ Event launch_cuda_kernel(const Resource& resource,
 #ifdef USE_SYCL
 template<typename InputTuple, typename OutputTuple, typename Functor, typename... Args>
 Event launch_sycl_kernel(const Resource& resource,
-						 size_t thread_count,
+						 idx_t thread_count,
 						 const InputTuple& inputs,
 						 const OutputTuple& outputs,
 						 const KernelConfig& config,
@@ -549,7 +550,7 @@ Event launch_sycl_kernel(const Resource& resource,
 										  std::make_tuple(std::forward<Args>(args)...));
 
 		h.parallel_for(execution_range, [=](sycl::nd_item<1> item) {
-			size_t i = item.get_global_id(0);
+			idx_t i = item.get_global_id(0);
 			if (i < thread_count) {
 				std::apply([&](auto&&... unpacked_args) { kernel_func(i, unpacked_args...); },
 						   kernel_args);
@@ -567,7 +568,7 @@ Event launch_sycl_kernel(const Resource& resource,
 
 #ifdef USE_METAL
 // Helper functions for buffer binding
-template<typename Tuple, std::size_t... I>
+template<typename Tuple, std::idx_t... I>
 void bind_tuple_to_encoder_impl(MTL::ComputeCommandEncoder* encoder,
 								const Tuple& tuple,
 								uint32_t& buffer_index,
@@ -604,7 +605,7 @@ struct MetalGridConfig {
 	MTL::Size threadgroup_size;
 };
 
-inline MetalGridConfig calculate_metal_grid_config(size_t thread_count,
+inline MetalGridConfig calculate_metal_grid_config(idx_t thread_count,
 												   const KernelConfig& config,
 												   MTL::ComputePipelineState* pipeline) {
 	MetalGridConfig result;
@@ -633,9 +634,9 @@ inline MetalGridConfig calculate_metal_grid_config(size_t thread_count,
  *
  * // Prepare Metal resource and buffers
  * Resource metal_res(ResourceType::METAL, 0);
- * constexpr size_t n = 16;
+ * constexpr idx_t n = 16;
  * std::vector<Vector3_t<float>> host_a(n), host_b(n), host_out(n);
- * for (size_t i = 0; i < n; ++i) {
+ * for (idx_t i = 0; i < n; ++i) {
  *     host_a[i] = Vector3_t<float>(float(i), float(i+1), float(i+2));
  *     host_b[i] = Vector3_t<float>(float(2*i), float(2*i+1), float(2*i+2));
  * }
@@ -668,9 +669,9 @@ inline MetalGridConfig calculate_metal_grid_config(size_t thread_count,
  * using namespace ARBD;
  *
  * Resource metal_res(ResourceType::METAL, 0);
- * constexpr size_t n = 4;
+ * constexpr idx_t n = 4;
  * std::vector<Matrix3_t<float>> host_a(n), host_b(n), host_out(n);
- * for (size_t i = 0; i < n; ++i) {
+ * for (idx_t i = 0; i < n; ++i) {
  *     Matrix3_t<float> m1, m2;
  *     m1.ex().x = float(i + 1); m1.ex().y = float(i + 2); m1.ex().z = float(i + 3);
  *     m1.ey().x = float(i + 4); m1.ey().y = float(i + 5); m1.ey().z = float(i + 6);
@@ -703,7 +704,7 @@ inline MetalGridConfig calculate_metal_grid_config(size_t thread_count,
 
 template<typename InputTuple, typename OutputTuple, typename... Args>
 Event launch_metal_kernel(const Resource& resource,
-						  size_t thread_count,
+						  idx_t thread_count,
 						  const InputTuple& inputs,
 						  const OutputTuple& outputs,
 						  const KernelConfig& config,
@@ -793,7 +794,7 @@ std::enable_if_t<is_device_buffer_v<OutputBuffer> && !is_device_buffer_v<InputBu
 					 !is_string_v<InputBuffer>,
 				 Event>
 launch_metal_kernel(const Resource& resource,
-					size_t thread_count,
+					idx_t thread_count,
 					const InputBuffer& input_buffer,
 					const OutputBuffer& output_buffer,
 					const KernelConfig& config,
@@ -812,7 +813,7 @@ launch_metal_kernel(const Resource& resource,
 /*
 template<typename... Args>
 Event launch_metal_kernel(const Resource& resource,
-						  size_t thread_count,
+						  idx_t thread_count,
 						  const KernelConfig& config,
 						  const std::string& kernel_name,
 						  Args&&... args) {
@@ -885,7 +886,7 @@ Event launch_metal_kernel(const Resource& resource,
 // Helper Functions
 // ============================================================================
 
-template<typename Tuple, std::size_t... I>
+template<typename Tuple, idx_t... I>
 auto extract_buffer_pointers_impl(Tuple& tuple, std::index_sequence<I...>) {
 	return std::make_tuple(std::get<I>(tuple).data()...);
 }
@@ -902,7 +903,7 @@ auto extract_buffer_pointers(Tuple& tuple) {
 
 template<typename T>
 struct CopyFunctor {
-	HOST DEVICE void operator()(size_t i, const T* src, T* dst) const {
+	HOST DEVICE void operator()(idx_t i, const T* src, T* dst) const {
 		dst[i] = src[i];
 	}
 };
@@ -910,7 +911,7 @@ struct CopyFunctor {
 template<typename T>
 struct FillFunctor {
 	T value;
-	HOST DEVICE void operator()(size_t i, T* out) const {
+	HOST DEVICE void operator()(idx_t i, T* out) const {
 		out[i] = value;
 	}
 };
@@ -965,7 +966,7 @@ class KernelChain {
 	explicit KernelChain(const Resource& resource) : resource_(resource) {}
 
 	template<typename InputTuple, typename OutputTuple, typename Functor, typename... Args>
-	KernelChain& then(size_t thread_count,
+	KernelChain& then(idx_t thread_count,
 					  InputTuple& inputs,
 					  OutputTuple& outputs,
 					  Functor&& kernel,
@@ -990,7 +991,7 @@ class KernelChain {
 	}
 
 	template<typename InputTuple, typename OutputTuple, typename... Args>
-	KernelChain& then(size_t thread_count,
+	KernelChain& then(idx_t thread_count,
 					  InputTuple& inputs,
 					  OutputTuple& outputs,
 					  const std::string& kernel_name,

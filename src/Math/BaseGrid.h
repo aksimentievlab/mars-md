@@ -25,11 +25,8 @@
 #include "Math/Matrix3.h"
 #include "Math/Types.h"
 #include "Math/Vector3.h"
+#include "IO/FileHandle.h"
 
-// Forward declaration for I/O
-namespace ARBD {
-class FileHandle;
-}
 
 namespace ARBD {
 
@@ -57,10 +54,10 @@ template<typename T = float>
 struct GridConfig {
 	Vector3_t<T> origin{0, 0, 0};		   ///< Origin point of the grid
 	Matrix3_t<T> basis{T(1)};			   ///< Basis vectors defining grid spacing
-	Vector3_t<size_t> dimensions{1, 1, 1}; ///< Grid dimensions (nx, ny, nz)
+	Vector3_t<idx_t> dimensions{1, 1, 1}; ///< Grid dimensions (nx, ny, nz)
 	BoundaryCondition boundary = BoundaryCondition::Periodic;
 
-	HOST DEVICE constexpr size_t total_size() const noexcept {
+	HOST DEVICE constexpr idx_t total_size() const noexcept {
 		return dimensions.x * dimensions.y * dimensions.z;
 	}
 
@@ -88,7 +85,7 @@ class BaseGrid {
 	using value_type = T;
 	using Vector3 = Vector3_t<T>;
 	using Matrix3 = Matrix3_t<T>;
-	using IndexType = size_t;
+	using IndexType = idx_t;
 
   private:
 	// Core grid data
@@ -130,8 +127,8 @@ class BaseGrid {
 	/**
 	 * @brief Primary constructor with full specification
 	 */
-	HOST BaseGrid(const Matrix3& basis, const Vector3& origin, size_t nx, size_t ny, size_t nz)
-		: config_{origin, basis, Vector3_t<size_t>(nx, ny, nz)} {
+	HOST BaseGrid(const Matrix3& basis, const Vector3& origin, idx_t nx, idx_t ny, idx_t nz)
+		: config_{origin, basis, Vector3_t<idx_t>(nx, ny, nz)} {
 
 		if (!config_.is_valid()) {
 			throw Exception(ExceptionType::ValueError,
@@ -158,11 +155,11 @@ class BaseGrid {
 		Vector3 abs_box{std::abs(box_size.x), std::abs(box_size.y), std::abs(box_size.z)};
 
 		// Calculate grid dimensions ensuring dx is upper bound for spacing
-		auto nx = static_cast<size_t>(std::max(1.0f, std::ceil(abs_box.x / abs_dx)));
-		auto ny = static_cast<size_t>(std::max(1.0f, std::ceil(abs_box.y / abs_dx)));
-		auto nz = static_cast<size_t>(std::max(1.0f, std::ceil(abs_box.z / abs_dx)));
+		auto nx = static_cast<idx_t>(std::max(1.0f, std::ceil(abs_box.x / abs_dx)));
+		auto ny = static_cast<idx_t>(std::max(1.0f, std::ceil(abs_box.y / abs_dx)));
+		auto nz = static_cast<idx_t>(std::max(1.0f, std::ceil(abs_box.z / abs_dx)));
 
-		config_.dimensions = Vector3_t<size_t>(nx, ny, nz);
+		config_.dimensions = Vector3_t<idx_t>(nx, ny, nz);
 		config_.basis = Matrix3(Vector3(abs_box.x / nx, 0, 0),
 								Vector3(0, abs_box.y / ny, 0),
 								Vector3(0, 0, abs_box.z / nz));
@@ -242,20 +239,20 @@ class BaseGrid {
 	/**
 	 * @brief Get grid dimensions
 	 */
-	HOST DEVICE const Vector3_t<size_t>& dimensions() const noexcept {
+	HOST DEVICE const Vector3_t<idx_t>& dimensions() const noexcept {
 		return config_.dimensions;
 	}
 
-	HOST DEVICE size_t nx() const noexcept {
+	HOST DEVICE idx_t nx() const noexcept {
 		return config_.dimensions.x;
 	}
-	HOST DEVICE size_t ny() const noexcept {
+	HOST DEVICE idx_t ny() const noexcept {
 		return config_.dimensions.y;
 	}
-	HOST DEVICE size_t nz() const noexcept {
+	HOST DEVICE idx_t nz() const noexcept {
 		return config_.dimensions.z;
 	}
-	HOST DEVICE size_t size() const noexcept {
+	HOST DEVICE idx_t size() const noexcept {
 		return config_.total_size();
 	}
 
@@ -279,15 +276,15 @@ class BaseGrid {
  * @brief Access grid values (host-only - uses std::vector)
  */
 #if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__)
-	HOST T& operator[](size_t index) {
+	HOST T& operator[](idx_t index) {
 		device_dirty_ = true;
 		return values_[index];
 	}
-	HOST const T& operator[](size_t index) const {
+	HOST const T& operator[](idx_t index) const {
 		return values_[index];
 	}
 
-	HOST T& at(size_t index) {
+	HOST T& at(idx_t index) {
 		if (index >= values_.size()) {
 			throw Exception(ExceptionType::ValueError,
 							SourceLocation(),
@@ -299,7 +296,7 @@ class BaseGrid {
 		return values_[index];
 	}
 
-	HOST const T& at(size_t index) const {
+	HOST const T& at(idx_t index) const {
 		if (index >= values_.size()) {
 			throw Exception(ExceptionType::ValueError,
 							SourceLocation(),
@@ -362,15 +359,15 @@ class BaseGrid {
 	/**
 	 * @brief Convert 3D indices to linear index
 	 */
-	HOST DEVICE size_t index(size_t ix, size_t iy, size_t iz) const noexcept {
+	HOST DEVICE idx_t index(idx_t ix, idx_t iy, idx_t iz) const noexcept {
 		return iz + iy * nz() + ix * ny() * nz();
 	}
 
 	/**
 	 * @brief Convert linear index to 3D indices using device-safe IndexList
 	 */
-	HOST DEVICE IndexList<size_t, 3> index_to_ijk(size_t linear_index) const {
-		IndexList<size_t, 3> result;
+	HOST DEVICE IndexList<idx_t, 3> index_to_ijk(idx_t linear_index) const {
+		IndexList<idx_t, 3> result;
 		result.add(linear_index / (ny() * nz())); // ix
 		result.add((linear_index / nz()) % ny()); // iy
 		result.add(linear_index % nz());		  // iz
@@ -380,7 +377,7 @@ class BaseGrid {
 	/**
 	 * @brief Get position in space from linear index
 	 */
-	HOST DEVICE Vector3 get_position(size_t linear_index) const {
+	HOST DEVICE Vector3 get_position(idx_t linear_index) const {
 		auto ijk = index_to_ijk(linear_index);
 		Vector3 grid_coords(static_cast<T>(ijk[0]), static_cast<T>(ijk[1]), static_cast<T>(ijk[2]));
 		return basis().transform(grid_coords) + origin();
@@ -479,7 +476,7 @@ class BaseGrid {
 							other.values_.size());
 		}
 
-		for (size_t i = 0; i < values_.size(); ++i) {
+		for (idx_t i = 0; i < values_.size(); ++i) {
 			values_[i] *= other.values_[i];
 		}
 		device_dirty_ = true;
@@ -625,7 +622,7 @@ class BaseGrid {
 	/**
 	 * @brief Get 3x3x3 neighborhood around a grid point (device-safe)
 	 */
-	HOST DEVICE NeighborList<T> get_neighbor_list(size_t ix, size_t iy, size_t iz) const {
+	HOST DEVICE NeighborList<T> get_neighbor_list(idx_t ix, idx_t iy, idx_t iz) const {
 #if (!defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__))
 		LOGINFO("get_neighbor_list: calling get_neighbor_list_from_grid");
 		return get_neighbor_list_from_grid(values_.data(), ix, iy, iz, config_.dimensions);
@@ -639,7 +636,7 @@ class BaseGrid {
 	/**
 	 * @brief Get neighbor value at relative offset (device-safe)
 	 */
-	HOST DEVICE T get_neighbor(size_t ix, size_t iy, size_t iz, int di, int dj, int dk) const {
+	HOST DEVICE T get_neighbor(idx_t ix, idx_t iy, idx_t iz, int di, int dj, int dk) const {
 #if (!defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__))
 		LOGINFO("get_neighbor on HOST: ix={}, iy={}, iz={}, di={}, dj={}, dk={}",
 				ix,
@@ -661,9 +658,9 @@ class BaseGrid {
 	HOST DEVICE T get_neighbor_at_position(const Vector3& world_pos, int di, int dj, int dk) const {
 		const Vector3 grid_pos = transform_to_grid(world_pos);
 
-		const size_t ix = static_cast<size_t>(grid_pos.x);
-		const size_t iy = static_cast<size_t>(grid_pos.y);
-		const size_t iz = static_cast<size_t>(grid_pos.z);
+		const idx_t ix = static_cast<idx_t>(grid_pos.x);
+		const idx_t iy = static_cast<idx_t>(grid_pos.y);
+		const idx_t iz = static_cast<idx_t>(grid_pos.z);
 
 		return get_neighbor(ix, iy, iz, di, dj, dk);
 	}
@@ -681,7 +678,7 @@ class BaseGrid {
 												const Vector3_t<U>& world_pos,
 												const Vector3_t<U>& origin,
 												const Matrix3_t<U>& basis_inv,
-												const Vector3_t<size_t>& dimensions);
+												const Vector3_t<idx_t>& dimensions);
 
 	/**
 	 * @brief Device-safe nearest point sampling
@@ -691,7 +688,7 @@ class BaseGrid {
 										   const Vector3_t<U>& world_pos,
 										   const Vector3_t<U>& origin,
 										   const Matrix3_t<U>& basis_inv,
-										   const Vector3_t<size_t>& dimensions);
+										   const Vector3_t<idx_t>& dimensions);
 
 	/**
 	 * @brief Device-safe gradient computation
@@ -702,35 +699,35 @@ class BaseGrid {
 													 const Vector3_t<U>& origin,
 													 const Matrix3_t<U>& basis,
 													 const Matrix3_t<U>& basis_inv,
-													 const Vector3_t<size_t>& dimensions);
+													 const Vector3_t<idx_t>& dimensions);
 
 	/**
 	 * @brief Device-safe neighbor list extraction
 	 */
 	template<typename U>
 	friend HOST DEVICE auto get_neighbor_list_from_grid(const U* grid_values,
-														size_t ix,
-														size_t iy,
-														size_t iz,
-														const Vector3_t<size_t>& dimensions);
+														idx_t ix,
+														idx_t iy,
+														idx_t iz,
+														const Vector3_t<idx_t>& dimensions);
 
 	/**
 	 * @brief Device-safe single neighbor access
 	 */
 	template<typename U>
 	friend HOST DEVICE U get_neighbor_from_grid(const U* grid_values,
-												size_t ix,
-												size_t iy,
-												size_t iz,
+												idx_t ix,
+												idx_t iy,
+												idx_t iz,
 												int di,
 												int dj,
 												int dk,
-												const Vector3_t<size_t>& dimensions);
+												const Vector3_t<idx_t>& dimensions);
 
 	/**
 	 * @brief Device-safe index wrapping for periodic boundaries
 	 */
-	friend HOST DEVICE size_t wrap_index(int index, size_t size);
+	friend HOST DEVICE idx_t wrap_index(int index, idx_t size);
 
 	/*===================*\
 	|  I/O OPERATIONS     |
@@ -776,13 +773,13 @@ HOST DEVICE T interpolate_grid_point(const T* grid_values,
 									 const Vector3_t<T>& world_pos,
 									 const Vector3_t<T>& origin,
 									 const Matrix3_t<T>& basis_inv,
-									 const Vector3_t<size_t>& dimensions) {
+									 const Vector3_t<idx_t>& dimensions) {
 	// Transform world position to grid coordinates
 	const Vector3_t<T> grid_pos = basis_inv.transform(world_pos - origin);
 
-	const size_t nx = dimensions.x;
-	const size_t ny = dimensions.y;
-	const size_t nz = dimensions.z;
+	const idx_t nx = dimensions.x;
+	const idx_t ny = dimensions.y;
+	const idx_t nz = dimensions.z;
 
 	// Check bounds
 	if (grid_pos.x < 0 || grid_pos.x >= nx || grid_pos.y < 0 || grid_pos.y >= ny ||
@@ -791,27 +788,27 @@ HOST DEVICE T interpolate_grid_point(const T* grid_values,
 	}
 
 	// Linear interpolation
-	const size_t i0 = static_cast<size_t>(grid_pos.x);
-	const size_t j0 = static_cast<size_t>(grid_pos.y);
-	const size_t k0 = static_cast<size_t>(grid_pos.z);
+	const idx_t i0 = static_cast<idx_t>(grid_pos.x);
+	const idx_t j0 = static_cast<idx_t>(grid_pos.y);
+	const idx_t k0 = static_cast<idx_t>(grid_pos.z);
 
-	const size_t i1 = i0 + 1;
-	const size_t j1 = j0 + 1;
-	const size_t k1 = k0 + 1;
+	const idx_t i1 = i0 + 1;
+	const idx_t j1 = j0 + 1;
+	const idx_t k1 = k0 + 1;
 
 	const T fx = grid_pos.x - static_cast<T>(i0);
 	const T fy = grid_pos.y - static_cast<T>(j0);
 	const T fz = grid_pos.z - static_cast<T>(k0);
 
 	// Get grid indices using consistent indexing
-	const size_t idx000 = k0 + j0 * nz + i0 * ny * nz;
-	const size_t idx001 = k1 + j0 * nz + i0 * ny * nz;
-	const size_t idx010 = k0 + j1 * nz + i0 * ny * nz;
-	const size_t idx011 = k1 + j1 * nz + i0 * ny * nz;
-	const size_t idx100 = k0 + j0 * nz + i1 * ny * nz;
-	const size_t idx101 = k1 + j0 * nz + i1 * ny * nz;
-	const size_t idx110 = k0 + j1 * nz + i1 * ny * nz;
-	const size_t idx111 = k1 + j1 * nz + i1 * ny * nz;
+	const idx_t idx000 = k0 + j0 * nz + i0 * ny * nz;
+	const idx_t idx001 = k1 + j0 * nz + i0 * ny * nz;
+	const idx_t idx010 = k0 + j1 * nz + i0 * ny * nz;
+	const idx_t idx011 = k1 + j1 * nz + i0 * ny * nz;
+	const idx_t idx100 = k0 + j0 * nz + i1 * ny * nz;
+	const idx_t idx101 = k1 + j0 * nz + i1 * ny * nz;
+	const idx_t idx110 = k0 + j1 * nz + i1 * ny * nz;
+	const idx_t idx111 = k1 + j1 * nz + i1 * ny * nz;
 
 	// Trilinear interpolation
 	const T v000 = grid_values[idx000];
@@ -842,21 +839,21 @@ HOST DEVICE T get_value_nearest(const T* grid_values,
 								const Vector3_t<T>& world_pos,
 								const Vector3_t<T>& origin,
 								const Matrix3_t<T>& basis_inv,
-								const Vector3_t<size_t>& dimensions) {
+								const Vector3_t<idx_t>& dimensions) {
 	// Transform to grid coordinates
 	const Vector3_t<T> grid_pos = basis_inv.transform(world_pos - origin);
 
 	// Find nearest grid point
-	const size_t ix = static_cast<size_t>(grid_pos.x + T{0.5});
-	const size_t iy = static_cast<size_t>(grid_pos.y + T{0.5});
-	const size_t iz = static_cast<size_t>(grid_pos.z + T{0.5});
+	const idx_t ix = static_cast<idx_t>(grid_pos.x + T{0.5});
+	const idx_t iy = static_cast<idx_t>(grid_pos.y + T{0.5});
+	const idx_t iz = static_cast<idx_t>(grid_pos.z + T{0.5});
 
 	// Wrap for periodic boundaries (simple modulo)
-	const size_t wrapped_ix = ix % dimensions.x;
-	const size_t wrapped_iy = iy % dimensions.y;
-	const size_t wrapped_iz = iz % dimensions.z;
+	const idx_t wrapped_ix = ix % dimensions.x;
+	const idx_t wrapped_iy = iy % dimensions.y;
+	const idx_t wrapped_iz = iz % dimensions.z;
 
-	const size_t linear_idx =
+	const idx_t linear_idx =
 		wrapped_iz + wrapped_iy * dimensions.z + wrapped_ix * dimensions.y * dimensions.z;
 	return grid_values[linear_idx];
 }
@@ -870,12 +867,12 @@ HOST DEVICE Vector3_t<T> compute_gradient(const T* grid_values,
 										  const Vector3_t<T>& origin,
 										  const Matrix3_t<T>& basis,
 										  const Matrix3_t<T>& basis_inv,
-										  const Vector3_t<size_t>& dimensions) {
+										  const Vector3_t<idx_t>& dimensions) {
 	const Vector3_t<T> grid_pos = basis_inv.transform(world_pos - origin);
 
-	const size_t nx = dimensions.x;
-	const size_t ny = dimensions.y;
-	const size_t nz = dimensions.z;
+	const idx_t nx = dimensions.x;
+	const idx_t ny = dimensions.y;
+	const idx_t nz = dimensions.z;
 
 	// Check if we're in bounds for gradient calculation
 	if (grid_pos.x < 1 || grid_pos.x >= nx - 1 || grid_pos.y < 1 || grid_pos.y >= ny - 1 ||
@@ -883,17 +880,17 @@ HOST DEVICE Vector3_t<T> compute_gradient(const T* grid_values,
 		return Vector3_t<T>{T{0}, T{0}, T{0}};
 	}
 
-	const size_t i = static_cast<size_t>(grid_pos.x);
-	const size_t j = static_cast<size_t>(grid_pos.y);
-	const size_t k = static_cast<size_t>(grid_pos.z);
+	const idx_t i = static_cast<idx_t>(grid_pos.x);
+	const idx_t j = static_cast<idx_t>(grid_pos.y);
+	const idx_t k = static_cast<idx_t>(grid_pos.z);
 
 	// Central differences
-	const size_t idx_xp = k + j * nz + (i + 1) * ny * nz;
-	const size_t idx_xm = k + j * nz + (i - 1) * ny * nz;
-	const size_t idx_yp = k + (j + 1) * nz + i * ny * nz;
-	const size_t idx_ym = k + (j - 1) * nz + i * ny * nz;
-	const size_t idx_zp = (k + 1) + j * nz + i * ny * nz;
-	const size_t idx_zm = (k - 1) + j * nz + i * ny * nz;
+	const idx_t idx_xp = k + j * nz + (i + 1) * ny * nz;
+	const idx_t idx_xm = k + j * nz + (i - 1) * ny * nz;
+	const idx_t idx_yp = k + (j + 1) * nz + i * ny * nz;
+	const idx_t idx_ym = k + (j - 1) * nz + i * ny * nz;
+	const idx_t idx_zp = (k + 1) + j * nz + i * ny * nz;
+	const idx_t idx_zm = (k - 1) + j * nz + i * ny * nz;
 
 	const T dx_grid = (grid_values[idx_xp] - grid_values[idx_xm]) / T{2};
 	const T dy_grid = (grid_values[idx_yp] - grid_values[idx_ym]) / T{2};
@@ -906,28 +903,28 @@ HOST DEVICE Vector3_t<T> compute_gradient(const T* grid_values,
 /**
  * @brief Device-safe index wrapping for periodic boundaries
  */
-HOST DEVICE inline size_t wrap_index(int index, size_t size) {
+HOST DEVICE inline idx_t wrap_index(int index, idx_t size) {
 	if (index < 0) {
-		return static_cast<size_t>(index + static_cast<int>(size) *
+		return static_cast<idx_t>(index + static_cast<int>(size) *
 											   ((-index / static_cast<int>(size)) + 1)) %
 			   size;
 	}
-	return static_cast<size_t>(index) % size;
+	return static_cast<idx_t>(index) % size;
 }
 /**
  * @brief Device-safe neighbor list extraction (works with raw pointers)
  */
 template<typename T>
 HOST DEVICE auto get_neighbor_list_from_grid(const T* grid_values,
-											 size_t ix,
-											 size_t iy,
-											 size_t iz,
-											 const Vector3_t<size_t>& dimensions) {
+											 idx_t ix,
+											 idx_t iy,
+											 idx_t iz,
+											 const Vector3_t<idx_t>& dimensions) {
 	typename BaseGrid<T>::template NeighborList<T> neighbors;
 
-	const size_t nx_val = dimensions.x;
-	const size_t ny_val = dimensions.y;
-	const size_t nz_val = dimensions.z;
+	const idx_t nx_val = dimensions.x;
+	const idx_t ny_val = dimensions.y;
+	const idx_t nz_val = dimensions.z;
 
 #if (!defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__))
 	LOGINFO("get_neighbor_list_from_grid: ix={}, iy={}, iz={}, nx={}, ny={}, nz={}",
@@ -944,11 +941,11 @@ HOST DEVICE auto get_neighbor_list_from_grid(const T* grid_values,
 		for (int dj = -1; dj <= 1; ++dj) {
 			for (int dk = -1; dk <= 1; ++dk) {
 				// Calculate neighbor indices with wrapping
-				const size_t ni = wrap_index(static_cast<int>(ix) + di, nx_val);
-				const size_t nj = wrap_index(static_cast<int>(iy) + dj, ny_val);
-				const size_t nk = wrap_index(static_cast<int>(iz) + dk, nz_val);
+				const idx_t ni = wrap_index(static_cast<int>(ix) + di, nx_val);
+				const idx_t nj = wrap_index(static_cast<int>(iy) + dj, ny_val);
+				const idx_t nk = wrap_index(static_cast<int>(iz) + dk, nz_val);
 
-				const size_t neighbor_idx = nk + nj * nz_val + ni * ny_val * nz_val;
+				const idx_t neighbor_idx = nk + nj * nz_val + ni * ny_val * nz_val;
 				const T value = grid_values[neighbor_idx];
 				neighbors.v[di + 1][dj + 1][dk + 1] = value;
 
@@ -978,18 +975,18 @@ HOST DEVICE auto get_neighbor_list_from_grid(const T* grid_values,
  */
 template<typename T>
 HOST DEVICE T get_neighbor_from_grid(const T* grid_values,
-									 size_t ix,
-									 size_t iy,
-									 size_t iz,
+									 idx_t ix,
+									 idx_t iy,
+									 idx_t iz,
 									 int di,
 									 int dj,
 									 int dk,
-									 const Vector3_t<size_t>& dimensions) {
-	const size_t ni = wrap_index(static_cast<int>(ix) + di, dimensions.x);
-	const size_t nj = wrap_index(static_cast<int>(iy) + dj, dimensions.y);
-	const size_t nk = wrap_index(static_cast<int>(iz) + dk, dimensions.z);
+									 const Vector3_t<idx_t>& dimensions) {
+	const idx_t ni = wrap_index(static_cast<int>(ix) + di, dimensions.x);
+	const idx_t nj = wrap_index(static_cast<int>(iy) + dj, dimensions.y);
+	const idx_t nk = wrap_index(static_cast<int>(iz) + dk, dimensions.z);
 
-	const size_t neighbor_idx = nk + nj * dimensions.z + ni * dimensions.y * dimensions.z;
+	const idx_t neighbor_idx = nk + nj * dimensions.z + ni * dimensions.y * dimensions.z;
 	return grid_values[neighbor_idx];
 }
 

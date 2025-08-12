@@ -9,7 +9,8 @@
  *          to factory methods. The virtual method
  *          `BasePatchOp::compute(Patch* patch)` is called by
  *          `patch->compute()` by any Patch to which the PatchOp has
- *          been added.
+ *          been added.'
+ * @todo: Implement neighbour list (v1 cell decomposition) 
  *********************************************************************/
 
 #pragma once
@@ -25,10 +26,10 @@ class BasePatch {
 	friend CellDecomposer;
 
   public:
-	// BasePatch(size_t num, short thread_id, short gpu_id, SimSystem& sys);
-	// BasePatch(size_t num, short thread_id, short gpu_id);
+	// BasePatch(idx_t num, short thread_id, short gpu_id, SimSystem& sys);
+	// BasePatch(idx_t num, short thread_id, short gpu_id);
 	BasePatch() : num(0), capacity(0), patch_idx(++global_patch_idx) {}
-	BasePatch(size_t capacity) : num(0), capacity(capacity), patch_idx(++global_patch_idx) {}
+	BasePatch(idx_t capacity) : num(0), capacity(capacity), patch_idx(++global_patch_idx) {}
 
 	// Copy constructor
 	BasePatch(const BasePatch& other)
@@ -57,6 +58,12 @@ class BasePatch {
 		// upper_bound = std::move(other.upper_bound);
 		return *this;
 	}
+
+	~BasePatch() {
+		LOGTRACE("Destroying {} @{}",
+				 type_name<decltype(*this)>().c_str(),
+				 static_cast<void*>(this));
+	}
 	struct Metadata {
 		Metadata() : num(0), capacity(0), min(0), max(0), data(){};
 		Metadata(const BasePatch& p)
@@ -65,8 +72,8 @@ class BasePatch {
 		Metadata(const Metadata& other)
 			: num(other.num), capacity(other.capacity), min(other.min), max(other.max),
 			  data(other.data){};
-		size_t num;
-		size_t capacity;
+		idx_t num;
+		idx_t capacity;
 		Vector3 min;
 		Vector3 max;
 	};
@@ -104,16 +111,16 @@ class BasePatch {
 	// ~BasePatch();
 
   protected:
-	size_t capacity;
-	size_t num;
+	idx_t capacity;
+	idx_t num;
 
 	// short thread_id;		// MPI
 	// short gpu_id;		// -1 if GPU unavailable
 
-	static size_t global_patch_idx; // Unique ID across ranks // TODO: preallocate
+	static idx_t global_patch_idx; // Unique ID across ranks // TODO: preallocate
 									// regions that will be used, or offload this
 									// to a parallel singleton class
-	size_t patch_idx;				// Unique ID across ranks
+	idx_t patch_idx;				// Unique ID across ranks
 
 	// Q: should we have different kinds of patches? E.g. Spheres? This
 	// specialization _could_ go into subclass, or we could have a ptr to a Region

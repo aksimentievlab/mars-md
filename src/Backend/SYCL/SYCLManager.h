@@ -3,6 +3,7 @@
 #ifdef USE_SYCL
 #include "ARBDException.h"
 #include "ARBDLogger.h"
+#include "Backend/Header.h"
 #include <array>
 #include <chrono>
 #include <iostream>
@@ -74,13 +75,13 @@ template<typename T>
 class DeviceMemory {
   private:
 	T* ptr_{nullptr};
-	size_t size_{0};
+	idx_t size_{0};
 	sycl::queue* queue_{nullptr};
 
   public:
 	DeviceMemory() = default;
 
-	explicit DeviceMemory(sycl::queue& q, size_t count) : queue_(&q), size_(count) {
+	explicit DeviceMemory(sycl::queue& q, idx_t count) : queue_(&q), size_(count) {
 		if (count > 0) {
 			SYCL_CHECK(ptr_ = sycl::malloc_device<T>(count, *queue_));
 			if (!ptr_) {
@@ -152,7 +153,7 @@ class DeviceMemory {
 	[[nodiscard]] const T* get() const noexcept {
 		return ptr_;
 	}
-	[[nodiscard]] size_t size() const noexcept {
+	[[nodiscard]] idx_t size() const noexcept {
 		return size_;
 	}
 	[[nodiscard]] sycl::queue* queue() const noexcept {
@@ -444,7 +445,7 @@ class Event {
  */
 class Manager {
   public:
-	static constexpr size_t NUM_QUEUES = 8;
+	static constexpr idx_t NUM_QUEUES = 8;
 
 	/**
 	 * @brief Individual SYCL device management class
@@ -484,11 +485,11 @@ class Manager {
 		Device(Device&&) = default;
 		Device& operator=(Device&&) = default;
 
-		[[nodiscard]] Queue& get_queue(size_t queue_id) {
+		[[nodiscard]] Queue& get_queue(idx_t queue_id) {
 			return queues_[queue_id % NUM_QUEUES];
 		}
 
-		[[nodiscard]] const Queue& get_queue(size_t queue_id) const {
+		[[nodiscard]] const Queue& get_queue(idx_t queue_id) const {
 			return queues_[queue_id % NUM_QUEUES];
 		}
 
@@ -515,16 +516,16 @@ class Manager {
 		[[nodiscard]] const std::string& version() const noexcept {
 			return version_;
 		}
-		[[nodiscard]] size_t max_work_group_size() const noexcept {
+		[[nodiscard]] idx_t max_work_group_size() const noexcept {
 			return max_work_group_size_;
 		}
-		[[nodiscard]] size_t max_compute_units() const noexcept {
+		[[nodiscard]] idx_t max_compute_units() const noexcept {
 			return max_compute_units_;
 		}
-		[[nodiscard]] size_t global_mem_size() const noexcept {
+		[[nodiscard]] idx_t global_mem_size() const noexcept {
 			return global_mem_size_;
 		}
-		[[nodiscard]] size_t local_mem_size() const noexcept {
+		[[nodiscard]] idx_t local_mem_size() const noexcept {
 			return local_mem_size_;
 		}
 		[[nodiscard]] bool is_cpu() const noexcept {
@@ -555,10 +556,10 @@ class Manager {
 		std::string name_;
 		std::string vendor_;
 		std::string version_;
-		size_t max_work_group_size_;
-		size_t max_compute_units_;
-		size_t global_mem_size_;
-		size_t local_mem_size_;
+		idx_t max_work_group_size_;
+		idx_t max_compute_units_;
+		idx_t global_mem_size_;
+		idx_t local_mem_size_;
 		bool is_cpu_;
 		bool is_gpu_;
 		bool is_accelerator_;
@@ -578,7 +579,7 @@ class Manager {
 	static void prefer_device_type(sycl::info::device_type type);
 	static void finalize();
 
-	[[nodiscard]] static size_t all_device_size() noexcept {
+	[[nodiscard]] static idx_t all_device_size() noexcept {
 		return all_devices_.size();
 	}
 	[[nodiscard]] static const std::vector<Device>& all_devices() noexcept {

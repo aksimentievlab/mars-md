@@ -146,7 +146,7 @@ int main(int argc, char* argv[]) {
                     // For Week 1, it might be a default constructor.
 
     // The main simulation run is commented out for Week 1
-    // std::cout << "Starting simulation (stubbed for Week 1)..." << std::endl;
+    // std::cout << "Starting simulation ..." << std::endl;
     // sim.run();
     // std::cout << "Simulation finished (stubbed)." << std::endl;
 

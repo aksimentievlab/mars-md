@@ -4,8 +4,6 @@
 #include "ARBDLogger.h"
 #include "Backend/Buffer.h"
 #include "Math/IndexList.h"
-#include "Objects/BasePatch.h"
-// #include "Objects/Particles/ParticlePatch.h"
 #include "Math/Types.h"
 
 // Class providing a description of a simulation system, including composition, coordinates,
@@ -24,13 +22,12 @@ struct Length {
 struct ResourceCollection {
 	std::vector<Resource> resources;
 };
-class Patch;
 
 class BoundaryConditions {
 
   public:
 	BoundaryConditions()
-		: origin(0, 0, 0), basis{Vector3(5000, 0, 0), Vector3(0, 5000, 0), Vector3(0, 0, 5000)},
+		: origin(0,0,0), basis{Vector3(5000, 0, 0), Vector3(0, 5000, 0), Vector3(0, 0, 5000)},
 		  periodic{true, true, true} {
 		// do things
 		LOGINFO("BoundaryConditions()");
@@ -61,18 +58,23 @@ class BoundaryConditions {
  * Q2: Should this also be the object that converts
  * SymbolicPatchOps to concrete PatchOp? Probably because this object should be the only one aware
  * of the details of the decomposition
+ *
+ * Q3: Neighbour list for in-GPU decomposition, Halo exchange for inter-GPU or inter-node.
+ *
  */
 
+
 class SimSystem {
-	// friend class CellDecomposer;
+//friend class CellDecomposer;
   public:
 	struct Conf {
-		enum Decomposer { CellDecomp, LoadBalance, AMR };
-		enum Periodicity { AllPeriodic, Free, OneDimensional, TwoDimensional };
-		enum Algorithm { BD, MD };
+		//enum Decomposer { CellDecomp };
+		enum Periodicity { AllPeriodic, OneDimensional, TwoDimensional, Open};
+		enum Algorithm { BD, Langevin,DPD }; //BAOAB for Langevin, possibly BK12?
+		enum Reaction { None, Reaction };
 
 		Temperature temperature;
-		Decomposer decomp;
+		//Decomposer decomp;
 		Periodicity periodicity;
 		const float cell_lengths[3];
 		const float cutoff;
@@ -81,20 +83,11 @@ class SimSystem {
 	};
 
 	inline static constexpr Conf default_conf =
-		Conf{290.0f, Conf::CellDecomp, Conf::AllPeriodic, {5000.0f, 5000.0f, 5000.0f}, 50.0f};
+		Conf{290.0f, Conf::AllPeriodic, {5000.0f, 5000.0f, 5000.0f}, 50.0f};
 
 	SimSystem() : SimSystem(default_conf) {}
 	// temperature(291.0f), decomp(), boundary_conditions() {}
 	SimSystem(const Conf& conf) : temperature(conf.temperature), cutoff(conf.cutoff) {
-
-		switch (conf.decomp) {
-		case Conf::CellDecomp:
-			CellDecomposer CellDecomp;
-			decomp = static_cast<Decomposer>(CellDecomp);
-			break;
-		default:
-			throw_value_error("SimSystem::GetIntegrator: Unrecognized CellDecomp type; exiting");
-		}
 
 		// Set up boundary_conditions
 		switch (conf.periodicity) {
@@ -112,6 +105,7 @@ class SimSystem {
 	}
 	SimSystem(Temperature& temp, Decomposer& decomp, BoundaryConditions boundary_conditions)
 		: temperature(temp), decomp(decomp), boundary_conditions(boundary_conditions) {}
+	
 
 	void use_decomposer(Decomposer& d) {
 		decomp = d;

@@ -14,6 +14,7 @@
 #include "Backend/Header.h"
 
 namespace ARBD {
+
 template<typename T>
 concept Demangable = requires { typeid(T).name(); };
 
@@ -21,7 +22,6 @@ template<typename T>
 concept HasTypeid = requires {
 	typename T::value_type; // Example: for container types
 } || std::is_fundamental_v<T>;
-
 
 namespace detail {
 template<typename T>
@@ -70,7 +70,7 @@ inline std::string demangle_name(const char* mangled_name) {
 		&std::free};
 	return (status == 0 && demangled) ? demangled.get() : mangled_name;
 #else
-	return mangled_name; 
+	return mangled_name;
 #endif
 }
 
