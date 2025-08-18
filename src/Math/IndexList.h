@@ -25,20 +25,20 @@ namespace ARBD {
  * This replaces the std::vector-based implementation to work on GPU devices.
  * Uses stack-allocated array with compile-time maximum size.
  *
- * @tparam T Index type (typically int, size_t)
+ * @tparam T Index type (typically int, idx_t)
  * @tparam MaxSize Maximum number of indices that can be stored
  */
-template<typename T = int, size_t MaxSize = 32>
+template<typename T = int, idx_t MaxSize = 32>
 class IndexList {
   public:
 	using value_type = T;
-	using size_type = size_t;
+	using idx_type = idx_t;
 
 	static_assert(MaxSize > 0, "IndexList MaxSize must be positive");
 
   private:
 	T data_[MaxSize]; ///< Fixed-size array for device compatibility
-	size_t size_ = 0; ///< Current number of elements
+	idx_t size_ = 0; ///< Current number of elements
 
   public:
 	/*===================*\
@@ -48,7 +48,7 @@ class IndexList {
 	HOST DEVICE constexpr IndexList() = default;
 
 	HOST DEVICE constexpr IndexList(const IndexList& other) : size_(other.size_) {
-		for (size_t i = 0; i < size_; ++i) {
+		for (idx_t i = 0; i < size_; ++i) {
 			data_[i] = other.data_[i];
 		}
 	}
@@ -56,7 +56,7 @@ class IndexList {
 	HOST DEVICE constexpr IndexList& operator=(const IndexList& other) {
 		if (this != &other) {
 			size_ = other.size_;
-			for (size_t i = 0; i < size_; ++i) {
+			for (idx_t i = 0; i < size_; ++i) {
 				data_[i] = other.data_[i];
 			}
 		}
@@ -80,19 +80,19 @@ class IndexList {
 	|  CAPACITY           |
 	\*===================*/
 
-	HOST DEVICE constexpr size_t size() const noexcept {
+	HOST DEVICE constexpr idx_t size() const noexcept {
 		return size_;
 	}
-	HOST DEVICE constexpr size_t length() const noexcept {
+	HOST DEVICE constexpr idx_t length() const noexcept {
 		return size_;
 	}
 	HOST DEVICE constexpr bool empty() const noexcept {
 		return size_ == 0;
 	}
-	HOST DEVICE constexpr size_t capacity() const noexcept {
+	HOST DEVICE constexpr idx_t capacity() const noexcept {
 		return MaxSize;
 	}
-	HOST DEVICE constexpr size_t max_size() const noexcept {
+	HOST DEVICE constexpr idx_t max_size() const noexcept {
 		return MaxSize;
 	}
 	HOST DEVICE constexpr bool full() const noexcept {
@@ -103,14 +103,14 @@ class IndexList {
 	|  ELEMENT ACCESS     |
 	\*===================*/
 
-	HOST DEVICE constexpr T& operator[](size_t i) noexcept {
+	HOST DEVICE constexpr T& operator[](idx_t i) noexcept {
 		return data_[i];
 	}
-	HOST DEVICE constexpr const T& operator[](size_t i) const noexcept {
+	HOST DEVICE constexpr const T& operator[](idx_t i) const noexcept {
 		return data_[i];
 	}
 
-	HOST DEVICE constexpr T get(size_t i) const noexcept {
+	HOST DEVICE constexpr T get(idx_t i) const noexcept {
 		return i < size_ ? data_[i] : T{};
 	}
 
@@ -155,7 +155,7 @@ class IndexList {
 	 */
 	HOST DEVICE constexpr bool add(const IndexList& other) noexcept {
 		if (size_ + other.size_ <= MaxSize) {
-			for (size_t i = 0; i < other.size_; ++i) {
+			for (idx_t i = 0; i < other.size_; ++i) {
 				data_[size_ + i] = other.data_[i];
 			}
 			size_ += other.size_;
@@ -189,12 +189,12 @@ class IndexList {
 	/**
 	 * @brief Remove element at specific position
 	 */
-	HOST DEVICE constexpr bool erase(size_t pos) noexcept {
+	HOST DEVICE constexpr bool erase(idx_t pos) noexcept {
 		if (pos >= size_)
 			return false;
 
 		// Shift elements left
-		for (size_t i = pos; i < size_ - 1; ++i) {
+		for (idx_t i = pos; i < size_ - 1; ++i) {
 			data_[i] = data_[i + 1];
 		}
 		--size_;
@@ -205,7 +205,7 @@ class IndexList {
 	 * @brief Remove first occurrence of value
 	 */
 	HOST DEVICE constexpr bool remove(T value) noexcept {
-		for (size_t i = 0; i < size_; ++i) {
+		for (idx_t i = 0; i < size_; ++i) {
 			if (data_[i] == value) {
 				return erase(i);
 			}
@@ -221,8 +221,8 @@ class IndexList {
 	 * @brief Find first occurrence of value
 	 * @return Index of element, or MaxSize if not found
 	 */
-	HOST DEVICE constexpr size_t find(T value) const noexcept {
-		for (size_t i = 0; i < size_; ++i) {
+	HOST DEVICE constexpr idx_t find(T value) const noexcept {
+		for (idx_t i = 0; i < size_; ++i) {
 			if (data_[i] == value) {
 				return i;
 			}
@@ -244,13 +244,13 @@ class IndexList {
 	/**
 	 * @brief Get subrange as new IndexList
 	 */
-	HOST DEVICE constexpr IndexList range(size_t start, size_t end) const noexcept {
+	HOST DEVICE constexpr IndexList range(idx_t start, idx_t end) const noexcept {
 		IndexList result;
 		if (start >= size_ || start >= end)
 			return result;
 
-		const size_t actual_end = (end > size_) ? size_ : end;
-		for (size_t i = start; i < actual_end && result.size_ < MaxSize; ++i) {
+		const idx_t actual_end = (end > size_) ? size_ : end;
+		for (idx_t i = start; i < actual_end && result.size_ < MaxSize; ++i) {
 			result.data_[result.size_++] = data_[i];
 		}
 		return result;
@@ -265,8 +265,8 @@ class IndexList {
 	 */
 	HOST DEVICE constexpr void sort() noexcept {
 		// Simple bubble sort for device compatibility
-		for (size_t i = 0; i < size_; ++i) {
-			for (size_t j = 0; j < size_ - 1 - i; ++j) {
+		for (idx_t i = 0; i < size_; ++i) {
+			for (idx_t j = 0; j < size_ - 1 - i; ++j) {
 				if (data_[j] > data_[j + 1]) {
 					T temp = data_[j];
 					data_[j] = data_[j + 1];
@@ -283,8 +283,8 @@ class IndexList {
 		if (size_ <= 1)
 			return;
 
-		size_t write_pos = 1;
-		for (size_t read_pos = 1; read_pos < size_; ++read_pos) {
+		idx_t write_pos = 1;
+		for (idx_t read_pos = 1; read_pos < size_; ++read_pos) {
 			if (data_[read_pos] != data_[write_pos - 1]) {
 				data_[write_pos++] = data_[read_pos];
 			}
@@ -309,7 +309,7 @@ class IndexList {
 			return T{};
 
 		T min_val = data_[0];
-		for (size_t i = 1; i < size_; ++i) {
+		for (idx_t i = 1; i < size_; ++i) {
 			if (data_[i] < min_val) {
 				min_val = data_[i];
 			}
@@ -322,7 +322,7 @@ class IndexList {
 			return T{};
 
 		T max_val = data_[0];
-		for (size_t i = 1; i < size_; ++i) {
+		for (idx_t i = 1; i < size_; ++i) {
 			if (data_[i] > max_val) {
 				max_val = data_[i];
 			}
@@ -362,7 +362,7 @@ class IndexList {
 		if (size_ != other.size_)
 			return false;
 
-		for (size_t i = 0; i < size_; ++i) {
+		for (idx_t i = 0; i < size_; ++i) {
 			if (data_[i] != other.data_[i])
 				return false;
 		}
@@ -387,7 +387,7 @@ class IndexList {
 			return "IndexList[]";
 
 		std::string result = "IndexList[";
-		for (size_t i = 0; i < size_; ++i) {
+		for (idx_t i = 0; i < size_; ++i) {
 			if (i > 0)
 				result += ", ";
 			result += std::to_string(data_[i]);
@@ -399,11 +399,11 @@ class IndexList {
 	/**
 	 * @brief Append from C-style array (host only)
 	 */
-	bool append(const T* values, size_t count) {
+	bool append(const T* values, idx_t count) {
 		if (size_ + count > MaxSize)
 			return false;
 
-		for (size_t i = 0; i < count; ++i) {
+		for (idx_t i = 0; i < count; ++i) {
 			data_[size_ + i] = values[i];
 		}
 		size_ += count;
@@ -418,18 +418,18 @@ class IndexList {
 \*===================*/
 
 // Common type aliases with different capacities
-template<size_t N = 32>
+template<idx_t N = 32>
 using IntIndexList = IndexList<int, N>;
-template<size_t N = 32>
-using SizeIndexList = IndexList<size_t, N>;
-template<size_t N = 128>
-using NeighborList = IndexList<size_t, N>; // Larger for neighbor lists
-template<size_t N = 16>
+template<idx_t N = 32>
+using SizeIndexList = IndexList<idx_t, N>;
+template<idx_t N = 128>
+using NeighborList = IndexList<idx_t, N>; // Larger for neighbor lists
+template<idx_t N = 16>
 using SmallIndexList = IndexList<int, N>; // Smaller for simple cases
 
 // Default aliases (backward compatibility)
 using DefaultIndexList = IndexList<int, 32>;
-using ParticleIndexList = IndexList<size_t, 64>;
+using ParticleIndexList = IndexList<idx_t, 64>;
 
 /*===================*\
 |  HELPER FUNCTIONS   |

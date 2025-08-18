@@ -5,6 +5,12 @@
  *********************************************************************/
  #pragma once
 
+ // Suppress narrowing conversion warnings
+ #ifdef __clang__
+ #pragma clang diagnostic push
+ #pragma clang diagnostic ignored "-Wc++11-narrowing"
+ #endif
+
  // Metal-specific implementation
  #ifdef __METAL_VERSION__
  #include "METAL/Vector3.h"
@@ -54,7 +60,7 @@
  template<typename T>
  class alignas(4 * sizeof(T)) Vector3_t {
  public:
-	 // Constructors - simplified without noexcept and concepts
+	 // Constructors
 	 HOST DEVICE constexpr Vector3_t() : x(T(0)), y(T(0)), z(T(0)), w(T(0)) {}
 	 HOST DEVICE constexpr Vector3_t(T s) : x(s), y(s), z(s), w(s) {}
 	 HOST DEVICE constexpr Vector3_t(const Vector3_t<T>& v) : x(v.x), y(v.y), z(v.z), w(v.w) {}
@@ -307,19 +313,19 @@
  }
  
  // Helpful index conversion routines
- HOST DEVICE inline Vector3_t<size_t> index_to_ijk(size_t idx, size_t nx, size_t ny, size_t nz) {
-	 Vector3_t<size_t> res;
+ HOST DEVICE inline Vector3_t<idx_t> index_to_ijk(idx_t idx, idx_t nx, idx_t ny, idx_t nz) {
+	 Vector3_t<idx_t> res;
 	 res.z = idx % nz;
 	 res.y = (idx / nz) % ny;
 	 res.x = (idx / (ny * nz)) % nx;
 	 return res;
  }
  
- HOST DEVICE inline Vector3_t<size_t> index_to_ijk(size_t idx, const size_t n[]) {
+ HOST DEVICE inline Vector3_t<idx_t> index_to_ijk(idx_t idx, const idx_t n[]) {
 	 return index_to_ijk(idx, n[0], n[1], n[2]);
  }
  
- HOST DEVICE inline Vector3_t<size_t> index_to_ijk(size_t idx, const Vector3_t<size_t>& n) {
+ HOST DEVICE inline Vector3_t<idx_t> index_to_ijk(idx_t idx, const Vector3_t<idx_t>& n) {
 	 return index_to_ijk(idx, n.x, n.y, n.z);
  }
  
@@ -327,7 +333,7 @@
  
  // Backend-specific specializations
  #ifdef USE_SYCL
- #include <sycl/sycl.hpp>
+ #include <SYCL/sycl.hpp>
  template<typename T>
  struct sycl::is_device_copyable<ARBD::Vector3_t<T>> : std::true_type {};
  #endif
@@ -343,3 +349,8 @@
  #endif
  
  #endif // __METAL_VERSION__
+
+ // Restore warning settings
+ #ifdef __clang__
+ #pragma clang diagnostic pop
+ #endif

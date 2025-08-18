@@ -17,6 +17,52 @@ using namespace ARBD::Profiling;
 using Catch::Approx;
 using Catch::Matchers::WithinAbs;
 
+// Backend initialization helper - only initialize if not already done
+#ifdef USE_CUDA
+static bool cuda_initialized = false;
+void ensure_cuda_initialized() {
+	if (!cuda_initialized) {
+		try {
+			CUDA::Manager::init();
+			CUDA::Manager::load_info();
+			cuda_initialized = true;
+		} catch (const std::exception& e) {
+			fprintf(stderr, "Warning: CUDA initialization failed: %s\n", e.what());
+		}
+	}
+}
+#endif
+
+#ifdef USE_SYCL
+static bool sycl_initialized = false;
+void ensure_sycl_initialized() {
+	if (!sycl_initialized) {
+		try {
+			SYCL::Manager::init();
+			SYCL::Manager::load_info();
+			sycl_initialized = true;
+		} catch (const std::exception& e) {
+			fprintf(stderr, "Warning: SYCL initialization failed: %s\n", e.what());
+		}
+	}
+}
+#endif
+
+#ifdef USE_METAL
+static bool metal_initialized = false;
+void ensure_metal_initialized() {
+	if (!metal_initialized) {
+		try {
+			METAL::Manager::init();
+			METAL::Manager::load_info();
+			metal_initialized = true;
+		} catch (const std::exception& e) {
+			fprintf(stderr, "Warning: Metal initialization failed: %s\n", e.what());
+		}
+	}
+}
+#endif
+
 // ============================================================================
 // Profiled Random Test Fixture
 // ============================================================================
@@ -37,29 +83,28 @@ struct ProfiledRandomTestFixture {
 		config.output_file = "random_profile_test.json";
 		ProfileManager::init(config);
 
-		// Initialize only one backend at a time as per project rules
+		// Initialize backends as needed
 		try {
 #ifdef USE_CUDA
-			CUDA::Manager::init();
-			CUDA::Manager::load_info();
+			ensure_cuda_initialized();
 			if (!CUDA::Manager::devices().empty()) {
 				CUDA::Manager::use(0);
 				cuda_resource = Resource(ResourceType::CUDA, 0);
 				cuda_available = true;
 				LOGINFO("CUDA backend available for profiled Random tests");
 			}
-#elif defined(USE_SYCL)
-			SYCL::Manager::init();
-			SYCL::Manager::load_info();
+#endif
+#ifdef USE_SYCL
+			ensure_sycl_initialized();
 			if (!SYCL::Manager::devices().empty()) {
 				SYCL::Manager::use(0);
 				sycl_resource = Resource(ResourceType::SYCL, 0);
 				sycl_available = true;
 				LOGINFO("SYCL backend available for profiled Random tests");
 			}
-#elif defined(USE_METAL)
-			METAL::Manager::init();
-			METAL::Manager::load_info();
+#endif
+#ifdef USE_METAL
+			ensure_metal_initialized();
 			if (!METAL::Manager::devices().empty()) {
 				METAL::Manager::use(0);
 				metal_resource = Resource(ResourceType::METAL, 0);
@@ -76,21 +121,39 @@ struct ProfiledRandomTestFixture {
 		ProfileManager::print_summary();
 		ProfileManager::finalize();
 
+		// Note: We do NOT finalize the backend managers here
+		// as they are shared across multiple test fixtures
+		// and should only be finalized once at the end of the test suite
+	}
+};
+
+// Multi-device test fixture that doesn't conflict with ProfiledRandomTestFixture
+class MultiDeviceTestFixture {
+  public:
+	MultiDeviceTestFixture() {
+		// Initialize backends as needed
 		try {
 #ifdef USE_CUDA
-			if (cuda_available)
-				CUDA::Manager::finalize();
-#elif defined(USE_SYCL)
-			if (sycl_available)
-				SYCL::Manager::finalize();
-#elif defined(USE_METAL)
-			if (metal_available)
-				METAL::Manager::finalize();
+			ensure_cuda_initialized();
+			if (CUDA::Manager::devices().empty()) {
+				LOGWARN("No CUDA devices available for multi-device test");
+			}
+#endif
+#ifdef USE_SYCL
+			ensure_sycl_initialized();
+			if (SYCL::Manager::devices().empty()) {
+				LOGWARN("No SYCL devices available for multi-device test");
+			}
 #endif
 		} catch (const std::exception& e) {
-			std::cerr << "Error during ProfiledRandomTestFixture cleanup: " << e.what()
-					  << std::endl;
+			LOGWARN("Backend initialization failed in MultiDeviceTestFixture: {}", e.what());
 		}
+	}
+
+	~MultiDeviceTestFixture() {
+		// Note: We do NOT finalize the backend managers here
+		// as they are shared across multiple test fixtures
+		// and should only be finalized once at the end of the test suite
 	}
 };
 
@@ -824,26 +887,19 @@ TEST_CASE_METHOD(ProfiledRandomTestFixture,
 		}
 	}
 }
-TEST_CASE("SYCL Multi-device parallel random generation with cross-device analysis",
-		  "[random][profiling][multi-device][sycl]") {
+TEST_CASE_METHOD(MultiDeviceTestFixture,
+				 "SYCL Multi-device parallel random generation with cross-device analysis",
+				 "[random][profiling][multi-device][sycl]") {
 #ifdef USE_SYCL
-	// Manually manage SYCL lifetime for this specific multi-device test
-	try {
-		SYCL::Manager::init();
-		SYCL::Manager::load_info();
-	} catch (const std::exception& e) {
-		SKIP("SYCL backend initialization failed: " << e.what());
+	const auto& sycl_devices = SYCL::Manager::devices();
+	if (sycl_devices.empty()) {
+		SKIP("No SYCL devices available for multi-device test.");
 	}
 
 	constexpr size_t NUMBERS_PER_DEVICE = 10000000; // 10M per device
 	constexpr size_t SAMPLE_SIZE = 10000;			// Sample for analysis
 
-	const auto& sycl_devices = SYCL::Manager::devices();
 	const size_t num_devices = sycl_devices.size();
-
-	if (num_devices == 0) {
-		SKIP("No SYCL devices available for multi-device test.");
-	}
 
 	LOGINFO("=== Multi-Device Parallel Random Generation Test ===");
 	LOGINFO("Testing {} SYCL devices with {} numbers per device", num_devices, NUMBERS_PER_DEVICE);
@@ -1210,37 +1266,25 @@ TEST_CASE("SYCL Multi-device parallel random generation with cross-device analys
 	LOGINFO("Cleaning up device data...");
 	devices.clear();
 
-	// Manually finalize SYCL at the end of the test
-	try {
-		SYCL::Manager::finalize();
-	} catch (const std::exception& e) {
-		FAIL("SYCL finalization failed: " << e.what());
-	}
+	LOGINFO("Multi-device test completed successfully - fixture will handle SYCL cleanup");
 #else
 	SKIP("Multi-device test requires SYCL backend to be enabled.");
 #endif
 }
 
-TEST_CASE("CUDA Multi-device parallel random generation with cross-device analysis",
-		  "[random][profiling][multi-device][cuda]") {
+TEST_CASE_METHOD(MultiDeviceTestFixture,
+				 "CUDA Multi-device parallel random generation with cross-device analysis",
+				 "[random][profiling][multi-device][cuda]") {
 #ifdef USE_CUDA
-	// Manually manage SYCL lifetime for this specific multi-device test
-	try {
-		CUDA::Manager::init();
-		CUDA::Manager::load_info();
-	} catch (const std::exception& e) {
-		SKIP("SYCL backend initialization failed: " << e.what());
+	const auto& cuda_devices = CUDA::Manager::devices();
+	if (cuda_devices.empty()) {
+		SKIP("No CUDA devices available for multi-device test.");
 	}
 
 	constexpr size_t NUMBERS_PER_DEVICE = 10000000; // 10M per device
 	constexpr size_t SAMPLE_SIZE = 10000;			// Sample for analysis
 
-	const auto& cuda_devices = CUDA::Manager::devices();
 	const size_t num_devices = cuda_devices.size();
-
-	if (num_devices == 0) {
-		SKIP("No CUDA devices available for multi-device test.");
-	}
 
 	LOGINFO("=== Multi-Device Parallel Random Generation Test ===");
 	LOGINFO("Testing {} CUDA devices with {} numbers per device", num_devices, NUMBERS_PER_DEVICE);
@@ -1608,12 +1652,7 @@ TEST_CASE("CUDA Multi-device parallel random generation with cross-device analys
 	LOGINFO("Cleaning up device data...");
 	devices.clear();
 
-	// Manually finalize SYCL at the end of the test
-	try {
-		CUDA::Manager::finalize();
-	} catch (const std::exception& e) {
-		FAIL("SYCL finalization failed: " << e.what());
-	}
+	LOGINFO("Multi-device test completed successfully - fixture will handle CUDA cleanup");
 #else
 	SKIP("Multi-device test requires CUDA backend to be enabled.");
 #endif

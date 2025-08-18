@@ -17,3 +17,6 @@
 [submodule "extern/spdlog"]
 	path = extern/spdlog
 	url = https://github.com/gabime/spdlog.git
+[submodule "extern/openvdb"]
+	path = extern/openvdb
+	url = https://github.com/pinyili2/openvdb/

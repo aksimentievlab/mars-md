@@ -12,6 +12,8 @@ This project incorporates code from several open-source projects. We are gratefu
 | `extern/neighbor`| BSD-3-Clause | [https://github.com/mphowardlab/neighbor](https://github.com/mphowardlab/neighbor) |
 | `extern/OpenRAND` | MIT | [https://github.com/glotzerlab/OpenRAND](https://github.com/glotzerlab/OpenRAND) |
 | `extern/metal-cpp-cmake`| Apache License 2.0 | [https://github.com/LeeTeng2001/metal-cpp-cmake](https://github.com/LeeTeng2001/metal-cpp-cmake) |
+| `extern/openvdb/nanovdb` | Apache License 2.0 | [https://github.com/AcademySoftwareFoundation/openvdb](https://github.com/AcademySoftwareFoundation/openvdb) |
 
-Please find the full license text within each submodule's respective directory after running `git submodule update --init`.
+Please find the full license text within each submodule's respective directory after running `git submodule update --init`
+
 ---

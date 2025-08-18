@@ -3,6 +3,7 @@
 #ifdef USE_SYCL
 #include "ARBDException.h"
 #include "ARBDLogger.h"
+#include "Backend/Header.h"
 #include <array>
 #include <chrono>
 #include <iostream>
@@ -31,142 +32,6 @@ inline void check_sycl_error(const sycl::exception& e, std::string_view file, in
 		check_sycl_error(e, __FILE__, __LINE__); \
 	}
 
-/**
- * @brief Modern RAII wrapper for SYCL device memory
- *
- * This class provides a safe and efficient way to manage SYCL device memory
- * with RAII semantics. It handles memory allocation, deallocation, and data
- * transfer between host and device memory.
- *
- * Features:
- * - Automatic memory management (RAII)
- * - Move semantics support
- * - Safe copy operations using std::span
- * - Exception handling for SYCL errors
- *
- * @tparam T The type of data to store in device memory
- *
- * @example Basic Usage:
- * ```cpp
- * // Create a queue and allocate memory for 1000 integers
- * sycl::queue q;
- * ARBD::DeviceMemory<int> device_mem(q, 1000);
- *
- * // Copy data from host to device
- * std::vector<int> host_data(1000, 42);
- * device_mem.copyFromHost(host_data);
- *
- * // Copy data back to host
- * std::vector<int> result(1000);
- * device_mem.copyToHost(result);
- * ```
- *
- * @example Move Semantics:
- * ```cpp
- * ARBD::DeviceMemory<float> mem1(queue, 1000);
- * ARBD::DeviceMemory<float> mem2 = std::move(mem1); // mem1 is now empty
- * ```
- *
- * @note The class prevents copying to avoid accidental memory leaks.
- * Use move semantics when transferring ownership.
- */
-template<typename T>
-class DeviceMemory {
-  private:
-	T* ptr_{nullptr};
-	size_t size_{0};
-	sycl::queue* queue_{nullptr};
-
-  public:
-	DeviceMemory() = default;
-
-	explicit DeviceMemory(sycl::queue& q, size_t count) : queue_(&q), size_(count) {
-		if (count > 0) {
-			SYCL_CHECK(ptr_ = sycl::malloc_device<T>(count, *queue_));
-			if (!ptr_) {
-				ARBD_Exception(ExceptionType::SYCLRuntimeError,
-							   "Failed to allocate {} elements of type {}",
-							   count,
-							   typeid(T).name());
-			}
-		}
-	}
-
-	~DeviceMemory() {
-		if (ptr_ && queue_) {
-			sycl::free(ptr_, *queue_);
-		}
-	}
-
-	// Prevent copying
-	DeviceMemory(const DeviceMemory&) = delete;
-	DeviceMemory& operator=(const DeviceMemory&) = delete;
-
-	// Allow moving
-	DeviceMemory(DeviceMemory&& other) noexcept
-		: ptr_(std::exchange(other.ptr_, nullptr)), size_(std::exchange(other.size_, 0)),
-		  queue_(std::exchange(other.queue_, nullptr)) {}
-
-	DeviceMemory& operator=(DeviceMemory&& other) noexcept {
-		if (this != &other) {
-			if (ptr_ && queue_)
-				sycl::free(ptr_, *queue_);
-			ptr_ = std::exchange(other.ptr_, nullptr);
-			size_ = std::exchange(other.size_, 0);
-			queue_ = std::exchange(other.queue_, nullptr);
-		}
-		return *this;
-	}
-
-	// Modern copy operations using std::span
-	void copyFromHost(std::span<const T> host_data) {
-		if (host_data.size() > size_) {
-			ARBD_Exception(ExceptionType::ValueError,
-						   "Tried to copy {} elements but only {} allocated",
-						   host_data.size(),
-						   size_);
-		}
-		if (!ptr_ || host_data.empty() || !queue_)
-			return;
-
-		SYCL_CHECK(queue_->memcpy(ptr_, host_data.data(), host_data.size() * sizeof(T)).wait());
-	}
-
-	void copyToHost(std::span<T> host_data) const {
-		if (host_data.size() > size_) {
-			ARBD_Exception(ExceptionType::ValueError,
-						   "Tried to copy {} elements but only {} allocated",
-						   host_data.size(),
-						   size_);
-		}
-		if (!ptr_ || host_data.empty() || !queue_)
-			return;
-
-		SYCL_CHECK(queue_->memcpy(host_data.data(), ptr_, host_data.size() * sizeof(T)).wait());
-	}
-
-	// Accessors
-	[[nodiscard]] T* get() noexcept {
-		return ptr_;
-	}
-	[[nodiscard]] const T* get() const noexcept {
-		return ptr_;
-	}
-	[[nodiscard]] size_t size() const noexcept {
-		return size_;
-	}
-	[[nodiscard]] sycl::queue* queue() const noexcept {
-		return queue_;
-	}
-
-	// Conversion operators
-	operator T*() noexcept {
-		return ptr_;
-	}
-	operator const T*() const noexcept {
-		return ptr_;
-	}
-};
 
 /**
  * @brief RAII SYCL queue wrapper with proper resource management
@@ -444,7 +309,7 @@ class Event {
  */
 class Manager {
   public:
-	static constexpr size_t NUM_QUEUES = 8;
+	static constexpr idx_t NUM_QUEUES = 8;
 
 	/**
 	 * @brief Individual SYCL device management class
@@ -484,11 +349,11 @@ class Manager {
 		Device(Device&&) = default;
 		Device& operator=(Device&&) = default;
 
-		[[nodiscard]] Queue& get_queue(size_t queue_id) {
+		[[nodiscard]] Queue& get_queue(idx_t queue_id) {
 			return queues_[queue_id % NUM_QUEUES];
 		}
 
-		[[nodiscard]] const Queue& get_queue(size_t queue_id) const {
+		[[nodiscard]] const Queue& get_queue(idx_t queue_id) const {
 			return queues_[queue_id % NUM_QUEUES];
 		}
 
@@ -515,16 +380,16 @@ class Manager {
 		[[nodiscard]] const std::string& version() const noexcept {
 			return version_;
 		}
-		[[nodiscard]] size_t max_work_group_size() const noexcept {
+		[[nodiscard]] idx_t max_work_group_size() const noexcept {
 			return max_work_group_size_;
 		}
-		[[nodiscard]] size_t max_compute_units() const noexcept {
+		[[nodiscard]] idx_t max_compute_units() const noexcept {
 			return max_compute_units_;
 		}
-		[[nodiscard]] size_t global_mem_size() const noexcept {
+		[[nodiscard]] idx_t global_mem_size() const noexcept {
 			return global_mem_size_;
 		}
-		[[nodiscard]] size_t local_mem_size() const noexcept {
+		[[nodiscard]] idx_t local_mem_size() const noexcept {
 			return local_mem_size_;
 		}
 		[[nodiscard]] bool is_cpu() const noexcept {
@@ -555,10 +420,10 @@ class Manager {
 		std::string name_;
 		std::string vendor_;
 		std::string version_;
-		size_t max_work_group_size_;
-		size_t max_compute_units_;
-		size_t global_mem_size_;
-		size_t local_mem_size_;
+		idx_t max_work_group_size_;
+		idx_t max_compute_units_;
+		idx_t global_mem_size_;
+		idx_t local_mem_size_;
 		bool is_cpu_;
 		bool is_gpu_;
 		bool is_accelerator_;
@@ -578,7 +443,7 @@ class Manager {
 	static void prefer_device_type(sycl::info::device_type type);
 	static void finalize();
 
-	[[nodiscard]] static size_t all_device_size() noexcept {
+	[[nodiscard]] static idx_t all_device_size() noexcept {
 		return all_devices_.size();
 	}
 	[[nodiscard]] static const std::vector<Device>& all_devices() noexcept {

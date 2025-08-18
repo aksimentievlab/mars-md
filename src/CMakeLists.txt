@@ -44,13 +44,16 @@ endif()
 
 # Define the library with all collected sources.
 add_library("lib${PROJECT_NAME}" ${LIB_SOURCES})
+target_link_libraries("lib${PROJECT_NAME}" PUBLIC nanovdb)
 
 # --- Include Directories ---
 # CMAKE_CURRENT_SOURCE_DIR in this file refers to the "src" directory.
 # This allows includes like #include "Backend/xx.h" from within any source
 # file of this library, and also allows targets linking to this library to
 # include public headers from "src/" (e.g., #include "ARBDException.h").
-target_include_directories("lib${PROJECT_NAME}" PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories("lib${PROJECT_NAME}" PUBLIC 
+    ${CMAKE_CURRENT_SOURCE_DIR}
+)
 
 # --- SYCL specific linking or include directories for the library ---
 if(USE_SYCL_ACPP OR USE_SYCL_ICPX)
