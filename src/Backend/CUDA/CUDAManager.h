@@ -18,10 +18,6 @@
 #include <cuda_runtime.h>
 #include <cuda_runtime_api.h>
 
-// Include NCCL if available
-#ifdef USE_NCCL
-#include "NCCLManager.h"
-#endif
 /**
  * @brief Modern RAII wrapper for CUDA device memory
  */
@@ -78,7 +74,7 @@ namespace CUDA {
  *
  * @note The class prevents copying to avoid accidental memory leaks.
  *       Use move semantics when transferring ownership.
- */
+
 
 template<typename T>
 class DeviceMemory {
@@ -207,6 +203,7 @@ class DeviceMemory {
 	T* ptr_{nullptr};
 	size_t size_{0};
 };
+ */
 
 /**
  * @brief Modern RAII wrapper for CUDA streams
@@ -409,7 +406,6 @@ class Event {
  * operations.
  *
  * Features:
- * - Multi-device support
  * - Automatic stream management
  * - Device selection and synchronization
  * - Peer-to-peer memory access
@@ -570,7 +566,6 @@ class Manager {
 	// Static interface
 	static void init();
 	static void load_info();
-	static void select_devices(const std::vector<unsigned int>& device_ids);
 	static void use(int device_id);
 	static void sync(int device_id);
 	static void sync();

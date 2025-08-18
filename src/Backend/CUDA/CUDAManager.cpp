@@ -5,7 +5,7 @@
 #include <vector>
 
 #ifdef USE_CUDA
-#include "CUDAManager.h"
+#include "Backend/CUDA/CUDAManager.h"
 #include <cuda.h>
 #include <cuda_runtime.h>
 #include <cuda_runtime_api.h>
@@ -113,33 +113,6 @@ void Manager::init() {
 
 	// Initialize peer access matrix
 	query_peer_access();
-}
-
-void Manager::select_devices(const std::vector<unsigned int>& device_ids) {
-	devices_.clear();
-	devices_.reserve(device_ids.size());
-
-	for (const auto& id : device_ids) {
-		// Find the device with matching ID in all_devices_
-		bool found = false;
-		for (const auto& device : all_devices_) {
-			if (device.id() == id) {
-				found = true;
-				break;
-			}
-		}
-
-		if (!found) {
-			ARBD_Exception(ExceptionType::ValueError,
-						   "Invalid device ID: %u (not found in available devices)",
-						   id);
-		}
-
-		// Create a new device object with the same ID
-		devices_.emplace_back(id);
-	}
-
-	init_devices();
 }
 
 void Manager::load_info() {
