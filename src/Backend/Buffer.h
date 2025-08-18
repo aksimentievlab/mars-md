@@ -762,6 +762,7 @@ class Buffer {
   private:
 	/**
 	 * @brief Get the best available resource (prioritizes GPU devices over CPU)
+	 * @todo Not implemented.
 	 */
 	static Resource get_best_available_resource() {
 #ifdef USE_SYCL
