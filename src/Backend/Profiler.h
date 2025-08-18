@@ -65,6 +65,99 @@ struct ProfileEvent {
 	}
 };
 
+// Generic Timer class for both CUDA and SYCL
+class Timer {
+  private:
+	using clock_t = std::chrono::high_resolution_clock;
+	clock_t::time_point start_time_;
+	std::string name_;
+
+#ifdef USE_CUDA
+	cudaEvent_t cuda_start_ = nullptr;
+	cudaEvent_t cuda_stop_ = nullptr;
+	cudaStream_t cuda_queue_ = nullptr;
+#endif
+
+#ifdef USE_SYCL
+	sycl::event sycl_event_;
+#endif
+
+  public:
+	Timer(const std::string& name = "", void* queue = nullptr) : name_(name) {
+
+#ifdef USE_CUDA
+		if (queue) {
+			cuda_queue_ = static_cast<cudaStream_t>(queue);
+			cudaEventCreate(&cuda_start_);
+			cudaEventCreate(&cuda_stop_);
+			cudaEventRecord(cuda_start_, cuda_queue_);
+		} else
+#endif
+		{
+			start_time_ = clock_t::now();
+		}
+
+		if (!name_.empty()) {
+			LOGINFO("{} ... ", name_);
+		}
+	}
+
+	~Timer() {
+#ifdef USE_CUDA
+		if (cuda_start_)
+			cudaEventDestroy(cuda_start_);
+		if (cuda_stop_)
+			cudaEventDestroy(cuda_stop_);
+#endif
+	}
+
+	void start() {
+#ifdef USE_CUDA
+		if (cuda_queue_) {
+			cudaEventRecord(cuda_start_, cuda_queue_);
+		} else
+#endif
+		{
+			start_time_ = clock_t::now();
+		}
+	}
+
+	float elapsed() {
+#ifdef USE_CUDA
+		if (cuda_queue_) {
+			cudaEventRecord(cuda_stop_, cuda_queue_);
+			cudaEventSynchronize(cuda_stop_);
+			float msec = 0.0f;
+			cudaEventElapsedTime(&msec, cuda_start_, cuda_stop_);
+			return msec;
+		}
+#endif
+
+		auto end_time = clock_t::now();
+		auto duration =
+			std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time_);
+		return duration.count() / 1000.0f; // Return milliseconds
+	}
+
+	void stop() {
+		float ms = elapsed();
+		if (!name_.empty()) {
+			LOGINFO("{} completed in {:.3f} ms", name_, ms);
+		}
+	}
+
+	void restart(const std::string& msg) {
+		stop();
+		name_ = msg;
+		start();
+		if (!name_.empty()) {
+			LOGINFO("{} ... ", name_);
+		}
+	}
+};
+
+// Convenience macros
+
 // ============================================================================
 // CUDA Profiling Implementation
 // ============================================================================
@@ -732,6 +825,15 @@ class ProfileManager {
 			break;
 		}
 	}
+	class ScopedTimer {
+		Timer timer_;
+
+	  public:
+		ScopedTimer(const std::string& name, void* queue = nullptr) : timer_(name, queue) {}
+		~ScopedTimer() {
+			timer_.stop();
+		}
+	};
 
 	// RAII wrapper for unified profiling
 	class ScopedRange {
@@ -831,6 +933,9 @@ class ProfileManager {
 #define PROFILE_CUDA_RANGE(name) PROFILE_RANGE(name, ARBD::ResourceType::CUDA)
 #define PROFILE_SYCL_RANGE(name) PROFILE_RANGE(name, ARBD::ResourceType::SYCL)
 #define PROFILE_METAL_RANGE(name) PROFILE_RANGE(name, ARBD::ResourceType::METAL)
+#define PROFILE_TIMER(name) ARBD::Profiling::ProfileManager::ScopedTimer _timer(name)
+#define PROFILE_TIMER_QUEUE(name, queue) \
+	ARBD::Profiling::ProfileManager::ScopedTimer _timer(name, queue)
 
 } // namespace Profiling
 } // namespace ARBD

@@ -61,21 +61,24 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Find threading library for use across the project
 find_package(Threads REQUIRED)
-
 include_directories(${CMAKE_SOURCE_DIR}/extern)
+
+# NanoVDB
+set(NANOVDB_BUILD_TOOLS OFF CACHE BOOL "Disable NanoVDB tools")
+set(NANOVDB_BUILD_UNITTESTS OFF CACHE BOOL "Disable NanoVDB tests")
+set(NANOVDB_BUILD_EXAMPLES OFF CACHE BOOL "Disable NanoVDB examples")
+set(NANOVDB_BUILD_PYTHON_MODULE OFF CACHE BOOL "Disable NanoVDB python module")
+set(NANOVDB_USE_CUDA OFF CACHE BOOL "Disable NanoVDB CUDA support")
+set(NANOVDB_USE_OPENVDB OFF CACHE BOOL "Disable NanoVDB OpenVDB support")
+add_subdirectory(extern/openvdb/nanovdb/nanovdb)
 
 if(USE_CUDA)
     set(CMAKE_CUDA_STANDARD 20)
     set(CMAKE_CUDA_STANDARD_REQUIRED ON)
     set(CMAKE_CUDA_EXTENSIONS OFF)
-
-    # Set CUDA architectures for compatibility with modern GPUs
-    # Include common architectures: 7.0 (V100), 7.5 (T4), 8.0 (A100), 8.6 (A40), 8.9 (RTX 4090)
-    set(CMAKE_CUDA_ARCHITECTURES "70;75;80;86;89")
-
+    set(CMAKE_CUDA_ARCHITECTURES "70;75;80;86;89;90;100;120")
     # Add CUDA compiler flags for compatibility and force older GCC
     set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --allow-unsupported-compiler")
-
     message(STATUS "CUDA architectures set to: ${CMAKE_CUDA_ARCHITECTURES}")
     message(STATUS "CUDA flags: ${CMAKE_CUDA_FLAGS}")
 endif()
@@ -166,16 +169,6 @@ if(USE_SYCL_ACPP OR USE_SYCL_ICPX)
     endif()
 endif()
 
-# Metal (Objective-C++) optimization flags
-if(USE_METAL AND APPLE)
-    set(CMAKE_OBJCXX_FLAGS_RELEASE "-O${OPT_LEVEL} -DNDEBUG")
-    set(CMAKE_OBJCXX_FLAGS_RELWITHDEBINFO "-O${OPT_LEVEL} -g -DNDEBUG")
-
-    if(OPT_LEVEL GREATER_EQUAL 3)
-        set(CMAKE_OBJCXX_FLAGS_RELEASE "${CMAKE_OBJCXX_FLAGS_RELEASE} -march=native -mtune=native")
-        set(CMAKE_OBJCXX_FLAGS_RELWITHDEBINFO "${CMAKE_OBJCXX_FLAGS_RELWITHDEBINFO} -march=native -mtune=native")
-    endif()
-endif()
 
 # Ensure optimization flags are applied globally (including to external dependencies)
 if(CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
