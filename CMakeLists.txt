@@ -76,7 +76,7 @@ if(USE_CUDA)
     set(CMAKE_CUDA_STANDARD 20)
     set(CMAKE_CUDA_STANDARD_REQUIRED ON)
     set(CMAKE_CUDA_EXTENSIONS OFF)
-    set(CMAKE_CUDA_ARCHITECTURES "70;75;80;86;89;90;100;120")
+    set(CMAKE_CUDA_ARCHITECTURES "70;75;80;86;89;90") #100, 120 are not supported by all GPUs and compilers
     # Add CUDA compiler flags for compatibility and force older GCC
     set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --allow-unsupported-compiler")
     message(STATUS "CUDA architectures set to: ${CMAKE_CUDA_ARCHITECTURES}")

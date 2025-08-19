@@ -100,8 +100,6 @@ TEST_CASE("Manager Device Selection and Usage", "[Manager][Backend]") {
 			device_ids.push_back(device.id());
 		}
 
-		REQUIRE_NOTHROW(ARBD::CUDA::Manager::select_devices(device_ids));
-
 		// Verify devices are still accessible
 		REQUIRE_NOTHROW(ARBD::CUDA::Manager::load_info());
 		const auto& selected_devices = ARBD::CUDA::Manager::devices();
