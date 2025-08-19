@@ -51,7 +51,7 @@ target_link_libraries("lib${PROJECT_NAME}" PUBLIC nanovdb)
 # This allows includes like #include "Backend/xx.h" from within any source
 # file of this library, and also allows targets linking to this library to
 # include public headers from "src/" (e.g., #include "ARBDException.h").
-target_include_directories("lib${PROJECT_NAME}" PUBLIC 
+target_include_directories("lib${PROJECT_NAME}" PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
