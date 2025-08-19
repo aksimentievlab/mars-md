@@ -85,39 +85,6 @@ struct Policy {
 	static void copy_device_to_device(void* dst, const void* src, size_t bytes) {
 		CUDA_CHECK(cudaMemcpy(dst, src, bytes, cudaMemcpyDeviceToDevice));
 	}
-
-	static Event copy_to_host_async(void* host_dst,
-									const void* device_src,
-									size_t bytes,
-									const Resource& resource) {
-		// We need a stream to perform async copies
-		auto& device = CUDA::Manager::devices()[resource.id];
-		cudaStream_t stream = device.get_next_stream();
-
-		CUDA_CHECK(cudaMemcpyAsync(host_dst, device_src, bytes, cudaMemcpyDeviceToHost, stream));
-
-		cudaEvent_t completion_event;
-		CUDA_CHECK(cudaEventCreate(&completion_event));
-		CUDA_CHECK(cudaEventRecord(completion_event, stream));
-
-		return Event(completion_event, resource);
-	}
-
-	static Event copy_from_host_async(void* device_dst,
-									  const void* host_src,
-									  size_t bytes,
-									  const Resource& resource) {
-		auto& device = CUDA::Manager::devices()[resource.id];
-		cudaStream_t stream = device.get_next_stream();
-
-		CUDA_CHECK(cudaMemcpyAsync(device_dst, host_src, bytes, cudaMemcpyHostToDevice, stream));
-
-		cudaEvent_t completion_event;
-		CUDA_CHECK(cudaEventCreate(&completion_event));
-		CUDA_CHECK(cudaEventRecord(completion_event, stream));
-
-		return Event(completion_event, resource);
-	}
 };
 struct PinnedPolicy {
 	static void* allocate(const Resource& resource, size_t bytes) {
@@ -762,6 +729,7 @@ class Buffer {
   private:
 	/**
 	 * @brief Get the best available resource (prioritizes GPU devices over CPU)
+	 * @todo Not implemented.
 	 */
 	static Resource get_best_available_resource() {
 #ifdef USE_SYCL
