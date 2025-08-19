@@ -1,11 +1,10 @@
 #include "ARBDException.h"
 #include "ARBDLogger.h"
-#include <array>
+#include <mutex>
 #include <string>
 #include <vector>
-
 #ifdef USE_CUDA
-#include "CUDAManager.h"
+#include "Backend/CUDA/CUDAManager.h"
 #include <cuda.h>
 #include <cuda_runtime.h>
 #include <cuda_runtime_api.h>
@@ -17,6 +16,7 @@ std::vector<Manager::Device> Manager::all_devices_;
 std::vector<Manager::Device> Manager::devices_;
 std::vector<Manager::Device> Manager::safe_devices_;
 std::vector<std::vector<bool>> Manager::peer_access_matrix_;
+std::mutex Manager::mtx_;
 bool Manager::prefer_safe_{false};
 int Manager::current_device_{0};
 
@@ -92,7 +92,8 @@ void Manager::Device::synchronize_all_streams() {
 }
 
 // Manager static methods implementation
-void Manager::init() {
+void Manager::init_impl() {
+
 	int num_devices;
 	CUDA_CHECK(cudaGetDeviceCount(&num_devices));
 	LOGINFO("Found {} CUDA device(s)", num_devices);
@@ -112,230 +113,10 @@ void Manager::init() {
 	}
 
 	// Initialize peer access matrix
-	query_peer_access();
+	query_peer_access_impl();
 }
 
-void Manager::select_devices(const std::vector<unsigned int>& device_ids) {
-	devices_.clear();
-	devices_.reserve(device_ids.size());
-
-	for (const auto& id : device_ids) {
-		// Find the device with matching ID in all_devices_
-		bool found = false;
-		for (const auto& device : all_devices_) {
-			if (device.id() == id) {
-				found = true;
-				break;
-			}
-		}
-
-		if (!found) {
-			ARBD_Exception(ExceptionType::ValueError,
-						   "Invalid device ID: %u (not found in available devices)",
-						   id);
-		}
-
-		// Create a new device object with the same ID
-		devices_.emplace_back(id);
-	}
-
-	init_devices();
-}
-
-void Manager::load_info() {
-	init();
-	devices_.clear();
-	if (prefer_safe_) {
-		for (const auto& device : safe_devices_) {
-			devices_.emplace_back(device.id());
-		}
-	} else {
-		for (const auto& device : all_devices_) {
-			devices_.emplace_back(device.id());
-		}
-	}
-	if (!devices_.empty()) {
-		init_devices();
-	} else {
-		LOGWARN("No devices selected for initialization");
-	}
-}
-
-void Manager::init_devices() {
-	LOGINFO("Initializing CUDA devices...");
-	std::string msg;
-
-	// Build message string like the old implementation
-	for (size_t i = 0; i < devices_.size(); i++) {
-		if (i != devices_.size() - 1 && devices_.size() > 1) {
-			msg += std::to_string(devices_[i].id()) + ", ";
-		} else if (devices_.size() > 1) {
-			msg += "and " + std::to_string(devices_[i].id());
-		} else {
-			msg += std::to_string(devices_[i].id());
-		}
-
-		use(static_cast<int>(i));
-		CUDA_CHECK(cudaDeviceSetCacheConfig(cudaFuncCachePreferL1));
-	}
-
-	LOGINFO("Initializing devices: {}", msg.c_str());
-	use(0);
-	CUDA_CHECK(cudaDeviceSynchronize());
-}
-
-void Manager::use(int device_id) {
-	if (devices_.empty()) {
-		ARBD_Exception(ExceptionType::ValueError, "No devices selected");
-	}
-	device_id = device_id % static_cast<int>(devices_.size());
-	current_device_ = device_id;
-	CUDA_CHECK(cudaSetDevice(devices_[device_id].id()));
-}
-
-void Manager::sync(int device_id) {
-	if (device_id >= static_cast<int>(devices_.size())) {
-		ARBD_Exception(ExceptionType::ValueError, "Invalid device index: {}", device_id);
-	}
-
-	int curr;
-	CUDA_CHECK(cudaGetDevice(&curr));
-	CUDA_CHECK(cudaSetDevice(devices_[device_id].id()));
-	CUDA_CHECK(cudaDeviceSynchronize());
-	CUDA_CHECK(cudaSetDevice(curr));
-}
-
-void Manager::sync() {
-	for (size_t i = 0; i < devices_.size(); ++i) {
-		sync(static_cast<int>(i));
-	}
-}
-
-int Manager::current() {
-	return current_device_;
-}
-
-Manager::Device& Manager::get_current_device() {
-	if (devices_.empty()) {
-		ARBD_Exception(ExceptionType::ValueError, "No devices available");
-	}
-	if (current_device_ >= static_cast<int>(devices_.size())) {
-		ARBD_Exception(ExceptionType::ValueError,
-					   "Current device index {} out of range",
-					   current_device_);
-	}
-	return devices_[current_device_];
-}
-
-void Manager::prefer_safe_devices(bool safe) {
-	prefer_safe_ = safe;
-
-	if (safe && safe_devices_.empty()) {
-		LOGWARN("No safe devices available (no devices without timeout enabled)");
-		return;
-	}
-
-	// Update current device selection
-	devices_.clear();
-	if (prefer_safe_) {
-		for (const auto& device : safe_devices_) {
-			devices_.emplace_back(device.id());
-		}
-	} else {
-		for (const auto& device : all_devices_) {
-			devices_.emplace_back(device.id());
-		}
-	}
-
-	if (!devices_.empty()) {
-		init_devices();
-	}
-}
-
-int Manager::get_safest_device() {
-	if (!safe_devices_.empty()) {
-		return safe_devices_[0].id();
-	}
-
-	if (!all_devices_.empty()) {
-		LOGWARN("No safe devices available, returning first available device");
-		return all_devices_[0].id();
-	}
-
-	ARBD_Exception(ExceptionType::ValueError, "No devices available");
-}
-
-void Manager::finalize() {
-	LOGINFO("Finalizing CUDA manager...");
-
-	// Synchronize all devices
-	sync();
-
-	// Clear device vectors
-	devices_.clear();
-	safe_devices_.clear();
-	all_devices_.clear();
-	peer_access_matrix_.clear();
-
-	// Reset state
-	current_device_ = 0;
-	prefer_safe_ = false;
-
-	LOGINFO("CUDA manager finalized");
-}
-
-void Manager::enable_peer_access() {
-	if (devices_.size() < 2) {
-		LOGINFO("Peer access not needed with fewer than 2 devices");
-		return;
-	}
-
-	LOGINFO("Enabling peer access between {} devices", devices_.size());
-
-	for (size_t i = 0; i < devices_.size(); ++i) {
-		CUDA_CHECK(cudaSetDevice(devices_[i].id()));
-
-		for (size_t j = 0; j < devices_.size(); ++j) {
-			if (i != j && can_access_peer(devices_[i].id(), devices_[j].id())) {
-				cudaError_t result = cudaDeviceEnablePeerAccess(devices_[j].id(), 0);
-				if (result == cudaSuccess) {
-					LOGDEBUG("Enabled peer access: device {} -> device {}",
-							 devices_[i].id(),
-							 devices_[j].id());
-				} else if (result != cudaErrorPeerAccessAlreadyEnabled) {
-					LOGWARN("Failed to enable peer access: device {} -> device {}: {}",
-							devices_[i].id(),
-							devices_[j].id(),
-							cudaGetErrorString(result));
-				}
-			}
-		}
-	}
-}
-
-bool Manager::can_access_peer(int device1, int device2) {
-	if (device1 >= static_cast<int>(peer_access_matrix_.size()) ||
-		device2 >= static_cast<int>(peer_access_matrix_[device1].size())) {
-		return false;
-	}
-	return peer_access_matrix_[device1][device2];
-}
-
-void Manager::set_cache_config(cudaFuncCache config) {
-	for (size_t i = 0; i < devices_.size(); ++i) {
-		use(static_cast<int>(i));
-		CUDA_CHECK(cudaDeviceSetCacheConfig(config));
-	}
-}
-
-cudaStream_t Manager::get_stream(int device_id, size_t stream_id) {
-	if (device_id >= static_cast<int>(devices_.size())) {
-		ARBD_Exception(ExceptionType::ValueError, "Invalid device index: {}", device_id);
-	}
-	return devices_[device_id].get_stream(stream_id);
-}
-
-void Manager::query_peer_access() {
+void Manager::query_peer_access_impl() {
 	size_t num_devices = all_devices_.size();
 	peer_access_matrix_.resize(num_devices, std::vector<bool>(num_devices, false));
 
@@ -356,6 +137,230 @@ void Manager::query_peer_access() {
 			}
 		}
 	}
+}
+
+void Manager::init_devices_impl() {
+	LOGINFO("Initializing CUDA devices...");
+	std::string msg;
+
+	// Build message string like the old implementation
+	for (size_t i = 0; i < devices_.size(); i++) {
+		if (i != devices_.size() - 1 && devices_.size() > 1) {
+			msg += std::to_string(devices_[i].id()) + ", ";
+		} else if (devices_.size() > 1) {
+			msg += "and " + std::to_string(devices_[i].id());
+		} else {
+			msg += std::to_string(devices_[i].id());
+		}
+
+		use_impl(static_cast<int>(i));
+		CUDA_CHECK(cudaDeviceSetCacheConfig(cudaFuncCachePreferL1));
+	}
+
+	LOGINFO("Initializing devices: {}", msg.c_str());
+	use_impl(0);
+	CUDA_CHECK(cudaDeviceSynchronize());
+}
+
+void Manager::use_impl(int device_id) {
+	if (devices_.empty()) {
+		ARBD_Exception(ExceptionType::ValueError, "No devices selected");
+	}
+	device_id = device_id % static_cast<int>(devices_.size());
+	current_device_ = device_id;
+	CUDA_CHECK(cudaSetDevice(devices_[device_id].id()));
+}
+
+void Manager::sync_impl(int device_id) {
+	if (device_id >= static_cast<int>(devices_.size())) {
+		ARBD_Exception(ExceptionType::ValueError, "Invalid device index: {}", device_id);
+	}
+
+	int curr;
+	CUDA_CHECK(cudaGetDevice(&curr));
+	CUDA_CHECK(cudaSetDevice(devices_[device_id].id()));
+	CUDA_CHECK(cudaDeviceSynchronize());
+	CUDA_CHECK(cudaSetDevice(curr));
+}
+
+bool Manager::can_access_peer_impl(int device1, int device2) {
+	if (device1 >= static_cast<int>(peer_access_matrix_.size()) ||
+		device2 >= static_cast<int>(peer_access_matrix_[device1].size())) {
+		return false;
+	}
+	return peer_access_matrix_[device1][device2];
+}
+
+void Manager::finalize_impl() {
+	LOGINFO("Finalizing CUDA manager...");
+
+	// Synchronize all devices
+	for (int i = 0; i < static_cast<int>(devices_.size()); ++i) {
+		sync_impl(i);
+	}
+
+	// Clear device vectors
+	devices_.clear();
+	safe_devices_.clear();
+	all_devices_.clear();
+	peer_access_matrix_.clear();
+
+	// Reset state
+	current_device_ = 0;
+	prefer_safe_ = false;
+
+	LOGINFO("CUDA manager finalized");
+}
+
+void Manager::init() {
+	std::lock_guard<std::mutex> lock(mtx_);
+	init_impl();
+}
+
+void Manager::load_info() {
+	std::lock_guard<std::mutex> lock(mtx_);
+	init_impl();
+	devices_.clear();
+	if (prefer_safe_) {
+		for (const auto& device : safe_devices_) {
+			devices_.emplace_back(device.id());
+		}
+	} else {
+		for (const auto& device : all_devices_) {
+			devices_.emplace_back(device.id());
+		}
+	}
+	if (!devices_.empty()) {
+		init_devices_impl();
+	} else {
+		LOGWARN("No devices selected for initialization");
+	}
+}
+
+void Manager::use(int device_id) {
+	std::lock_guard<std::mutex> lock(mtx_);
+	use_impl(device_id);
+}
+
+void Manager::sync(int device_id) {
+	std::lock_guard<std::mutex> lock(mtx_);
+	sync_impl(device_id);
+}
+
+void Manager::sync() {
+	std::lock_guard<std::mutex> lock(mtx_);
+	for (int i = 0; i < static_cast<int>(devices_.size()); ++i) {
+		sync_impl(i);
+	}
+}
+
+int Manager::current() {
+	std::lock_guard<std::mutex> lock(mtx_);
+	return current_device_;
+}
+
+Manager::Device& Manager::get_current_device() {
+	std::lock_guard<std::mutex> lock(mtx_);
+	if (devices_.empty()) {
+		ARBD_Exception(ExceptionType::ValueError, "No devices available");
+	}
+	if (current_device_ >= static_cast<int>(devices_.size())) {
+		ARBD_Exception(ExceptionType::ValueError,
+					   "Current device index {} out of range",
+					   current_device_);
+	}
+	return devices_[current_device_];
+}
+
+void Manager::prefer_safe_devices(bool safe) {
+	std::lock_guard<std::mutex> lock(mtx_);
+	prefer_safe_ = safe;
+
+	if (safe && safe_devices_.empty()) {
+		LOGWARN("No safe devices available (no devices without timeout enabled)");
+		return;
+	}
+
+	// Update current device selection
+	devices_.clear();
+	if (prefer_safe_) {
+		for (const auto& device : safe_devices_) {
+			devices_.emplace_back(device.id());
+		}
+	} else {
+		for (const auto& device : all_devices_) {
+			devices_.emplace_back(device.id());
+		}
+	}
+	if (!devices_.empty()) {
+		init_devices_impl();
+	}
+}
+
+int Manager::get_safest_device() {
+	std::lock_guard<std::mutex> lock(mtx_);
+	if (!safe_devices_.empty()) {
+		return safe_devices_[0].id();
+	}
+
+	if (!all_devices_.empty()) {
+		LOGWARN("No safe devices available, returning first available device");
+		return all_devices_[0].id();
+	}
+
+	ARBD_Exception(ExceptionType::ValueError, "No devices available");
+}
+void Manager::finalize() {
+	std::lock_guard<std::mutex> lock(mtx_);
+	finalize_impl();
+}
+bool Manager::can_access_peer(int device1, int device2) {
+	std::lock_guard<std::mutex> lock(mtx_);
+	return can_access_peer_impl(device1, device2);
+}
+void Manager::set_cache_config(cudaFuncCache config) {
+	std::lock_guard<std::mutex> lock(mtx_);
+	for (size_t i = 0; i < devices_.size(); ++i) {
+		use_impl(static_cast<int>(i)); // Call non-locking helper
+		CUDA_CHECK(cudaDeviceSetCacheConfig(config));
+	}
+}
+void Manager::enable_peer_access() {
+	std::lock_guard<std::mutex> lock(mtx_);
+	if (devices_.size() < 2) {
+		LOGINFO("Peer access not needed with fewer than 2 devices");
+		return;
+	}
+
+	LOGINFO("Enabling peer access between {} devices", devices_.size());
+
+	for (size_t i = 0; i < devices_.size(); ++i) {
+		CUDA_CHECK(cudaSetDevice(devices_[i].id()));
+
+		for (size_t j = 0; j < devices_.size(); ++j) {
+			if (i != j && can_access_peer_impl(devices_[i].id(), devices_[j].id())) {
+				cudaError_t result = cudaDeviceEnablePeerAccess(devices_[j].id(), 0);
+				if (result == cudaSuccess) {
+					LOGDEBUG("Enabled peer access: device {} -> device {}",
+							 devices_[i].id(),
+							 devices_[j].id());
+				} else if (result != cudaErrorPeerAccessAlreadyEnabled) {
+					LOGWARN("Failed to enable peer access: device {} -> device {}: {}",
+							devices_[i].id(),
+							devices_[j].id(),
+							cudaGetErrorString(result));
+				}
+			}
+		}
+	}
+}
+
+cudaStream_t Manager::get_stream(int device_id, size_t stream_id) {
+	std::lock_guard<std::mutex> lock(mtx_);
+	if (device_id >= static_cast<int>(devices_.size())) {
+		ARBD_Exception(ExceptionType::ValueError, "Invalid device index: {}", device_id);
+	}
+	return devices_[device_id].get_stream(stream_id);
 }
 
 } // namespace CUDA

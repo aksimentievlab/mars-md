@@ -9,6 +9,7 @@
 #include "ARBDException.h"
 #include <algorithm>
 #include <array>
+#include <mutex>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -18,10 +19,6 @@
 #include <cuda_runtime.h>
 #include <cuda_runtime_api.h>
 
-// Include NCCL if available
-#ifdef USE_NCCL
-#include "NCCLManager.h"
-#endif
 /**
  * @brief Modern RAII wrapper for CUDA device memory
  */
@@ -40,173 +37,6 @@ inline void check_cuda_error(cudaError_t error, const char* file, int line) {
 #define CUDA_CHECK(call) check_cuda_error(call, __FILE__, __LINE__)
 
 namespace CUDA {
-
-/**
- * @brief Modern RAII wrapper for CUDA device memory
- *
- * This class provides a safe and efficient way to manage CUDA device memory
- * with RAII semantics. It handles memory allocation, deallocation, and data
- * transfer between host and device memory.
- *
- * Features:
- * - Automatic memory management (RAII)
- * - Move semantics support
- * - Safe copy operations using std::span
- * - Exception handling for CUDA errors
- *
- * @tparam T The type of data to store in device memory
- *
- * @example Basic Usage:
- * ```cpp
- * // Allocate memory for 1000 integers
- * ARBD::CUDA::DeviceMemory<int> device_mem(1000);
- *
- * // Copy data from host to device
- * std::vector<int> host_data(1000, 42);
- * device_mem.copyFromHost(host_data);
- *
- * // Copy data back to host
- * std::vector<int> result(1000);
- * device_mem.copyToHost(result);
- * ```
- *
- * @example Move Semantics:
- * ```cpp
- * ARBD::CUDA::DeviceMemory<float> mem1(1000);
- * ARBD::CUDA::DeviceMemory<float> mem2 = std::move(mem1); // mem1 is now empty
- * ```
- *
- * @note The class prevents copying to avoid accidental memory leaks.
- *       Use move semantics when transferring ownership.
- */
-
-template<typename T>
-class DeviceMemory {
-  public:
-	DeviceMemory() = default;
-
-	explicit DeviceMemory(size_t count) : size_(count) {
-		if (count > 0) {
-			CUDA_CHECK(cudaMalloc(&ptr_, count * sizeof(T)));
-		}
-	}
-
-	~DeviceMemory() {
-		if (ptr_) {
-			cudaFree(ptr_);
-		}
-	}
-
-	// Prevent copying
-	DeviceMemory(const DeviceMemory&) = delete;
-	DeviceMemory& operator=(const DeviceMemory&) = delete;
-
-	// Allow moving
-	DeviceMemory(DeviceMemory&& other) noexcept
-		: ptr_(std::exchange(other.ptr_, nullptr)), size_(std::exchange(other.size_, 0)) {}
-
-	DeviceMemory& operator=(DeviceMemory&& other) noexcept {
-		if (this != &other) {
-			if (ptr_)
-				cudaFree(ptr_);
-			ptr_ = std::exchange(other.ptr_, nullptr);
-			size_ = std::exchange(other.size_, 0);
-		}
-		return *this;
-	}
-
-	// Modern copy operations using pointer + size
-	void copyFromHost(const T* host_data, size_t count, cudaStream_t stream = nullptr) {
-		if (count > size_) {
-			ARBD_Exception(ExceptionType::ValueError,
-						   "Tried to copy %zu elements but only %zu allocated",
-						   count,
-						   size_);
-		}
-		if (!ptr_ || !host_data || count == 0)
-			return;
-
-		if (stream) {
-			CUDA_CHECK(cudaMemcpyAsync(ptr_,
-									   host_data,
-									   count * sizeof(T),
-									   cudaMemcpyHostToDevice,
-									   stream));
-		} else {
-			CUDA_CHECK(cudaMemcpy(ptr_, host_data, count * sizeof(T), cudaMemcpyHostToDevice));
-		}
-	}
-
-	// Overload for containers like std::vector
-	template<typename Container>
-	void copyFromHost(const Container& host_data, cudaStream_t stream = nullptr) {
-		copyFromHost(host_data.data(), host_data.size(), stream);
-	}
-
-	void copyToHost(T* host_data, size_t count, cudaStream_t stream = nullptr) const {
-		if (count > size_) {
-			ARBD_Exception(ExceptionType::ValueError,
-						   "Tried to copy %zu elements but only %zu allocated",
-						   count,
-						   size_);
-		}
-		if (!ptr_ || !host_data || count == 0)
-			return;
-
-		if (stream) {
-			CUDA_CHECK(cudaMemcpyAsync(host_data,
-									   ptr_,
-									   count * sizeof(T),
-									   cudaMemcpyDeviceToHost,
-									   stream));
-		} else {
-			CUDA_CHECK(cudaMemcpy(host_data, ptr_, count * sizeof(T), cudaMemcpyDeviceToHost));
-		}
-	}
-
-	// Overload for containers like std::vector
-	template<typename Container>
-	void copyToHost(Container& host_data, cudaStream_t stream = nullptr) const {
-		copyToHost(host_data.data(), host_data.size(), stream);
-	}
-
-	// Accessors
-	[[nodiscard]] T* get() noexcept {
-		return ptr_;
-	}
-	[[nodiscard]] const T* get() const noexcept {
-		return ptr_;
-	}
-	[[nodiscard]] size_t size() const noexcept {
-		return size_;
-	}
-	[[nodiscard]] size_t bytes() const noexcept {
-		return size_ * sizeof(T);
-	}
-
-	// Conversion operators
-	operator T*() noexcept {
-		return ptr_;
-	}
-	operator const T*() const noexcept {
-		return ptr_;
-	}
-
-	// Memory operations
-	void memset(int value, cudaStream_t stream = nullptr) {
-		if (!ptr_)
-			return;
-		if (stream) {
-			CUDA_CHECK(cudaMemsetAsync(ptr_, value, bytes(), stream));
-		} else {
-			CUDA_CHECK(cudaMemset(ptr_, value, bytes()));
-		}
-	}
-
-  private:
-	T* ptr_{nullptr};
-	size_t size_{0};
-};
 
 /**
  * @brief Modern RAII wrapper for CUDA streams
@@ -409,7 +239,6 @@ class Event {
  * operations.
  *
  * Features:
- * - Multi-device support
  * - Automatic stream management
  * - Device selection and synchronization
  * - Peer-to-peer memory access
@@ -419,10 +248,6 @@ class Event {
  * ```cpp
  * // Initialize device system
  * ARBD::CUDA::Manager::init();
- *
- * // Select specific devices
- * std::vector<unsigned int> device_ids = {0, 1};
- * ARBD::CUDA::Manager::select_devices(device_ids);
  *
  * // Use a specific device
  * ARBD::CUDA::Manager::use(0);
@@ -516,6 +341,7 @@ class Manager {
 		 * @return CUDA stream handle
 		 */
 		[[nodiscard]] cudaStream_t get_next_stream() const {
+			std::lock_guard<std::mutex> lock(stream_mtx_);
 			last_stream_ = (last_stream_ + 1) % NUM_STREAMS;
 			return streams_[last_stream_].get();
 		}
@@ -565,12 +391,12 @@ class Manager {
 		mutable int last_stream_{-1};
 		bool streams_created_{false};
 		cudaDeviceProp properties_;
+		mutable std::mutex stream_mtx_;
 	};
 
 	// Static interface
 	static void init();
 	static void load_info();
-	static void select_devices(const std::vector<unsigned int>& device_ids);
 	static void use(int device_id);
 	static void sync(int device_id);
 	static void sync();
@@ -631,14 +457,21 @@ class Manager {
 
   private:
 	static void init_devices();
+	static void init_impl();
+	static void init_devices_impl();
+	static void use_impl(int device_id);
+	static void sync_impl(int device_id);
+	static void finalize_impl();
+	static bool can_access_peer_impl(int device1, int device2);
+	static void query_peer_access_impl();
 	static void query_peer_access();
-
 	static std::vector<Device> all_devices_;
 	static std::vector<Device> devices_;
 	static std::vector<Device> safe_devices_;
 	static std::vector<std::vector<bool>> peer_access_matrix_;
 	static bool prefer_safe_;
 	static int current_device_;
+	static std::mutex mtx_;
 };
 
 /**
@@ -813,6 +646,174 @@ __device__ constexpr T warp_broadcast(T value, int leader) noexcept {
 		return *reinterpret_cast<const T*>(&result);
 	}
 }
+
+/**
+ * @brief Modern RAII wrapper for CUDA device memory
+ *
+ * This class provides a safe and efficient way to manage CUDA device memory
+ * with RAII semantics. It handles memory allocation, deallocation, and data
+ * transfer between host and device memory.
+ *
+ * Features:
+ * - Automatic memory management (RAII)
+ * - Move semantics support
+ * - Safe copy operations using std::span
+ * - Exception handling for CUDA errors
+ *
+ * @tparam T The type of data to store in device memory
+ *
+ * @example Basic Usage:
+ * ```cpp
+ * // Allocate memory for 1000 integers
+ * ARBD::CUDA::DeviceMemory<int> device_mem(1000);
+ *
+ * // Copy data from host to device
+ * std::vector<int> host_data(1000, 42);
+ * device_mem.copyFromHost(host_data);
+ *
+ * // Copy data back to host
+ * std::vector<int> result(1000);
+ * device_mem.copyToHost(result);
+ * ```
+ *
+ * @example Move Semantics:
+ * ```cpp
+ * ARBD::CUDA::DeviceMemory<float> mem1(1000);
+ * ARBD::CUDA::DeviceMemory<float> mem2 = std::move(mem1); // mem1 is now empty
+ * ```
+ *
+ * @note The class prevents copying to avoid accidental memory leaks.
+ *       Use move semantics when transferring ownership.
+
+
+template<typename T>
+class DeviceMemory {
+  public:
+	DeviceMemory() = default;
+
+	explicit DeviceMemory(size_t count) : size_(count) {
+		if (count > 0) {
+			CUDA_CHECK(cudaMalloc(&ptr_, count * sizeof(T)));
+		}
+	}
+
+	~DeviceMemory() {
+		if (ptr_) {
+			cudaFree(ptr_);
+		}
+	}
+
+	// Prevent copying
+	DeviceMemory(const DeviceMemory&) = delete;
+	DeviceMemory& operator=(const DeviceMemory&) = delete;
+
+	// Allow moving
+	DeviceMemory(DeviceMemory&& other) noexcept
+		: ptr_(std::exchange(other.ptr_, nullptr)), size_(std::exchange(other.size_, 0)) {}
+
+	DeviceMemory& operator=(DeviceMemory&& other) noexcept {
+		if (this != &other) {
+			if (ptr_)
+				cudaFree(ptr_);
+			ptr_ = std::exchange(other.ptr_, nullptr);
+			size_ = std::exchange(other.size_, 0);
+		}
+		return *this;
+	}
+
+	// Modern copy operations using pointer + size
+	void copyFromHost(const T* host_data, size_t count, cudaStream_t stream = nullptr) {
+		if (count > size_) {
+			ARBD_Exception(ExceptionType::ValueError,
+						   "Tried to copy %zu elements but only %zu allocated",
+						   count,
+						   size_);
+		}
+		if (!ptr_ || !host_data || count == 0)
+			return;
+
+		if (stream) {
+			CUDA_CHECK(cudaMemcpyAsync(ptr_,
+									   host_data,
+									   count * sizeof(T),
+									   cudaMemcpyHostToDevice,
+									   stream));
+		} else {
+			CUDA_CHECK(cudaMemcpy(ptr_, host_data, count * sizeof(T), cudaMemcpyHostToDevice));
+		}
+	}
+
+	// Overload for containers like std::vector
+	template<typename Container>
+	void copyFromHost(const Container& host_data, cudaStream_t stream = nullptr) {
+		copyFromHost(host_data.data(), host_data.size(), stream);
+	}
+
+	void copyToHost(T* host_data, size_t count, cudaStream_t stream = nullptr) const {
+		if (count > size_) {
+			ARBD_Exception(ExceptionType::ValueError,
+						   "Tried to copy %zu elements but only %zu allocated",
+						   count,
+						   size_);
+		}
+		if (!ptr_ || !host_data || count == 0)
+			return;
+
+		if (stream) {
+			CUDA_CHECK(cudaMemcpyAsync(host_data,
+									   ptr_,
+									   count * sizeof(T),
+									   cudaMemcpyDeviceToHost,
+									   stream));
+		} else {
+			CUDA_CHECK(cudaMemcpy(host_data, ptr_, count * sizeof(T), cudaMemcpyDeviceToHost));
+		}
+	}
+
+	// Overload for containers like std::vector
+	template<typename Container>
+	void copyToHost(Container& host_data, cudaStream_t stream = nullptr) const {
+		copyToHost(host_data.data(), host_data.size(), stream);
+	}
+
+	// Accessors
+	[[nodiscard]] T* get() noexcept {
+		return ptr_;
+	}
+	[[nodiscard]] const T* get() const noexcept {
+		return ptr_;
+	}
+	[[nodiscard]] size_t size() const noexcept {
+		return size_;
+	}
+	[[nodiscard]] size_t bytes() const noexcept {
+		return size_ * sizeof(T);
+	}
+
+	// Conversion operators
+	operator T*() noexcept {
+		return ptr_;
+	}
+	operator const T*() const noexcept {
+		return ptr_;
+	}
+
+	// Memory operations
+	void memset(int value, cudaStream_t stream = nullptr) {
+		if (!ptr_)
+			return;
+		if (stream) {
+			CUDA_CHECK(cudaMemsetAsync(ptr_, value, bytes(), stream));
+		} else {
+			CUDA_CHECK(cudaMemset(ptr_, value, bytes()));
+		}
+	}
+
+  private:
+	T* ptr_{nullptr};
+	size_t size_{0};
+};
+ */
 
 } // namespace CUDA
 } // namespace ARBD
