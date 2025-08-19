@@ -32,7 +32,6 @@ inline void check_sycl_error(const sycl::exception& e, std::string_view file, in
 		check_sycl_error(e, __FILE__, __LINE__); \
 	}
 
-
 /**
  * @brief RAII SYCL queue wrapper with proper resource management
  *
@@ -482,6 +481,6 @@ class Manager {
 	static sycl::info::device_type preferred_type_;
 };
 
-} 
-}
+} // namespace SYCL
+} // namespace ARBD
 #endif // PROJECT_USES_SYCL

@@ -272,6 +272,11 @@ Manager::Device& Manager::get_current_device() {
 	return devices_[current_device_];
 }
 
+Manager::Device& Manager::get_device(int device_id) {
+	std::lock_guard<std::mutex> lock(mtx_);
+	return all_devices_[device_id];
+}
+
 void Manager::prefer_safe_devices(bool safe) {
 	std::lock_guard<std::mutex> lock(mtx_);
 	prefer_safe_ = safe;

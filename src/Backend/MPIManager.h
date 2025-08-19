@@ -35,9 +35,7 @@ class Manager {
 
 	void finalize() {
 		if (initialized_) {
-			for (auto& [size, ptr] : staging_buffers_) {
-				free(ptr);
-			}
+			staging_buffers_.clear();
 			MPI_Finalize();
 			initialized_ = false;
 		}

@@ -36,6 +36,7 @@
 
 #include "ARBDLogger.h"
 #include "Events.h"
+#include "MemoryPool.h"
 #include "Resource.h"
 
 namespace ARBD {
@@ -47,7 +48,8 @@ namespace ARBD {
 #ifdef USE_CUDA
 namespace CUDA {
 struct Policy {
-	static void* allocate(const Resource& resource, size_t bytes) {
+	// queue is a cuda stream
+	static void* allocate(const Resource& resource, size_t bytes, void* queue = nullptr) {
 		if (resource.type != ResourceType::CUDA) {
 			ARBD_Exception(ExceptionType::ValueError,
 						   "CUDA Policy requires CUDA resource, got {}",
@@ -60,7 +62,9 @@ struct Policy {
 		CUDA_CHECK(cudaSetDevice(static_cast<int>(resource.id)));
 
 		void* ptr = nullptr;
-		CUDA_CHECK(cudaMalloc(&ptr, bytes));
+		cudaStream_t stream = queue ? static_cast<cudaStream_t>(queue)
+									: Manager::get_device(resource.id).get_next_stream();
+		CUDA_CHECK(cudaMallocAsync(&ptr, bytes, stream));
 
 		// Restore previous device context
 		CUDA_CHECK(cudaSetDevice(old_device));
@@ -68,21 +72,34 @@ struct Policy {
 		return ptr;
 	}
 
-	static void deallocate(void* ptr) {
+	static void deallocate(void* ptr, void* queue = nullptr) {
 		if (ptr) {
-			CUDA_CHECK(cudaFree(ptr));
+			cudaStream_t stream = queue ? static_cast<cudaStream_t>(queue)
+										: Manager::get_current_device().get_next_stream();
+			CUDA_CHECK(cudaFreeAsync(ptr, stream));
 		}
 	}
 
-	static void copy_to_host(void* host_dst, const void* device_src, size_t bytes, bool sync = false) {
+	static void copy_to_host(void* host_dst,
+							 const void* device_src,
+							 size_t bytes,
+							 void* queue = nullptr,
+							 bool sync = false) {
 		if (sync) {
 			CUDA_CHECK(cudaMemcpy(host_dst, device_src, bytes, cudaMemcpyDeviceToHost));
 		} else {
-			CUDA_CHECK(cudaMemcpyAsync(host_dst, device_src, bytes, cudaMemcpyDeviceToHost));
+			cudaStream_t stream = queue ? static_cast<cudaStream_t>(queue)
+										: Manager::get_current_device().get_next_stream();
+			CUDA_CHECK(
+				cudaMemcpyAsync(host_dst, device_src, bytes, cudaMemcpyDeviceToHost, stream));
 		}
 	}
 
-	static void copy_from_host(void* device_dst, const void* host_src, size_t bytes, bool sync = false) {
+	static void copy_from_host(void* device_dst,
+							   const void* host_src,
+							   size_t bytes,
+							   void* queue = nullptr,
+							   bool sync = false) {
 		if (sync) {
 			CUDA_CHECK(cudaMemcpy(device_dst, host_src, bytes, cudaMemcpyHostToDevice));
 		} else {
@@ -90,11 +107,17 @@ struct Policy {
 		}
 	}
 
-	static void copy_device_to_device(void* dst, const void* src, size_t bytes, bool sync = false) {
+	static void copy_device_to_device(void* dst,
+									  const void* src,
+									  size_t bytes,
+									  void* queue = nullptr,
+									  bool sync = false) {
 		if (sync) {
 			CUDA_CHECK(cudaMemcpy(dst, src, bytes, cudaMemcpyDeviceToDevice));
 		} else {
-			CUDA_CHECK(cudaMemcpyAsync(dst, src, bytes, cudaMemcpyDeviceToDevice));
+			cudaStream_t stream = queue ? static_cast<cudaStream_t>(queue)
+										: Manager::get_current_device().get_next_stream();
+			CUDA_CHECK(cudaMemcpyAsync(dst, src, bytes, cudaMemcpyDeviceToDevice, stream));
 		}
 	}
 };
@@ -115,17 +138,48 @@ struct PinnedPolicy {
 			CUDA_CHECK(cudaFreeHost(ptr));
 		}
 	}
-
-	static void copy_to_host(void* host_dst, const void* device_src, size_t bytes) {
-		CUDA_CHECK(cudaMemcpy(host_dst, device_src, bytes, cudaMemcpyDeviceToHost));
+	static void upload_to_device(void* device_dst,
+								 const void* pinned_src,
+								 size_t bytes,
+								 const Resource& resource,
+								 void* queue = nullptr) {
+		cudaStream_t stream = queue ? static_cast<cudaStream_t>(queue)
+									: Manager::get_device(resource.id).get_next_stream();
+		CUDA_CHECK(cudaMemcpyAsync(device_dst, pinned_src, bytes, cudaMemcpyHostToDevice, stream));
 	}
 
-	static void copy_from_host(void* device_dst, const void* host_src, size_t bytes) {
-		CUDA_CHECK(cudaMemcpy(device_dst, host_src, bytes, cudaMemcpyHostToDevice));
+	static void download_from_device(void* pinned_dst,
+									 const void* device_src,
+									 size_t bytes,
+									 const Resource& resource,
+									 void* queue = nullptr) {
+		cudaStream_t stream = queue ? static_cast<cudaStream_t>(queue)
+									: Manager::get_device(resource.id).get_next_stream();
+		CUDA_CHECK(cudaMemcpyAsync(pinned_dst, device_src, bytes, cudaMemcpyDeviceToHost, stream));
 	}
 
-	static void copy_device_to_device(void* dst, const void* src, size_t bytes) {
-		CUDA_CHECK(cudaMemcpy(dst, src, bytes, cudaMemcpyDeviceToDevice));
+	static void copy_from_host(void* pinned_dst,
+							   const void* host_src,
+							   size_t bytes,
+							   void* queue = nullptr,
+							   bool sync = false) {
+		std::memcpy(pinned_dst, host_src, bytes);
+	}
+
+	// Copies from this pinned buffer to a standard host buffer.
+	static void copy_to_host(void* host_dst,
+							 const void* pinned_src,
+							 size_t bytes,
+							 void* queue = nullptr,
+							 bool sync = false) {
+		std::memcpy(host_dst, pinned_src, bytes);
+	}
+	static void copy_device_to_device(void* dst,
+									  const void* src,
+									  size_t bytes,
+									  void* queue = nullptr,
+									  bool sync = false) {
+		std::memcpy(dst, src, bytes);
 	}
 };
 struct UnifiedPolicy {
@@ -145,17 +199,38 @@ struct UnifiedPolicy {
 			CUDA_CHECK(cudaFree(ptr));
 		}
 	}
-
-	static void copy_to_host(void* host_dst, const void* device_src, size_t bytes) {
-		CUDA_CHECK(cudaMemcpyAsync(host_dst, device_src, bytes, cudaMemcpyDeviceToHost));
+	static void prefetch(void* ptr, size_t bytes, int device_id, void* queue = nullptr) {
+		cudaStream_t stream =
+			queue ? static_cast<cudaStream_t>(queue)
+				  : (device_id >= 0 ? Manager::get_device(device_id).get_next_stream() : 0);
+		CUDA_CHECK(cudaMemPrefetchAsync(ptr, bytes, device_id, stream));
 	}
 
-	static void copy_from_host(void* device_dst, const void* host_src, size_t bytes) {
-		CUDA_CHECK(cudaMemcpyAsync(device_dst, host_src, bytes, cudaMemcpyHostToDevice));
+	static void mem_advise(void* ptr, size_t bytes, int advice, int device_id) {
+		CUDA_CHECK(cudaMemAdvise(ptr, bytes, static_cast<cudaMemoryAdvise>(advice), device_id));
+	}
+	static void
+	copy_to_host(void* host_dst, const void* unified_src, size_t bytes, void* queue = nullptr) {
+		// Prefetch to CPU then memcpy
+		prefetch(const_cast<void*>(unified_src), bytes, cudaCpuDeviceId, queue);
+		if (queue) {
+			cudaStreamSynchronize(static_cast<cudaStream_t>(queue));
+		}
+		std::memcpy(host_dst, unified_src, bytes);
 	}
 
-	static void copy_device_to_device(void* dst, const void* src, size_t bytes) {
-		CUDA_CHECK(cudaMemcpyAsync(dst, src, bytes, cudaMemcpyDeviceToDevice));
+	static void
+	copy_from_host(void* unified_dst, const void* host_src, size_t bytes, void* queue = nullptr) {
+		std::memcpy(unified_dst, host_src, bytes);
+		// Optionally prefetch to current device
+		int device;
+		cudaGetDevice(&device);
+		prefetch(unified_dst, bytes, device, queue);
+	}
+
+	static void
+	copy_device_to_device(void* dst, const void* src, size_t bytes, void* queue = nullptr) {
+		std::memcpy(dst, src, bytes);
 	}
 };
 } // namespace CUDA
@@ -164,7 +239,7 @@ struct UnifiedPolicy {
 #ifdef USE_SYCL
 namespace SYCL {
 struct Policy {
-	static void* allocate(const Resource& resource, size_t bytes) {
+	static void* allocate(const Resource& resource, size_t bytes, auto& queue) {
 		if (resource.type != ResourceType::SYCL) {
 			ARBD_Exception(ExceptionType::ValueError,
 						   "SYCL Policy requires SYCL resource, got {}",
@@ -410,6 +485,29 @@ struct Policy {
 } // namespace METAL
 #endif
 
+namespace CPU {
+struct Policy {
+	static void* allocate(const Resource& resource, size_t bytes) {
+		return malloc(bytes);
+	}
+
+	static void deallocate(void* ptr) {
+		free(ptr);
+	}
+
+	static void copy_to_host(void* host_dst, const void* device_src, size_t bytes) {
+		std::memcpy(host_dst, device_src, bytes);
+	}
+
+	static void copy_from_host(void* device_dst, const void* host_src, size_t bytes) {
+		std::memcpy(device_dst, host_src, bytes);
+	}
+
+	static void copy_device_to_device(void* dst, const void* src, size_t bytes) {
+		std::memcpy(dst, src, bytes);
+	}
+};
+} // namespace CPU
 // ============================================================================
 // Compile-time backend selection for policies
 // ============================================================================
@@ -829,6 +927,8 @@ template<typename T>
 using PinnedBuffer = Buffer<T, PinnedPolicy>;
 template<typename T>
 using UnifiedBuffer = Buffer<T, UnifiedPolicy>;
+template<typename T>
+using HostBuffer = Buffer<T, CPU::Policy>;
 
 // Backend-specific aliases for explicit use cases
 #ifdef USE_CUDA

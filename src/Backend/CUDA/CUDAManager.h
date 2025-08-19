@@ -69,19 +69,50 @@ namespace CUDA {
  * @note The stream is automatically destroyed when the Stream object goes out
  * of scope
  */
+
 class Stream {
   public:
 	Stream() {
-		CUDA_CHECK(cudaStreamCreate(&stream_));
+		CUDA_CHECK(cudaGetDevice(&deviceID_)); // Get current device ID
+		// Create the stream with a recommended non-blocking flag for performance
+		CUDA_CHECK(cudaStreamCreateWithFlags(&stream_, cudaStreamNonBlocking));
 	}
 
-	explicit Stream(unsigned int flags) {
+	explicit Stream(int deviceID, unsigned int flags = cudaStreamNonBlocking)
+		: deviceID_(deviceID) {
+		int originalDeviceID = -1;
+		// Save the original device
+		CUDA_CHECK(cudaGetDevice(&originalDeviceID));
+
+		// Set the new device if it's different
+		if (originalDeviceID != deviceID_) {
+			CUDA_CHECK(cudaSetDevice(deviceID_));
+		}
+
+		// Create the stream on the now-active device
 		CUDA_CHECK(cudaStreamCreateWithFlags(&stream_, flags));
+
+		// Restore the original device if we changed it
+		if (originalDeviceID != deviceID_) {
+			CUDA_CHECK(cudaSetDevice(originalDeviceID));
+		}
 	}
 
 	~Stream() {
 		if (stream_) {
+			// Set the correct device context before destroying the stream
+			int originalDeviceID = -1;
+			cudaGetDevice(&originalDeviceID);
+			if (originalDeviceID != deviceID_) {
+				cudaSetDevice(deviceID_);
+			}
+
 			cudaStreamDestroy(stream_);
+
+			// Restore the original context if we changed it
+			if (originalDeviceID != deviceID_) {
+				cudaSetDevice(originalDeviceID);
+			}
 		}
 	}
 
@@ -90,15 +121,32 @@ class Stream {
 	Stream& operator=(const Stream&) = delete;
 
 	// Allow moving
-	Stream(Stream&& other) noexcept : stream_(std::exchange(other.stream_, nullptr)) {}
+	Stream(Stream&& other) noexcept
+		: stream_(std::exchange(other.stream_, nullptr)),
+		  deviceID_(std::exchange(other.deviceID_, -1)) {}
 
 	Stream& operator=(Stream&& other) noexcept {
 		if (this != &other) {
-			if (stream_)
+			if (stream_) {
+				// Ensure destruction happens on the correct device
+				int originalDeviceID = -1;
+				cudaGetDevice(&originalDeviceID);
+				if (originalDeviceID != deviceID_)
+					cudaSetDevice(deviceID_);
+
 				cudaStreamDestroy(stream_);
+
+				if (originalDeviceID != deviceID_)
+					cudaSetDevice(originalDeviceID);
+			}
 			stream_ = std::exchange(other.stream_, nullptr);
+			deviceID_ = std::exchange(other.deviceID_, -1);
 		}
 		return *this;
+	}
+
+	[[nodiscard]] int deviceID() const noexcept {
+		return deviceID_;
 	}
 
 	void synchronize() {
@@ -111,10 +159,11 @@ class Stream {
 			return true;
 		if (result == cudaErrorNotReady)
 			return false;
-		CUDA_CHECK(result);
+		CUDA_CHECK(result); // Throws on other errors
 		return false;
 	}
 
+	// --- Getters ---
 	[[nodiscard]] cudaStream_t get() const noexcept {
 		return stream_;
 	}
@@ -124,6 +173,7 @@ class Stream {
 
   private:
 	cudaStream_t stream_{nullptr};
+	int deviceID_ = -1;
 };
 
 /**
@@ -407,6 +457,7 @@ class Manager {
 
 	// Current device access
 	static Device& get_current_device();
+	static Device& get_device(int device_id);
 
 	// Peer-to-peer operations
 	static void enable_peer_access();
@@ -417,14 +468,6 @@ class Manager {
 
 	// Advanced stream access
 	static cudaStream_t get_stream(int device_id, size_t stream_id);
-
-	// Legacy compatibility methods (deprecated, use new names)
-	[[deprecated("Use get_safest_device() instead")]] static int getInitialGPU() {
-		return get_safest_device();
-	}
-	[[deprecated("Use prefer_safe_devices() instead")]] static void safe(bool make_safe) {
-		prefer_safe_devices(make_safe);
-	}
 
 	[[nodiscard]] static size_t all_device_size() noexcept {
 		return all_devices_.size();
@@ -646,174 +689,6 @@ __device__ constexpr T warp_broadcast(T value, int leader) noexcept {
 		return *reinterpret_cast<const T*>(&result);
 	}
 }
-
-/**
- * @brief Modern RAII wrapper for CUDA device memory
- *
- * This class provides a safe and efficient way to manage CUDA device memory
- * with RAII semantics. It handles memory allocation, deallocation, and data
- * transfer between host and device memory.
- *
- * Features:
- * - Automatic memory management (RAII)
- * - Move semantics support
- * - Safe copy operations using std::span
- * - Exception handling for CUDA errors
- *
- * @tparam T The type of data to store in device memory
- *
- * @example Basic Usage:
- * ```cpp
- * // Allocate memory for 1000 integers
- * ARBD::CUDA::DeviceMemory<int> device_mem(1000);
- *
- * // Copy data from host to device
- * std::vector<int> host_data(1000, 42);
- * device_mem.copyFromHost(host_data);
- *
- * // Copy data back to host
- * std::vector<int> result(1000);
- * device_mem.copyToHost(result);
- * ```
- *
- * @example Move Semantics:
- * ```cpp
- * ARBD::CUDA::DeviceMemory<float> mem1(1000);
- * ARBD::CUDA::DeviceMemory<float> mem2 = std::move(mem1); // mem1 is now empty
- * ```
- *
- * @note The class prevents copying to avoid accidental memory leaks.
- *       Use move semantics when transferring ownership.
-
-
-template<typename T>
-class DeviceMemory {
-  public:
-	DeviceMemory() = default;
-
-	explicit DeviceMemory(size_t count) : size_(count) {
-		if (count > 0) {
-			CUDA_CHECK(cudaMalloc(&ptr_, count * sizeof(T)));
-		}
-	}
-
-	~DeviceMemory() {
-		if (ptr_) {
-			cudaFree(ptr_);
-		}
-	}
-
-	// Prevent copying
-	DeviceMemory(const DeviceMemory&) = delete;
-	DeviceMemory& operator=(const DeviceMemory&) = delete;
-
-	// Allow moving
-	DeviceMemory(DeviceMemory&& other) noexcept
-		: ptr_(std::exchange(other.ptr_, nullptr)), size_(std::exchange(other.size_, 0)) {}
-
-	DeviceMemory& operator=(DeviceMemory&& other) noexcept {
-		if (this != &other) {
-			if (ptr_)
-				cudaFree(ptr_);
-			ptr_ = std::exchange(other.ptr_, nullptr);
-			size_ = std::exchange(other.size_, 0);
-		}
-		return *this;
-	}
-
-	// Modern copy operations using pointer + size
-	void copyFromHost(const T* host_data, size_t count, cudaStream_t stream = nullptr) {
-		if (count > size_) {
-			ARBD_Exception(ExceptionType::ValueError,
-						   "Tried to copy %zu elements but only %zu allocated",
-						   count,
-						   size_);
-		}
-		if (!ptr_ || !host_data || count == 0)
-			return;
-
-		if (stream) {
-			CUDA_CHECK(cudaMemcpyAsync(ptr_,
-									   host_data,
-									   count * sizeof(T),
-									   cudaMemcpyHostToDevice,
-									   stream));
-		} else {
-			CUDA_CHECK(cudaMemcpy(ptr_, host_data, count * sizeof(T), cudaMemcpyHostToDevice));
-		}
-	}
-
-	// Overload for containers like std::vector
-	template<typename Container>
-	void copyFromHost(const Container& host_data, cudaStream_t stream = nullptr) {
-		copyFromHost(host_data.data(), host_data.size(), stream);
-	}
-
-	void copyToHost(T* host_data, size_t count, cudaStream_t stream = nullptr) const {
-		if (count > size_) {
-			ARBD_Exception(ExceptionType::ValueError,
-						   "Tried to copy %zu elements but only %zu allocated",
-						   count,
-						   size_);
-		}
-		if (!ptr_ || !host_data || count == 0)
-			return;
-
-		if (stream) {
-			CUDA_CHECK(cudaMemcpyAsync(host_data,
-									   ptr_,
-									   count * sizeof(T),
-									   cudaMemcpyDeviceToHost,
-									   stream));
-		} else {
-			CUDA_CHECK(cudaMemcpy(host_data, ptr_, count * sizeof(T), cudaMemcpyDeviceToHost));
-		}
-	}
-
-	// Overload for containers like std::vector
-	template<typename Container>
-	void copyToHost(Container& host_data, cudaStream_t stream = nullptr) const {
-		copyToHost(host_data.data(), host_data.size(), stream);
-	}
-
-	// Accessors
-	[[nodiscard]] T* get() noexcept {
-		return ptr_;
-	}
-	[[nodiscard]] const T* get() const noexcept {
-		return ptr_;
-	}
-	[[nodiscard]] size_t size() const noexcept {
-		return size_;
-	}
-	[[nodiscard]] size_t bytes() const noexcept {
-		return size_ * sizeof(T);
-	}
-
-	// Conversion operators
-	operator T*() noexcept {
-		return ptr_;
-	}
-	operator const T*() const noexcept {
-		return ptr_;
-	}
-
-	// Memory operations
-	void memset(int value, cudaStream_t stream = nullptr) {
-		if (!ptr_)
-			return;
-		if (stream) {
-			CUDA_CHECK(cudaMemsetAsync(ptr_, value, bytes(), stream));
-		} else {
-			CUDA_CHECK(cudaMemset(ptr_, value, bytes()));
-		}
-	}
-
-  private:
-	T* ptr_{nullptr};
-	size_t size_{0};
-};
- */
 
 } // namespace CUDA
 } // namespace ARBD
