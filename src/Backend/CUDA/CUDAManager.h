@@ -818,22 +818,6 @@ class DeviceMemory {
 } // namespace CUDA
 } // namespace ARBD
 
-// Utility macros for backward compatibility
-/**
- * @brief Temporarily switch to a specific device and execute code
- * @param device_id CUDA device ID to switch to
- * @param code Code block to execute on the specified device
- *
- * @example Usage:
- * ```cpp
- * WITH_DEVICE(1, {
- *     // This code runs on device 1
- *     cudaMalloc(&ptr, size);
- *     my_kernel<<<blocks, threads>>>();
- * });
- * // Device context is restored after the block
- * ```
- */
 #define WITH_DEVICE(device_id, code)                                                          \
 	do {                                                                                      \
 		int _wd_current_device;                                                               \

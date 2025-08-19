@@ -74,16 +74,28 @@ struct Policy {
 		}
 	}
 
-	static void copy_to_host(void* host_dst, const void* device_src, size_t bytes) {
-		CUDA_CHECK(cudaMemcpy(host_dst, device_src, bytes, cudaMemcpyDeviceToHost));
+	static void copy_to_host(void* host_dst, const void* device_src, size_t bytes, bool sync = false) {
+		if (sync) {
+			CUDA_CHECK(cudaMemcpy(host_dst, device_src, bytes, cudaMemcpyDeviceToHost));
+		} else {
+			CUDA_CHECK(cudaMemcpyAsync(host_dst, device_src, bytes, cudaMemcpyDeviceToHost));
+		}
 	}
 
-	static void copy_from_host(void* device_dst, const void* host_src, size_t bytes) {
-		CUDA_CHECK(cudaMemcpy(device_dst, host_src, bytes, cudaMemcpyHostToDevice));
+	static void copy_from_host(void* device_dst, const void* host_src, size_t bytes, bool sync = false) {
+		if (sync) {
+			CUDA_CHECK(cudaMemcpy(device_dst, host_src, bytes, cudaMemcpyHostToDevice));
+		} else {
+			CUDA_CHECK(cudaMemcpyAsync(device_dst, host_src, bytes, cudaMemcpyHostToDevice));
+		}
 	}
 
-	static void copy_device_to_device(void* dst, const void* src, size_t bytes) {
-		CUDA_CHECK(cudaMemcpy(dst, src, bytes, cudaMemcpyDeviceToDevice));
+	static void copy_device_to_device(void* dst, const void* src, size_t bytes, bool sync = false) {
+		if (sync) {
+			CUDA_CHECK(cudaMemcpy(dst, src, bytes, cudaMemcpyDeviceToDevice));
+		} else {
+			CUDA_CHECK(cudaMemcpyAsync(dst, src, bytes, cudaMemcpyDeviceToDevice));
+		}
 	}
 };
 struct PinnedPolicy {
@@ -135,15 +147,15 @@ struct UnifiedPolicy {
 	}
 
 	static void copy_to_host(void* host_dst, const void* device_src, size_t bytes) {
-		CUDA_CHECK(cudaMemcpy(host_dst, device_src, bytes, cudaMemcpyDeviceToHost));
+		CUDA_CHECK(cudaMemcpyAsync(host_dst, device_src, bytes, cudaMemcpyDeviceToHost));
 	}
 
 	static void copy_from_host(void* device_dst, const void* host_src, size_t bytes) {
-		CUDA_CHECK(cudaMemcpy(device_dst, host_src, bytes, cudaMemcpyHostToDevice));
+		CUDA_CHECK(cudaMemcpyAsync(device_dst, host_src, bytes, cudaMemcpyHostToDevice));
 	}
 
 	static void copy_device_to_device(void* dst, const void* src, size_t bytes) {
-		CUDA_CHECK(cudaMemcpy(dst, src, bytes, cudaMemcpyDeviceToDevice));
+		CUDA_CHECK(cudaMemcpyAsync(dst, src, bytes, cudaMemcpyDeviceToDevice));
 	}
 };
 } // namespace CUDA
