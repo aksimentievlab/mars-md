@@ -1,6 +1,9 @@
 #pragma once
 #include "Backend/Header.h"
+#include "Math/Vector3.h"
 #include "nanovdb/GridHandle.h"
+#include "nanovdb/math/Stencils.h"
+#include "nanovdb/NanoVDB.h"
 
 namespace ARBD {
 
@@ -40,6 +43,75 @@ struct UpdateGridCountFunctor {
 					*d_dirty = false; // no need to update checksum if it didn't already exist
 				}
 			}
+		}
+	}
+};
+
+// --- Stencil Gradient Computation Functor ---
+template<typename ValueT, typename CoordT>
+struct GradientStencilFunctor {
+	const nanovdb::NanoGrid<ValueT>* grid;
+	const CoordT* coordinates;
+	nanovdb::math::Vec3<ValueT>* results;
+	size_t num_points;
+
+	HOST DEVICE void operator()(size_t idx) const {
+		if (idx < num_points) {
+			nanovdb::math::GradStencil<nanovdb::NanoGrid<ValueT>> stencil(*grid);
+			stencil.moveTo(coordinates[idx]);
+			results[idx] = stencil.gradient();
+		}
+	}
+};
+
+// --- Stencil Laplacian Computation Functor ---
+template<typename ValueT, typename CoordT>
+struct LaplacianStencilFunctor {
+	const nanovdb::NanoGrid<ValueT>* grid;
+	const CoordT* coordinates;
+	ValueT* results;
+	size_t num_points;
+
+	HOST DEVICE void operator()(size_t idx) const {
+		if (idx < num_points) {
+			nanovdb::math::GradStencil<nanovdb::NanoGrid<ValueT>> stencil(*grid);
+			stencil.moveTo(coordinates[idx]);
+			results[idx] = stencil.laplacian();
+		}
+	}
+};
+
+// --- Stencil Mean Curvature Computation Functor ---
+template<typename ValueT, typename CoordT>
+struct MeanCurvatureStencilFunctor {
+	const nanovdb::NanoGrid<ValueT>* grid;
+	const CoordT* coordinates;
+	ValueT* results;
+	size_t num_points;
+
+	HOST DEVICE void operator()(size_t idx) const {
+		if (idx < num_points) {
+			nanovdb::math::CurvatureStencil<nanovdb::NanoGrid<ValueT>> stencil(*grid);
+			stencil.moveTo(coordinates[idx]);
+			results[idx] = stencil.meanCurvature();
+		}
+	}
+};
+
+// --- Trilinear Interpolation Functor ---
+template<typename ValueT, typename PosT>
+struct TrilinearInterpolationFunctor {
+	const nanovdb::NanoGrid<ValueT>* grid;
+	const PosT* world_positions;
+	ValueT* results;
+	size_t num_points;
+
+	HOST DEVICE void operator()(size_t idx) const {
+		if (idx < num_points) {
+			nanovdb::math::BoxStencil<nanovdb::NanoGrid<ValueT>> stencil(*grid);
+			auto coord = grid->worldToIndex(world_positions[idx]);
+			stencil.moveTo(coord);
+			results[idx] = stencil.interpolation(world_positions[idx]);
 		}
 	}
 };

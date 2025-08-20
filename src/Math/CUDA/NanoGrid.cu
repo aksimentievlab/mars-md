@@ -3,6 +3,7 @@
 #include "Math/Types.h"
 #include "nanovdb/GridHandle.h"
 #include "nanovdb/NanoVDB.h"
+#include "nanovdb/math/Stencils.h"
 
 // Include necessary headers
 #include "Backend/Buffer.h"
@@ -36,5 +37,39 @@ template Event launch_cuda_kernel_impl<std::tuple<GridData*, uint32_t, uint32_t,
 	const std::tuple<>& outputs,
 	const KernelConfig& config,
 	UpdateGridCountFunctor<GridData>& kernel_func);
+
+// Stencil kernel template instantiations for common types
+// Float gradients with Coord coordinates
+template Event launch_cuda_kernel_impl<std::tuple<const nanovdb::NanoGrid<float>*, const nanovdb::Coord*, nanovdb::math::Vec3<float>*, size_t>,
+									   std::tuple<nanovdb::math::Vec3<float>*>,
+									   GradientStencilFunctor<float, nanovdb::Coord>&>(
+	const Resource& resource,
+	size_t thread_count,
+	const std::tuple<const nanovdb::NanoGrid<float>*, const nanovdb::Coord*, nanovdb::math::Vec3<float>*, size_t>& inputs,
+	const std::tuple<nanovdb::math::Vec3<float>*>& outputs,
+	const KernelConfig& config,
+	GradientStencilFunctor<float, nanovdb::Coord>& kernel_func);
+
+// Float laplacians with Coord coordinates
+template Event launch_cuda_kernel_impl<std::tuple<const nanovdb::NanoGrid<float>*, const nanovdb::Coord*, float*, size_t>,
+									   std::tuple<float*>,
+									   LaplacianStencilFunctor<float, nanovdb::Coord>&>(
+	const Resource& resource,
+	size_t thread_count,
+	const std::tuple<const nanovdb::NanoGrid<float>*, const nanovdb::Coord*, float*, size_t>& inputs,
+	const std::tuple<float*>& outputs,
+	const KernelConfig& config,
+	LaplacianStencilFunctor<float, nanovdb::Coord>& kernel_func);
+
+// Float interpolation with Vec3 world positions
+template Event launch_cuda_kernel_impl<std::tuple<const nanovdb::NanoGrid<float>*, const nanovdb::math::Vec3<float>*, float*, size_t>,
+									   std::tuple<float*>,
+									   TrilinearInterpolationFunctor<float, nanovdb::math::Vec3<float>>&>(
+	const Resource& resource,
+	size_t thread_count,
+	const std::tuple<const nanovdb::NanoGrid<float>*, const nanovdb::math::Vec3<float>*, float*, size_t>& inputs,
+	const std::tuple<float*>& outputs,
+	const KernelConfig& config,
+	TrilinearInterpolationFunctor<float, nanovdb::math::Vec3<float>>& kernel_func);
 
 } // namespace ARBD

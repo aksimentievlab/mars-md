@@ -559,7 +559,7 @@ using Queue = Stream;
  * ```
  */
 #if defined(__CUDA_ARCH__)
-#if __CUDA_ARCH__ < 300
+#if __CUDA_ARCH__ < 700
 // For very old architectures, require shared memory
 extern __shared__ int warp_broadcast_shared[];
 __device__ inline int warp_broadcast(int value, int leader) noexcept {
@@ -572,11 +572,6 @@ __device__ inline int warp_broadcast(int value, int leader) noexcept {
 	}
 	__syncwarp();
 	return warp_broadcast_shared[warp_id];
-}
-#elif __CUDA_ARCH__ < 700
-// Pre-Volta: use legacy __shfl (deprecated but still supported)
-__device__ constexpr int warp_broadcast(int value, int leader) noexcept {
-	return __shfl(value, leader);
 }
 #else
 // Volta and later: use __shfl_sync with mask
@@ -625,7 +620,7 @@ inline int warp_broadcast(int value, int leader) noexcept {
  * @see
  * https://developer.nvidia.com/blog/cuda-pro-tip-optimized-filtering-warp-aggregated-atomics/
  */
-#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 300
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 700
 __device__ inline int warp_aggregated_atomic_inc(int* counter, int warp_lane) noexcept {
 	// Get mask of active threads in warp
 	unsigned int mask = __ballot_sync(0xffffffff, 1);
@@ -648,19 +643,6 @@ __device__ inline int warp_aggregated_atomic_inc(int* counter, int warp_lane) no
 	// Calculate this thread's unique position within the warp's contribution
 	unsigned int rank_mask = mask & ((1u << warp_lane) - 1u);
 	return result + __popc(rank_mask);
-}
-#elif defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 200
-// Fallback for older architectures
-__device__ inline int warp_aggregated_atomic_inc(int* counter, int warp_lane) noexcept {
-	unsigned int mask = __ballot(1);
-	int leader = __ffs(mask) - 1;
-
-	int result;
-	if (warp_lane == leader) {
-		result = atomicAdd(counter, __popc(mask));
-	}
-	result = warp_broadcast(result, leader);
-	return result + __popc(mask & ((1u << warp_lane) - 1u));
 }
 #else
 // Host-side or very old GPU stub

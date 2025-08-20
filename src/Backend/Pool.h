@@ -5,6 +5,25 @@
 
 namespace ARBD {
 
+class StreamPool {
+  public:
+	void* acquire_stream(const Resource& res, StreamType type = StreamType::Compute) {
+		// Delegate to Resource's stream management
+		return res.get_stream(type);
+	}
+
+	void release_stream(void* stream, const Resource& res) {
+		// No need to release - backend managers handle stream lifecycle
+		(void)stream; // Suppress unused parameter warning
+		(void)res;    // Suppress unused parameter warning
+	}
+
+	void sync_all_streams(const Resource& res) {
+		// Delegate to Resource's synchronization
+		res.synchronize_streams();
+	}
+};
+
 template<typename T>
 class MemoryPool {
   private:

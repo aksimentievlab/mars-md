@@ -76,7 +76,7 @@ if(USE_CUDA)
     set(CMAKE_CUDA_STANDARD 20)
     set(CMAKE_CUDA_STANDARD_REQUIRED ON)
     set(CMAKE_CUDA_EXTENSIONS OFF)
-    set(CMAKE_CUDA_ARCHITECTURES "70;75;80;86;89;90") #100, 120 are not supported by all GPUs and compilers
+    set(CMAKE_CUDA_ARCHITECTURES "75;80;86;89;90") #100, 120 are not supported by all GPUs and compilers
     # Add CUDA compiler flags for compatibility and force older GCC
     set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --allow-unsupported-compiler")
     message(STATUS "CUDA architectures set to: ${CMAKE_CUDA_ARCHITECTURES}")
@@ -235,8 +235,8 @@ Example for USE_SYCL_ACPP on macOS:    cmake -D CMAKE_CXX_COMPILER=/opt/homebrew
                 message(STATUS "Setting AdaptiveCpp default target flags for macOS (CPU via OpenMP).")
                 set(ACPP_TARGET_FLAGS "--acpp-targets=omp")
             elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-                message(STATUS "Setting AdaptiveCpp default target flags for Linux (CUDA and OpenMP).")
-                set(ACPP_TARGET_FLAGS "--acpp-targets=cuda,omp")
+                message(STATUS "Setting AdaptiveCpp default target flags for Linux (CUDA and OpenMP ).")
+                set(ACPP_TARGET_FLAGS "--acpp-targets=omp") #--acpp-targets=cuda:sm_80
 
             else() # Other OS
                 message(WARNING "AdaptiveCpp on unknown OS ${CMAKE_SYSTEM_NAME}. Defaulting to OpenMP target.")
@@ -261,6 +261,8 @@ Ensure CMAKE_CXX_COMPILER is set to your AdaptiveCpp executable path (e.g., /opt
         # CMAKE_CXX_COMPILER_ID for icpx is typically "IntelLLVM".
         if(CMAKE_CXX_COMPILER_ID MATCHES "IntelLLVM" OR CMAKE_CXX_COMPILER MATCHES "icpx")
             message(STATUS "Verified Intel DPC++ (icpx) compiler: ${CMAKE_CXX_COMPILER}")
+            set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-c99-designator")
+            message(STATUS "Suppressed -Wc99-designator warning for Intel DPC++")
 
             # Configure SYCL targets based on available hardware
             if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
