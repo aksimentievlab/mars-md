@@ -1,5 +1,4 @@
 #include "Backend/Resource.h"
-#include <thread>
 
 #ifdef USE_CUDA
 #include "Backend/CUDA/CUDAManager.h"
@@ -37,10 +36,8 @@ void* Resource::get_stream(StreamType stream_type) const {
 	if (type == ResourceType::SYCL) {
 		try {
 			auto& device = SYCL::Manager::get_device(id);
-			// Use a consistent queue index based on thread ID to avoid race conditions
-			// This ensures each thread gets its own queue consistently
-			size_t thread_queue_id = std::hash<std::thread::id>{}(std::this_thread::get_id()) % 8;
-			return &device.get_queue(thread_queue_id);
+			// Return pointer to the Queue object
+			return &device.get_next_queue();
 		} catch (...) {
 			return nullptr;
 		}
