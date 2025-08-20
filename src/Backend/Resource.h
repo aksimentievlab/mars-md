@@ -414,4 +414,11 @@ class Resource {
 	}
 };
 
+/**
+ * @brief A collection of resources.
+ */
+struct ResourceCollection {
+	std::vector<Resource> resources;
+};
+
 } // namespace ARBD

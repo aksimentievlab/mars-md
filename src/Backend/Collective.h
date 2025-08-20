@@ -58,7 +58,27 @@ class Collectives {
 			LOGINFO("Using MPI for collectives");
 		}
 	}
+	// Performance comparison helper
+	void benchmark_backends() {
+		DeviceBuffer<float> test_buffer(1024 * 1024); // 1M floats
 
+		// Test MPI
+		auto start = std::chrono::high_resolution_clock::now();
+		MPI::Manager::instance().allReduce(test_buffer, test_buffer.size(), resource_);
+		auto mpi_time = std::chrono::high_resolution_clock::now() - start;
+
+#ifdef USE_NCCL
+		if (resource_.type == ResourceType::CUDA) {
+			start = std::chrono::high_resolution_clock::now();
+			NCCL::Manager::instance().allReduce(test_buffer, test_buffer.size(), resource_);
+			auto nccl_time = std::chrono::high_resolution_clock::now() - start;
+
+			LOGINFO("MPI: {}ms, NCCL: {}ms",
+					std::chrono::duration_cast<std::chrono::milliseconds>(mpi_time).count(),
+					std::chrono::duration_cast<std::chrono::milliseconds>(nccl_time).count());
+		}
+#endif
+	};
 	template<typename T>
 	Event allReduce(DeviceBuffer<T>& buffer, idx_t count) {
 		switch (active_backend_) {
@@ -82,46 +102,49 @@ class Collectives {
 			return MPI::Manager::instance().broadcast(buffer, count, root, resource_);
 		}
 	}
-
-	// Performance comparison helper
-	void benchmark_backends() {
-		DeviceBuffer<float> test_buffer(1024 * 1024); // 1M floats
-
-		// Test MPI
-		auto start = std::chrono::high_resolution_clock::now();
-		MPI::Manager::instance().allReduce(test_buffer, test_buffer.size(), resource_);
-		auto mpi_time = std::chrono::high_resolution_clock::now() - start;
-
-#ifdef USE_NCCL
-		if (resource_.type == ResourceType::CUDA) {
-			start = std::chrono::high_resolution_clock::now();
-			NCCL::Manager::instance().allReduce(test_buffer, test_buffer.size(), resource_);
-			auto nccl_time = std::chrono::high_resolution_clock::now() - start;
-
-			LOGINFO("MPI: {}ms, NCCL: {}ms",
-					std::chrono::duration_cast<std::chrono::milliseconds>(mpi_time).count(),
-					std::chrono::duration_cast<std::chrono::milliseconds>(nccl_time).count());
-		}
-#endif
-	}
 };
 
 class DeviceMesh {
   private:
-	std::vector<Resource> resources_;
-	std::unordered_map<int, void*> queues_; // device_id -> queue
+	struct DeviceNode {
+		Resource resource;
+		void* primary_stream;
+		std::vector<void*> secondary_streams; // Multiple streams per device
+		bool peer_access_enabled = false;
+
+		void* get_queue(int device_id) const {
+			return primary_stream;
+		}
+
+		void* get_secondary_stream(int device_id) const {
+			if (device_id < secondary_streams.size()) {
+				return secondary_streams[device_id];
+			}
+			return nullptr;
+		}
+	};
+
+	std::vector<DeviceNode> nodes_;
+	std::vector<std::vector<bool>> connectivity_matrix_; // P2P access
+	std::vector<Resource> resources_;					 // Store the resources
+	std::unordered_map<size_t, void*> queues_;			 // device_id -> queue mapping
 	bool peer_access_enabled_ = false;
 
   public:
 	DeviceMesh() = default;
 
 	explicit DeviceMesh(std::vector<Resource> resources) : resources_(resources) {
+		// Initialize device nodes
 		for (const auto& res : resources_) {
+			DeviceNode node;
+			node.resource = res;
+
 #ifdef USE_CUDA
 			if (res.type == ResourceType::CUDA) {
 				cudaStream_t queue;
 				CUDA_CHECK(cudaSetDevice(res.id));
 				CUDA_CHECK(cudaStreamCreate(&queue));
+				node.primary_stream = queue;
 				queues_[res.id] = queue;
 			}
 #endif
@@ -129,9 +152,26 @@ class DeviceMesh {
 #ifdef USE_SYCL
 			if (res.type == ResourceType::SYCL) {
 				auto& device = SYCL::Manager::get_device(res.id);
-				queues_[res.id] = &device.get_queue(0);
+				node.primary_stream = &device.get_queue(0);
+				queues_[res.id] = node.primary_stream;
 			}
 #endif
+
+#ifdef USE_METAL
+			if (res.type == ResourceType::METAL) {
+				auto& device = METAL::Manager::get_device(res.id);
+				node.primary_stream = device.get_next_queue();
+				queues_[res.id] = node.primary_stream;
+			}
+#endif
+
+			nodes_.push_back(std::move(node));
+		}
+
+		// Initialize connectivity matrix
+		connectivity_matrix_.resize(resources_.size());
+		for (auto& row : connectivity_matrix_) {
+			row.resize(resources_.size(), false);
 		}
 
 		enable_peer_access();
@@ -142,7 +182,10 @@ class DeviceMesh {
 		for (const auto& res : resources_) {
 			if (res.type == ResourceType::CUDA) {
 				cudaSetDevice(res.id);
-				cudaStreamDestroy(static_cast<cudaStream_t>(queues_[res.id]));
+				auto it = queues_.find(res.id);
+				if (it != queues_.end()) {
+					cudaStreamDestroy(static_cast<cudaStream_t>(it->second));
+				}
 			}
 		}
 #endif
@@ -161,6 +204,8 @@ class DeviceMesh {
 					cudaDeviceCanAccessPeer(&can_access, resources_[i].id, resources_[j].id);
 					if (can_access) {
 						cudaDeviceEnablePeerAccess(resources_[j].id, 0);
+						connectivity_matrix_[i][j] = true;
+						connectivity_matrix_[j][i] = true;
 					}
 				}
 			}
@@ -169,9 +214,34 @@ class DeviceMesh {
 		peer_access_enabled_ = true;
 	}
 
-	void* get_queue(int device_id) {
+	// Getter methods
+	size_t device_count() const {
+		return nodes_.size();
+	}
+
+	const DeviceNode& operator[](size_t device_id) const {
+		return nodes_[device_id];
+	}
+
+	bool can_access_peer(size_t device_id, size_t peer_id) const {
+		if (device_id < connectivity_matrix_.size() &&
+			peer_id < connectivity_matrix_[device_id].size()) {
+			return connectivity_matrix_[device_id][peer_id];
+		}
+		return false;
+	}
+
+	void* get_queue(size_t device_id) const {
 		auto it = queues_.find(device_id);
 		return (it != queues_.end()) ? it->second : nullptr;
+	}
+
+	const std::vector<Resource>& get_resources() const {
+		return resources_;
+	}
+
+	bool is_peer_access_enabled() const {
+		return peer_access_enabled_;
 	}
 };
 } // namespace ARBD

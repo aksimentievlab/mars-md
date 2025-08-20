@@ -1,90 +1,145 @@
 #include "SimSystem.h"
-#include "Math/Types.h"
-#include "Backend/Buffer.h"
+#include "ARBDLogger.h"
 #include "Backend/Resource.h"
-#include "Backend/Events.h"
-#include "Backend/Kernels.h"
+#include "Math/Types.h"
+
+
 
 namespace ARBD {
-class CellDecomposer {
-    public:
-        void decompose(SimSystem& sys, ResourceCollection& resources);
+
+void CellDecomposer::decompose(SimSystem& sys, const ResourceCollection& resources) {
+    const BoundaryConditions& bcs = sys.get_boundary_conditions();
+    const Length& cutoff = sys.get_cutoff();
+    
+    LOGINFO("Starting cell decomposition with cutoff: {}", cutoff.value);
+    
+    // Get system bounds from boundary conditions
+    Vector3 origin = bcs.get_origin();
+    const auto& basis = bcs.get_basis();
+    
+    // Calculate system dimensions
+    Vector3 min = origin;
+    Vector3 max = origin + basis[0] + basis[1] + basis[2];
+    Vector3 dr = max - min;
+    
+    LOGINFO("System bounds: min={}, max={}, dimensions={}", min, max, dr);
+    
+    // Calculate number of patches in each dimension
+    Vector3_t<size_t> n_patches = {
+        static_cast<size_t>(std::max(1.0f, std::ceil(dr.x / cutoff.value))),
+        static_cast<size_t>(std::max(1.0f, std::ceil(dr.y / cutoff.value))),
+        static_cast<size_t>(std::max(1.0f, std::ceil(dr.z / cutoff.value)))
     };
-void CellDecomposer::decompose(SimSystem& sys, ResourceCollection& resources) {
-    BoundaryConditions& bcs = sys.boundary_conditions;
-    const Length& cutoff = sys.cutoff;
-
-    // Initialize workers; TODO move this out of decompose
-    std::vector<Proxy<Worker>> workers;
-    for (auto& r: resources.resources) {
-	Worker w{sys.cutoff, sys.patches};
-	auto w_p = send(r, w);
-	workers.push_back( w_p );
+    
+    size_t total_patches = n_patches.x * n_patches.y * n_patches.z;
+    size_t num_resources = resources.resources.size();
+    
+    LOGINFO("Creating {} patches ({}x{}x{}) across {} resources", 
+            total_patches, n_patches.x, n_patches.y, n_patches.z, num_resources);
+    
+    // Create patch boundaries
+    std::vector<Vector3> patch_mins(total_patches);
+    std::vector<Vector3> patch_maxs(total_patches);
+    std::vector<Resource> patch_resources(total_patches);
+    
+    for (size_t idx = 0; idx < total_patches; ++idx) {
+        Vector3_t<size_t> ijk = index_to_ijk(idx, n_patches.x, n_patches.y, n_patches.z);
+        
+        // Calculate patch boundaries
+        Vector3 pmin = min + Vector3(
+            ijk.x * cutoff.value,
+            ijk.y * cutoff.value, 
+            ijk.z * cutoff.value
+        );
+        Vector3 pmax = pmin + Vector3(cutoff.value, cutoff.value, cutoff.value);
+        
+        // Clamp to system bounds
+        pmax.x = std::min(pmax.x, max.x);
+        pmax.y = std::min(pmax.y, max.y);
+        pmax.z = std::min(pmax.z, max.z);
+        
+        patch_mins[idx] = pmin;
+        patch_maxs[idx] = pmax;
+        
+        // Assign resource (round-robin distribution)
+        size_t resource_idx = idx % num_resources;
+        patch_resources[idx] = resources.resources[resource_idx];
     }
     
-    Vector3 min = sys.get_min();
-    Vector3 max = sys.get_max();
-    Vector3 dr = max-min;
-
-    // For starters, distribute patches uniformly among available resources
-    Vector3 n_p_v = (dr / cutoff).element_floor();
-    size_t n_r = resources.resources.size();
-
-    size_t num_particles = 0;
-    for (auto& p: sys.patches) num_particles += p.metadata->num;
-   
-    std::vector<Proxy<Patch>> new_patches;
-    // std::vector<Patch> new_patches;
-    size_t n_p = static_cast<size_t>(round(n_p_v.x*n_p_v.y*n_p_v.z));
-    for (size_t idx = 0; idx < n_p; ++idx) {
-	Vector3_t<size_t> ijk = index_to_ijk( idx, n_p_v.x, n_p_v.y, n_p_v.z );
-	// size_t cap = 2*num_particles / n_r;
-	// auto p2 = Patch(cap);
-	Patch p2 = Patch();	// don't allocate array locally
+    // TODO: Load particle data from system
+    // For now, we'll create a placeholder for the particle assignment logic
+    // This would typically come from the SimSystem's particle data
     
-	/** @TODO: generalize to non-orthogonal basis */
-	Vector3 pmin = min + dr.element_mult(ijk);
-	Vector3 pmax = pmin + dr;
-
-	p2.lower_bound = pmin;
-	p2.upper_bound = pmax;
-
-	size_t r_idx = idx / ceil(n_p/n_r);
-	
-	//auto p2_p = send(resources.resources[r_idx], p2);
-	Proxy<Patch> p2_p = send(resources.resources[r_idx], p2);
-
-	for (auto& p: sys.patches) {
-	    auto filter_lambda = [pmin, pmax] (size_t i, Patch::Data d)->bool {
-		return d.get_pos(i).x >= pmin.x && d.get_pos(i).x < pmax.x &&
-		    d.get_pos(i).y >= pmin.y && d.get_pos(i).y < pmax.y &&
-		    d.get_pos(i).z >= pmin.z && d.get_pos(i).z < pmax.z; };
-	    auto filter = std::function<bool(size_t, Patch::Data)>(filter_lambda);
-	    using _filter_t = decltype(filter);
-	    // p.callSync<void,Proxy<Patch>,_filter_t>( &Patch::send_particles_filtered<_filter_t>, p2_p, filter );
-	    // p.callSync<size_t, Proxy<Patch>&, _filter_t>(static_cast<size_t (Patch::*)(Proxy<Patch>&, _filter_t)>(&Patch::send_particles_filtered<_filter_t>), p2_p, filter);
-	    // p.callSync<size_t, Proxy<Patch>&>( &Patch::send_particles_filtered, p2_p, filter);
-	    p.callSync( &Patch::send_particles_filtered, p2_p, filter);
-	    
-	    num_particles += p.metadata->num;
-	}
-	
-	new_patches.push_back( p2_p );
+    LOGINFO("Patch boundaries calculated, ready for particle assignment");
+    
+    // Example of how particle assignment would work with the new Buffer system:
+    /*
+    // Create buffers for particle data (this would come from SimSystem)
+    DeviceBuffer<Vector3> positions(num_particles, resource);
+    DeviceBuffer<Vector3> momenta(num_particles, resource);
+    DeviceBuffer<size_t> types(num_particles, resource);
+    DeviceBuffer<size_t> global_indices(num_particles, resource);
+    
+    // Create output buffers
+    DeviceBuffer<size_t> patch_assignments(num_particles, resource);
+    DeviceBuffer<size_t> particle_counts(total_patches, resource);
+    
+    // Initialize particle counts to zero
+    std::vector<size_t> zero_counts(total_patches, 0);
+    particle_counts.copy_from_host(zero_counts.data(), total_patches);
+    
+    // Create buffers for patch boundaries
+    DeviceBuffer<Vector3> patch_mins_buffer(patch_mins.size(), resource);
+    DeviceBuffer<Vector3> patch_maxs_buffer(patch_maxs.size(), resource);
+    patch_mins_buffer.copy_from_host(patch_mins.data(), patch_mins.size());
+    patch_maxs_buffer.copy_from_host(patch_maxs.data(), patch_maxs.size());
+    
+    // Launch kernel to assign particles to patches
+    ParticleAssignmentFunctor func{
+        positions.data(),
+        momenta.data(),
+        types.data(),
+        global_indices.data(),
+        num_particles,
+        patch_mins_buffer.data(),
+        patch_maxs_buffer.data(),
+        total_patches,
+        patch_assignments.data(),
+        particle_counts.data()
+    };
+    
+    KernelConfig config;
+    config.block_size = {256, 1, 1};
+    
+    auto event = launch_kernel(resource, num_particles, config, func);
+    event.wait();
+    
+    // Now create patches with assigned particles
+    std::vector<Patch> new_patches;
+    new_patches.reserve(total_patches);
+    
+    for (size_t patch_idx = 0; patch_idx < total_patches; ++patch_idx) {
+        // Get particle count for this patch
+        std::vector<size_t> count(1);
+        particle_counts.copy_to_host(count.data(), 1, patch_idx);
+        size_t patch_particle_count = count[0];
+        
+        // Create patch with appropriate capacity
+        Patch new_patch(patch_particle_count);
+        new_patch.metadata.min = patch_mins[patch_idx];
+        new_patch.metadata.max = patch_maxs[patch_idx];
+        
+        // TODO: Copy particles assigned to this patch
+        // This would involve filtering the particle data based on patch_assignments
+        
+        new_patches.push_back(std::move(new_patch));
     }
     
-    // size_t n_p = static_cast<size_t>(round(n_p_v[0]*n_p_v[1]*n_p_v[2]));
-    // for (size_t i = 0; i < n_p; ++i) {
-    // 	auto w_p = workers[i / floor(n_p/n_r)];
-    // 	w_p.create_patch();
-    // 	// other stuff
-    // }
-	
+    // Update system with new patches
+    // sys.set_patches(std::move(new_patches));
+    */
     
-    
-    // Count particles in each new_patch
-    //   (ultimately this must be distributed, but via what mechanisms? Decomposer is only on controlling thread in current implementation, but perhaps each thread should have its own copy)
-    // Then add particles from old patches to new one
-    
-    sys.patches = new_patches;
+    LOGINFO("Cell decomposition completed");
 }
-}
+
+} // namespace ARBD

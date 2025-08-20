@@ -5,67 +5,61 @@
 #include "Backend/Buffer.h"
 #include "Math/IndexList.h"
 #include "Math/Types.h"
-
-// Check parilist distance
-// Bond check
-//  Class providing a description of a simulation system, including composition, coordinates,
-//  interactions, state parameters (temperature, boundary conditions, etc) + RNG counter
-
-//   Although only one instance of this should be created per replica of the system, it should be
-//   possible to distribute (at least parts of) the description of the system
-#pragma once
-
-#include <vector>
-#include <string>
-#include <stdexcept>
+#include "Backend/Resource.h"
 #include <array>
-#include <memory>
 #include <iostream> // For logging placeholders
+#include <memory>
+#include <stdexcept>
+#include <string>
+#include <vector>
 
 namespace ARBD {
 
 // Forward-declare SimSystem to be used in the Decomposer interface
-class SimSystem; 
+class SimSystem;
 
 struct Temperature {
-    float value;
+	float value;
 };
 struct Length {
-    float value;
-};
-struct ResourceCollection {
-    std::vector<Resource> resources;
+	float value;
 };
 
-//================================================================================
-// Boundary Conditions
-//================================================================================
 class BoundaryConditions {
   public:
-    BoundaryConditions()
-        : origin_{0, 0, 0}, 
-          basis_{Vector3{5000, 0, 0}, Vector3{0, 5000, 0}, Vector3{0, 0, 5000}},
-          periodic_{true, true, true} {
-        LOGINFO("BoundaryConditions default constructor.");
-    }
+	BoundaryConditions()
+		: origin_{0, 0, 0}, basis_{Vector3{5000, 0, 0}, Vector3{0, 5000, 0}, Vector3{0, 0, 5000}},
+		  periodic_{true, true, true} {
+		LOGINFO("BoundaryConditions default constructor.");
+	}
 
-    BoundaryConditions(Vector3 basis1, Vector3 basis2, Vector3 basis3,
-                       Vector3 origin = {0.0f, 0.0f, 0.0f},
-                       bool periodic1 = true, bool periodic2 = true, bool periodic3 = true) 
-        : origin_{origin}, basis_{basis1, basis2, basis3}, periodic_{periodic1, periodic2, periodic3} {
-        LOGINFO("BoundaryConditions parameterized constructor.");
-    }
+	BoundaryConditions(Vector3 basis1,
+					   Vector3 basis2,
+					   Vector3 basis3,
+					   Vector3 origin = {0.0f, 0.0f, 0.0f},
+					   bool periodic1 = true,
+					   bool periodic2 = true,
+					   bool periodic3 = true)
+		: origin_{origin}, basis_{basis1, basis2, basis3},
+		  periodic_{periodic1, periodic2, periodic3} {
+		LOGINFO("BoundaryConditions parameterized constructor.");
+	}
 
-    const Vector3& get_origin() const { return origin_; }
-    const std::array<Vector3, 3>& get_basis() const { return basis_; }
-    const std::array<bool, 3>& get_periodicity() const { return periodic_; }
+	const Vector3& get_origin() const {
+		return origin_;
+	}
+	const std::array<Vector3, 3>& get_basis() const {
+		return basis_;
+	}
+	const std::array<bool, 3>& get_periodicity() const {
+		return periodic_;
+	}
 
   private:
-    Vector3 origin_;
-    std::array<Vector3, 3> basis_;
-    std::array<bool, 3> periodic_;
+	Vector3 origin_;
+	std::array<Vector3, 3> basis_;
+	std::array<bool, 3> periodic_;
 };
-
 
 //================================================================================
 // Decomposer Interface (Strategy Pattern)
@@ -78,143 +72,142 @@ class BoundaryConditions {
  */
 class Decomposer {
   public:
-    virtual ~Decomposer() = default;
+	virtual ~Decomposer() = default;
 
-    /**
-     * @brief The core function that performs the decomposition.
-     * @param sys The global system containing particle data and configuration.
-     * @param resources The collection of hardware resources (e.g., GPUs) to distribute to.
-     */
-    virtual void decompose(SimSystem& sys, const ResourceCollection& resources) = 0;
-    
-    virtual std::string get_name() const = 0;
+	/**
+	 * @brief The core function that performs the decomposition.
+	 * @param sys The global system containing particle data and configuration.
+	 * @param resources The collection of hardware resources (e.g., GPUs) to distribute to.
+	 */
+	virtual void decompose(SimSystem& sys, const ResourceCollection& resources) = 0;
+
+	virtual std::string get_name() const = 0;
 };
 
-/**
- * @brief A concrete implementation of the Decomposer interface using a cell list approach.
- */
 class CellDecomposer : public Decomposer {
-public:
-    void decompose(SimSystem& sys, const ResourceCollection& resources) override {
-        LOGINFO("Performing decomposition using CellDecomposer...");
-        // Logic to create patches (cells) and assign them to resources would go here.
-        // This would involve iterating through sys.particles and assigning them to cells.
-    }
-    std::string get_name() const override { return "CellDecomposer"; }
+  public:
+	void decompose(SimSystem& sys, const ResourceCollection& resources) override;
+	std::string get_name() const override {
+		return "CellDecomposer";
+	}
 };
-
-
 //================================================================================
 // Global Simulation System
 //================================================================================
 class SimSystem {
   public:
-    /**
-     * @brief Central configuration struct for initializing a simulation.
-     */
-    struct Conf {
-        enum class DecomposerType { Cell,               // For uniform systems
+	/**
+	 * @brief Central configuration struct for initializing a simulation.
+	 */
+	struct Conf {
+		enum class DecomposerType {
+			Cell,				// For uniform systems
 			RecursiveBisection, // For non-uniform systems (load balancing)
-			Geometric           // For systems with specific shapes (e.g., membranes)
-        };
-        enum class Periodicity { AllPeriodic, TwoDimensional, OneDimensional, Open };
-        enum class Algorithm { BD, Langevin, DPD };
-        enum class ReactionScheme { None, Simple };
+			Geometric			// For systems with specific shapes (e.g., membranes)
+		};
+		enum class Periodicity { AllPeriodic, TwoDimensional, OneDimensional, Open };
+		enum class Algorithm { BD, Langevin, DPD };
+		enum class ReactionScheme { None, Simple };
 
-        Temperature temperature{298.15f};
-        Periodicity periodicity{Periodicity::AllPeriodic};
-        DecomposerType decomposer{DecomposerType::Cell};
-        Algorithm algorithm{Algorithm::Langevin};
-        ReactionScheme reaction_scheme{ReactionScheme::None};
-        
-        std::array<float, 3> box_lengths{5000.0f, 5000.0f, 5000.0f};
-        float cutoff{50.0f};
-    };
+		Temperature temperature{298.15f};
+		Periodicity periodicity{Periodicity::AllPeriodic};
+		DecomposerType decomposer{DecomposerType::Cell};
+		Algorithm algorithm{Algorithm::Langevin};
+		ReactionScheme reaction_scheme{ReactionScheme::None};
 
-    /**
-     * @brief The primary constructor. Builds the entire system from a configuration struct.
-     */
-    SimSystem(const Conf& conf, const ResourceCollection& resources)
-        : temperature_(conf.temperature),
-          cutoff_(conf.cutoff),
-          boundary_conditions_{}, // Will be overwritten below
-          resources_(resources)
-    {
-        LOGINFO("SimSystem constructor from Conf.");
+		std::array<float, 3> box_lengths{5000.0f, 5000.0f, 5000.0f};
+		float cutoff{50.0f};
+	};
 
-        // 1. Set up boundary conditions based on config
-        switch (conf.periodicity) {
-            case Conf::Periodicity::AllPeriodic:
-                boundary_conditions_ = BoundaryConditions(
-                    Vector3(conf.box_lengths[0], 0, 0),
-                    Vector3(0, conf.box_lengths[1], 0),
-                    Vector3(0, 0, conf.box_lengths[2]),
-                    {0,0,0}, true, true, true);
-                break;
-            // Add other cases for TwoDimensional, Open, etc.
-            default:
-                throw std::runtime_error("Unsupported periodicity specified in configuration.");
-        }
+	/**
+	 * @brief The primary constructor. Builds the entire system from a configuration struct.
+	 */
+	SimSystem(const Conf& conf, const ResourceCollection& resources)
+		: temperature_(conf.temperature), cutoff_(conf.cutoff),
+		  boundary_conditions_{}, // Will be overwritten below
+		  resources_(resources) {
+		LOGINFO("SimSystem constructor from Conf.");
 
-        // 2. Create the chosen decomposer instance (Factory Pattern)
-        switch (conf.decomposer) {
-            case Conf::DecomposerType::Cell:
-                decomposer_ = std::make_unique<CellDecomposer>();
-                break;
-            default:
-                throw std::runtime_error("Unsupported decomposer type specified in configuration.");
-        }
-        LOGINFO("Using Decomposer: " + decomposer_->get_name());
-    }
+		// 1. Set up boundary conditions based on config
+		switch (conf.periodicity) {
+		case Conf::Periodicity::AllPeriodic:
+			boundary_conditions_ = BoundaryConditions(Vector3(conf.box_lengths[0], 0, 0),
+													  Vector3(0, conf.box_lengths[1], 0),
+													  Vector3(0, 0, conf.box_lengths[2]),
+													  {0, 0, 0},
+													  true,
+													  true,
+													  true);
+			break;
+		// Add other cases for TwoDimensional, Open, etc.
+		default:
+			throw std::runtime_error("Unsupported periodicity specified in configuration.");
+		}
 
-    /**
-     * @brief Triggers the domain decomposition process.
-     *
-     * Q1: Should this normally only happen at initialization?
-     * A1: Yes, a full decomposition is typically done once at initialization.
-     * Subsequent changes (e.g., for dynamic load balancing) would be handled
-     * by more specific operations, potentially triggered by a 'rebalance()' method.
-     */
-    void decompose_system() {
-        if (!decomposer_) {
-            throw std::runtime_error("No decomposer has been set.");
-        }
-        LOGINFO("decompose_system() called.");
-        decomposer_->decompose(*this, resources_);
-    }
+		// 2. Create the chosen decomposer instance (Factory Pattern)
+		switch (conf.decomposer) {
+		case Conf::DecomposerType::Cell:
+			decomposer_ = std::make_unique<CellDecomposer>();
+			break;
+		default:
+			throw std::runtime_error("Unsupported decomposer type specified in configuration.");
+		}
+		LOGINFO("Using Decomposer: " + decomposer_->get_name());
+	}
 
-    /**
-     * Q2: Should the Decomposer also be the object that converts
-     * SymbolicPatchOps to concrete PatchOp?
-     * A2: Yes, absolutely. The Decomposer is the only object with complete
-     * knowledge of the spatial layout of patches/cells. It is therefore
-     * the perfect candidate to translate abstract operations (e.g., "apply force
-     * in region X") into concrete work on specific patches.
-     *
-     * Q3: Neighbour list for in-GPU decomposition, Halo exchange for inter-GPU?
-     * A3: Correct. This is the standard pattern.
-     * - Neighbor Lists: For interactions within a single patch (or between
-     * adjacent patches) residing on the *same* computational resource.
-     * - Halo Exchanges: For communicating data (particle positions, forces)
-     * for particles in the "halo" or "ghost" regions between patches on
-     * *different* resources (inter-GPU or inter-node).
-     */
+	/**
+	 * @brief Triggers the domain decomposition process.
+	 *
+	 * Q1: Should this normally only happen at initialization?
+	 * A1: Yes, a full decomposition is typically done once at initialization.
+	 * Subsequent changes (e.g., for dynamic load balancing) would be handled
+	 * by more specific operations, potentially triggered by a 'rebalance()' method.
+	 */
+	void decompose_system() {
+		if (!decomposer_) {
+			throw std::runtime_error("No decomposer has been set.");
+		}
+		LOGINFO("decompose_system() called.");
+		decomposer_->decompose(*this, resources_);
+	}
 
-    // --- Public Accessors ---
-    const Temperature& get_temperature() const { return temperature_; }
-    const Length& get_cutoff() const { return cutoff_; }
-    const BoundaryConditions& get_boundary_conditions() const { return boundary_conditions_; }
+	/**
+	 * Q2: Should the Decomposer also be the object that converts
+	 * SymbolicPatchOps to concrete PatchOp?
+	 * A2: Yes, absolutely. The Decomposer is the only object with complete
+	 * knowledge of the spatial layout of patches/cells. It is therefore
+	 * the perfect candidate to translate abstract operations (e.g., "apply force
+	 * in region X") into concrete work on specific patches.
+	 *
+	 * Q3: Neighbour list for in-GPU decomposition, Halo exchange for inter-GPU?
+	 * A3: Correct. This is the standard pattern.
+	 * - Neighbor Lists: For interactions within a single patch (or between
+	 * adjacent patches) residing on the *same* computational resource.
+	 * - Halo Exchanges: For communicating data (particle positions, forces)
+	 * for particles in the "halo" or "ghost" regions between patches on
+	 * *different* resources (inter-GPU or inter-node).
+	 */
+
+	// --- Public Accessors ---
+	const Temperature& get_temperature() const {
+		return temperature_;
+	}
+	const Length& get_cutoff() const {
+		return cutoff_;
+	}
+	const BoundaryConditions& get_boundary_conditions() const {
+		return boundary_conditions_;
+	}
 
   private:
-    // --- Core Configuration & State ---
-    Temperature temperature_;
-    Length cutoff_;
-    BoundaryConditions boundary_conditions_;
-    
-    // --- Decomposition & Resources ---
-    std::unique_ptr<Decomposer> decomposer_;
-    ResourceCollection resources_;
-    
+	// --- Core Configuration & State ---
+	Temperature temperature_;
+	Length cutoff_;
+	BoundaryConditions boundary_conditions_;
+
+	// --- Decomposition & Resources ---
+	std::unique_ptr<Decomposer> decomposer_;
+	ResourceCollection resources_;
 };
 
 } // namespace ARBD

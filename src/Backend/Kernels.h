@@ -50,13 +50,17 @@ struct kerneldim3 {
  */
 struct KernelConfig {
   public:
-	kerneldim3 grid_size = {0,
-							0,
-							0}; // Grid dimensions. A zero value in x signals auto-calculation.
-	kerneldim3 block_size = {256, 1, 1}; // Block/Work-group dimensions.
-	idx_t shared_memory = 0;			 // Shared memory in bytes (primarily for CUDA).
-	bool async = true;					 // If false, the host will wait for completion.
-	EventList dependencies;				 // Events this kernel must wait for.
+	// Grid dimensions. A zero value in x signals auto-calculation.
+	kerneldim3 grid_size = {0, 0, 0};
+	// Block/Work-group dimensions.
+	kerneldim3 block_size = {256, 1, 1};
+	// Shared memory in bytes (primarily for CUDA).
+	idx_t shared_memory = 0;
+	// If false, the host will wait for completion.
+	bool sync = false;
+	// Events this kernel must wait for.
+	EventList dependencies;
+	// Stream ID/Queue for SYCL and CUDA
 	int stream_id = 0;
 
 	inline void validate_block_size(const Resource& resource) {
