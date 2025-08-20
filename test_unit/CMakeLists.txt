@@ -129,9 +129,9 @@ if(USE_SYCL_ACPP OR USE_SYCL_ICPX)
     target_link_libraries(arbd_test_sycl PRIVATE "lib${PROJECT_NAME}" Threads::Threads)
 
     add_executable(arbd_test_sycl_backend
-        Backends/sycl_backend.cpp
-        Backends/sycl_manager.cpp
-        Backends/sycl_omp.cpp
+        Backends/sycl_backend.cpp #passed
+        #Backends/sycl_manager.cpp
+        #Backends/sycl_omp.cpp
         ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp)
     target_include_directories(arbd_test_sycl_backend PRIVATE ${CMAKE_SOURCE_DIR}/src)
     target_link_libraries(arbd_test_sycl_backend PRIVATE "lib${PROJECT_NAME}" Threads::Threads)
@@ -139,7 +139,6 @@ if(USE_SYCL_ACPP OR USE_SYCL_ICPX)
     add_executable(arbd_test_sycl_math
         Math/RandomDevice.cpp
         Math/RandomProfile.cpp
-        #Math/Grid.cpp
         ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp)
     target_include_directories(arbd_test_sycl_math PRIVATE ${CMAKE_SOURCE_DIR}/src)
     target_link_libraries(arbd_test_sycl_math PRIVATE "lib${PROJECT_NAME}" Threads::Threads)

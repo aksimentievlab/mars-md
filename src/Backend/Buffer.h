@@ -683,6 +683,7 @@ class Buffer {
 	T* host_ptr_{nullptr};	 // Host memory pointer
 	void* queue_{nullptr};	 // Queue/Stream pointer
 	bool sync_{false};		 // Sync flag
+	mutable std::mutex buffer_mutex_; // Mutex for thread-safe operations
 
   public:
 	/**
@@ -696,14 +697,16 @@ class Buffer {
 	// Constructor with size only (uses default queue)
 	explicit Buffer(size_t count) : count_(count), resource_(get_best_available_resource()) {
 		if (count_ > 0) {
-			allocate_on_resource(resource_, count_, nullptr, sync_);
+			queue_ = resource_.get_stream(); // Acquire dedicated stream from resource
+			allocate_on_resource(resource_, count_, queue_, sync_);
 		}
 	}
 
 	// Constructor with resource (uses default queue)
 	explicit Buffer(size_t count, const Resource& resource) : count_(count), resource_(resource) {
 		if (count_ > 0) {
-			allocate_on_resource(resource_, count_, nullptr, sync_);
+			queue_ = resource_.get_stream(); // Acquire stream from resource
+			allocate_on_resource(resource_, count_, queue_, sync_);
 		}
 	}
 
@@ -726,6 +729,7 @@ class Buffer {
 	Buffer(const Buffer& other, const Resource& resource)
 		: count_(other.count_), resource_(resource) {
 		if (count_ > 0) {
+			queue_ = resource_.get_stream(); // Acquire stream from resource
 			allocate_on_resource(resource_, count_, queue_, sync_);
 			copy_device_to_device(other, count_);
 		}
@@ -736,6 +740,7 @@ class Buffer {
 	 */
 	Buffer(const Buffer& other) : resource_(other.resource_), count_(other.count_) {
 		if (count_ > 0) {
+			queue_ = resource_.get_stream(); // Acquire stream from resource
 			allocate_on_resource(resource_, count_, queue_, sync_);
 			copy_device_to_device(other, count_);
 		}
@@ -750,6 +755,7 @@ class Buffer {
 			resource_ = other.resource_;
 			count_ = other.count_;
 			if (count_ > 0) {
+				queue_ = resource_.get_stream(); // Acquire stream from resource
 				allocate_on_resource(resource_, count_, queue_, sync_);
 				copy_device_to_device(other, count_);
 			}
@@ -760,6 +766,7 @@ class Buffer {
 	Buffer(Buffer&& other) noexcept
 		: resource_(other.resource_), count_(other.count_), device_ptr_(other.device_ptr_),
 		  queue_(other.queue_), sync_(other.sync_) {
+		// buffer_mutex_ is default constructed (mutexes can't be moved)
 		other.count_ = 0;
 		other.device_ptr_ = nullptr;
 		other.queue_ = nullptr;
@@ -795,6 +802,7 @@ class Buffer {
 	void create(size_t count, const Resource& resource) {
 		resource_ = resource;
 		count_ = count;
+		queue_ = resource_.get_stream(); // Acquire stream from resource
 		allocate_on_resource(resource_, count_, queue_, sync_);
 	}
 
@@ -813,7 +821,8 @@ class Buffer {
 		// First, try to allocate the new buffer.
 		T* new_ptr = nullptr;
 		if (count > 0) {
-			new_ptr = static_cast<T*>(Policy::allocate(target_resource, count * sizeof(T)));
+			void* new_queue = target_resource.get_stream(); // Acquire stream from resource
+			new_ptr = static_cast<T*>(Policy::allocate(target_resource, count * sizeof(T), new_queue));
 			if (!new_ptr) {
 				// Allocation failed. The original buffer is untouched.
 				// You could throw an exception here to signal the failure.
@@ -831,6 +840,7 @@ class Buffer {
 		device_ptr_ = new_ptr;
 		count_ = count;
 		resource_ = target_resource;
+		queue_ = target_resource.get_stream(); // Update queue for new resource
 	}
 
 	/**
@@ -906,13 +916,14 @@ class Buffer {
 	}
 
 	void copy_to_host(T* host_dst, size_t num_elements) const {
+		std::lock_guard<std::mutex> lock(buffer_mutex_); // Thread safety for concurrent operations
 		if (num_elements > count_) {
 			ARBD_Exception(ExceptionType::ValueError, "Copy size exceeds buffer size");
 		}
 		if (!device_ptr_) {
 			ARBD_Exception(ExceptionType::ValueError, "Cannot copy from null buffer");
 		}
-		Policy::copy_to_host(host_dst, device_ptr_, num_elements * sizeof(T), queue_);
+		Policy::copy_to_host(host_dst, device_ptr_, num_elements * sizeof(T), queue_, true); // Force sync
 #if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__) && !defined(__METAL_VERSION__)
 		LOGTRACE("Copied {} bytes to host from {}", num_elements * sizeof(T), resource_.toString());
 #endif
@@ -929,6 +940,7 @@ class Buffer {
 	}
 
 	void copy_from_host(const T* host_src, size_t num_elements) {
+		std::lock_guard<std::mutex> lock(buffer_mutex_); // Thread safety for concurrent operations
 		if (num_elements > count_) {
 #if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__) && !defined(__METAL_VERSION__)
 			ARBD_Exception(ExceptionType::ValueError, "Copy size exceeds buffer size");
@@ -942,7 +954,7 @@ class Buffer {
 		if (!device_ptr_) {
 			ARBD_Exception(ExceptionType::ValueError, "Cannot copy to null buffer");
 		}
-		Policy::copy_from_host(device_ptr_, host_src, num_elements * sizeof(T), queue_);
+		Policy::copy_from_host(device_ptr_, host_src, num_elements * sizeof(T), queue_, true); // Force sync
 #if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__) && !defined(__METAL_VERSION__)
 		LOGTRACE("Copied {} bytes from host to {}", num_elements * sizeof(T), resource_.toString());
 #endif
@@ -952,6 +964,10 @@ class Buffer {
 	 * @brief Copy between device buffers.
 	 */
 	void copy_device_to_device(const Buffer& src, size_t num_elements) {
+		// For device-to-device copy, we only need to lock the destination buffer
+		// Source buffer is read-only, so we can safely read from it concurrently
+		std::lock_guard<std::mutex> lock(buffer_mutex_);
+		
 		if (num_elements > count_ || num_elements > src.count_) {
 #if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__) && !defined(__METAL_VERSION__)
 			ARBD_Exception(ExceptionType::ValueError, "Copy size exceeds buffer size");
@@ -1049,11 +1065,11 @@ class Buffer {
 		return Resource{ResourceType::CPU, 0};
 	}
 
-	void allocate_on_resource(const Resource& resource, size_t count) {
+	void allocate_on_resource(const Resource& resource, size_t count, void* queue, bool sync) {
 		count_ = count;
 		if (count_ > 0) {
 			// Use the resource-aware allocation method
-			device_ptr_ = static_cast<T*>(Policy::allocate(resource, count_ * sizeof(T), queue_));
+			device_ptr_ = static_cast<T*>(Policy::allocate(resource, count_ * sizeof(T), queue));
 			if (!device_ptr_) {
 				ARBD_Exception(ExceptionType::RuntimeError,
 							   "Failed to allocate {} bytes on {}",

@@ -18,6 +18,9 @@
 #include "ARBDException.h"
 #include <cstddef>
 #include <string>
+#include <vector>
+#include <memory>
+#include <mutex>
 #endif
 
 namespace ARBD {
@@ -33,6 +36,15 @@ enum class ResourceType : uint8_t {
 };
 
 /**
+ * @brief Stream type enumeration for different use cases
+ */
+enum class StreamType {
+	Compute = 0, ///< General compute operations
+	Memory = 1,  ///< Memory transfer operations
+	Default = 2  ///< Default stream
+};
+
+/**
  * @brief A production-ready resource identifier that explicitly specifies
  * compute devices for thread-safe, multi-GPU operations.
  *
@@ -45,6 +57,10 @@ class Resource {
 	ResourceType type{ResourceType::CPU}; ///< Resource type (defaults to CPU)
 	size_t id{0};						  ///< Device ID within the resource type
 
+  private:
+	// No internal stream storage needed - use existing manager infrastructure
+
+  public:
 	/**
 	 * @brief Default constructor creates a CPU resource.
 	 */
@@ -58,6 +74,31 @@ class Resource {
 	 */
 	HOST DEVICE constexpr Resource(ResourceType resource_type, size_t device_id = 0)
 		: type(resource_type), id(device_id) {}
+
+	/**
+	 * @brief Destructor - no cleanup needed, managers handle streams
+	 */
+	~Resource() = default;
+
+	/**
+	 * @brief Copy constructor
+	 */
+	Resource(const Resource& other) = default;
+
+	/**
+	 * @brief Assignment operator
+	 */
+	Resource& operator=(const Resource& other) = default;
+
+	/**
+	 * @brief Move constructor
+	 */
+	Resource(Resource&& other) noexcept = default;
+
+	/**
+	 * @brief Move assignment operator
+	 */
+	Resource& operator=(Resource&& other) noexcept = default;
 
 	/**
 	 * @brief Check if this resource is valid (always true since CPU is always available).
@@ -305,6 +346,34 @@ class Resource {
 	HOST DEVICE constexpr bool is_host() const {
 		return type == ResourceType::CPU;
 	}
+
+	/**
+	 * @brief Get a stream for this resource using round-robin selection.
+	 *
+	 * This method provides access to compute streams managed by the backend managers.
+	 * The actual stream management is handled by CUDAManager, SYCLManager, etc.
+	 *
+	 * @param stream_type The type of stream (currently unused, defaults to compute)
+	 * @return Pointer to backend-specific stream object, or nullptr if unavailable
+	 */
+	void* get_stream(StreamType stream_type = StreamType::Compute) const;
+
+	/**
+	 * @brief Get a specific stream by index for this resource.
+	 *
+	 * @param stream_id The stream index (modulo number of streams available)
+	 * @param stream_type The type of stream (currently unused)
+	 * @return Pointer to backend-specific stream object, or nullptr if unavailable
+	 */
+	void* get_stream(size_t stream_id, StreamType stream_type = StreamType::Compute) const;
+
+	/**
+	 * @brief Synchronize all streams for this resource.
+	 *
+	 * This method blocks until all pending operations on this resource's
+	 * streams have completed. Uses the backend manager's synchronization.
+	 */
+	void synchronize_streams() const;
 
 	/**
 	 * @brief Check if this resource can access peer memory from another resource.

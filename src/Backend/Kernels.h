@@ -58,6 +58,7 @@ struct KernelConfig {
 	idx_t shared_memory = 0;
 	// If false, the host will wait for completion.
 	bool sync = false;
+	bool async = !sync; // Legacy compatibility
 	// Events this kernel must wait for.
 	EventList dependencies;
 	// Stream ID/Queue for SYCL and CUDA
@@ -562,7 +563,7 @@ Event launch_sycl_kernel(const Resource& resource,
 		});
 	});
 
-	if (!config.async) {
+	if (config.sync) {
 		sycl_event.wait();
 	}
 
@@ -886,80 +887,10 @@ Event launch_metal_kernel(const Resource& resource,
 */
 #endif
 
-// ============================================================================
-// Helper Functions
-// ============================================================================
-
-template<typename Tuple, idx_t... I>
-auto extract_buffer_pointers_impl(Tuple& tuple, std::index_sequence<I...>) {
-	return std::make_tuple(std::get<I>(tuple).data()...);
-}
-
-template<typename Tuple>
-auto extract_buffer_pointers(Tuple& tuple) {
-	return extract_buffer_pointers_impl(tuple,
-										std::make_index_sequence<std::tuple_size_v<Tuple>>{});
-}
-
-// ============================================================================
-// Utility Functors
-// ============================================================================
-
-template<typename T>
-struct CopyFunctor {
-	HOST DEVICE void operator()(idx_t i, const T* src, T* dst) const {
-		dst[i] = src[i];
-	}
-};
-
-template<typename T>
-struct FillFunctor {
-	T value;
-	HOST DEVICE void operator()(idx_t i, T* out) const {
-		out[i] = value;
-	}
-};
-
-// ============================================================================
-// High-Level Utility Functions
-// ============================================================================
-
-template<typename Backend, typename T>
-Event copy_async(const Resource& resource,
-				 const DeviceBuffer<T>& source,
-				 DeviceBuffer<T>& destination,
-				 const KernelConfig& config = {}) {
-
-	if (source.size() != destination.size()) {
-		throw std::runtime_error("Buffer size mismatch in copy_async");
-	}
-
-	return launch_kernel<Backend>(resource,
-								  source.size(),
-								  std::tie(source),
-								  std::tie(destination),
-								  config,
-								  CopyFunctor<T>{});
-}
-
-template<typename Backend, typename T>
-Event fill_async(const Resource& resource,
-				 DeviceBuffer<T>& buffer,
-				 const T& value,
-				 const KernelConfig& config = {}) {
-
-	return launch_kernel<Backend>(resource,
-								  buffer.size(),
-								  std::tie(),
-								  std::tie(buffer),
-								  config,
-								  FillFunctor<T>{value});
-}
-
-// ============================================================================
-// Kernel Chaining
-// ============================================================================
-
+/**
+ * @brief Kernel chaining
+ * Kernel chain on a single resource with same stream/Queue
+ */
 template<typename Backend>
 class KernelChain {
   private:
@@ -979,7 +910,7 @@ class KernelChain {
 
 		KernelConfig new_config = config;
 		new_config.dependencies = events_;
-		new_config.async = true;
+		new_config.sync = false;
 
 		Event completion_event = launch_kernel<Backend>(resource_,
 														thread_count,
@@ -1004,7 +935,7 @@ class KernelChain {
 
 		KernelConfig new_config = config;
 		new_config.dependencies = events_;
-		new_config.async = true;
+		new_config.sync = false;
 
 		Event completion_event = launch_kernel<Backend>(resource_,
 														thread_count,

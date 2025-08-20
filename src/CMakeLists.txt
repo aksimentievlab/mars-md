@@ -2,6 +2,7 @@
 set(LIB_SOURCES
     ARBDException.cpp
     SignalManager.cpp
+    Backend/Resource.cpp
     #Math/BaseGrid.cpp
 )
 

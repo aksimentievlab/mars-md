@@ -115,12 +115,12 @@ TEST_CASE("SYCL OpenMP Parallel For", "[SYCL][OpenMP]") {
         std::vector<float> c(SIZE, 0.0f);
         
         // Use ARBD DeviceMemory for automatic USM management
-        DeviceMemory<float> d_a(queue.get(), SIZE);
-        DeviceMemory<float> d_b(queue.get(), SIZE);
-        DeviceMemory<float> d_c(queue.get(), SIZE);
+        ARBD::DeviceBuffer<float> d_a(queue.get(), SIZE, true);
+        ARBD::DeviceBuffer<float> d_b(queue.get(), SIZE, true);
+        ARBD::DeviceBuffer<float> d_c(queue.get(), SIZE, true);
         
-        d_a.copyFromHost(a);
-        d_b.copyFromHost(b);
+        d_a.copyFromHost(a.data(), SIZE);
+        d_b.copyFromHost(b.data(), SIZE);
         
         // Get raw pointers for kernel
         float* ptr_a = d_a.get();
