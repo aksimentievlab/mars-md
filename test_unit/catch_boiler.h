@@ -1,6 +1,5 @@
 #include "../extern/Catch2/extras/catch_amalgamated.hpp"
 
-
 #include <cstdio>
 #include <iostream>
 #include <memory>
@@ -32,7 +31,6 @@
 #include "Math/Types.h"
 
 // Use Catch2 v3 amalgamated header (self-contained)
-
 
 // Macro for run_trial function - defines run_trial as an alias to run_trial function
 #define DEF_RUN_TRIAL using Tests::run_trial;
@@ -202,7 +200,7 @@ class TestBackendManager {
 	void execute_kernel(R* result_device, T... args) {
 #ifdef USE_CUDA
 #if defined(__CUDACC__)
-		cuda_op_kernel<Op_t, R, T...><<<1, 1>>>(result_device, args...);
+		cudaGetKernelFunction<Op_t, R, T...>()(result_device, args...);
 		ARBD::check_cuda_error(cudaGetLastError(), __FILE__, __LINE__);
 		ARBD::check_cuda_error(cudaDeviceSynchronize(), __FILE__, __LINE__);
 #else

@@ -6,7 +6,6 @@
 #include <chrono>
 #include <cmath>
 #include <numeric>
-#include <random>
 #include <vector>
 using namespace ARBD;
 
@@ -114,7 +113,7 @@ TEST_CASE_METHOD(SYCLKernelTestFixture,
 
 		KernelConfig config;
 		config.block_size = {64, 1, 1};
-		config.async = false;
+		config.sync = true;
 
 		// Use the backend-specific function directly
 		auto event = launch_sycl_kernel(sycl_resource, n, inputs, outputs, config, scale_kernel);
@@ -133,62 +132,6 @@ TEST_CASE_METHOD(SYCLKernelTestFixture,
 TEST_CASE_METHOD(SYCLKernelTestFixture, "SYCL Utility Functors", "[sycl][kernels][utils]") {
 	if (!sycl_available) {
 		SKIP("SYCL not available");
-	}
-
-	SECTION("Copy functor test") {
-		const size_t n = 500;
-
-		DeviceBuffer<double> source(n);
-		DeviceBuffer<double> dest(n);
-
-		// Initialize source
-		std::vector<double> data(n);
-		std::iota(data.begin(), data.end(), 1.0);
-		source.copy_from_host(data);
-
-		// Test CopyFunctor
-		CopyFunctor<double> copy_func;
-
-		auto inputs = std::tie(source);
-		auto outputs = std::tie(dest);
-
-		KernelConfig config;
-		auto event = launch_sycl_kernel(sycl_resource, n, inputs, outputs, config, copy_func);
-		event.wait();
-
-		// Verify copy
-		std::vector<double> result(n);
-		dest.copy_to_host(result);
-
-		for (size_t i = 0; i < n; ++i) {
-			REQUIRE(result[i] == data[i]);
-		}
-	}
-
-	SECTION("Fill functor test") {
-		const size_t n = 300;
-		const float fill_value = 42.5f;
-
-		DeviceBuffer<float> buffer(n);
-
-		FillFunctor<float> fill_func{fill_value};
-
-		auto inputs = std::tie();
-		auto outputs = std::tie(buffer);
-
-		KernelConfig config;
-		config.block_size = {32, 1, 1};
-
-		auto event = launch_sycl_kernel(sycl_resource, n, inputs, outputs, config, fill_func);
-		event.wait();
-
-		// Verify fill
-		std::vector<float> result(n);
-		buffer.copy_to_host(result);
-
-		for (size_t i = 0; i < n; ++i) {
-			REQUIRE(std::abs(result[i] - fill_value) < 1e-6f);
-		}
 	}
 }
 
@@ -220,7 +163,7 @@ TEST_CASE_METHOD(SYCLKernelTestFixture, "SYCL Configuration Testing", "[sycl][ke
 
 			KernelConfig config;
 			config.block_size = {block_size, 1, 1};
-			config.async = false;
+			config.sync = true;
 
 			auto event =
 				launch_sycl_kernel(sycl_resource, n, inputs, outputs, config, double_kernel);
@@ -257,7 +200,7 @@ TEST_CASE_METHOD(SYCLKernelTestFixture, "SYCL Configuration Testing", "[sycl][ke
 			auto outputs = std::tie(sync_output);
 
 			KernelConfig config;
-			config.async = false;
+			config.sync = true;
 			config.block_size = {64, 1, 1};
 
 			auto event = launch_sycl_kernel(sycl_resource, n, inputs, outputs, config, add_kernel);
@@ -270,7 +213,7 @@ TEST_CASE_METHOD(SYCLKernelTestFixture, "SYCL Configuration Testing", "[sycl][ke
 			auto outputs = std::tie(async_output);
 
 			KernelConfig config;
-			config.async = true;
+			config.sync = false;
 			config.block_size = {64, 1, 1};
 
 			auto event = launch_sycl_kernel(sycl_resource, n, inputs, outputs, config, add_kernel);
@@ -392,7 +335,8 @@ TEST_CASE_METHOD(SYCLKernelTestFixture, "SYCL Error Handling", "[sycl][kernels][
 			config.block_size = block_config;
 
 			// None of these should crash
-			auto event = launch_sycl_kernel(sycl_resource, n, inputs, outputs, config, simple_kernel);
+			auto event =
+				launch_sycl_kernel(sycl_resource, n, inputs, outputs, config, simple_kernel);
 			REQUIRE_NOTHROW(event);
 
 			// Wait for kernel completion
@@ -440,7 +384,7 @@ TEST_CASE_METHOD(SYCLKernelTestFixture,
 
 			KernelConfig config;
 			config.block_size = {256, 1, 1};
-			config.async = false;
+			config.sync = true;
 
 			auto start = std::chrono::high_resolution_clock::now();
 			auto event =

@@ -283,18 +283,6 @@ class NCCLManager {
 				  stream_id);
 	}
 
-	/**
-	 * @brief Legacy allreduce interface using std::vector
-	 * @deprecated Use the modern span-based interface instead
-	 * @tparam T Data type (must satisfy NCCLSupported concept)
-	 * @param send_d Vector of device pointers (in-place operation)
-	 * @param size Number of elements to reduce
-	 * @param stream_id Stream ID to use (-1 for default stream)
-	 */
-	template<NCCLSupported T>
-	static void nccl_allreduce(const std::vector<T*>& send_d, size_t size, int stream_id = -1) {
-		allreduce<T>(const_cast<T**>(send_d.data()), send_d.size(), size, ncclSum, stream_id);
-	}
 
   private:
 	/**

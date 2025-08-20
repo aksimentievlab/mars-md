@@ -152,10 +152,11 @@ class Patch : public BasePatch {
   private:
 	void initialize();
 
-	// void randomize_positions(size_t start = 0, size_t num = -1);
+	void randomize_positions(size_t start = 0, size_t num = -1);
 
 	// TODO: move computes to another object; this should simply be a dumb data
-	// store std::vector<PatchProxy> neighbors;
+	// store std::vector<PatchProxy> neighbors and should use Event/Buffer system for streaming Kernels
+	//Potentially a CUDAGraph or SYCL graph ops.
 	std::vector<std::unique_ptr<PatchOp>> local_computes;	 // Operations that will be performed on
 															 // this patch each timestep
 	std::vector<std::unique_ptr<PatchOp>> nonlocal_computes; // Operations that will be performed on

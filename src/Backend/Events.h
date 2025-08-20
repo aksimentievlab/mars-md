@@ -24,7 +24,7 @@
 #endif
 
 namespace ARBD {
-namespace BACKEND {
+
 class Event {
   private:
 	Resource resource_;
@@ -225,11 +225,7 @@ class EventList {
 	}
 #endif
 };
-}; // namespace BACKEND
 
-// Make Event and EventList directly accessible from ARBD namespace
-using Event = BACKEND::Event;
-using EventList = BACKEND::EventList;
 
 } // namespace ARBD
 #endif // __METAL_VERSION__

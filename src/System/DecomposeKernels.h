@@ -11,13 +11,6 @@
 
 namespace ARBD {
 
-// Forward declaration
-class CellDecomposition;
-
-/*===============================*\
-|   CELLDECOMPOSITION KERNELS    |
-\===============================*/
-
 /**
  * @brief Kernel to decompose particles into cells
  */
@@ -200,6 +193,53 @@ struct CountParticlesKernel {
 			counts[idx] = 0;
 		}
 	}
+};
+// Kernel functor for particle assignment to patches
+struct ParticleAssignmentFunctor {
+    const Vector3* positions;
+    const Vector3* momenta;
+    const size_t* types;
+    const size_t* global_indices;
+    size_t num_particles;
+    
+    // Patch boundaries
+    const Vector3* patch_mins;
+    const Vector3* patch_maxs;
+    size_t num_patches;
+    
+    // Output arrays
+    size_t* patch_assignments;  // Which patch each particle belongs to
+    size_t* particle_counts;    // How many particles in each patch
+    
+    HOST DEVICE void operator()(size_t particle_idx) const {
+        if (particle_idx >= num_particles) return;
+        
+        Vector3 pos = positions[particle_idx];
+        size_t assigned_patch = num_patches; // Invalid patch index
+        
+        // Find which patch this particle belongs to
+        for (size_t patch_idx = 0; patch_idx < num_patches; ++patch_idx) {
+            Vector3 pmin = patch_mins[patch_idx];
+            Vector3 pmax = patch_maxs[patch_idx];
+            
+            if (pos.x >= pmin.x && pos.x < pmax.x &&
+                pos.y >= pmin.y && pos.y < pmax.y &&
+                pos.z >= pmin.z && pos.z < pmax.z) {
+                assigned_patch = patch_idx;
+                break;
+            }
+        }
+        
+        if (assigned_patch < num_patches) {
+            patch_assignments[particle_idx] = assigned_patch;
+            // Atomic increment of particle count for this patch
+            #ifdef __CUDA_ARCH__
+            atomicAdd(&particle_counts[assigned_patch], 1);
+            #else
+            particle_counts[assigned_patch]++;
+            #endif
+        }
+    }
 };
 
 } // namespace ARBD

@@ -15,23 +15,35 @@
 // Patches should work independently with syncronization mediated by SimManager
 // Patch to Patch data exchange should not require explicit scheduling by SimManager
 
-// Load balancing?
 namespace ARBD {
+
+struct LoadBalancer {
+    void balance(SimSystem& sys, const ResourceCollection& resources);
+};
+
 
 class SimManager {
 
 public:
-    SimManager() {}; //: load_balancer() {}
+    SimManager(SimSystem& sys, const ResourceCollection& resources); 
 
 private:    
     LoadBalancer load_balancer;
     SimSystem sys;	// make it a list for replicas
-    Decomposer decomp;
+    CellDecomposer cell_decomp;
     //std::vector<SymbolicOp> sym_ops;
     //std::vector<PatchOp>  ops;
     
 public:
-
+class CheckPairlist {
+    public:
+      CheckPairlist(SimSystem& sys, const ResourceCollection& resources);
+      void check_pairlist(SimSystem& sys, const ResourceCollection& resources);
+  
+    private:
+      SimSystem& sys_;
+      ResourceCollection resources_;
+  };
     void run();    
 };
 }
