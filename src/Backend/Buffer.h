@@ -49,7 +49,8 @@ namespace ARBD {
 namespace CUDA {
 struct Policy {
 	// queue is a cuda stream
-	static void* allocate(const Resource& resource, size_t bytes, void* queue = nullptr) {
+	static void*
+	allocate(const Resource& resource, size_t bytes, void* queue = nullptr, bool sync = true) {
 		if (resource.type != ResourceType::CUDA) {
 			ARBD_Exception(ExceptionType::ValueError,
 						   "CUDA Policy requires CUDA resource, got {}",
@@ -72,7 +73,7 @@ struct Policy {
 		return ptr;
 	}
 
-	static void deallocate(void* ptr, void* queue = nullptr) {
+	static void deallocate(void* ptr, void* queue = nullptr, bool sync = true) {
 		if (ptr) {
 			cudaStream_t stream = queue ? static_cast<cudaStream_t>(queue)
 										: Manager::get_current_device().get_next_stream();
@@ -125,7 +126,8 @@ struct Policy {
 	}
 };
 struct PinnedPolicy {
-	static void* allocate(const Resource& resource, size_t bytes) {
+	static void*
+	allocate(const Resource& resource, size_t bytes, void* queue = nullptr, bool sync = true) {
 		if (resource.type != ResourceType::CUDA) {
 			ARBD_Exception(ExceptionType::ValueError,
 						   "CUDA Policy requires CUDA resource, got {}",
@@ -137,7 +139,7 @@ struct PinnedPolicy {
 		return ptr;
 	}
 
-	static void deallocate(void* ptr) {
+	static void deallocate(void* ptr, void* queue = nullptr) {
 		if (ptr) {
 			CUDA_CHECK(cudaFreeHost(ptr));
 		}
@@ -187,7 +189,8 @@ struct PinnedPolicy {
 	}
 };
 struct UnifiedPolicy {
-	static void* allocate(const Resource& resource, size_t bytes) {
+	static void* allocate(const Resource& resource, size_t bytes, void* queue = nullptr,
+						  bool sync = true) {
 		if (resource.type != ResourceType::CUDA) {
 			ARBD_Exception(ExceptionType::ValueError,
 						   "CUDA Policy requires CUDA resource, got {}",
@@ -198,7 +201,7 @@ struct UnifiedPolicy {
 		return ptr;
 	}
 
-	static void deallocate(void* ptr) {
+	static void deallocate(void* ptr, void* queue = nullptr, bool sync = true) {
 		if (ptr) {
 			CUDA_CHECK(cudaFree(ptr));
 		}
@@ -214,7 +217,6 @@ struct UnifiedPolicy {
 		CUDA_CHECK(cudaMemAdvise(ptr, bytes, static_cast<cudaMemoryAdvise>(advice), device_id));
 	}
 
-	// Copying to/from a standard host buffer is just a memcpy for USM
 	static void
 	copy_from_host(void* unified_dst, const void* host_src, size_t bytes, void* queue = nullptr) {
 		std::memcpy(unified_dst, host_src, bytes);
@@ -260,7 +262,8 @@ struct UnifiedPolicy {
 #ifdef USE_SYCL
 namespace SYCL {
 struct Policy {
-	static void* allocate(const Resource& resource, size_t bytes, auto& queue) {
+	static void*
+	allocate(const Resource& resource, size_t bytes, void* queue = nullptr, bool sync = true) {
 		if (resource.type != ResourceType::SYCL) {
 			ARBD_Exception(ExceptionType::ValueError,
 						   "SYCL Policy requires SYCL resource, got {}",
@@ -269,10 +272,10 @@ struct Policy {
 
 		// Get the specific device queue for this resource
 		auto& device_manager = Manager::get_device(resource.id);
-		auto& queue = device_manager.get_next_queue();
 
 		void* ptr = nullptr; // Initialize the pointer
-		SYCL_CHECK(ptr = sycl::malloc_device(bytes, queue));
+		auto& q = queue ? *static_cast<sycl::queue*>(queue) : device_manager.get_next_queue();
+		SYCL_CHECK(ptr = sycl::malloc_device(bytes, q));
 		if (!ptr) {
 			ARBD_Exception(ExceptionType::RuntimeError,
 						   "Failed to allocate {} bytes on SYCL device {}",
@@ -283,7 +286,7 @@ struct Policy {
 		return ptr;
 	}
 
-	static void deallocate(void* ptr) {
+	static void deallocate(void* ptr, void* queue = nullptr, bool sync = true) {
 		if (ptr) {
 			// For deallocation, we need to use the current queue context
 			// since we don't have the original resource information
@@ -292,51 +295,58 @@ struct Policy {
 		}
 	}
 
-	static void copy_to_host(void* host_dst, const void* device_src, size_t bytes) {
-		auto& queue = Manager::get_current_queue();
-		SYCL_CHECK(queue.get().memcpy(host_dst, device_src, bytes).wait());
+	static void copy_to_host(void* host_dst,
+							 const void* device_src,
+							 size_t bytes,
+							 void* queue = nullptr,
+							 bool sync = false) {
+		auto& q = queue ? *static_cast<sycl::queue*>(queue) : Manager::get_current_queue().get();
+		if (sync) {
+			SYCL_CHECK(q.memcpy(host_dst, device_src, bytes).wait());
+		} else {
+			SYCL_CHECK(q.memcpy(host_dst, device_src, bytes));
+		}
 	}
 
-	static void copy_from_host(void* device_dst, const void* host_src, size_t bytes) {
-		auto& queue = Manager::get_current_queue();
-		SYCL_CHECK(queue.get().memcpy(device_dst, host_src, bytes).wait());
+	static void copy_from_host(void* device_dst,
+							   const void* host_src,
+							   size_t bytes,
+							   void* queue = nullptr,
+							   bool sync = false) {
+		auto& q = queue ? *static_cast<sycl::queue*>(queue) : Manager::get_current_queue().get();
+		if (sync) {
+			SYCL_CHECK(q.memcpy(device_dst, host_src, bytes).wait());
+		} else {
+			SYCL_CHECK(q.memcpy(device_dst, host_src, bytes));
+		}
 	}
 
-	static void copy_device_to_device(void* dst, const void* src, size_t bytes) {
-		auto& queue = Manager::get_current_queue();
-		SYCL_CHECK(queue.get().memcpy(dst, src, bytes).wait());
-	}
-
-	static sycl::event copy_to_host_async(void* host_dst, const void* device_src, size_t bytes) {
-		auto& queue = Manager::get_current_queue();
-		// Return the event instead of waiting on it
-		return queue.get().memcpy(host_dst, device_src, bytes);
-	}
-
-	static sycl::event copy_from_host_async(void* device_dst, const void* host_src, size_t bytes) {
-		auto& queue = Manager::get_current_queue();
-		// Return the event
-		return queue.get().memcpy(device_dst, host_src, bytes);
-	}
-
-	static sycl::event copy_device_to_device_async(void* dst, const void* src, size_t bytes) {
-		auto& queue = Manager::get_current_queue();
-		// Return the event
-		return queue.get().memcpy(dst, src, bytes);
+	static void copy_device_to_device(void* dst,
+									  const void* src,
+									  size_t bytes,
+									  void* queue = nullptr,
+									  bool sync = false) {
+		auto& q = queue ? *static_cast<sycl::queue*>(queue) : Manager::get_current_queue().get();
+		if (sync) {
+			SYCL_CHECK(q.memcpy(dst, src, bytes).wait());
+		} else {
+			SYCL_CHECK(q.memcpy(dst, src, bytes));
+		}
 	}
 };
 struct PinnedPolicy {
-	static void* allocate(const Resource& resource, size_t bytes) {
+	static void*
+	allocate(const Resource& resource, size_t bytes, void* queue = nullptr, bool sync = true) {
 		if (resource.type != ResourceType::SYCL) {
 			ARBD_Exception(ExceptionType::ValueError,
 						   "SYCL Policy requires SYCL resource, got {}",
 						   resource.toString());
 		}
 		auto& device = SYCL::Manager::get_device(resource.id);
-		auto& queue = device.get_next_queue();
+		auto& q = queue ? *static_cast<sycl::queue*>(queue) : device.get_next_queue();
 
 		void* ptr = nullptr; // Initialize the pointer
-		SYCL_CHECK(ptr = sycl::malloc_host(bytes, queue));
+		SYCL_CHECK(ptr = sycl::malloc_host(bytes, q));
 		if (!ptr) {
 			ARBD_Exception(ExceptionType::SYCLRuntimeError,
 						   "Failed to allocate {} bytes of SYCL host memory",
@@ -345,25 +355,71 @@ struct PinnedPolicy {
 		return ptr;
 	}
 
-	static void deallocate(void* ptr) {
+	static void deallocate(void* ptr, void* queue = nullptr, bool sync = true) {
 		if (ptr) {
 			auto& queue = SYCL::Manager::get_current_queue();
 			SYCL_CHECK(sycl::free(ptr, queue));
 		}
 	}
+	static void upload_to_device(void* device_dst,
+								 const void* pinned_src,
+								 size_t bytes,
+								 const Resource& resource,
+								 void* queue = nullptr) {
+		cudaStream_t stream = queue ? static_cast<cudaStream_t>(queue)
+									: Manager::get_device(resource.id).get_next_stream();
+		CUDA_CHECK(cudaMemcpyAsync(device_dst, pinned_src, bytes, cudaMemcpyHostToDevice, stream));
+	}
+
+	static void download_from_device(void* pinned_dst,
+									 const void* device_src,
+									 size_t bytes,
+									 const Resource& resource,
+									 void* queue = nullptr) {
+		cudaStream_t stream = queue ? static_cast<cudaStream_t>(queue)
+									: Manager::get_device(resource.id).get_next_stream();
+		CUDA_CHECK(cudaMemcpyAsync(pinned_dst, device_src, bytes, cudaMemcpyDeviceToHost, stream));
+	}
+
+	static void copy_from_host(void* pinned_dst,
+							   const void* host_src,
+							   size_t bytes,
+							   void* queue = nullptr,
+							   bool sync = false) {
+		std::memcpy(pinned_dst, host_src, bytes);
+	}
+
+	// Copies from this pinned buffer to a standard host buffer.
+	static void copy_to_host(void* host_dst,
+							 const void* pinned_src,
+							 size_t bytes,
+							 void* queue = nullptr,
+							 bool sync = false) {
+		std::memcpy(host_dst, pinned_src, bytes);
+	}
+	static void copy_device_to_device(void* dst,
+									  const void* src,
+									  size_t bytes,
+									  void* queue = nullptr,
+									  bool sync = false) {
+		std::memcpy(dst, src, bytes);
+	}
 };
 struct UnifiedPolicy {
-	static void* allocate(const Resource& resource, size_t bytes) {
+	static void* allocate(const Resource& resource,
+						  size_t bytes,
+						  void* queue = nullptr,
+						  bool sync = true) {
 		if (resource.type != ResourceType::SYCL) {
 			ARBD_Exception(ExceptionType::ValueError,
 						   "SYCLUnifiedMemoryPolicy requires a SYCL resource.");
 		}
 		// Get the queue associated with the target SYCL device
 		auto& device = SYCL::Manager::get_device(resource.id);
-		auto& queue = device.get_next_queue();
+		auto& q = queue ? *static_cast<sycl::queue*>(queue) : device.get_next_queue();
 
 		void* ptr = nullptr; // Initialize the pointer
-		SYCL_CHECK(ptr = sycl::malloc_shared(bytes, queue));
+		SYCL_CHECK(ptr = sycl::malloc_shared(bytes, q));
 		if (!ptr) {
 			ARBD_Exception(ExceptionType::SYCLRuntimeError,
 						   "Failed to allocate {} bytes of SYCL shared memory",
@@ -372,10 +428,63 @@ struct UnifiedPolicy {
 		return ptr;
 	}
 
-	static void deallocate(void* ptr) {
+	static void deallocate(void* ptr, void* queue = nullptr, bool sync = true) {
 		if (ptr) {
 			auto& queue = SYCL::Manager::get_current_queue();
 			SYCL_CHECK(sycl::free(ptr, queue));
+		}
+	}
+	// Should be default async
+	static void prefetch(void* ptr, size_t bytes, int device_id, void* queue = nullptr) {
+		auto& q = queue ? *static_cast<sycl::queue*>(queue) : Manager::get_current_queue().get();
+		if (device_id >= 0) {
+			q.prefetch(ptr, bytes);
+		} else {
+			q.prefetch(ptr, bytes);
+		}
+	}
+
+	static void
+	mem_advise(void* ptr, size_t bytes, int advice, int device_id, void* queue = nullptr) {
+		auto& q = queue ? *static_cast<sycl::queue*>(queue) : Manager::get_current_queue().get();
+		q.mem_advise(ptr, bytes, advice);
+	}
+	static void
+	copy_from_host(void* unified_dst, const void* host_src, size_t bytes, void* queue = nullptr) {
+		std::memcpy(unified_dst, host_src, bytes);
+		// Optionally prefetch to the current device to warm it up
+		int device;
+		cudaGetDevice(&device);
+		cudaStream_t stream = queue ? static_cast<cudaStream_t>(queue) : 0;
+		CUDA_CHECK(cudaMemPrefetchAsync(unified_dst, bytes, device, stream));
+	}
+
+	static void
+	copy_to_host(void* host_dst, const void* unified_src, size_t bytes, void* queue = nullptr) {
+		// Prefetch to the host to ensure data is resident, then copy
+		cudaStream_t stream = queue ? static_cast<cudaStream_t>(queue) : 0;
+		CUDA_CHECK(
+			cudaMemPrefetchAsync(const_cast<void*>(unified_src), bytes, cudaCpuDeviceId, stream));
+		if (stream) {
+			CUDA_CHECK(cudaStreamSynchronize(stream));
+		} else {
+			CUDA_CHECK(cudaDeviceSynchronize()); // Sync if default stream
+		}
+		std::memcpy(host_dst, unified_src, bytes);
+	}
+
+	static void copy_device_to_device(void* dst,
+									  const void* src,
+									  size_t bytes,
+									  void* queue = nullptr,
+									  bool sync = false) {
+		if (sync) {
+			// cudaMemcpyDefault handles peer-to-peer automatically
+			CUDA_CHECK(cudaMemcpy(dst, src, bytes, cudaMemcpyDefault));
+		} else {
+			cudaStream_t stream = queue ? static_cast<cudaStream_t>(queue)
+										: Manager::get_current_device().get_next_stream();
+			CUDA_CHECK(cudaMemcpyAsync(dst, src, bytes, cudaMemcpyDefault, stream));
 		}
 	}
 };
@@ -566,6 +675,12 @@ using UnifiedPolicy = METAL::Policy;
  */
 template<typename T, typename Policy>
 class Buffer {
+  private:
+	Resource resource_{};	 // The compute resource this buffer is allocated on
+	size_t count_{0};		 // Number of elements
+	T* device_ptr_{nullptr}; // Device memory pointer
+	void* queue_{nullptr};	 // Queue/Stream pointer
+
   public:
 	/**
 	 * @brief Default constructor creates an empty buffer with no resource.
@@ -575,30 +690,30 @@ class Buffer {
 	 */
 	Buffer() = default;
 
-	/**
-	 * @brief BACKWARD COMPATIBLE: Creates a buffer with size only.
-	 * Uses the best available device (prioritizes GPU over CPU).
-	 *
-	 * @param count The number of elements to allocate
-	 */
+	// Constructor with size only (uses default queue)
 	explicit Buffer(size_t count) : count_(count), resource_(get_best_available_resource()) {
 		if (count_ > 0) {
-			allocate_on_resource(resource_, count_);
+			allocate_on_resource(resource_, count_, nullptr);
 		}
 	}
 
-	/**
-	 * @brief PRODUCTION CONSTRUCTOR: Creates a buffer tied to a specific resource.
-	 *
-	 * @param count The number of elements to allocate
-	 * @param resource The compute resource (device) to allocate memory on
-	 */
+	// Constructor with resource (uses default queue)
 	explicit Buffer(size_t count, const Resource& resource) : count_(count), resource_(resource) {
 		if (count_ > 0) {
-			allocate_on_resource(resource_, count_);
+			allocate_on_resource(resource_, count_, nullptr);
 		}
 	}
 
+	// Constructor with resource and queue
+	explicit Buffer(size_t count, const Resource& resource, void* queue)
+		: count_(count), resource_(resource), queue_(queue) {
+		if (count_ > 0) {
+			allocate_on_resource(resource_, count_, queue_);
+		}
+	}
+	~Buffer() {
+		deallocate();
+	}
 	/**
 	 * @brief Copy constructor with explicit resource binding.
 	 *
@@ -624,16 +739,6 @@ class Buffer {
 	}
 
 	/**
-	 * @brief Move constructor.
-	 */
-	Buffer(Buffer&& other) noexcept
-		: resource_(other.resource_), count_(other.count_), device_ptr_(other.device_ptr_) {
-		other.count_ = 0;
-		other.device_ptr_ = nullptr;
-		other.resource_ = Resource{}; // Reset to CPU default
-	}
-
-	/**
 	 * @brief Copy assignment operator.
 	 */
 	Buffer& operator=(const Buffer& other) {
@@ -648,32 +753,44 @@ class Buffer {
 		}
 		return *this;
 	}
+	// Move constructor
+	Buffer(Buffer&& other) noexcept
+		: resource_(other.resource_), count_(other.count_), device_ptr_(other.device_ptr_),
+		  queue_(other.queue_) {
+		other.count_ = 0;
+		other.device_ptr_ = nullptr;
+		other.queue_ = nullptr;
+		other.resource_ = Resource{};
+	}
 
-	/**
-	 * @brief Move assignment operator.
-	 */
+	// Move assignment
 	Buffer& operator=(Buffer&& other) noexcept {
 		if (this != &other) {
 			deallocate();
 			resource_ = other.resource_;
 			count_ = other.count_;
 			device_ptr_ = other.device_ptr_;
+			queue_ = other.queue_;
 			other.count_ = 0;
 			other.device_ptr_ = nullptr;
-			other.resource_ = Resource{}; // Reset to CPU default
+			other.queue_ = nullptr;
+			other.resource_ = Resource{};
 		}
 		return *this;
 	}
+
+	// Set queue for async operations
+	void set_queue(void* queue) {
+		queue_ = queue;
+	}
+	void* get_queue() const {
+		return queue_;
+	}
+
 	void create(size_t count, const Resource& resource) {
 		resource_ = resource;
 		count_ = count;
 		allocate_on_resource(resource_, count_);
-	}
-	/**
-	 * @brief Destructor deallocates the buffer.
-	 */
-	~Buffer() {
-		deallocate();
 	}
 
 	/**
@@ -790,7 +907,7 @@ class Buffer {
 		if (!device_ptr_) {
 			ARBD_Exception(ExceptionType::ValueError, "Cannot copy from null buffer");
 		}
-		Policy::copy_to_host(host_dst, device_ptr_, num_elements * sizeof(T));
+		Policy::copy_to_host(host_dst, device_ptr_, num_elements * sizeof(T), queue_);
 #if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__) && !defined(__METAL_VERSION__)
 		LOGTRACE("Copied {} bytes to host from {}", num_elements * sizeof(T), resource_.toString());
 #endif
@@ -820,7 +937,7 @@ class Buffer {
 		if (!device_ptr_) {
 			ARBD_Exception(ExceptionType::ValueError, "Cannot copy to null buffer");
 		}
-		Policy::copy_from_host(device_ptr_, host_src, num_elements * sizeof(T));
+		Policy::copy_from_host(device_ptr_, host_src, num_elements * sizeof(T), queue_);
 #if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__) && !defined(__METAL_VERSION__)
 		LOGTRACE("Copied {} bytes from host to {}", num_elements * sizeof(T), resource_.toString());
 #endif
@@ -844,7 +961,10 @@ class Buffer {
 		if (!device_ptr_ || !src.device_ptr_) {
 			ARBD_Exception(ExceptionType::ValueError, "Cannot copy with null buffer(s)");
 		}
-		Policy::copy_device_to_device(device_ptr_, src.device_ptr_, num_elements * sizeof(T));
+		Policy::copy_device_to_device(device_ptr_,
+									  src.device_ptr_,
+									  num_elements * sizeof(T),
+									  queue_);
 #if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__) && !defined(__METAL_VERSION__)
 		LOGTRACE("Copied {} bytes device-to-device from {} to {}",
 				 num_elements * sizeof(T),
@@ -928,7 +1048,7 @@ class Buffer {
 		count_ = count;
 		if (count_ > 0) {
 			// Use the resource-aware allocation method
-			device_ptr_ = static_cast<T*>(Policy::allocate(resource, count_ * sizeof(T)));
+			device_ptr_ = static_cast<T*>(Policy::allocate(resource, count_ * sizeof(T), queue_));
 			if (!device_ptr_) {
 				ARBD_Exception(ExceptionType::RuntimeError,
 							   "Failed to allocate {} bytes on {}",
@@ -943,7 +1063,7 @@ class Buffer {
 
 	void deallocate() {
 		if (device_ptr_) {
-			Policy::deallocate(device_ptr_);
+			Policy::deallocate(device_ptr_, queue_);
 			device_ptr_ = nullptr;
 #if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__) && !defined(__METAL_VERSION__)
 			LOGTRACE("Deallocated buffer on {}", resource_.toString());
@@ -951,12 +1071,36 @@ class Buffer {
 		}
 		count_ = 0;
 	}
-
-	Resource resource_{};	 // The compute resource this buffer is allocated on
-	size_t count_{0};		 // Number of elements
-	T* device_ptr_{nullptr}; // Device memory pointer
 };
 
+template<typename T, typename Policy>
+class PinnedBuffer: public Buffer<T, Policy>{
+  public:
+	PinnedBuffer(size_t count, const Resource& resource, void* queue = nullptr, bool sync = true)
+		: Buffer<T, Policy>(count, resource, queue, sync) {}
+	void upload_to_device(const T* host_src, size_t num_elements) {
+		Policy::upload_to_device(this->device_ptr_, host_src, num_elements * sizeof(T), this->resource_,
+								 this->queue_);
+	}
+	void download_from_device(T* host_dst, size_t num_elements) {
+		Policy::download_from_device(host_dst, this->device_ptr_, num_elements * sizeof(T),
+									 this->resource_, this->queue_);
+	}
+};
+
+template<typename T, typename Policy>
+class USMBuffer: public Buffer<T, Policy> {
+  public:
+	USMBuffer(size_t count, const Resource& resource, void* queue = nullptr, bool sync = true)
+		: Buffer<T, Policy>(count, resource, queue, sync) {}
+	void prefetch(int device_id = -1, void* queue = nullptr) {
+		Policy::prefetch(this->device_ptr_, this->count_ * sizeof(T), device_id, this->queue_);
+	}
+	void mem_advise(int advice, int device_id = -1) {
+		Policy::mem_advise(this->device_ptr_, this->count_ * sizeof(T), advice, device_id,
+						   this->queue_);
+	}
+};
 // ============================================================================
 // Convenient Aliases
 // ============================================================================
@@ -970,9 +1114,9 @@ class Buffer {
 template<typename T>
 using DeviceBuffer = Buffer<T, BackendPolicy>;
 template<typename T>
-using PinnedBuffer = Buffer<T, PinnedPolicy>;
+using PinnedBuffer = PinnedBuffer<T, PinnedPolicy>;
 template<typename T>
-using UnifiedBuffer = Buffer<T, UnifiedPolicy>;
+using UnifiedBuffer = USMBuffer<T, UnifiedPolicy>;
 template<typename T>
 using HostBuffer = Buffer<T, CPU::Policy>;
 
