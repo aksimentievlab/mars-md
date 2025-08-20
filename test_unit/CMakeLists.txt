@@ -130,13 +130,13 @@ if(USE_SYCL_ACPP OR USE_SYCL_ICPX)
 
     add_executable(arbd_test_sycl_backend
         Backends/sycl_backend.cpp #passed
-        #Backends/sycl_manager.cpp
-        #Backends/sycl_omp.cpp
+        Backends/sycl_manager.cpp
+        Backends/sycl_omp.cpp
         ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp)
     target_include_directories(arbd_test_sycl_backend PRIVATE ${CMAKE_SOURCE_DIR}/src)
     target_link_libraries(arbd_test_sycl_backend PRIVATE "lib${PROJECT_NAME}" Threads::Threads)
 
-    add_executable(arbd_test_sycl_math
+    add_executable(arbd_test_sycl_math #passed for single device.
         Math/RandomDevice.cpp
         Math/RandomProfile.cpp
         ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp)
@@ -225,6 +225,7 @@ endif()
 
 # CUDA Tests
 if(USE_CUDA)
+    find_package(CUDAToolkit REQUIRED)
     add_executable(arbd_test_cuda
         #Backends/cuda_backend.cpp
         Backends/generic_Buffer.cpp
@@ -239,14 +240,29 @@ if(USE_CUDA)
         ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp)
     set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --extended-lambda --allow-unsupported-compiler -Xcompiler=-Wno-deprecated-declarations")
     target_include_directories(arbd_test_cuda PRIVATE ${CMAKE_SOURCE_DIR}/src)
-    target_link_libraries(arbd_test_cuda PRIVATE "lib${PROJECT_NAME}")
+    target_link_libraries(arbd_test_cuda PRIVATE 
+    "lib${PROJECT_NAME}" 
+    CUDA::cudart 
+    CUDA::cuda_driver 
+    curand)
 
-    # Link CUDA runtime libraries
-    find_package(CUDAToolkit REQUIRED)
-    target_link_libraries(arbd_test_cuda PRIVATE
-        CUDA::cudart
-        CUDA::cuda_driver
-        curand)
+    add_executable(arbd_test_cuda_math
+
+    Math/Kernel_for_test.h
+    Math/RandomTestKernels.cu
+    Math/RandomDevice.cpp
+    Math/RandomProfile.cpp
+    #Math/vector3_precision.cu
+    #Math/bitmask.cu
+    ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp)
+    set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --extended-lambda --allow-unsupported-compiler -Xcompiler=-Wno-deprecated-declarations")
+    target_include_directories(arbd_test_cuda_math PRIVATE ${CMAKE_SOURCE_DIR}/src)
+    target_link_libraries(arbd_test_cuda_math PRIVATE 
+    "lib${PROJECT_NAME}"
+    CUDA::cudart
+    CUDA::cuda_driver
+    curand)
+    
     set_source_files_properties(
             Math/RandomTestKernels.cu
             Math/Kernel_for_test.h
@@ -261,6 +277,13 @@ if(USE_CUDA)
     catch_discover_tests(arbd_test_cuda)
     install(TARGETS arbd_test_cuda)
     message(STATUS "Added CUDA test executable: arbd_test_cuda")
+
+    add_test(NAME CUDA_Math_Tests COMMAND arbd_test_cuda_math)
+    set_tests_properties(CUDA_Math_Tests PROPERTIES
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+    )
+    install(TARGETS arbd_test_cuda_math)
+    message(STATUS "Added CUDA math test executable: arbd_test_cuda_math")
 endif()
 
 if(USE_MPI)

@@ -1,4 +1,5 @@
 #include "../catch_boiler.h"
+#include "Backend/Buffer.h"
 #include <cmath>
 #include <string>
 
@@ -90,12 +91,11 @@ TEST_CASE("SYCL OpenMP Memory Operations", "[SYCL][OpenMP]") {
         std::vector<float> host_data(SIZE);
         std::iota(host_data.begin(), host_data.end(), 0.0f);
         
-        // Use ARBD DeviceMemory wrapper (already optimized for USM)
-        DeviceMemory<float> device_mem(queue.get(), SIZE);
-        device_mem.copyFromHost(host_data);
+        ARBD::DeviceBuffer<float> device_mem(SIZE);
+        device_mem.copy_from_host(host_data);
         
         std::vector<float> result(SIZE, -1.0f); // Initialize with different value
-        device_mem.copyToHost(result);
+        device_mem.copy_to_host(result);
         
         // Verify the copy operation
         for (size_t i = 0; i < SIZE; ++i) {
@@ -114,18 +114,18 @@ TEST_CASE("SYCL OpenMP Parallel For", "[SYCL][OpenMP]") {
         std::vector<float> b(SIZE, 2.0f);
         std::vector<float> c(SIZE, 0.0f);
         
-        // Use ARBD DeviceMemory for automatic USM management
-        ARBD::DeviceBuffer<float> d_a(queue.get(), SIZE, true);
-        ARBD::DeviceBuffer<float> d_b(queue.get(), SIZE, true);
-        ARBD::DeviceBuffer<float> d_c(queue.get(), SIZE, true);
+        // Use ARBD DeviceBuffer for automatic USM management
+        ARBD::DeviceBuffer<float> d_a(SIZE);
+        ARBD::DeviceBuffer<float> d_b(SIZE);
+        ARBD::DeviceBuffer<float> d_c(SIZE);
         
-        d_a.copyFromHost(a.data(), SIZE);
-        d_b.copyFromHost(b.data(), SIZE);
+        d_a.copy_from_host(a.data(), SIZE);
+        d_b.copy_from_host(b.data(), SIZE);
         
         // Get raw pointers for kernel
-        float* ptr_a = d_a.get();
-        float* ptr_b = d_b.get();
-        float* ptr_c = d_c.get();
+        float* ptr_a = d_a.data();
+        float* ptr_b = d_b.data();
+        float* ptr_c = d_c.data();
         
         // Submit parallel kernel using USM pointers
         auto event = queue.submit([=](sycl::handler& h) {
@@ -136,7 +136,7 @@ TEST_CASE("SYCL OpenMP Parallel For", "[SYCL][OpenMP]") {
         });
         
         event.wait(); // Wait for kernel completion
-        d_c.copyToHost(c);
+        d_c.copy_to_host(c);
         
         // Verify results
         for (size_t i = 0; i < SIZE; ++i) {
@@ -154,13 +154,13 @@ TEST_CASE("SYCL OpenMP Reduction", "[SYCL][OpenMP]") {
         std::vector<int> data(SIZE);
         std::iota(data.begin(), data.end(), 1); // Fill with 1, 2, 3, ..., SIZE
         
-        DeviceMemory<int> d_data(queue.get(), SIZE);
-        DeviceMemory<int> d_result(queue.get(), 1);
+        ARBD::DeviceBuffer<int> d_data(SIZE);
+        ARBD::DeviceBuffer<int> d_result(1);
         
-        d_data.copyFromHost(data);
+        d_data.copy_from_host(data);
         
-        int* ptr_data = d_data.get();
-        int* ptr_result = d_result.get();
+        int* ptr_data = d_data.data();
+        int* ptr_result = d_result.data();
         
         // Initialize result to 0
         int zero = 0;
@@ -178,7 +178,7 @@ TEST_CASE("SYCL OpenMP Reduction", "[SYCL][OpenMP]") {
         event.wait();
         
         std::vector<int> result(1);
-        d_result.copyToHost(result);
+        d_result.copy_to_host(result);
         
         // Verify result: sum of 1 to SIZE = SIZE * (SIZE + 1) / 2
         int expected = SIZE * (SIZE + 1) / 2;

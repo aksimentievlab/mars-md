@@ -1,7 +1,5 @@
 #include "../catch_boiler.h"
 #include "Backend/Buffer.h"
-#include "Backend/Resource.h"
-#include "Math/Types.h"
 #include "Math/Vector3.h"
 
 #ifdef USE_CUDA
@@ -19,7 +17,6 @@ using namespace ARBD::SYCL;
 using namespace ARBD::METAL;
 #endif
 
-#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <memory>

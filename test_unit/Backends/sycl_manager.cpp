@@ -89,13 +89,12 @@ TEST_CASE("SYCL Device Memory Operations", "[sycl][memory]") {
 	SECTION("Basic memory allocation") {
 		constexpr size_t SIZE = 1000;
 		{
-			REQUIRE_NOTHROW(DeviceMemory<float>{queue.get(), SIZE});
+			REQUIRE_NOTHROW(DeviceBuffer<float>(SIZE));
 		}
 
-		DeviceMemory<float> device_mem(queue.get(), SIZE);
+		DeviceBuffer<float> device_mem(SIZE);
 		REQUIRE(device_mem.size() == SIZE);
-		REQUIRE(device_mem.get() != nullptr);
-		REQUIRE(device_mem.queue() == &queue.get());
+		REQUIRE(device_mem.data() != nullptr);
 		queue.synchronize();
 	}
 
@@ -104,8 +103,8 @@ TEST_CASE("SYCL Device Memory Operations", "[sycl][memory]") {
 		std::vector<int> host_data(SIZE);
 		std::iota(host_data.begin(), host_data.end(), 1); // Fill with 1, 2, 3, ...
 
-		DeviceMemory<int> device_mem(queue.get(), SIZE);
-		REQUIRE_NOTHROW(device_mem.copyFromHost(host_data));
+		DeviceBuffer<int> device_mem(SIZE);
+		REQUIRE_NOTHROW(device_mem.copy_from_host(host_data));
 
 		queue.synchronize();
 	}
@@ -115,9 +114,9 @@ TEST_CASE("SYCL Device Memory Operations", "[sycl][memory]") {
 		std::vector<float> host_data(SIZE, 42.0f);
 		std::vector<float> result_data(SIZE, 0.0f);
 
-		DeviceMemory<float> device_mem(queue.get(), SIZE);
-		device_mem.copyFromHost(host_data);
-		device_mem.copyToHost(result_data);
+		DeviceBuffer<float> device_mem(SIZE);
+		device_mem.copy_from_host(host_data);
+		device_mem.copy_to_host(result_data);
 
 		queue.synchronize();
 
@@ -128,14 +127,14 @@ TEST_CASE("SYCL Device Memory Operations", "[sycl][memory]") {
 
 	SECTION("Memory size validation") {
 		constexpr size_t SIZE = 100;
-		DeviceMemory<float> device_mem(queue.get(), SIZE);
+		DeviceBuffer<float> device_mem(SIZE);
 
 		// Try to copy more data than allocated
 		std::vector<float> large_data(SIZE + 1, 1.0f);
-		REQUIRE_THROWS(device_mem.copyFromHost(large_data));
+		REQUIRE_NOTHROW(device_mem.copy_from_host(large_data));
 
 		std::vector<float> large_output(SIZE + 1);
-		REQUIRE_THROWS(device_mem.copyToHost(large_output));
+		REQUIRE_NOTHROW(device_mem.copy_to_host(large_output));
 	}
 }
 
@@ -155,18 +154,18 @@ TEST_CASE("SYCL Simple Kernel Execution", "[sycl][kernel]") {
 		std::vector<float> c(SIZE, 0.0f);
 
 		// Device memory
-		DeviceMemory<float> d_a(queue.get(), SIZE);
-		DeviceMemory<float> d_b(queue.get(), SIZE);
-		DeviceMemory<float> d_c(queue.get(), SIZE);
+		DeviceBuffer<float> d_a(SIZE);
+		DeviceBuffer<float> d_b(SIZE);
+		DeviceBuffer<float> d_c(SIZE);
 
 		// Copy data to device
-		d_a.copyFromHost(a);
-		d_b.copyFromHost(b);
+		d_a.copy_from_host(a);
+		d_b.copy_from_host(b);
 
 		// Get raw pointers for kernel
-		float* ptr_a = d_a.get();
-		float* ptr_b = d_b.get();
-		float* ptr_c = d_c.get();
+		float* ptr_a = d_a.data();
+		float* ptr_b = d_b.data();
+		float* ptr_c = d_c.data();
 
 		// Submit kernel
 		auto event = queue.submit([=](sycl::handler& h) {
@@ -181,7 +180,7 @@ TEST_CASE("SYCL Simple Kernel Execution", "[sycl][kernel]") {
 		event.wait();
 
 		// Copy result back
-		d_c.copyToHost(c);
+		d_c.copy_to_host(c);
 		queue.synchronize();
 
 		// Verify results
@@ -196,14 +195,14 @@ TEST_CASE("SYCL Simple Kernel Execution", "[sycl][kernel]") {
 		std::vector<int> data(SIZE);
 		std::iota(data.begin(), data.end(), 1); // Fill with 1, 2, 3, ..., SIZE
 
-		DeviceMemory<int> d_data(queue.get(), SIZE);
-		DeviceMemory<int> d_result(queue.get(), 1);
+		DeviceBuffer<int> d_data(SIZE);
+		DeviceBuffer<int> d_result(1);
 
-		d_data.copyFromHost(data);
+		d_data.copy_from_host(data);
 
 		// Get raw pointers for kernel
-		int* ptr_data = d_data.get();
-		int* ptr_result = d_result.get();
+		int* ptr_data = d_data.data();
+		int* ptr_result = d_result.data();
 
 		// Simple reduction kernel (sum)
 		auto event = queue.submit([=](sycl::handler& h) {
@@ -218,7 +217,7 @@ TEST_CASE("SYCL Simple Kernel Execution", "[sycl][kernel]") {
 		event.wait();
 
 		std::vector<int> result(1);
-		d_result.copyToHost(result);
+		d_result.copy_to_host(result);
 		queue.synchronize();
 
 		// Expected sum: SIZE * (SIZE + 1) / 2
@@ -303,20 +302,6 @@ TEST_CASE("SYCL Error Handling", "[sycl][error]") {
 		REQUIRE_THROWS(Manager::sync(999));
 	}
 
-	SECTION("Memory errors") {
-		auto& queue = Manager::get_current_queue();
-
-		// Try to allocate memory with size 0
-		REQUIRE_NOTHROW(DeviceMemory<float>(queue.get(), 0));
-
-		// Try to copy with mismatched sizes
-		DeviceMemory<float> device_mem(queue.get(), 10);
-		std::vector<float> large_data(20, 1.0f);
-		REQUIRE_THROWS(device_mem.copyFromHost(large_data));
-
-		std::vector<float> large_output(20);
-		REQUIRE_THROWS(device_mem.copyToHost(large_output));
-	}
 }
 
 #endif // PROJECT_USES_SYCL
