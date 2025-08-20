@@ -235,8 +235,8 @@ Example for USE_SYCL_ACPP on macOS:    cmake -D CMAKE_CXX_COMPILER=/opt/homebrew
                 message(STATUS "Setting AdaptiveCpp default target flags for macOS (CPU via OpenMP).")
                 set(ACPP_TARGET_FLAGS "--acpp-targets=omp")
             elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-                message(STATUS "Setting AdaptiveCpp default target flags for Linux (CUDA and OpenMP).")
-                set(ACPP_TARGET_FLAGS "--acpp-targets=cuda,omp")
+                message(STATUS "Setting AdaptiveCpp default target flags for Linux (CUDA and OpenMP ).")
+                set(ACPP_TARGET_FLAGS "--acpp-targets=omp") #--acpp-targets=cuda:sm_80
 
             else() # Other OS
                 message(WARNING "AdaptiveCpp on unknown OS ${CMAKE_SYSTEM_NAME}. Defaulting to OpenMP target.")

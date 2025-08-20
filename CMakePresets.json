@@ -201,7 +201,8 @@
                 "USE_SYCL_ACPP": "ON",
                 "CMAKE_CXX_EXTENSIONS": "OFF",
                 "CMAKE_BUILD_WITH_INSTALL_RPATH": "YES",
-                "CMAKE_CXX_FLAGS": "-stdlib=libc++ -nostdinc++ -I/data/server10/pinyili2/local/include/c++/v1 -I/data/server10/pinyili2/local/include/x86_64-unknown-linux-gnu/c++/v1"
+                "CMAKE_CXX_FLAGS": "-stdlib=libc++ -nostdinc++ -I/data/server10/pinyili2/local/include/c++/v1 -I/data/server10/pinyili2/local/include/x86_64-unknown-linux-gnu/c++/v1 -Wl,-rpath,/data/server10/pinyili2/local/lib/x86_64-unknown-linux-gnu",
+                "CMAKE_EXE_LINKER_FLAGS": "-L/software/gcc-14.2.0-rh8/lib64 -lstdc++ -Wl,-rpath,/software/gcc-14.2.0-rh8/lib64"
             }
         },
         {
@@ -215,7 +216,8 @@
                 "CMAKE_CXX_COMPILER": "/data/server10/pinyili2/local/bin/acpp",
                 "USE_SYCL_ACPP": "ON",
                 "CMAKE_CXX_EXTENSIONS": "OFF",
-                "CMAKE_CXX_FLAGS": "-stdlib=libc++ -nostdinc++ -I/data/server10/pinyili2/local/include/c++/v1 -I/data/server10/pinyili2/local/include/x86_64-unknown-linux-gnu/c++/v1 -L/data/server10/pinyili2/local/lib/x86_64-unknown-linux-gnu"
+                "CMAKE_CXX_FLAGS": "-stdlib=libc++ -nostdinc++ -I/data/server10/pinyili2/local/include/c++/v1 -I/data/server10/pinyili2/local/include/x86_64-unknown-linux-gnu/c++/v1 -Wl,-rpath,/data/server10/pinyili2/local/lib/x86_64-unknown-linux-gnu",
+                "CMAKE_EXE_LINKER_FLAGS": "-L/software/gcc-14.2.0-rh8/lib64 -lstdc++ -Wl,-rpath,/software/gcc-14.2.0-rh8/lib64"
             }
         },
         {
