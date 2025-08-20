@@ -640,8 +640,8 @@ TEST_CASE_METHOD(BackendInitFixture, "Buffer Move Constructor and Assignment", "
 // ============================================================================
 
 TEST_CASE_METHOD(BackendInitFixture,
-				 "Metal Buffer Edge Cases and Error Handling",
-				 "[metal][buffer][edge_cases]") {
+				 "Buffer Edge Cases and Error Handling",
+				 "[buffer][edge_cases]") {
 
 	SECTION("Zero size buffer operations") {
 		DeviceBuffer<int> buffer(0);
@@ -708,7 +708,7 @@ TEST_CASE_METHOD(BackendInitFixture,
 // Performance Tests
 // ============================================================================
 
-TEST_CASE_METHOD(BackendInitFixture, "Metal Buffer Performance", "[metal][buffer][performance]") {
+TEST_CASE_METHOD(BackendInitFixture, "Buffer Performance", "[buffer][performance]") {
 
 	SECTION("Large data transfer performance") {
 		const size_t test_size = 1000000; // 1M elements
@@ -832,7 +832,7 @@ TEST_CASE_METHOD(BackendInitFixture,
 // Stress Tests
 // ============================================================================
 
-TEST_CASE_METHOD(BackendInitFixture, "Metal Buffer Stress Tests", "[metal][buffer][stress]") {
+TEST_CASE_METHOD(BackendInitFixture, "Buffer Stress Tests", "[buffer][stress]") {
 
 	SECTION("Multiple buffer creation and destruction") {
 		const int num_buffers = 100;

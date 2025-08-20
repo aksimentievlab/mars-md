@@ -579,7 +579,7 @@ TEST_CASE_METHOD(ProductionBufferTestFixture, "Resource Management", "[buffer][r
 		REQUIRE(cpu1 == cpu2);
 
 #ifdef USE_CUDA
-		if (CUDA::Manager::device_count() > 0) {
+		if (CUDA::Manager::all_device_size() > 0) {
 			Resource cuda1 = Resource::CUDA();
 			Resource cuda2 = Resource::CUDA(0);
 			REQUIRE(cuda1 == cuda2);
@@ -622,7 +622,7 @@ TEST_CASE_METHOD(ProductionBufferTestFixture, "Resource Management", "[buffer][r
 #ifdef USE_CUDA
 TEST_CASE_METHOD(ProductionBufferTestFixture, "CUDA-Specific Buffer Operations", "[buffer][cuda]") {
 
-	if (CUDA::Manager::device_count() == 0) {
+	if (CUDA::Manager::all_device_size() == 0) {
 		SKIP("No CUDA devices available");
 	}
 
@@ -635,7 +635,7 @@ TEST_CASE_METHOD(ProductionBufferTestFixture, "CUDA-Specific Buffer Operations",
 	}
 
 	SECTION("Multi-CUDA device") {
-		if (CUDA::Manager::device_count() < 2) {
+		if (CUDA::Manager::all_device_size() < 2) {
 			SKIP("Need at least 2 CUDA devices");
 		}
 
@@ -837,9 +837,9 @@ TEST_CASE_METHOD(ProductionBufferTestFixture, "Buffer Edge Cases", "[buffer][edg
 	}
 
 	SECTION("Move semantics") {
-		// Use SYCL resource which is available in this backend
+		// Use available device resource
 		auto devices = get_device_resources();
-		Resource test_resource = devices.empty() ? Resource::SYCL(0) : devices[0];
+		Resource test_resource = devices.empty() ? Resource::CPU(0) : devices[0];
 
 		DeviceBuffer<int> original(50, test_resource);
 		void* original_ptr = original.data();
@@ -1243,6 +1243,15 @@ TEST_CASE_METHOD(ProductionBufferTestFixture,
 
 	SECTION("Resource factory consistency") {
 		// Test all equivalent ways to create the same resource
+#ifdef USE_CUDA
+		ResourceType Rtype = ResourceType::CUDA;
+		std::vector<Resource> equivalent_resources = {
+			Resource::CUDA(),  // Factory method
+			Resource::CUDA(0), // Explicit ID
+			Resource(Rtype),   // Enum constructor
+			Resource(Rtype, 0) // Explicit enum + ID
+		};
+#elif defined(USE_SYCL)
 		ResourceType Rtype = ResourceType::SYCL;
 		std::vector<Resource> equivalent_resources = {
 			Resource::SYCL(),  // Factory method
@@ -1250,6 +1259,24 @@ TEST_CASE_METHOD(ProductionBufferTestFixture,
 			Resource(Rtype),   // Enum constructor
 			Resource(Rtype, 0) // Explicit enum + ID
 		};
+#elif defined(USE_METAL)
+		ResourceType Rtype = ResourceType::METAL;
+		std::vector<Resource> equivalent_resources = {
+			Resource::METAL(),	// Factory method
+			Resource::METAL(0), // Explicit ID
+			Resource(Rtype),	// Enum constructor
+			Resource(Rtype, 0)	// Explicit enum + ID
+		};
+#else
+		// Fallback to CPU if no GPU backend is available
+		ResourceType Rtype = ResourceType::CPU;
+		std::vector<Resource> equivalent_resources = {
+			Resource::CPU(),   // Factory method
+			Resource::CPU(0),  // Explicit ID
+			Resource(Rtype),   // Enum constructor
+			Resource(Rtype, 0) // Explicit enum + ID
+		};
+#endif
 
 		for (size_t i = 1; i < equivalent_resources.size(); ++i) {
 			REQUIRE(equivalent_resources[0] == equivalent_resources[i]);
@@ -1270,7 +1297,7 @@ TEST_CASE_METHOD(ProductionBufferTestFixture,
 		// Add CPU
 
 #ifdef USE_CUDA
-		for (size_t i = 0; i < CUDA::Manager::device_count(); ++i) {
+		for (size_t i = 0; i < CUDA::Manager::all_device_size(); ++i) {
 			all_resources.push_back(Resource::CUDA(i));
 		}
 #endif

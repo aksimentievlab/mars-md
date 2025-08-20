@@ -4,6 +4,23 @@ list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/extern/Catch2/extras)
 include(Catch) # contains some cmake macros that will help with discovery of tests
 include(CTest)
 
+# Common source files for core tests
+set(CORE_TEST_SOURCES
+    Backends/generic_Buffer.cpp
+    Backends/buffer_test.cpp
+    #Buffer/Buffer.cpp
+    ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp
+)
+
+# Math folder sources - explicitly list what to include in math tests
+set(MATH_SOURCES
+    Math/RandomDevice.cpp
+    Math/RandomProfile.cpp
+    Math/Kernel_for_test.h
+    Math/RandomTestKernels.cu
+    # Add more math sources here as needed
+    ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp
+)
 
 # Common libraries and include directories for all tests
 set(COMMON_TEST_LIBS "lib${PROJECT_NAME}" Catch2::Catch2WithMain)
@@ -13,6 +30,9 @@ endif()
 if(USE_NCCL)
     list(APPEND COMMON_TEST_LIBS nccl)
 endif()
+
+# Common test executables list
+set(COMMON_TEST_EXECUTABLES)
 
 # Metal Tests
 if(USE_METAL AND APPLE)
@@ -29,7 +49,7 @@ if(USE_METAL AND APPLE)
         ${FOUNDATION_FRAMEWORK}
         ${QUARTZCORE_FRAMEWORK}
     )
-    # Horrible METAL library loding system, just use the default.metallib
+
     # Compile Metal shaders
     set(METAL_SHADER_DIR ${CMAKE_CURRENT_SOURCE_DIR}/*)
     set(METAL_OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR})
@@ -77,19 +97,15 @@ if(USE_METAL AND APPLE)
         VERBATIM
     )
 
-    # Metal backend tests
+    # Metal backend tests - use core sources + Metal-specific sources
     add_executable(arbd_test_metal
-        #Backends/metal_manager.cpp
+        ${CORE_TEST_SOURCES}
         Backends/metal_backend.cpp
-        Backends/generic_Buffer.cpp
         Backends/metal_buffer_test.cpp
         Math/metal_bitmask.cpp
-        Kernels/metal_kernels.cpp
-        ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp)
+        Kernels/metal_kernels.cpp)
     target_include_directories(arbd_test_metal PRIVATE ${METAL_TEST_INCLUDES})
     target_link_libraries(arbd_test_metal PRIVATE ${METAL_TEST_LIBS})
-
-    #     # Make sure Metal shaders are built before the test executable
     add_dependencies(arbd_test_metal metal_shaders)
 
     add_test(NAME Metal_Tests COMMAND arbd_test_metal)
@@ -97,11 +113,10 @@ if(USE_METAL AND APPLE)
         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     )
 
-    install(TARGETS arbd_test_metal)
-    # Metal math tests
+    # Metal math tests - use all math sources
     add_executable(arbd_test_metal_math
-        Math/metal_math.cpp
-        ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp)
+        ${MATH_SOURCES}
+        Math/metal_bitmask.cpp)
     target_include_directories(arbd_test_metal_math PRIVATE ${METAL_TEST_INCLUDES})
     target_link_libraries(arbd_test_metal_math PRIVATE ${METAL_TEST_LIBS})
 
@@ -110,36 +125,35 @@ if(USE_METAL AND APPLE)
         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     )
 
-    install(TARGETS arbd_test_metal_math)
-    message(STATUS "Added Metal math test executable: arbd_test_metal_math")
+    # Add to common list
+    list(APPEND COMMON_TEST_EXECUTABLES arbd_test_metal arbd_test_metal_math)
+    message(STATUS "Added Metal test executables: arbd_test_metal, arbd_test_metal_math")
+
 elseif(USE_METAL)
     message(WARNING "USE_METAL is ON but not on Apple platform - Metal tests will be excluded")
 endif()
 
 # SYCL Tests
 if(USE_SYCL_ACPP OR USE_SYCL_ICPX)
-    # Test for test_sycl.cpp - now uses Catch2's main function
+    # SYCL core tests - use core sources
     add_executable(arbd_test_sycl
-        Backends/generic_Buffer.cpp
-        Backends/metal_buffer_test.cpp
-        Kernels/sycl_kernels.cpp
-        Buffer/Buffer.cpp
-        ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp)
+        ${CORE_TEST_SOURCES}
+        Kernels/sycl_kernels.cpp)
     target_include_directories(arbd_test_sycl PRIVATE ${CMAKE_SOURCE_DIR}/src)
     target_link_libraries(arbd_test_sycl PRIVATE "lib${PROJECT_NAME}" Threads::Threads)
 
+    # SYCL backend tests
     add_executable(arbd_test_sycl_backend
-        Backends/sycl_backend.cpp #passed
+        Backends/sycl_backend.cpp
         Backends/sycl_manager.cpp
         Backends/sycl_omp.cpp
         ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp)
     target_include_directories(arbd_test_sycl_backend PRIVATE ${CMAKE_SOURCE_DIR}/src)
     target_link_libraries(arbd_test_sycl_backend PRIVATE "lib${PROJECT_NAME}" Threads::Threads)
 
-    add_executable(arbd_test_sycl_math #passed for single device.
-        Math/RandomDevice.cpp
-        Math/RandomProfile.cpp
-        ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp)
+    # SYCL math tests - use all math sources
+    add_executable(arbd_test_sycl_math
+        ${MATH_SOURCES})
     target_include_directories(arbd_test_sycl_math PRIVATE ${CMAKE_SOURCE_DIR}/src)
     target_link_libraries(arbd_test_sycl_math PRIVATE "lib${PROJECT_NAME}" Threads::Threads)
 
@@ -189,28 +203,18 @@ if(USE_SYCL_ACPP OR USE_SYCL_ICPX)
         endif()
     endif()
 
-    # Instead of catch_discover_tests which causes bus errors on ACPP,
-    # we'll add a single test that runs the entire executable
+    # Add tests
     add_test(NAME SYCL_Tests COMMAND arbd_test_sycl)
-
-    # Set environment variables for SYCL test execution
     set_tests_properties(SYCL_Tests PROPERTIES
         ENVIRONMENT "ACPP_TARGETS=omp;SYCL_DEVICE_FILTER=cpu;ACPP_DEBUG=1"
         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     )
 
-    install(TARGETS arbd_test_sycl)
-    message(STATUS "Added SYCL test executable: arbd_test_sycl")
-
-    # Add test for backend tests
     add_test(NAME SYCL_Backend_Tests COMMAND arbd_test_sycl_backend)
     set_tests_properties(SYCL_Backend_Tests PROPERTIES
         ENVIRONMENT "ACPP_TARGETS=omp;SYCL_DEVICE_FILTER=cpu;ACPP_DEBUG=1"
         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     )
-
-    install(TARGETS arbd_test_sycl_backend)
-    message(STATUS "Added SYCL backend test executable: arbd_test_sycl_backend")
 
     add_test(NAME SYCL_Math_Tests COMMAND arbd_test_sycl_math)
     set_tests_properties(SYCL_Math_Tests PROPERTIES
@@ -218,74 +222,66 @@ if(USE_SYCL_ACPP OR USE_SYCL_ICPX)
         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     )
 
-    install(TARGETS arbd_test_sycl_math)
-    message(STATUS "Added SYCL math test executable: arbd_test_sycl_math")
-
+    # Add to common list
+    list(APPEND COMMON_TEST_EXECUTABLES arbd_test_sycl arbd_test_sycl_backend arbd_test_sycl_math)
+    message(STATUS "Added SYCL test executables: arbd_test_sycl, arbd_test_sycl_backend, arbd_test_sycl_math")
 endif()
 
 # CUDA Tests
 if(USE_CUDA)
     find_package(CUDAToolkit REQUIRED)
+
+    # CUDA core tests - use core sources + CUDA-specific sources
     add_executable(arbd_test_cuda
-        #Backends/cuda_backend.cpp
-        Backends/generic_Buffer.cpp
+        ${CORE_TEST_SOURCES}
         Kernels/cuda_kernels.cu
-        Kernels/cuda_kernels.cpp
-        Math/Kernel_for_test.h
-        Math/RandomTestKernels.cu
-        Math/RandomDevice.cpp
-        Math/RandomProfile.cpp
-        #Math/vector3_precision.cu
-        #Math/bitmask.cu
-        ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp)
+        Kernels/cuda_kernels.cpp)
     set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --extended-lambda --allow-unsupported-compiler -Xcompiler=-Wno-deprecated-declarations")
     target_include_directories(arbd_test_cuda PRIVATE ${CMAKE_SOURCE_DIR}/src)
-    target_link_libraries(arbd_test_cuda PRIVATE 
-    "lib${PROJECT_NAME}" 
-    CUDA::cudart 
-    CUDA::cuda_driver 
-    curand)
+    target_link_libraries(arbd_test_cuda PRIVATE
+        "lib${PROJECT_NAME}"
+        CUDA::cudart
+        CUDA::cuda_driver
+        curand)
 
+    # CUDA math tests - use all math sources
     add_executable(arbd_test_cuda_math
-
-    Math/Kernel_for_test.h
-    Math/RandomTestKernels.cu
-    Math/RandomDevice.cpp
-    Math/RandomProfile.cpp
-    #Math/vector3_precision.cu
-    #Math/bitmask.cu
-    ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp)
+        ${MATH_SOURCES})
     set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --extended-lambda --allow-unsupported-compiler -Xcompiler=-Wno-deprecated-declarations")
     target_include_directories(arbd_test_cuda_math PRIVATE ${CMAKE_SOURCE_DIR}/src)
-    target_link_libraries(arbd_test_cuda_math PRIVATE 
-    "lib${PROJECT_NAME}"
-    CUDA::cudart
-    CUDA::cuda_driver
-    curand)
-    
+    target_link_libraries(arbd_test_cuda_math PRIVATE
+        "lib${PROJECT_NAME}"
+        CUDA::cudart
+        CUDA::cuda_driver
+        curand)
+
+    # Set CUDA properties for math test files
     set_source_files_properties(
-            Math/RandomTestKernels.cu
-            Math/Kernel_for_test.h
-            PROPERTIES
-            LANGUAGE CUDA
-            CUDA_SEPARABLE_COMPILATION ON
-        )
+        Math/RandomTestKernels.cu
+        Math/Kernel_for_test.h
+        PROPERTIES
+        LANGUAGE CUDA
+        CUDA_SEPARABLE_COMPILATION ON
+    )
+
     if(USE_NCCL)
         target_link_libraries(arbd_test_cuda PRIVATE nccl)
     endif()
 
+    # Add tests
     catch_discover_tests(arbd_test_cuda)
-    install(TARGETS arbd_test_cuda)
-    message(STATUS "Added CUDA test executable: arbd_test_cuda")
 
     add_test(NAME CUDA_Math_Tests COMMAND arbd_test_cuda_math)
     set_tests_properties(CUDA_Math_Tests PROPERTIES
         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     )
-    install(TARGETS arbd_test_cuda_math)
-    message(STATUS "Added CUDA math test executable: arbd_test_cuda_math")
+
+    # Add to common list
+    list(APPEND COMMON_TEST_EXECUTABLES arbd_test_cuda arbd_test_cuda_math)
+    message(STATUS "Added CUDA test executables: arbd_test_cuda, arbd_test_cuda_math")
 endif()
 
+# MPI Tests
 if(USE_MPI)
     add_executable(arbd_test_mpi mpitest.cpp)
     target_include_directories(arbd_test_mpi PRIVATE ${CMAKE_SOURCE_DIR}/src)
@@ -309,6 +305,14 @@ if(USE_MPI)
     endif()
 
     catch_discover_tests(arbd_test_mpi)
-    install(TARGETS arbd_test_mpi)
+
+    # Add to common list
+    list(APPEND COMMON_TEST_EXECUTABLES arbd_test_mpi)
     message(STATUS "Added MPI test executable: arbd_test_mpi")
 endif()
+
+# Install all test executables at once
+install(TARGETS ${COMMON_TEST_EXECUTABLES})
+
+# Print summary of all test executables
+message(STATUS "All test executables: ${COMMON_TEST_EXECUTABLES}")

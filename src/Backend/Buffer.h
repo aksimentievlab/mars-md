@@ -217,8 +217,11 @@ struct UnifiedPolicy {
 		CUDA_CHECK(cudaMemAdvise(ptr, bytes, static_cast<cudaMemoryAdvise>(advice), device_id));
 	}
 
-	static void
-	copy_from_host(void* unified_dst, const void* host_src, size_t bytes, void* queue = nullptr) {
+	static void copy_from_host(void* unified_dst,
+							   const void* host_src,
+							   size_t bytes,
+							   void* queue = nullptr,
+							   bool sync = false) {
 		std::memcpy(unified_dst, host_src, bytes);
 		// Optionally prefetch to the current device to warm it up
 		int device;
@@ -227,8 +230,11 @@ struct UnifiedPolicy {
 		CUDA_CHECK(cudaMemPrefetchAsync(unified_dst, bytes, device, stream));
 	}
 
-	static void
-	copy_to_host(void* host_dst, const void* unified_src, size_t bytes, void* queue = nullptr) {
+	static void copy_to_host(void* host_dst,
+							 const void* unified_src,
+							 size_t bytes,
+							 void* queue = nullptr,
+							 bool sync = false) {
 		// Prefetch to the host to ensure data is resident, then copy
 		cudaStream_t stream = queue ? static_cast<cudaStream_t>(queue) : 0;
 		CUDA_CHECK(
@@ -820,7 +826,8 @@ class Buffer {
 		T* new_ptr = nullptr;
 		if (count > 0) {
 			void* new_queue = target_resource.get_stream(); // Acquire stream from resource
-			new_ptr = static_cast<T*>(Policy::allocate(target_resource, count * sizeof(T), new_queue));
+			new_ptr =
+				static_cast<T*>(Policy::allocate(target_resource, count * sizeof(T), new_queue));
 			if (!new_ptr) {
 				// Allocation failed. The original buffer is untouched.
 				// You could throw an exception here to signal the failure.
@@ -920,7 +927,11 @@ class Buffer {
 		if (!device_ptr_) {
 			ARBD_Exception(ExceptionType::ValueError, "Cannot copy from null buffer");
 		}
-		Policy::copy_to_host(host_dst, device_ptr_, num_elements * sizeof(T), queue_, true); // Force sync
+		Policy::copy_to_host(host_dst,
+							 device_ptr_,
+							 num_elements * sizeof(T),
+							 queue_,
+							 true); // Force sync
 #if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__) && !defined(__METAL_VERSION__)
 		LOGTRACE("Copied {} bytes to host from {}", num_elements * sizeof(T), resource_.toString());
 #endif
@@ -950,7 +961,11 @@ class Buffer {
 		if (!device_ptr_) {
 			ARBD_Exception(ExceptionType::ValueError, "Cannot copy to null buffer");
 		}
-		Policy::copy_from_host(device_ptr_, host_src, num_elements * sizeof(T), queue_, true); // Force sync ?
+		Policy::copy_from_host(device_ptr_,
+							   host_src,
+							   num_elements * sizeof(T),
+							   queue_,
+							   true); // Force sync ?
 #if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__) && !defined(__METAL_VERSION__)
 		LOGTRACE("Copied {} bytes from host to {}", num_elements * sizeof(T), resource_.toString());
 #endif
@@ -1113,7 +1128,7 @@ class USMBuffer : public Buffer<T, Policy> {
 	USMBuffer(size_t count, const Resource& resource, void* queue = nullptr, bool sync = true)
 		: Buffer<T, Policy>(count, resource, queue, sync), capacity_(count) {}
 
-	//multi-device constructor with capacity
+	// multi-device constructor with capacity
 	USMBuffer(size_t count,
 			  size_t capacity,
 			  const std::vector<Resource>& resources,
