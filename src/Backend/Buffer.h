@@ -366,9 +366,8 @@ struct PinnedPolicy {
 								 size_t bytes,
 								 const Resource& resource,
 								 void* queue = nullptr) {
-		cudaStream_t stream = queue ? static_cast<cudaStream_t>(queue)
-									: Manager::get_device(resource.id).get_next_stream();
-		CUDA_CHECK(cudaMemcpyAsync(device_dst, pinned_src, bytes, cudaMemcpyHostToDevice, stream));
+		auto& q = queue ? *static_cast<sycl::queue*>(queue) : Manager::get_current_queue().get();
+		SYCL_CHECK(q.memcpy(device_dst, pinned_src, bytes));
 	}
 
 	static void download_from_device(void* pinned_dst,
@@ -376,9 +375,8 @@ struct PinnedPolicy {
 									 size_t bytes,
 									 const Resource& resource,
 									 void* queue = nullptr) {
-		cudaStream_t stream = queue ? static_cast<cudaStream_t>(queue)
-									: Manager::get_device(resource.id).get_next_stream();
-		CUDA_CHECK(cudaMemcpyAsync(pinned_dst, device_src, bytes, cudaMemcpyDeviceToHost, stream));
+		auto& q = queue ? *static_cast<sycl::queue*>(queue) : Manager::get_current_queue().get();
+		SYCL_CHECK(q.memcpy(pinned_dst, device_src, bytes));
 	}
 
 	static void copy_from_host(void* pinned_dst,
@@ -450,25 +448,25 @@ struct UnifiedPolicy {
 		q.mem_advise(ptr, bytes, advice);
 	}
 	static void
-	copy_from_host(void* unified_dst, const void* host_src, size_t bytes, void* queue = nullptr) {
+	copy_from_host(void* unified_dst, const void* host_src, size_t bytes, void* queue = nullptr,bool sync = false) {
 		std::memcpy(unified_dst, host_src, bytes);
 		// Optionally prefetch to the current device to warm it up
-		int device;
-		cudaGetDevice(&device);
-		cudaStream_t stream = queue ? static_cast<cudaStream_t>(queue) : 0;
-		CUDA_CHECK(cudaMemPrefetchAsync(unified_dst, bytes, device, stream));
+		auto& q = queue ? *static_cast<sycl::queue*>(queue) : Manager::get_current_queue().get();
+		if (sync) {
+			q.prefetch(unified_dst, bytes).wait();
+		} else {
+			q.prefetch(unified_dst, bytes);
+		}
 	}
 
 	static void
-	copy_to_host(void* host_dst, const void* unified_src, size_t bytes, void* queue = nullptr) {
+	copy_to_host(void* host_dst, const void* unified_src, size_t bytes, void* queue = nullptr,bool sync = false) {
 		// Prefetch to the host to ensure data is resident, then copy
-		cudaStream_t stream = queue ? static_cast<cudaStream_t>(queue) : 0;
-		CUDA_CHECK(
-			cudaMemPrefetchAsync(const_cast<void*>(unified_src), bytes, cudaCpuDeviceId, stream));
-		if (stream) {
-			CUDA_CHECK(cudaStreamSynchronize(stream));
+		auto& q = queue ? *static_cast<sycl::queue*>(queue) : Manager::get_current_queue().get();
+		if (sync) {
+			q.prefetch(const_cast<void*>(unified_src), bytes).wait();
 		} else {
-			CUDA_CHECK(cudaDeviceSynchronize()); // Sync if default stream
+			q.prefetch(const_cast<void*>(unified_src), bytes);
 		}
 		std::memcpy(host_dst, unified_src, bytes);
 	}
@@ -478,13 +476,11 @@ struct UnifiedPolicy {
 									  size_t bytes,
 									  void* queue = nullptr,
 									  bool sync = false) {
+		auto& q = queue ? *static_cast<sycl::queue*>(queue) : Manager::get_current_queue().get();
 		if (sync) {
-			// cudaMemcpyDefault handles peer-to-peer automatically
-			CUDA_CHECK(cudaMemcpy(dst, src, bytes, cudaMemcpyDefault));
+			q.memcpy(dst, src, bytes).wait();
 		} else {
-			cudaStream_t stream = queue ? static_cast<cudaStream_t>(queue)
-										: Manager::get_current_device().get_next_stream();
-			CUDA_CHECK(cudaMemcpyAsync(dst, src, bytes, cudaMemcpyDefault, stream));
+			q.memcpy(dst, src, bytes);
 		}
 	}
 };
@@ -1074,9 +1070,9 @@ class Buffer {
 };
 
 template<typename T, typename Policy>
-class PinnedBuffer: public Buffer<T, Policy>{
+class PINBuffer: public Buffer<T, Policy>{
   public:
-	PinnedBuffer(size_t count, const Resource& resource, void* queue = nullptr, bool sync = true)
+	PINBuffer(size_t count, const Resource& resource, void* queue = nullptr, bool sync = true)
 		: Buffer<T, Policy>(count, resource, queue, sync) {}
 	void upload_to_device(const T* host_src, size_t num_elements) {
 		Policy::upload_to_device(this->device_ptr_, host_src, num_elements * sizeof(T), this->resource_,
@@ -1114,7 +1110,7 @@ class USMBuffer: public Buffer<T, Policy> {
 template<typename T>
 using DeviceBuffer = Buffer<T, BackendPolicy>;
 template<typename T>
-using PinnedBuffer = PinnedBuffer<T, PinnedPolicy>;
+using PinnedBuffer = PINBuffer<T, PinnedPolicy>;
 template<typename T>
 using UnifiedBuffer = USMBuffer<T, UnifiedPolicy>;
 template<typename T>
