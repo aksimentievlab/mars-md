@@ -103,7 +103,10 @@ struct Policy {
 		if (sync) {
 			CUDA_CHECK(cudaMemcpy(device_dst, host_src, bytes, cudaMemcpyHostToDevice));
 		} else {
-			CUDA_CHECK(cudaMemcpyAsync(device_dst, host_src, bytes, cudaMemcpyHostToDevice));
+			cudaStream_t stream = queue ? static_cast<cudaStream_t>(queue)
+										: Manager::get_current_device().get_next_stream();
+			CUDA_CHECK(
+				cudaMemcpyAsync(device_dst, host_src, bytes, cudaMemcpyHostToDevice, stream));
 		}
 	}
 
@@ -129,7 +132,8 @@ struct PinnedPolicy {
 						   resource.type);
 		}
 		void* ptr = nullptr;
-		CUDA_CHECK(cudaMallocHost(&ptr, bytes));
+		CUDA_CHECK(cudaHostAlloc(&ptr, bytes, cudaHostAllocPortable | cudaHostAllocMapped));
+
 		return ptr;
 	}
 
@@ -190,7 +194,7 @@ struct UnifiedPolicy {
 						   resource.type);
 		}
 		void* ptr = nullptr;
-		CUDA_CHECK(cudaMallocManaged(&ptr, bytes));
+		CUDA_CHECK(cudaMallocManaged(&ptr, bytes, cudaMemAttachGlobal));
 		return ptr;
 	}
 
@@ -209,28 +213,45 @@ struct UnifiedPolicy {
 	static void mem_advise(void* ptr, size_t bytes, int advice, int device_id) {
 		CUDA_CHECK(cudaMemAdvise(ptr, bytes, static_cast<cudaMemoryAdvise>(advice), device_id));
 	}
+
+	// Copying to/from a standard host buffer is just a memcpy for USM
+	static void
+	copy_from_host(void* unified_dst, const void* host_src, size_t bytes, void* queue = nullptr) {
+		std::memcpy(unified_dst, host_src, bytes);
+		// Optionally prefetch to the current device to warm it up
+		int device;
+		cudaGetDevice(&device);
+		cudaStream_t stream = queue ? static_cast<cudaStream_t>(queue) : 0;
+		CUDA_CHECK(cudaMemPrefetchAsync(unified_dst, bytes, device, stream));
+	}
+
 	static void
 	copy_to_host(void* host_dst, const void* unified_src, size_t bytes, void* queue = nullptr) {
-		// Prefetch to CPU then memcpy
-		prefetch(const_cast<void*>(unified_src), bytes, cudaCpuDeviceId, queue);
-		if (queue) {
-			cudaStreamSynchronize(static_cast<cudaStream_t>(queue));
+		// Prefetch to the host to ensure data is resident, then copy
+		cudaStream_t stream = queue ? static_cast<cudaStream_t>(queue) : 0;
+		CUDA_CHECK(
+			cudaMemPrefetchAsync(const_cast<void*>(unified_src), bytes, cudaCpuDeviceId, stream));
+		if (stream) {
+			CUDA_CHECK(cudaStreamSynchronize(stream));
+		} else {
+			CUDA_CHECK(cudaDeviceSynchronize()); // Sync if default stream
 		}
 		std::memcpy(host_dst, unified_src, bytes);
 	}
 
-	static void
-	copy_from_host(void* unified_dst, const void* host_src, size_t bytes, void* queue = nullptr) {
-		std::memcpy(unified_dst, host_src, bytes);
-		// Optionally prefetch to current device
-		int device;
-		cudaGetDevice(&device);
-		prefetch(unified_dst, bytes, device, queue);
-	}
-
-	static void
-	copy_device_to_device(void* dst, const void* src, size_t bytes, void* queue = nullptr) {
-		std::memcpy(dst, src, bytes);
+	static void copy_device_to_device(void* dst,
+									  const void* src,
+									  size_t bytes,
+									  void* queue = nullptr,
+									  bool sync = false) {
+		if (sync) {
+			// cudaMemcpyDefault handles peer-to-peer automatically
+			CUDA_CHECK(cudaMemcpy(dst, src, bytes, cudaMemcpyDefault));
+		} else {
+			cudaStream_t stream = queue ? static_cast<cudaStream_t>(queue)
+										: Manager::get_current_device().get_next_stream();
+			CUDA_CHECK(cudaMemcpyAsync(dst, src, bytes, cudaMemcpyDefault, stream));
+		}
 	}
 };
 } // namespace CUDA
@@ -643,7 +664,11 @@ class Buffer {
 		}
 		return *this;
 	}
-
+	void create(size_t count, const Resource& resource) {
+		resource_ = resource;
+		count_ = count;
+		allocate_on_resource(resource_, count_);
+	}
 	/**
 	 * @brief Destructor deallocates the buffer.
 	 */
@@ -710,10 +735,18 @@ class Buffer {
 		return device_ptr_;
 	}
 
+	void clear() {
+		deallocate();
+	}
+
 	/**
 	 * @brief Returns device-qualified pointers for kernel use.
 	 */
 	DEVICE_PTR(T) device_data() {
+		return static_cast<DEVICE_PTR(T)>(device_ptr_);
+	}
+
+	DEVICE_PTR(T) deviceData() {
 		return static_cast<DEVICE_PTR(T)>(device_ptr_);
 	}
 
@@ -835,6 +868,19 @@ class Buffer {
 		encoder->setBuffer(metal_buffer, 0, index);
 	}
 #endif
+	static Buffer create(size_t count, const Buffer* pool = nullptr) {
+		// This version now uses your custom memory pool for allocation.
+		// It creates a new buffer and allocates the required memory from the pool.
+		Buffer new_buffer;
+		new_buffer.resource_ = pool ? pool->resource() : get_best_available_resource();
+
+		// Allocate memory from your global temporary pool
+		new_buffer.device_ptr_ = static_cast<T*>(
+			ARBD::get_temp_pool().allocate(count * sizeof(T), new_buffer.resource_));
+		new_buffer.count_ = count;
+
+		return new_buffer;
+	}
 
   private:
 	/**
