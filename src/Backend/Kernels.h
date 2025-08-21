@@ -33,10 +33,6 @@
 
 namespace ARBD {
 
-// ============================================================================
-// Configuration and Types
-// ============================================================================
-
 struct kerneldim3 {
 	idx_t x = 1, y = 1, z = 1;
 };
@@ -50,19 +46,14 @@ struct kerneldim3 {
  */
 struct KernelConfig {
   public:
-	// Grid dimensions. A zero value in x signals auto-calculation.
-	kerneldim3 grid_size = {0, 0, 0};
-	// Block/Work-group dimensions.
-	kerneldim3 block_size = {256, 1, 1};
-	// Shared memory in bytes (primarily for CUDA).
-	idx_t shared_memory = 0;
-	// If false, the host will wait for completion.
-	bool sync = false;
-	bool async = !sync; // Legacy compatibility
-	// Events this kernel must wait for.
+	kerneldim3 grid_size{0, 0, 0};
+	kerneldim3 block_size{256, 1, 1};
+	idx_t shared_memory{0};
+	bool sync{false};
+	bool async{!sync}; // FOR LEGACY COMPATIBILITY
 	EventList dependencies;
-	// Stream ID/Queue for SYCL and CUDA
-	int stream_id = 0;
+	int stream_id{0};
+	void* explicit_queue{nullptr};
 
 	inline void validate_block_size(const Resource& resource) {
 #ifdef USE_SYCL

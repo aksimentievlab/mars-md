@@ -171,7 +171,25 @@ void example_complete_workflow() {
 }
 
 // ============================================================================
-// 5. Multi-device coordination
+// 5. Stream lifecycle is managed by Resource backends
+// ============================================================================
+
+// Resource.h provides the interface:
+// - get_stream() → stream/queue pointer
+// - synchronize_streams() → sync all streams
+
+// Backend managers provide the implementation:
+// - CUDAManager: manages cudaStream_t pools per device
+// - SYCLManager: manages sycl::queue pools per device
+// - MetalManager: manages MTL::CommandQueue pools per device
+
+// Kernels use streams and produce events:
+// - Stream determines WHERE kernel executes
+// - Event determines WHEN kernel completes
+// - EventList coordinates DEPENDENCIES across streams/devices
+
+// ============================================================================
+// 5. Multi-device coordination (TO BE IMPLEMENTED)
 // ============================================================================
 
 void example_multi_device() {
@@ -211,24 +229,5 @@ void example_multi_device() {
 
     final_event.wait();
 }
-
-// ============================================================================
-// 6. Stream lifecycle is managed by Resource backends
-// ============================================================================
-
-// Resource.h provides the interface:
-// - get_stream() → stream/queue pointer
-// - synchronize_streams() → sync all streams
-
-// Backend managers provide the implementation:
-// - CUDAManager: manages cudaStream_t pools per device
-// - SYCLManager: manages sycl::queue pools per device
-// - MetalManager: manages MTL::CommandQueue pools per device
-
-// Kernels use streams and produce events:
-// - Stream determines WHERE kernel executes
-// - Event determines WHEN kernel completes
-// - EventList coordinates DEPENDENCIES across streams/devices
-
 } // namespace ARBD
 ```
