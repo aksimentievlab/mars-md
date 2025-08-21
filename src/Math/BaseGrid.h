@@ -21,12 +21,11 @@
 #endif
 
 #include "Backend/Header.h"
+#include "IO/FileHandle.h"
 #include "Math/IndexList.h"
 #include "Math/Matrix3.h"
 #include "Math/Types.h"
 #include "Math/Vector3.h"
-#include "IO/FileHandle.h"
-
 
 namespace ARBD {
 
@@ -52,8 +51,8 @@ enum class InterpolationOrder : int {
  */
 template<typename T = float>
 struct GridConfig {
-	Vector3_t<T> origin{0, 0, 0};		   ///< Origin point of the grid
-	Matrix3_t<T> basis{T(1)};			   ///< Basis vectors defining grid spacing
+	Vector3_t<T> origin{0, 0, 0};		  ///< Origin point of the grid
+	Matrix3_t<T> basis{T(1)};			  ///< Basis vectors defining grid spacing
 	Vector3_t<idx_t> dimensions{1, 1, 1}; ///< Grid dimensions (nx, ny, nz)
 	BoundaryCondition boundary = BoundaryCondition::Periodic;
 
@@ -67,10 +66,8 @@ struct GridConfig {
 };
 
 /**
- * @brief Modern C++20 BaseGrid class with multi-backend support
- *
+ * @brief Template-based for different data types (float, double)
  * Features:
- * - Template-based for different data types (float, double)
  * - CUDA/SYCL/CPU compatibility using unified math system
  * - Clean separation of I/O operations at the end of class
  * - RAII memory management
@@ -906,7 +903,7 @@ HOST DEVICE Vector3_t<T> compute_gradient(const T* grid_values,
 HOST DEVICE inline idx_t wrap_index(int index, idx_t size) {
 	if (index < 0) {
 		return static_cast<idx_t>(index + static_cast<int>(size) *
-											   ((-index / static_cast<int>(size)) + 1)) %
+											  ((-index / static_cast<int>(size)) + 1)) %
 			   size;
 	}
 	return static_cast<idx_t>(index) % size;

@@ -306,5 +306,5 @@ class Configuration {
 	int ParticleInterpolationType;
 	int RigidBodyInterpolationType;
 };
-}
+} // namespace ARBD
 #endif

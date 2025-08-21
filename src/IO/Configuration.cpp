@@ -1,7 +1,9 @@
 #include "Configuration.h"
-
+#include "FileHandler.h"
+#include "Reader.h"
 #include <cassert>
 #include <cmath>
+#include <filesystetem>
 #include <iostream>
 #include <stdlib.h> /* srand, rand */
 #include <string>
@@ -293,7 +295,8 @@ ARBD::Configuration::Configuration(const char* config_file, int simNum, bool deb
 						   2); // Throw exception because this implementation needs to be revisited
 							   /*                OverlordGrid* over = new
 								  OverlordGrid[part[i].numPartGridFiles];		    part[i].meanPmf = new
-								  float[part[i].numPartGridFiles];		    for(int j = 0; j < part[i].numPartGridFiles;
+								  float[part[i].numPartGridFiles];		    for(int j = 0; j <
+								  part[i].numPartGridFiles;
 								  ++j)
 										 {
 										 map = partGridFile[i][j];

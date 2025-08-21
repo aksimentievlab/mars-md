@@ -17,10 +17,10 @@
 #ifndef __METAL_VERSION__
 #include "ARBDException.h"
 #include <cstddef>
-#include <string>
-#include <vector>
 #include <memory>
 #include <mutex>
+#include <string>
+#include <vector>
 #endif
 
 namespace ARBD {
@@ -40,8 +40,8 @@ enum class ResourceType : uint8_t {
  */
 enum class StreamType {
 	Compute = 0, ///< General compute operations
-	Memory = 1,  ///< Memory transfer operations
-	Default = 2  ///< Default stream
+	Memory = 1,	 ///< Memory transfer operations
+	Default = 2	 ///< Default stream
 };
 
 /**
@@ -387,7 +387,7 @@ class Resource {
 	 */
 	bool can_access_peer(const Resource& other) const {
 		// Same resource can always access itself
-		if (*this == other) {
+		if (type == other.type && id == other.id) {
 			return true;
 		}
 
