@@ -1,4 +1,3 @@
-///////////////////////////////////////////////////////////////////////
 // Modified dcd reader from NAMD.
 // Author: Jeff Comer <jcomer2@illinois.edu>
 // Refactored for the arbd2/cpp20 branch with on 2025
@@ -110,11 +109,10 @@ class DcdWriter {
 		fd_ = openDcd(fileName_);
 
 		if (fd_ < 0) {
-			throw Exception(ExceptionType::FileOpenError,
+			throw Exception(ExceptionType::FileIoError,
 							SourceLocation(),
-							"DcdWriter: Failed to open DCD file '%s': %s",
-							fileName_.c_str(),
-							getErrorString(static_cast<DcdError>(fd_)).c_str());
+							"DcdWriter: Failed to open DCD file {}",
+							fileName_);
 		}
 
 		LOGINFO("DcdWriter: Successfully opened DCD file '{}'", fileName_);
@@ -321,26 +319,35 @@ class DcdWriter {
 	 * @param error DcdError code
 	 * @return Error description
 	 */
-	static std::string getErrorString(DcdError error) {
+	static void getErrorString(DcdError error) {
 		switch (error) {
 		case DcdError::Success:
-			return "Success";
+			LOGINFO("Success");
+			break;
 		case DcdError::FileDoesNotExist:
-			return "DCD file does not exist";
+			LOGERROR("DCD file does not exist");
+			break;
 		case DcdError::OpenFailed:
-			return "Open of DCD file failed";
+			LOGERROR("Open of DCD file failed");
+			break;
 		case DcdError::BadRead:
-			return "Read call on DCD file failed";
+			LOGERROR("Read call on DCD file failed");
+			break;
 		case DcdError::PrematureEOF:
-			return "Premature EOF found in DCD file";
+			LOGERROR("Premature EOF found in DCD file");
+			break;
 		case DcdError::BadFormat:
-			return "Format of DCD file is wrong";
+			LOGERROR("Format of DCD file is wrong");
+			break;
 		case DcdError::FileExists:
-			return "Output file already exists";
+			LOGERROR("Output file already exists");
+			break;
 		case DcdError::BadMalloc:
-			return "Memory allocation failed";
+			LOGERROR("Memory allocation failed");
+			break;
 		default:
-			return string_format("Unknown DCD error code: %d", static_cast<int>(error));
+			LOGERROR("Unknown DCD error code: {}", static_cast<int>(error));
+			break;
 		}
 	}
 
@@ -544,8 +551,11 @@ class DcdWriter {
 	void safeWrite(const void* data, size_t size) {
 		ssize_t written = write(fd_, data, size);
 		if (written != static_cast<ssize_t>(size)) {
-			throw std::runtime_error(
-				string_format("Write failed: expected %zu bytes, wrote %zd bytes", size, written));
+			throw Exception(ExceptionType::FileIoError,
+							SourceLocation(),
+							"Write failed: expected {} bytes, wrote {} bytes",
+							size,
+							written);
 		}
 	}
 };

@@ -5,27 +5,20 @@
  *********************************************************************/
 #pragma once
 
-// Suppress narrowing conversion warnings
-#ifdef __clang__
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wc++11-narrowing"
-#endif
-
+#include "Backend/Header.h"
 // Metal-specific implementation
 #ifdef __METAL_VERSION__
 #include "METAL/Vector3.h"
 #else
 
 // Standard implementation for CUDA, SYCL, and HOST
-#if !defined(__SYCL_DEVICE_ONLY__) && !defined(__CUDA_ARCH__)
+#ifdef HOST_GUARD
 #include "ARBDException.h"
 #include "ARBDLogger.h"
 #include <limits>
 #include <sstream>
 #include <type_traits>
 #endif
-
-#include "Backend/Header.h"
 
 #ifdef __CUDA_ARCH__
 #include <cuda/std/limits>
@@ -280,9 +273,18 @@ class alignas(4 * sizeof(T)) Vector3_t {
 #endif
 	}
 
-	// String and printing (host-only)
-#if !defined(__SYCL_DEVICE_ONLY__) && !defined(__CUDA_ARCH__)
-	HOST DEVICE void print() const {
+	// Comparison operators
+	template<typename U>
+	HOST DEVICE constexpr bool operator==(const Vector3_t<U>& b) const {
+		return x == b.x && y == b.y && z == b.z && w == b.w;
+	}
+
+	template<typename U>
+	HOST DEVICE constexpr bool operator!=(const Vector3_t<U>& b) const {
+		return !(*this == b);
+	}
+#ifdef HOST_GUARD
+	HOST void print() const {
 		DEVICEINFO("%0.3f %0.3f %0.3f",
 				   static_cast<double>(x),
 				   static_cast<double>(y),
@@ -295,18 +297,6 @@ class alignas(4 * sizeof(T)) Vector3_t {
 		return oss.str();
 	}
 #endif
-
-	// Comparison operators
-	template<typename U>
-	HOST DEVICE constexpr bool operator==(const Vector3_t<U>& b) const {
-		return x == b.x && y == b.y && z == b.z && w == b.w;
-	}
-
-	template<typename U>
-	HOST DEVICE constexpr bool operator!=(const Vector3_t<U>& b) const {
-		return !(*this == b);
-	}
-
 	T x, y, z, w;
 };
 
@@ -363,8 +353,3 @@ struct common_type<ARBD::Vector3_t<T>, ARBD::Vector3_t<U> > {
 #endif
 
 #endif // __METAL_VERSION__
-
-// Restore warning settings
-#ifdef __clang__
-#pragma clang diagnostic pop
-#endif

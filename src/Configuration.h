@@ -10,7 +10,6 @@
  *********************************************************************/
 #pragma once
 
-#if !defined(__METAL_VERSION__) && !defined(__SYCL_DEVICE_ONLY__) && !defined(__CUDA_ARCH__)
 #include "ARBDException.h"
 #include "ARBDLogger.h"
 #include "IO/FileHandle.h"
@@ -18,6 +17,7 @@
 #include "Math/BaseGrid.h"
 #include "Math/Types.h"
 #include "Math/Vector3.h"
+#include "System/SimSystem.h"
 
 #include <algorithm> // sort
 #include <map>
@@ -30,21 +30,21 @@
 // #include "BaseGrid.h"
 // #include "OverlordGrid.h"
 // #include "ComputeForce.h"
-// #include "Reader.h"
 // #include "TrajectoryWriter.h"
 // #include "TabulatedPotential.h"
 // #include "TabulatedAngle.h"
 // #include "ProductPotential.h"
-// #include "GPUManager.h"
 // #include "RigidBodyType.h"
 // #include "RigidBody.h"
 
-// Units:
-//    Energy: kcal/mol (6.947694e-24 kJ)
-//    Temperature: Kelvin
-//    Time: nanoseconds
-//    Length: angstroms
-//    Momentum: Da * \mu m / ns
+/**
+ * @brief Units:
+ *    Energy: kcal/mol (6.947694e-24 kJ)
+ *    Temperature: Kelvin
+ *    Time: nanoseconds
+ *    Length: angstroms
+ *    Momentum: Da * \mu m / ns
+ */
 
 // Forward declerations
 using String = std::string;
@@ -241,11 +241,8 @@ class Configuration {
 	bool readVecanglesFromFile;
 	bool readBondAnglesFromFile;
 	bool readRestraintsFromFile;
-	// String* partGridFile;
 	String** partGridFile;
-	// float* partGridFileScale;
 	float** partGridFileScale;
-	// int *numPartGridFiles;
 	std::map<std::string, BaseGrid<float>> part_grid_dictionary;
 	std::map<std::string, BaseGrid<float>*> part_grid_dictionary_d;
 	std::vector<std::vector<String>> partRigidBodyGrid;
@@ -307,4 +304,3 @@ class Configuration {
 	int RigidBodyInterpolationType;
 };
 } // namespace ARBD
-#endif

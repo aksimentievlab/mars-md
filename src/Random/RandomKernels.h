@@ -4,11 +4,10 @@
 #include "random/philox.h"
 #ifdef __CUDACC__
 #include <cuda_runtime.h>
-using namespace thrust;
+#include <thrust/tuple.h>
 #else
-using namespace std;
-#endif
 #include <cmath>
+#endif
 
 // --- Functor for Uniform Float Generation ---
 namespace ARBD {

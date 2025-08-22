@@ -6,16 +6,15 @@
  * @author V2: Pin-Yi Li <pinyili2@illinois.edu>
  *********************************************************************/
 #pragma once
+#include "Backend/Header.h"
 
-#if !defined(__METAL_VERSION__) && !defined(__SYCL_DEVICE_ONLY__) && !defined(__CUDA_ARCH__)
+#ifdef HOST_GUARD
 #include "ARBDException.h"
 #include "ARBDLogger.h"
 #include <algorithm>
 #include <initializer_list>
 #include <string>
 #endif
-
-#include "Backend/Header.h"
 
 namespace ARBD {
 
@@ -38,7 +37,7 @@ class IndexList {
 
   private:
 	T data_[MaxSize]; ///< Fixed-size array for device compatibility
-	idx_t size_ = 0; ///< Current number of elements
+	idx_t size_ = 0;  ///< Current number of elements
 
   public:
 	/*===================*\
@@ -63,17 +62,8 @@ class IndexList {
 		return *this;
 	}
 
-#if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__)
-	/**
-	 * @brief Host-only constructor from initializer list
-	 */
-	HOST IndexList(std::initializer_list<T> init) : size_(0) {
-		for (const auto& value : init) {
-			if (size_ < MaxSize) {
-				data_[size_++] = value;
-			}
-		}
-	}
+#ifdef HOST_GUARD
+
 #endif
 
 	/*===================*\
@@ -377,12 +367,21 @@ class IndexList {
 	|  HOST-ONLY METHODS  |
 	\*===================*/
 
-#if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__)
-
+#ifdef HOST_GUARD
+	/**
+	 * @brief Host-only constructor from initializer list
+	 */
+	HOST IndexList(std::initializer_list<T> init) : size_(0) {
+		for (const auto& value : init) {
+			if (size_ < MaxSize) {
+				data_[size_++] = value;
+			}
+		}
+	}
 	/**
 	 * @brief String representation for debugging (host only)
 	 */
-	std::string to_string() const {
+	auto to_string() const {
 		if (size_ == 0)
 			return "IndexList[]";
 

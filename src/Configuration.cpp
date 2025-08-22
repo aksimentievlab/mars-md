@@ -1,19 +1,13 @@
 #include "Configuration.h"
-#include "FileHandler.h"
-#include "Reader.h"
+#include "Math/BaseGrid.h"
+#include "Math/Types.h"
 #include <cassert>
-#include <cmath>
-#include <filesystetem>
-#include <iostream>
-#include <stdlib.h> /* srand, rand */
-#include <string>
 #include <time.h> /* time */
+
 // #include "Angle.h"
 // #include "Dihedral.h"
 // #include "Restraint.h"
 // #include "ProductPotential.h"
-#include "ARBDException.h"
-#include "ARBDLogger.h"
 
 ARBD::Configuration::Configuration(const char* config_file, int simNum, bool debug)
 	: simNum(simNum) {
