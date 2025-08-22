@@ -1,9 +1,9 @@
 #pragma once
 
-#include "Buffer.h"
-#include "Events.h"
-#include "KernelConfig.h"
-#include "Resource.h"
+#include "../Buffer.h"
+#include "../Events.h"
+#include "../KernelConfig.h"
+#include "../Resource.h"
 
 #ifdef __CUDACC__
 // Only include CUDA headers when compiling with nvcc

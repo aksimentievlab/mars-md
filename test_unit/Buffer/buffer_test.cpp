@@ -742,10 +742,16 @@ TEST_CASE_METHOD(BackendInitFixture, "Buffer Performance", "[buffer][performance
 		const size_t test_size = 500000; // 500K elements
 
 		DeviceBuffer<int> src_buffer(test_size);
-		DeviceBuffer<int> dst_buffer(test_size);
+		// Create destination buffer with the same resource as source and sync=true
+		DeviceBuffer<int> dst_buffer(test_size, src_buffer.resource(), nullptr, true);
 
 		auto host_data = generate_test_data<int>(test_size);
 		src_buffer.copy_from_host(host_data);
+
+		// Ensure source buffer is ready by performing a small operation
+		// This helps ensure the device is ready for operations
+		DeviceBuffer<int> test_buffer(10, src_buffer.resource());
+		test_buffer.copy_from_host(std::vector<int>(10, 1));
 
 		auto start = std::chrono::high_resolution_clock::now();
 		dst_buffer.copy_device_to_device(src_buffer, test_size);
@@ -754,8 +760,58 @@ TEST_CASE_METHOD(BackendInitFixture, "Buffer Performance", "[buffer][performance
 		auto copy_time = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
 		LOGINFO("Device to device copy of {} elements took {} ms", test_size, copy_time.count());
 
+		// The copy_to_host method already forces synchronization, so we don't need additional sync
+		// The copy_from_host and copy_to_host methods use sync=true internally
 		std::vector<int> result_data;
 		dst_buffer.copy_to_host(result_data);
+
+		// Debug: Check sizes and first few elements
+		LOGINFO("Expected size: {}, Result size: {}", host_data.size(), result_data.size());
+		if (result_data.size() > 0) {
+			LOGINFO("First 5 expected: {}, {}, {}, {}, {}",
+					host_data[0],
+					host_data[1],
+					host_data[2],
+					host_data[3],
+					host_data[4]);
+			LOGINFO("First 5 result: {}, {}, {}, {}, {}",
+					result_data[0],
+					result_data[1],
+					result_data[2],
+					result_data[3],
+					result_data[4]);
+		}
+
+		// Check if the data is actually different or just a timing issue
+		if (result_data.size() == host_data.size()) {
+			size_t mismatch_count = 0;
+			size_t zero_count = 0;
+			for (size_t i = 0; i < std::min(result_data.size(), host_data.size()); ++i) {
+				if (result_data[i] != host_data[i]) {
+					mismatch_count++;
+					if (result_data[i] == 0) {
+						zero_count++;
+					}
+					if (mismatch_count <= 10) { // Log first 10 mismatches
+						LOGINFO("Mismatch at index {}: expected {}, got {}",
+								i,
+								host_data[i],
+								result_data[i]);
+					}
+				}
+			}
+			LOGINFO("Total mismatches: {} out of {}, Zero values: {}",
+					mismatch_count,
+					host_data.size(),
+					zero_count);
+
+			// If we have too many mismatches, the copy operation failed
+			if (mismatch_count > test_size * 0.1) { // More than 10% mismatches
+				FAIL("Device-to-device copy failed with too many mismatches: "
+					 << mismatch_count << " out of " << test_size);
+			}
+		}
+
 		REQUIRE(vectors_equal(host_data, result_data));
 	}
 }

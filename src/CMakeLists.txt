@@ -22,7 +22,7 @@ if(USE_CUDA)
     message(STATUS "src: Adding CUDA specific sources to lib${PROJECT_NAME}")
     list(APPEND LIB_SOURCES
         Backend/CUDA/CUDAManager.cpp
-        Random/Random.cu
+        #Random/Random.cu
 
     )
     # Ensure the CUDA language is enabled in your top-level project() call
@@ -169,7 +169,7 @@ endif()
 if(USE_CUDA)
     # Set CUDA properties for .cu files
     set_source_files_properties(
-        Random/Random.cu
+        #Random/Random.cu
         PROPERTIES
         LANGUAGE CUDA
         CUDA_SEPARABLE_COMPILATION ON

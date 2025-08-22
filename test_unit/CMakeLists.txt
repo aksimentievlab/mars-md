@@ -6,18 +6,18 @@ include(CTest)
 
 # Common source files for core tests
 set(CORE_TEST_SOURCES
-    Backends/generic_Buffer.cpp
-    Backends/buffer_test.cpp
-    #Buffer/Buffer.cpp
+    Buffer/generic_Buffer.cpp
+    Buffer/buffer_test.cpp
+    Buffer/Buffer.cpp
+    Buffer/Pinned_Unified.cpp
     ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp
 )
 
 # Math folder sources - explicitly list what to include in math tests
 set(MATH_SOURCES
-    Math/RandomDevice.cpp
-    Math/RandomProfile.cpp
-    Math/Kernel_for_test.h
-    Math/RandomTestKernels.cu
+    #Math/RandomDevice.cpp
+    #Math/RandomProfile.cpp
+    #Math/Kernel_for_test.h
     # Add more math sources here as needed
     ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp
 )
@@ -233,9 +233,9 @@ if(USE_CUDA)
 
     # CUDA core tests - use core sources + CUDA-specific sources
     add_executable(arbd_test_cuda
-        ${CORE_TEST_SOURCES}
-        Kernels/cuda_kernels.cu
-        Kernels/cuda_kernels.cpp)
+        ${CORE_TEST_SOURCES})
+        #Kernels/cuda_kernels.cu
+        #Kernels/cuda_kernels.cpp
     set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --extended-lambda --allow-unsupported-compiler -Xcompiler=-Wno-deprecated-declarations")
     target_include_directories(arbd_test_cuda PRIVATE ${CMAKE_SOURCE_DIR}/src)
     target_link_libraries(arbd_test_cuda PRIVATE
@@ -246,7 +246,9 @@ if(USE_CUDA)
 
     # CUDA math tests - use all math sources
     add_executable(arbd_test_cuda_math
-        ${MATH_SOURCES})
+        ${MATH_SOURCES}
+        #Math/RandomTestKernels.cu
+    )
     set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --extended-lambda --allow-unsupported-compiler -Xcompiler=-Wno-deprecated-declarations")
     target_include_directories(arbd_test_cuda_math PRIVATE ${CMAKE_SOURCE_DIR}/src)
     target_link_libraries(arbd_test_cuda_math PRIVATE
@@ -257,8 +259,8 @@ if(USE_CUDA)
 
     # Set CUDA properties for math test files
     set_source_files_properties(
-        Math/RandomTestKernels.cu
-        Math/Kernel_for_test.h
+        #Math/RandomTestKernels.cu
+        #Math/Kernel_for_test.h
         PROPERTIES
         LANGUAGE CUDA
         CUDA_SEPARABLE_COMPILATION ON

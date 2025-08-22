@@ -1,4 +1,11 @@
 #pragma once
+#include "ARBDException.h"
+#include "ARBDLogger.h"
+#include "Buffer.h"
+#include "Events.h"
+#include "Header.h"
+#include "KernelConfig.h"
+#include "Resource.h"
 #include <functional>
 #include <future>
 #include <memory>
@@ -7,26 +14,20 @@
 #include <type_traits>
 #include <vector>
 
-#ifdef USE_CUDA
-#include "CUDA/CUDAManager.h"
-#include "CUDA/KernelHelper.cuh"
-#include <cuda_runtime.h>
-#include <cuda_runtime_api.h>
-#include <thrust/tuple.h>
-#endif
-
 #ifdef USE_SYCL
 #include "SYCL/SYCLKernels.h"
 #include "SYCL/SYCLManager.h"
 #endif
 
-#include "ARBDException.h"
-#include "ARBDLogger.h"
-#include "Buffer.h"
-#include "Events.h"
-#include "Header.h"
-#include "KernelConfig.h"
-#include "Resource.h"
+#ifdef USE_CUDA
+#include "CUDA/CUDAManager.h"
+#include <cuda_runtime.h>
+#include <cuda_runtime_api.h>
+#include <thrust/tuple.h>
+#ifdef __CUDACC__
+#include "CUDA/KernelHelper.cuh"
+#endif
+#endif
 
 namespace ARBD {
 
@@ -530,17 +531,18 @@ class KernelGraph {
 		EventList all_events;
 		std::vector<bool> visited(nodes_.size(), false);
 
-		std::function<void(size_t)> execute_node = [&](size_t node_id) {
+		std::function<void(idx_t)> execute_node;
+		execute_node = [&](idx_t node_id) {
 			if (visited[node_id] || nodes_[node_id].executed)
 				return;
 
 			auto& node = nodes_[node_id];
 
-			for (size_t dep_id : node.dependencies) {
+			for (idx_t dep_id : node.dependencies) {
 				execute_node(dep_id);
 			}
 
-			for (size_t dep_id : node.dependencies) {
+			for (idx_t dep_id : node.dependencies) {
 				nodes_[dep_id].completion_event.wait();
 			}
 
@@ -551,7 +553,7 @@ class KernelGraph {
 			all_events.add(node.completion_event);
 		};
 
-		for (size_t i = 0; i < nodes_.size(); ++i) {
+		for (idx_t i = 0; i < nodes_.size(); ++i) {
 			execute_node(i);
 		}
 
@@ -559,10 +561,14 @@ class KernelGraph {
 	}
 };
 
-// ============================================================================
-// High-Performance Kernel Pipeline
-// ============================================================================
-
+/**
+ * @brief Kernel Pipeline
+ * A pipeline of kernels that are executed in order.
+ * The pipeline is executed in order, and the output of each kernel is used as the input to the next
+ * kernel.
+ * @param resource The resource to use for the pipeline.
+ * @param stream_id The stream ID to use for the pipeline.
+ */
 class KernelPipeline {
   private:
 	const Resource& resource_;

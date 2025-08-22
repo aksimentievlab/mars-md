@@ -15,8 +15,7 @@ using BufferVector3 = DeviceBuffer<ARBD::Vector3_t<float>>;
 
 // Random kernel template instantiations
 // UniformFunctor template instantiations
-template Event
-launch_cuda_kernel_impl<std::tuple<>, std::tuple<BufferFloat&>, UniformFunctor<float>&>(
+template Event launch_cuda_kernel<std::tuple<>, std::tuple<BufferFloat&>, UniformFunctor<float>&>(
 	const Resource& resource,
 	size_t thread_count,
 	const std::tuple<>& inputs,
@@ -24,9 +23,9 @@ launch_cuda_kernel_impl<std::tuple<>, std::tuple<BufferFloat&>, UniformFunctor<f
 	const KernelConfig& config,
 	UniformFunctor<float>& kernel_func);
 
-template Event launch_cuda_kernel_impl<std::tuple<>,
-									   std::tuple<BufferVector3&>,
-									   UniformFunctor<ARBD::Vector3_t<float>>&>(
+template Event launch_cuda_kernel<std::tuple<>,
+								  std::tuple<BufferVector3&>,
+								  UniformFunctor<ARBD::Vector3_t<float>>&>(
 	const Resource& resource,
 	size_t thread_count,
 	const std::tuple<>& inputs,
@@ -35,8 +34,7 @@ template Event launch_cuda_kernel_impl<std::tuple<>,
 	UniformFunctor<ARBD::Vector3_t<float>>& kernel_func);
 
 // GaussianFunctor template instantiations
-template Event
-launch_cuda_kernel_impl<std::tuple<>, std::tuple<BufferFloat&>, GaussianFunctor<float>&>(
+template Event launch_cuda_kernel<std::tuple<>, std::tuple<BufferFloat&>, GaussianFunctor<float>&>(
 	const Resource& resource,
 	size_t thread_count,
 	const std::tuple<>& inputs,
@@ -44,9 +42,9 @@ launch_cuda_kernel_impl<std::tuple<>, std::tuple<BufferFloat&>, GaussianFunctor<
 	const KernelConfig& config,
 	GaussianFunctor<float>& kernel_func);
 
-template Event launch_cuda_kernel_impl<std::tuple<>,
-									   std::tuple<BufferVector3&>,
-									   GaussianFunctor<ARBD::Vector3_t<float>>&>(
+template Event launch_cuda_kernel<std::tuple<>,
+								  std::tuple<BufferVector3&>,
+								  GaussianFunctor<ARBD::Vector3_t<float>>&>(
 	const Resource& resource,
 	size_t thread_count,
 	const std::tuple<>& inputs,
@@ -56,7 +54,7 @@ template Event launch_cuda_kernel_impl<std::tuple<>,
 
 // Also need int version for UniformFunctor
 template Event
-launch_cuda_kernel_impl<std::tuple<>, std::tuple<DeviceBuffer<int>&>, UniformFunctor<int>&>(
+launch_cuda_kernel<std::tuple<>, std::tuple<DeviceBuffer<int>&>, UniformFunctor<int>&>(
 	const Resource& resource,
 	size_t thread_count,
 	const std::tuple<>& inputs,
