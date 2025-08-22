@@ -399,12 +399,12 @@ class KernelGraph {
 #endif
 
 #if defined(USE_SYCL) && defined(USE_SYCL_ICPX)
-	sycl::ext::oneapi::experimental::command_graph<
-		sycl::ext::oneapi::experimental::graph_state::modifiable>
-		sycl_graph_;
-	sycl::ext::oneapi::experimental::command_graph<
-		sycl::ext::oneapi::experimental::graph_state::executable>
-		sycl_exec_graph_;
+	using command_graph = sycl::ext::oneapi::experimental::command_graph<
+		sycl::ext::oneapi::experimental::graph_state::modifiable>;
+	using executable_graph = sycl::ext::oneapi::experimental::command_graph<
+		sycl::ext::oneapi::experimental::graph_state::executable>;
+	command_graph* sycl_graph_{nullptr};
+	executable_graph* sycl_exec_graph_{nullptr};
 	bool sycl_graph_recorded_{false};
 #endif
 
@@ -416,9 +416,7 @@ class KernelGraph {
 #if defined(USE_SYCL) && defined(USE_SYCL_ICPX)
 		if (resource.type == ResourceType::SYCL) {
 			sycl::queue& q = *static_cast<sycl::queue*>(resource.get_stream());
-			sycl_graph_ = sycl::ext::oneapi::experimental::command_graph<
-				sycl::ext::oneapi::experimental::graph_state::modifiable>(q.get_context(),
-																		  q.get_device());
+			sycl_graph_ = new command_graph(q.get_context(), q.get_device());
 		}
 #endif
 	}
@@ -429,6 +427,12 @@ class KernelGraph {
 			cudaGraphExecDestroy(cuda_graph_instance_);
 		if (cuda_graph_)
 			cudaGraphDestroy(cuda_graph_);
+#endif
+#if defined(USE_SYCL) && defined(USE_SYCL_ICPX)
+		if (sycl_exec_graph_)
+			delete sycl_exec_graph_;
+		if (sycl_graph_)
+			delete sycl_graph_;
 #endif
 	}
 
@@ -481,14 +485,14 @@ class KernelGraph {
 #endif
 
 #if defined(USE_SYCL) && defined(USE_SYCL_ICPX)
-		if (resource_.type == ResourceType::SYCL && !nodes_.empty()) {
+		if (resource_.type == ResourceType::SYCL && !nodes_.empty() && sycl_exec_graph_) {
 			if (!sycl_graph_recorded_) {
 				record_sycl_graph();
 			}
 
 			sycl::queue& q = *static_cast<sycl::queue*>(resource_.get_stream());
 			auto sycl_event =
-				q.submit([&](sycl::handler& h) { h.ext_oneapi_graph(sycl_exec_graph_); });
+				q.submit([&](sycl::handler& h) { h.ext_oneapi_graph(*sycl_exec_graph_); });
 
 			EventList result;
 			result.add(Event(sycl_event, resource_));
@@ -516,13 +520,13 @@ class KernelGraph {
 	void record_sycl_graph() {
 		// Record SYCL graph nodes
 		for (auto& node : nodes_) {
-			sycl_graph_.add([&](sycl::handler& h) {
+			sycl_graph_->add([&](sycl::handler& h) {
 				// Add kernel to graph
 				node.launcher();
 			});
 		}
 
-		sycl_exec_graph_ = sycl_graph_.finalize();
+		sycl_exec_graph_ = new executable_graph(sycl_graph_->finalize());
 		sycl_graph_recorded_ = true;
 	}
 #endif
