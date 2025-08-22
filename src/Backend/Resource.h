@@ -16,10 +16,6 @@
 
 #ifndef __METAL_VERSION__
 #include "ARBDException.h"
-#include <cstddef>
-#include <memory>
-#include <mutex>
-#include <string>
 #include <vector>
 #endif
 
@@ -55,10 +51,7 @@ enum class StreamType {
 class Resource {
   public:
 	ResourceType type{ResourceType::CPU}; ///< Resource type (defaults to CPU)
-	size_t id{0};						  ///< Device ID within the resource type
-
-  private:
-	// No internal stream storage needed - use existing manager infrastructure
+	idx_t id{0};						  ///< Device ID within the resource type
 
   public:
 	/**
@@ -72,7 +65,7 @@ class Resource {
 	 * @param resource_type The type of compute resource
 	 * @param device_id The device ID within that resource type (defaults to 0)
 	 */
-	HOST DEVICE constexpr Resource(ResourceType resource_type, size_t device_id = 0)
+	HOST DEVICE constexpr Resource(ResourceType resource_type, idx_t device_id = 0)
 		: type(resource_type), id(device_id) {}
 
 	/**
@@ -135,7 +128,7 @@ class Resource {
 	 * @return true if this resource matches the currently active device context
 	 */
 	HOST DEVICE bool is_current() const {
-#if defined(__CUDA_ARCH__) || defined(__SYCL_DEVICE_ONLY__) || defined(__METAL_VERSION__)
+#ifdef HOST_GUARD
 		// On device: assume we're on the right device if code is executing
 		// A more robust implementation might be needed for cross-device kernels
 		return true;
@@ -196,14 +189,14 @@ class Resource {
 #ifdef USE_CUDA
 		int device;
 		if (cudaGetDevice(&device) == cudaSuccess) {
-			return Resource{ResourceType::CUDA, static_cast<size_t>(device)};
+			return Resource{ResourceType::CUDA, static_cast<idx_t>(device)};
 		}
 #endif
 
 #ifdef USE_SYCL
 		try {
 			auto& current_device = ARBD::SYCL::Manager::get_current_device();
-			return Resource{ResourceType::SYCL, static_cast<size_t>(current_device.id())};
+			return Resource{ResourceType::SYCL, static_cast<idx_t>(current_device.id())};
 		} catch (...) {
 			// Fall through to CPU default
 		}
@@ -212,7 +205,7 @@ class Resource {
 #ifdef USE_METAL
 		try {
 			auto& current_device = ARBD::METAL::Manager::get_current_device();
-			return Resource{ResourceType::METAL, static_cast<size_t>(current_device.id())};
+			return Resource{ResourceType::METAL, static_cast<idx_t>(current_device.id())};
 		} catch (...) {
 			// Fall through to CPU default
 		}
@@ -228,7 +221,7 @@ class Resource {
 	 * @param cpu_id The CPU ID (typically 0 for single-socket systems)
 	 * @return Resource representing the specified CPU
 	 */
-	static constexpr Resource CPU(size_t cpu_id = 0) {
+	static constexpr Resource CPU(idx_t cpu_id = 0) {
 		return Resource{ResourceType::CPU, cpu_id};
 	}
 
@@ -239,7 +232,7 @@ class Resource {
 	 * @param device_id The CUDA device ID (defaults to 0)
 	 * @return Resource representing the specified CUDA device
 	 */
-	static constexpr Resource CUDA(size_t device_id = 0) {
+	static constexpr Resource CUDA(idx_t device_id = 0) {
 		return Resource{ResourceType::CUDA, device_id};
 	}
 #endif
@@ -251,7 +244,7 @@ class Resource {
 	 * @param device_id The SYCL device ID (defaults to 0)
 	 * @return Resource representing the specified SYCL device
 	 */
-	static constexpr Resource SYCL(size_t device_id = 0) {
+	static constexpr Resource SYCL(idx_t device_id = 0) {
 		return Resource{ResourceType::SYCL, device_id};
 	}
 #endif
@@ -263,7 +256,7 @@ class Resource {
 	 * @param device_id The Metal device ID (defaults to 0)
 	 * @return Resource representing the specified Metal device
 	 */
-	static constexpr Resource METAL(size_t device_id = 0) {
+	static constexpr Resource METAL(idx_t device_id = 0) {
 		return Resource{ResourceType::METAL, device_id};
 	}
 #endif
@@ -292,6 +285,7 @@ class Resource {
 		return id < other.id;
 	}
 
+#ifdef HOST_GUARD
 	/**
 	 * @brief Get a string representation of this resource.
 	 *
@@ -300,6 +294,7 @@ class Resource {
 	std::string toString() const {
 		return std::string(getTypeString()) + "[" + std::to_string(id) + "]";
 	}
+#endif
 
 	/**
 	 * @brief Check if the resource supports asynchronous operations.
@@ -365,7 +360,7 @@ class Resource {
 	 * @param stream_type The type of stream (currently unused)
 	 * @return Pointer to backend-specific stream object, or nullptr if unavailable
 	 */
-	void* get_stream(size_t stream_id, StreamType stream_type = StreamType::Compute) const;
+	void* get_stream(idx_t stream_id, StreamType stream_type = StreamType::Compute) const;
 
 	/**
 	 * @brief Synchronize all streams for this resource.
@@ -427,7 +422,7 @@ class Resource {
 	 * @throws ARBDException if the resource is invalid or inaccessible
 	 */
 	void validate() const {
-#if !defined(__METAL_VERSION__) && !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__)
+#ifdef HOST_GUARD
 		if (type == ResourceType::CPU) {
 			// CPU resources are always valid
 			return;

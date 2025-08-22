@@ -36,6 +36,7 @@
 
 #include "ARBDLogger.h"
 #include "Events.h"
+#include "Header.h"
 #include "Pool.h"
 #include "Resource.h"
 
@@ -868,7 +869,7 @@ class Buffer {
 	T* data() {
 		return device_ptr_;
 	}
-	T* data() const {
+	const T* data() const {
 		return device_ptr_;
 	}
 
@@ -883,7 +884,7 @@ class Buffer {
 		return static_cast<DEVICE_PTR(T)>(device_ptr_);
 	}
 
-	DEVICE_PTR(T) deviceData() {
+	DEVICE_PTR(T) deviceData() { // Alias
 		return static_cast<DEVICE_PTR(T)>(device_ptr_);
 	}
 
@@ -1033,7 +1034,7 @@ class Buffer {
   private:
 	/**
 	 * @brief Get the best available resource (prioritizes GPU devices over CPU)
-	 * @todo Not implemented.
+	 * @todo Implement this.
 	 */
 	static Resource get_best_available_resource() {
 #ifdef USE_SYCL
@@ -1077,13 +1078,14 @@ class Buffer {
 		if (count_ > 0) {
 			// Use the resource-aware allocation method
 			device_ptr_ = static_cast<T*>(Policy::allocate(resource, count_ * sizeof(T), queue));
+#ifdef HOST_GUARD
 			if (!device_ptr_) {
 				ARBD_Exception(ExceptionType::RuntimeError,
 							   "Failed to allocate {} bytes on {}",
 							   count_ * sizeof(T),
-							   resource.toString());
+							   resource.to_string());
 			}
-#if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__) && !defined(__METAL_VERSION__)
+
 			LOGTRACE("Allocated {} bytes on {}", count_ * sizeof(T), resource.toString());
 #endif
 		}
@@ -1093,7 +1095,7 @@ class Buffer {
 		if (device_ptr_) {
 			Policy::deallocate(device_ptr_, queue_);
 			device_ptr_ = nullptr;
-#if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__) && !defined(__METAL_VERSION__)
+#ifdef HOST_GUARD
 			LOGTRACE("Deallocated buffer on {}", resource_.toString());
 #endif
 		}
@@ -1313,6 +1315,54 @@ auto get_buffer_pointers(const std::tuple<Buffers...>& buffer_tuple) {
 	return get_buffer_pointers_impl(buffer_tuple, std::make_index_sequence<sizeof...(Buffers)>{});
 }
 
+/**
+ * @brief A convenient alias for the Buffer class using the active backend policy.
+ */
+
+template<typename T>
+struct is_device_buffer : std::false_type {};
+
+template<typename T>
+struct is_device_buffer<DeviceBuffer<T>> : std::true_type {};
+
+template<typename T>
+constexpr bool is_device_buffer_v = is_device_buffer<std::decay_t<T>>::value;
+
+template<typename T>
+struct is_pinned_buffer : std::false_type {};
+
+template<typename T>
+struct is_pinned_buffer<PinnedBuffer<T>> : std::true_type {};
+
+template<typename T>
+constexpr bool is_pinned_buffer_v = is_pinned_buffer<std::decay_t<T>>::value;
+
+template<typename T>
+struct is_unified_buffer : std::false_type {};
+
+template<typename T>
+struct is_unified_buffer<UnifiedBuffer<T>> : std::true_type {};
+
+template<typename T>
+constexpr bool is_unified_buffer_v = is_unified_buffer<std::decay_t<T>>::value;
+
+template<typename T>
+struct is_string : std::false_type {};
+
+template<>
+struct is_string<std::string> : std::true_type {};
+
+template<>
+struct is_string<const std::string> : std::true_type {};
+
+template<>
+struct is_string<const char*> : std::true_type {};
+
+template<>
+struct is_string<char*> : std::true_type {};
+
+template<typename T>
+constexpr bool is_string_v = is_string<std::decay_t<T>>::value;
 } // namespace ARBD
 
 #endif // __METAL_VERSION__

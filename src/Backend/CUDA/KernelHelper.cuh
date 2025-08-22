@@ -1,9 +1,9 @@
 #pragma once
 
-#include "Backend/Buffer.h"
-#include "Backend/Events.h"
-#include "Backend/Kernels.h"
-#include "Backend/Resource.h"
+#include "Buffer.h"
+#include "Events.h"
+#include "KernelConfig.h"
+#include "Resource.h"
 
 #ifdef __CUDACC__
 // Only include CUDA headers when compiling with nvcc
@@ -16,10 +16,9 @@ using namespace cuda::std;
 namespace ARBD {
 
 #ifdef __CUDACC__
-// Forward declarations for CUDA-specific functions (defined in .cu files)
 template<typename Functor, typename... Args>
-__global__ void cuda_kernel_wrapper(size_t n, Functor kernel, Args... args) {
-	size_t i = blockIdx.x * blockDim.x + threadIdx.x;
+__global__ void cuda_kernel_wrapper(idx_t n, Functor kernel, Args... args) {
+	idx_t i = blockIdx.x * blockDim.x + threadIdx.x;
 	if (i < n) {
 		kernel(i, args...);
 	}
@@ -27,9 +26,9 @@ __global__ void cuda_kernel_wrapper(size_t n, Functor kernel, Args... args) {
 template<typename Functor, typename... Args>
 void launch_cuda_wrapper_impl(dim3 grid,
 							  dim3 block,
-							  size_t shared_mem,
+							  idx_t shared_mem,
 							  cudaStream_t stream,
-							  size_t thread_count,
+							  idx_t thread_count,
 							  Functor&& kernel_func,
 							  Args&&... args) {
 	cuda_kernel_wrapper<<<grid, block, shared_mem, stream>>>(thread_count,
@@ -47,14 +46,63 @@ void launch_cuda_wrapper_impl(dim3 grid,
  * By placing this in a header file, it can be instantiated for any user-defined
  * kernel types without requiring explicit instantiations.
  */
+
+template<typename Functor, typename... Args>
+Event launch_cuda_kernel(const Resource& resource,
+						 idx_t thread_count,
+						 const KernelConfig& config,
+						 Functor kernel_func,
+						 Args... args) {
+#ifdef __CUDACC__
+	// Get queue from config
+	cudaStream_t stream = static_cast<cudaStream_t>(config.get_queue(resource));
+
+	// Handle dependencies
+	for (const auto& dep_event : config.dependencies.get_cuda_events()) {
+		CUDA_CHECK(cudaStreamWaitEvent(stream, dep_event, 0));
+	}
+
+	// Auto-configure if needed
+	KernelConfig local_config = config;
+	local_config.auto_configure(thread_count, resource);
+
+	// Set device context
+	int old_device;
+	CUDA_CHECK(cudaGetDevice(&old_device));
+	CUDA_CHECK(cudaSetDevice(static_cast<int>(resource.id)));
+
+	// Launch kernel directly
+	dim3 grid(local_config.grid_size.x, local_config.grid_size.y, local_config.grid_size.z);
+	dim3 block(local_config.block_size.x, local_config.block_size.y, local_config.block_size.z);
+
+	kernel_func<<<grid, block, local_config.shared_memory, stream>>>(thread_count, args...);
+
+	// Check for launch errors
+	CUDA_CHECK(cudaGetLastError());
+
+	// Create completion event
+	cudaEvent_t completion_event;
+	CUDA_CHECK(cudaEventCreateWithFlags(&completion_event, cudaEventDisableTiming));
+	CUDA_CHECK(cudaEventRecord(completion_event, stream));
+
+	// Restore device context
+	CUDA_CHECK(cudaSetDevice(old_device));
+
+	return Event(completion_event, resource);
+#else
+	throw_not_implemented("launch_cuda_kernel can only be used in CUDA compilation units");
+#endif
+}
+
+// Overloaded version for input and output buffers
 template<typename InputTuple, typename OutputTuple, typename Functor, typename... Args>
-Event launch_cuda_kernel_impl(const Resource& resource,
-							  size_t thread_count,
-							  const InputTuple& inputs,
-							  const OutputTuple& outputs,
-							  const KernelConfig& config,
-							  Functor&& kernel_func,
-							  Args&&... args) {
+Event launch_cuda_kernel(const Resource& resource,
+						 idx_t thread_count,
+						 const InputTuple& inputs,
+						 const OutputTuple& outputs,
+						 const KernelConfig& config,
+						 Functor&& kernel_func,
+						 Args&&... args) {
 
 #ifdef __CUDACC__
 	KernelConfig local_config = config;
