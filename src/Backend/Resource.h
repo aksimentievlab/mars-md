@@ -285,7 +285,6 @@ class Resource {
 		return id < other.id;
 	}
 
-#ifdef HOST_GUARD
 	/**
 	 * @brief Get a string representation of this resource.
 	 *
@@ -294,7 +293,6 @@ class Resource {
 	std::string toString() const {
 		return std::string(getTypeString()) + "[" + std::to_string(id) + "]";
 	}
-#endif
 
 	/**
 	 * @brief Check if the resource supports asynchronous operations.
