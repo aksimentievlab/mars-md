@@ -96,7 +96,7 @@ void Manager::init_impl() {
 
 	int num_devices;
 	CUDA_CHECK(cudaGetDeviceCount(&num_devices));
-	LOGINFO("Found {} CUDA device(s)", num_devices);
+	LOGDEBUG("Found {} CUDA device(s)", num_devices);
 
 	all_devices_.clear();
 	safe_devices_.clear();
@@ -140,7 +140,7 @@ void Manager::query_peer_access_impl() {
 }
 
 void Manager::init_devices_impl() {
-	LOGINFO("Initializing CUDA devices...");
+	LOGDEBUG("Initializing CUDA devices...");
 	std::string msg;
 
 	// Build message string like the old implementation
@@ -192,7 +192,7 @@ bool Manager::can_access_peer_impl(int device1, int device2) {
 }
 
 void Manager::finalize_impl() {
-	LOGINFO("Finalizing CUDA manager...");
+	LOGDEBUG("Finalizing CUDA manager...");
 
 	// Synchronize all devices
 	for (int i = 0; i < static_cast<int>(devices_.size()); ++i) {
@@ -209,7 +209,7 @@ void Manager::finalize_impl() {
 	current_device_ = 0;
 	prefer_safe_ = false;
 
-	LOGINFO("CUDA manager finalized");
+	LOGDEBUG("CUDA manager finalized");
 }
 
 void Manager::init() {
@@ -333,7 +333,7 @@ void Manager::set_cache_config(cudaFuncCache config) {
 void Manager::enable_peer_access() {
 	std::lock_guard<std::mutex> lock(mtx_);
 	if (devices_.size() < 2) {
-		LOGINFO("Peer access not needed with fewer than 2 devices");
+		LOGDEBUG("Peer access not needed with fewer than 2 devices");
 		return;
 	}
 

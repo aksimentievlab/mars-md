@@ -2,9 +2,7 @@
 
 #ifdef USE_CUDA
 #include "Backend/CUDA/CUDAManager.h"
-#include "Backend/Resource.h"
 #include <algorithm>
-#include <numeric>
 #include <string>
 #include <vector>
 using Catch::Approx;

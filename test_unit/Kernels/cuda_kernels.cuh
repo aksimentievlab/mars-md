@@ -7,10 +7,6 @@
 
 namespace ARBD {
 
-// ============================================================================
-// Test Kernel Function Objects
-// ============================================================================
-
 struct ScaleKernel {
 	__device__ void operator()(size_t i, const float* input, float* output) {
 		output[i] = input[i] * 3.0f;

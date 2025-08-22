@@ -12,7 +12,7 @@ namespace ARBD {
 using BufferFloat = DeviceBuffer<float>;
 
 template Event
-launch_cuda_kernel_impl<std::tuple<BufferFloat&>, std::tuple<BufferFloat&>, TransformKernel>(
+launch_cuda_kernel<std::tuple<BufferFloat&>, std::tuple<BufferFloat&>, TransformKernel>(
 	const Resource&,
 	size_t,
 	const std::tuple<BufferFloat&>&,
@@ -20,14 +20,14 @@ launch_cuda_kernel_impl<std::tuple<BufferFloat&>, std::tuple<BufferFloat&>, Tran
 	const KernelConfig&,
 	TransformKernel&&);
 
-template Event launch_cuda_kernel_impl<std::tuple<BufferFloat&, BufferFloat&>,
-									   std::tuple<BufferFloat&>,
-									   CombineKernel>(const Resource&,
-													  size_t,
-													  const std::tuple<BufferFloat&, BufferFloat&>&,
-													  const std::tuple<BufferFloat&>&,
-													  const KernelConfig&,
-													  CombineKernel&&);
+template Event
+launch_cuda_kernel<std::tuple<BufferFloat&, BufferFloat&>, std::tuple<BufferFloat&>, CombineKernel>(
+	const Resource&,
+	size_t,
+	const std::tuple<BufferFloat&, BufferFloat&>&,
+	const std::tuple<BufferFloat&>&,
+	const KernelConfig&,
+	CombineKernel&&);
 
 // For UniformFunctor<int>
 using BufferInt = DeviceBuffer<int>;
@@ -36,7 +36,7 @@ using BufferFloat = DeviceBuffer<float>;
 
 // InitializeWalkersKernel instantiation
 template Event
-launch_cuda_kernel_impl<std::tuple<>, std::tuple<BufferVector3&>, InitializeWalkersKernel>(
+launch_cuda_kernel<std::tuple<>, std::tuple<BufferVector3&>, InitializeWalkersKernel>(
 	const Resource& resource,
 	size_t thread_count,
 	const std::tuple<>& inputs,
@@ -46,7 +46,7 @@ launch_cuda_kernel_impl<std::tuple<>, std::tuple<BufferVector3&>, InitializeWalk
 
 // RandomWalkKernel instantiation
 template Event
-launch_cuda_kernel_impl<std::tuple<BufferVector3&>, std::tuple<BufferVector3&>, RandomWalkKernel>(
+launch_cuda_kernel<std::tuple<BufferVector3&>, std::tuple<BufferVector3&>, RandomWalkKernel>(
 	const Resource& resource,
 	size_t thread_count,
 	const std::tuple<BufferVector3&>& inputs,
@@ -56,18 +56,16 @@ launch_cuda_kernel_impl<std::tuple<BufferVector3&>, std::tuple<BufferVector3&>, 
 
 // CalculateDistancesKernel instantiation
 template Event
-launch_cuda_kernel_impl<std::tuple<BufferVector3&>,
-						std::tuple<BufferFloat&>,
-						CalculateDistancesKernel>(const Resource& resource,
-												  size_t thread_count,
-												  const std::tuple<BufferVector3&>& inputs,
-												  const std::tuple<BufferFloat&>& outputs,
-												  const KernelConfig& config,
-												  CalculateDistancesKernel&& kernel_func);
+launch_cuda_kernel<std::tuple<BufferVector3&>, std::tuple<BufferFloat&>, CalculateDistancesKernel>(
+	const Resource& resource,
+	size_t thread_count,
+	const std::tuple<BufferVector3&>& inputs,
+	const std::tuple<BufferFloat&>& outputs,
+	const KernelConfig& config,
+	CalculateDistancesKernel&& kernel_func);
 
 // SimpleKernel instantiation
-template Event
-launch_cuda_kernel_impl<std::tuple<BufferFloat&>, std::tuple<BufferFloat&>, SimpleKernel>(
+template Event launch_cuda_kernel<std::tuple<BufferFloat&>, std::tuple<BufferFloat&>, SimpleKernel>(
 	const Resource& resource,
 	size_t thread_count,
 	const std::tuple<BufferFloat&>& inputs,
@@ -77,7 +75,7 @@ launch_cuda_kernel_impl<std::tuple<BufferFloat&>, std::tuple<BufferFloat&>, Simp
 
 // SmoothingFilterKernel instantiation
 template Event
-launch_cuda_kernel_impl<std::tuple<BufferFloat&>, std::tuple<BufferFloat&>, SmoothingFilterKernel>(
+launch_cuda_kernel<std::tuple<BufferFloat&>, std::tuple<BufferFloat&>, SmoothingFilterKernel>(
 	const Resource& resource,
 	size_t thread_count,
 	const std::tuple<BufferFloat&>& inputs,
@@ -87,12 +85,11 @@ launch_cuda_kernel_impl<std::tuple<BufferFloat&>, std::tuple<BufferFloat&>, Smoo
 
 // GradientCalculationKernel instantiation
 template Event
-launch_cuda_kernel_impl<std::tuple<BufferFloat&>,
-						std::tuple<BufferFloat&>,
-						GradientCalculationKernel>(const Resource& resource,
-												   size_t thread_count,
-												   const std::tuple<BufferFloat&>& inputs,
-												   const std::tuple<BufferFloat&>& outputs,
-												   const KernelConfig& config,
-												   GradientCalculationKernel&& kernel_func);
+launch_cuda_kernel<std::tuple<BufferFloat&>, std::tuple<BufferFloat&>, GradientCalculationKernel>(
+	const Resource& resource,
+	size_t thread_count,
+	const std::tuple<BufferFloat&>& inputs,
+	const std::tuple<BufferFloat&>& outputs,
+	const KernelConfig& config,
+	GradientCalculationKernel&& kernel_func);
 } // namespace ARBD
