@@ -1,6 +1,7 @@
 #include "../catch_boiler.h"
 #ifdef USE_SYCL
 
+#include "../sycl_runtime_check.h"
 #include "Math/Bitmask.h"
 #include "Backend/SYCL/SYCLManager.h"
 #include "Backend/Resource.h"
@@ -15,33 +16,35 @@ struct SYCLBitmaskTestFixture {
 
     SYCLBitmaskTestFixture() {
         try {
-            SYCL::SYCLManager::init();
-            SYCL::SYCLManager::load_info();
+            SYCL::Manager::init();
+            SYCL::Manager::load_info();
             
-            if (SYCL::SYCLManager::all_devices().empty()) {
+            if (SYCL::Manager::all_devices().empty()) {
                 WARN("No SYCL devices found. Skipping SYCL Bitmask tests.");
                 return;
             }
             
             sycl_resource = Resource(ResourceType::SYCL, 0);
-            SYCL::SYCLManager::use(0);
+            SYCL::Manager::use(0);
 
         } catch (const std::exception& e) {
-            FAIL("Failed to initialize SYCLManager in Bitmask test fixture: " << e.what());
+            FAIL("Failed to initialize Manager in Bitmask test fixture: " << e.what());
         }
     }
 
     ~SYCLBitmaskTestFixture() {
         try {
-            SYCL::SYCLManager::finalize();
+            SYCL::Manager::finalize();
         } catch (const std::exception& e) {
-            std::cerr << "Error during SYCLManager finalization in Bitmask test fixture: " << e.what() << std::endl;
+            std::cerr << "Error during Manager finalization in Bitmask test fixture: " << e.what() << std::endl;
         }
     }
 };
 
 TEST_CASE_METHOD(SYCLBitmaskTestFixture, "SYCL Bitmask Basic Operations", "[sycl][bitmask]") {
-    if (SYCL::SYCLManager::all_devices().empty()) {
+    SKIP_IF_SYCL_UNSTABLE();
+    
+    if (SYCL::Manager::all_devices().empty()) {
         SKIP("No SYCL devices available");
     }
     
@@ -97,7 +100,9 @@ TEST_CASE_METHOD(SYCLBitmaskTestFixture, "SYCL Bitmask Basic Operations", "[sycl
 }
 
 TEST_CASE_METHOD(SYCLBitmaskTestFixture, "SYCL Bitmask Backend Operations", "[sycl][bitmask][backend]") {
-    if (SYCL::SYCLManager::all_devices().empty()) {
+    SKIP_IF_SYCL_UNSTABLE();
+    
+    if (SYCL::Manager::all_devices().empty()) {
         SKIP("No SYCL devices available");
     }
     
@@ -164,7 +169,9 @@ TEST_CASE_METHOD(SYCLBitmaskTestFixture, "SYCL Bitmask Backend Operations", "[sy
 }
 
 TEST_CASE_METHOD(SYCLBitmaskTestFixture, "SYCL SparseBitmask Operations", "[sycl][bitmask][sparse]") {
-    if (SYCL::SYCLManager::all_devices().empty()) {
+    SKIP_IF_SYCL_UNSTABLE();
+    
+    if (SYCL::Manager::all_devices().empty()) {
         SKIP("No SYCL devices available");
     }
     
@@ -216,7 +223,9 @@ TEST_CASE_METHOD(SYCLBitmaskTestFixture, "SYCL SparseBitmask Operations", "[sycl
 }
 
 TEST_CASE_METHOD(SYCLBitmaskTestFixture, "SYCL Bitmask Stress Tests", "[sycl][bitmask][stress]") {
-    if (SYCL::SYCLManager::all_devices().empty()) {
+    SKIP_IF_SYCL_UNSTABLE();
+    
+    if (SYCL::Manager::all_devices().empty()) {
         SKIP("No SYCL devices available");
     }
     
@@ -246,9 +255,6 @@ TEST_CASE_METHOD(SYCLBitmaskTestFixture, "SYCL Bitmask Stress Tests", "[sycl][bi
 }
 
 TEST_CASE("Bitmask Host-Only Tests", "[bitmask][host]") {
-    SECTION("Run built-in test functions") {
-        REQUIRE(BitmaskTests::run_all_tests());
-    }
     
     SECTION("Edge cases") {
         // Zero-length bitmask

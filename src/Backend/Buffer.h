@@ -787,18 +787,6 @@ template<typename T>
 using MetalBuffer = Buffer<T, METAL::Policy>;
 #endif
 
-// Helper function to get buffer pointers for kernel launches
-template<typename... Buffers, std::size_t... Is>
-auto get_buffer_pointers_impl(const std::tuple<Buffers...>& buffer_tuple,
-							  std::index_sequence<Is...>) {
-	return std::make_tuple(std::get<Is>(buffer_tuple).data()...);
-}
-
-template<typename... Buffers>
-auto get_buffer_pointers(const std::tuple<Buffers...>& buffer_tuple) {
-	return get_buffer_pointers_impl(buffer_tuple, std::make_index_sequence<sizeof...(Buffers)>{});
-}
-
 /**
  * @brief A convenient alias for the Buffer class using the active backend policy.
  */
@@ -847,6 +835,33 @@ struct is_string<char*> : std::true_type {};
 
 template<typename T>
 constexpr bool is_string_v = is_string<std::decay_t<T>>::value;
+
+// Helper function to get buffer pointers from tuples for legacy kernel launches
+template<typename... Buffers, std::size_t... Is>
+auto get_buffer_tuples_impl(const std::tuple<Buffers...>& buffer_tuple,
+							  std::index_sequence<Is...>) {
+	return std::make_tuple(std::get<Is>(buffer_tuple).device_data()...);
+}
+
+template<typename... Buffers>
+auto get_buffer_tuples(const std::tuple<Buffers...>& buffer_tuple) {
+	return get_buffer_tuples_impl(buffer_tuple, std::make_index_sequence<sizeof...(Buffers)>{});
+}
+
+// Zero-overhead helpers for individual buffer/value extraction
+template<typename T>
+constexpr auto get_buffer_pointer(T&& arg) {
+	if constexpr (is_device_buffer_v<std::decay_t<T>>) {
+		return arg.data();
+	} else {
+		return std::forward<T>(arg);
+	}
+}
+
+template<typename T>
+constexpr auto get_buffer_value(T&& arg) {
+	return get_buffer_pointer(std::forward<T>(arg));
+}
 } // namespace ARBD
 
 #endif // __METAL_VERSION__

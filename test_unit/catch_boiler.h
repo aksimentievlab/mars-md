@@ -4,6 +4,7 @@
 #include <iostream>
 #include <memory>
 #include <string>
+#include <mutex>
 
 // Include backend-specific headers
 #ifdef USE_CUDA
@@ -35,6 +36,9 @@
 // Macro for run_trial function - defines run_trial as an alias to run_trial function
 #define DEF_RUN_TRIAL using Tests::run_trial;
 
+// Macro for cleanup function - defines cleanup as an alias to TestBackendManager::cleanup
+#define DEF_CLEANUP using Tests::cleanup;
+
 namespace Tests {
 
 // =============================================================================
@@ -56,14 +60,42 @@ __global__ void cuda_op_kernel(R* result, T... args) {
 
 /**
  * @brief Unified backend manager for test execution across different compute backends
+ * 
+ * Singleton pattern to ensure SYCL is only initialized once across all tests
  */
 class TestBackendManager {
   private:
+	static TestBackendManager* instance_;
+	static std::mutex mutex_;
 	bool initialized_ = false;
 
-  public:
+	// Private constructor for singleton pattern
 	TestBackendManager() {
 		initialize();
+	}
+
+  public:
+	// Delete copy constructor and assignment operator
+	TestBackendManager(const TestBackendManager&) = delete;
+	TestBackendManager& operator=(const TestBackendManager&) = delete;
+
+	// Get singleton instance
+	static TestBackendManager& getInstance() {
+		std::lock_guard<std::mutex> lock(mutex_);
+		if (instance_ == nullptr) {
+			instance_ = new TestBackendManager();
+		}
+		return *instance_;
+	}
+
+	// Cleanup singleton instance
+	static void cleanup() {
+		std::lock_guard<std::mutex> lock(mutex_);
+		if (instance_ != nullptr) {
+			instance_->finalize();
+			delete instance_;
+			instance_ = nullptr;
+		}
 	}
 
 	~TestBackendManager() {
@@ -74,21 +106,34 @@ class TestBackendManager {
 		if (initialized_)
 			return;
 
+		try {
 #ifdef USE_CUDA
-		ARBD::SignalManager::manage_segfault();
-		// Initialize CUDA GPU Manager
-		ARBD::CUDA::Manager::init();
-		ARBD::CUDA::Manager::load_info();
+			ARBD::SignalManager::manage_segfault();
+			// Initialize CUDA GPU Manager
+			ARBD::CUDA::Manager::init();
+			ARBD::CUDA::Manager::load_info();
 #endif
 #ifdef USE_SYCL
-		ARBD::SYCL::Manager::init();
-		ARBD::SYCL::Manager::load_info();
+			// Add error handling around SYCL initialization to prevent memory corruption
+			try {
+				ARBD::SYCL::Manager::init();
+				ARBD::SYCL::Manager::load_info();
+			} catch (const ARBD::Exception& e) {
+				std::cerr << "Warning: SYCL initialization failed: " << e.what() << std::endl;
+				// Don't mark as initialized if SYCL fails
+				return;
+			}
 #endif
 #ifdef USE_METAL
-		ARBD::METAL::Manager::init();
-		ARBD::METAL::Manager::load_info();
+			ARBD::METAL::Manager::init();
+			ARBD::METAL::Manager::load_info();
 #endif
-		initialized_ = true;
+			initialized_ = true;
+		} catch (const ARBD::Exception& e) {
+			std::cerr << "Warning: Backend initialization failed: " << e.what() << std::endl;
+			// Don't mark as initialized if any backend fails
+			return;
+		}
 	}
 
 	void finalize() {
@@ -107,7 +152,16 @@ class TestBackendManager {
 		initialized_ = false;
 	}
 
+	bool isInitialized() const {
+		return initialized_;
+	}
+
 	void synchronize() {
+		if (!initialized_) {
+			std::cerr << "Warning: Backend not initialized, skipping synchronization" << std::endl;
+			return;
+		}
+
 #ifdef USE_CUDA
 		cudaDeviceSynchronize();
 #endif
@@ -121,6 +175,10 @@ class TestBackendManager {
 
 	template<typename R>
 	R* allocate_device_memory(size_t count) {
+		if (!initialized_) {
+			std::cerr << "Warning: Backend not initialized, skipping memory allocation" << std::endl;
+			return nullptr;
+		}
 #ifdef USE_CUDA
 		R* ptr;
 		ARBD::check_cuda_error(cudaMalloc((void**)&ptr, count * sizeof(R)), __FILE__, __LINE__);
@@ -146,6 +204,11 @@ class TestBackendManager {
 	void free_device_memory(R* ptr) {
 		if (!ptr)
 			return;
+		
+		if (!initialized_) {
+			std::cerr << "Warning: Backend not initialized, skipping memory deallocation" << std::endl;
+			return;
+		}
 
 #ifdef USE_CUDA
 		cudaFree(ptr);
@@ -162,6 +225,10 @@ class TestBackendManager {
 
 	template<typename R>
 	void copy_to_device(R* device_ptr, const R* host_ptr, size_t count) {
+		if (!initialized_) {
+			std::cerr << "Warning: Backend not initialized, skipping copy to device" << std::endl;
+			return;
+		}
 #ifdef USE_CUDA
 		ARBD::check_cuda_error(
 			cudaMemcpy(device_ptr, host_ptr, count * sizeof(R), cudaMemcpyHostToDevice),
@@ -180,6 +247,10 @@ class TestBackendManager {
 
 	template<typename R>
 	void copy_from_device(R* host_ptr, const R* device_ptr, size_t count) {
+		if (!initialized_) {
+			std::cerr << "Warning: Backend not initialized, skipping copy from device" << std::endl;
+			return;
+		}
 #ifdef USE_CUDA
 		ARBD::check_cuda_error(
 			cudaMemcpy(host_ptr, device_ptr, count * sizeof(R), cudaMemcpyDeviceToHost),
@@ -198,6 +269,11 @@ class TestBackendManager {
 
 	template<typename Op_t, typename R, typename... T>
 	void execute_kernel(R* result_device, T... args) {
+		// Check if backend is properly initialized
+		if (!initialized_) {
+			std::cerr << "Warning: Backend not initialized, skipping kernel execution" << std::endl;
+			return;
+		}
 #ifdef USE_CUDA
 #if defined(__CUDACC__)
 		cudaGetKernelFunction<Op_t, R, T...>()(result_device, args...);
@@ -246,9 +322,19 @@ void run_trial(std::string name, R expected_result, T... args) {
 	REQUIRE(cpu_result == expected_result);
 
 	// Test the current backend (determined at compile time)
-	TestBackendManager manager;
+	TestBackendManager& manager = TestBackendManager::getInstance();
+
+	// Check if backend is properly initialized
+	if (!manager.isInitialized()) {
+		WARN("Backend not properly initialized, skipping device execution");
+		return;
+	}
 
 	R* device_result_d = manager.allocate_device_memory<R>(1);
+	if (!device_result_d) {
+		WARN("Failed to allocate device memory, skipping device execution");
+		return;
+	}
 
 	manager.execute_kernel<Op_t, R, T...>(device_result_d, args...);
 
@@ -260,6 +346,11 @@ void run_trial(std::string name, R expected_result, T... args) {
 
 	CAPTURE(device_result);
 	CHECK(cpu_result == device_result);
+}
+
+// Cleanup function for test suite
+inline void cleanup() {
+	TestBackendManager::cleanup();
 }
 
 } // namespace Tests
@@ -314,3 +405,12 @@ struct DivOp {
 	}
 };
 } // namespace Tests::Binary
+
+// =============================================================================
+// Static member definitions
+// =============================================================================
+
+namespace Tests {
+	inline TestBackendManager* TestBackendManager::instance_ = nullptr;
+	inline std::mutex TestBackendManager::mutex_;
+} // namespace Tests

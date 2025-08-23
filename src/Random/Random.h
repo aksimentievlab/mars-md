@@ -31,43 +31,40 @@ class Random {
 	// --- UNIFORM DISTRIBUTION ---
 	template<typename T>
 	Event generate_uniform(DeviceBuffer<T>& output, T min_val, T max_val) {
-		ARBD::KernelConfig config;
+		KernelConfig config;
+		config.sync = false; // Async for better multi-GPU performance
+		config.auto_configure(output.size(), resource_);
+		
 		UniformFunctor<T> func{min_val, max_val, seed_, base_ctr_, global_seed_};
-
-		auto inputs = std::make_tuple(); // Empty tuple for no inputs
-		auto outputs = std::make_tuple(std::ref(output));
-
-		return launch_kernel(resource_, output.size(), config, inputs, outputs, func);
+		return launch_kernel(resource_, output.size(), config, func, output);
 	}
 
 	// --- GAUSSIAN DISTRIBUTION ---
 	template<typename T>
 	Event generate_gaussian(DeviceBuffer<T>& output, T mean, T stddev) {
-		ARBD::KernelConfig config;
+		KernelConfig config;
+		config.sync = false; // Async for better multi-GPU performance
+		config.auto_configure(output.size(), resource_);
+		
 		GaussianFunctor<T> func{mean, stddev, output.size(), seed_, base_ctr_, global_seed_};
-
-		auto inputs = std::make_tuple(); // Empty tuple for no inputs
-		auto outputs = std::make_tuple(std::ref(output));
-
-		return launch_kernel(resource_, output.size(), config, inputs, outputs, func);
+		return launch_kernel(resource_, output.size(), config, func, output);
 	}
 
 	// --- GAUSSIAN DISTRIBUTION FOR VECTOR3 ---
 	template<typename T>
 	Event
 	generate_gaussian(DeviceBuffer<Vector3_t<T>>& output, Vector3_t<T> mean, Vector3_t<T> stddev) {
-		ARBD::KernelConfig config;
+		KernelConfig config;
+		config.sync = false; // Async for better multi-GPU performance
+		config.auto_configure(output.size(), resource_);
+		
 		GaussianFunctor<Vector3_t<T>> func{mean,
 										   stddev,
 										   output.size(),
 										   seed_,
 										   base_ctr_,
 										   global_seed_};
-
-		auto inputs = std::make_tuple(); // Empty tuple for no inputs
-		auto outputs = std::make_tuple(std::ref(output));
-
-		return launch_kernel(resource_, output.size(), config, inputs, outputs, func);
+		return launch_kernel(resource_, output.size(), config, func, output);
 	}
 };
 

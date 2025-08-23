@@ -14,7 +14,7 @@
 
 using namespace ARBD;
 using namespace ARBD::Profiling;
-using Catch::Approx;
+//using Catch::Approx;
 using Catch::Matchers::WithinAbs;
 
 // Backend initialization helper - only initialize if not already done
@@ -514,17 +514,16 @@ TEST_CASE_METHOD(ProfiledRandomTestFixture,
 			// Initialize walker positions to origin
 			{
 				PROFILE_RANGE("Kernel::InitializeWalkers", backend_type);
-				KernelConfig config{.block_size = 256, .async = false};
+				KernelConfig config;
+				config.sync = false;
+				config.auto_configure(NUM_WALKERS, resource);
 
-				auto inputs = std::make_tuple();
-				auto outputs = std::make_tuple(std::ref(walker_positions));
-
+				// New structure: functor first, then output buffer
 				Event init_event = launch_kernel(resource,
 												 NUM_WALKERS,
 												 config,
-												 inputs,
-												 outputs,
-												 InitializeWalkersKernel{});
+												 InitializeWalkersKernel{},
+												 walker_positions);
 
 				init_event.wait();
 			}
@@ -532,17 +531,17 @@ TEST_CASE_METHOD(ProfiledRandomTestFixture,
 			// Simulate random walk
 			{
 				PROFILE_RANGE("Kernel::RandomWalk", backend_type);
-				KernelConfig config{.block_size = 256, .async = false};
+				KernelConfig config;
+				config.sync = false;
+				config.auto_configure(NUM_WALKERS, resource);
 
-				auto inputs = std::make_tuple(std::ref(random_steps));
-				auto outputs = std::make_tuple(std::ref(walker_positions));
-
+				// Input-output kernel: functor, input, output
 				Event walk_event = launch_kernel(resource,
 												 NUM_WALKERS,
 												 config,
-												 inputs,
-												 outputs,
-												 RandomWalkKernel{NUM_STEPS, NUM_WALKERS});
+												 RandomWalkKernel{NUM_STEPS, NUM_WALKERS},
+												 random_steps,
+												 walker_positions);
 
 				walk_event.wait();
 			}
@@ -550,17 +549,17 @@ TEST_CASE_METHOD(ProfiledRandomTestFixture,
 			// Calculate final distances from origin
 			{
 				PROFILE_RANGE("Kernel::CalculateDistances", backend_type);
-				KernelConfig config{.block_size = 256, .async = false};
+				KernelConfig config;
+				config.sync = false;
+				config.auto_configure(NUM_WALKERS, resource);
 
-				auto inputs = std::make_tuple(std::ref(walker_positions));
-				auto outputs = std::make_tuple(std::ref(final_distances));
-
+				// Input-output kernel for distance calculation
 				Event distance_event = launch_kernel(resource,
 													 NUM_WALKERS,
 													 config,
-													 inputs,
-													 outputs,
-													 CalculateDistancesKernel{});
+													 CalculateDistancesKernel{},
+													 walker_positions,
+													 final_distances);
 
 				distance_event.wait();
 			}
@@ -616,17 +615,18 @@ TEST_CASE_METHOD(ProfiledRandomTestFixture,
 			// Apply smoothing filter
 			{
 				PROFILE_RANGE("Kernel::SmoothingFilter", backend_type);
-				KernelConfig config{.block_size = 256, .async = false};
+				KernelConfig config;
+				config.sync = false;
+				config.auto_configure(TOTAL_POINTS, resource);
 
-				auto inputs = std::make_tuple(std::ref(noise_values));
-				auto outputs = std::make_tuple(std::ref(smoothed_noise));
+				// Remove tuple overhead - use direct buffer args
 
 				Event smooth_event = launch_kernel(resource,
 												   TOTAL_POINTS,
 												   config,
-												   inputs,
-												   outputs,
-												   SmoothingFilterKernel{GRID_SIZE});
+												   SmoothingFilterKernel{GRID_SIZE},
+												   noise_values,
+												   smoothed_noise);
 
 				smooth_event.wait();
 			}
@@ -634,17 +634,18 @@ TEST_CASE_METHOD(ProfiledRandomTestFixture,
 			// Calculate gradient magnitude
 			{
 				PROFILE_RANGE("Kernel::GradientCalculation", backend_type);
-				KernelConfig config{.block_size = 256, .async = false};
+				KernelConfig config;
+				config.sync = false;
+				config.auto_configure(TOTAL_POINTS, resource);
 
-				auto inputs = std::make_tuple(std::ref(smoothed_noise));
-				auto outputs = std::make_tuple(std::ref(gradient_magnitude));
+				// Remove tuple overhead - use direct buffer args
 
 				Event gradient_event = launch_kernel(resource,
 													 TOTAL_POINTS,
 													 config,
-													 inputs,
-													 outputs,
-													 GradientCalculationKernel{GRID_SIZE});
+													 GradientCalculationKernel{GRID_SIZE},
+													 smoothed_noise,
+													 gradient_magnitude);
 
 				gradient_event.wait();
 			}
@@ -772,13 +773,17 @@ TEST_CASE_METHOD(ProfiledRandomTestFixture,
 			// Try a simple kernel launch to see exactly where it fails
 			const size_t test_size = 100;
 			DeviceBuffer<float> test_buffer(test_size, sycl_resource);
-			auto inputs = std::make_tuple(std::ref(test_buffer));
-			auto outputs = std::make_tuple(std::ref(test_buffer));
-
 			KernelConfig config;
+			config.sync = false;
+			config.auto_configure(test_size, sycl_resource);
 
-			Event event =
-				launch_kernel(sycl_resource, test_size, config, inputs, outputs, SimpleKernel{});
+			// Simple test kernel call
+			Event event = launch_kernel(sycl_resource,
+										test_size,
+										config,
+										SimpleKernel{},
+										test_buffer,
+										test_buffer);
 
 			LOGINFO("About to call launch_kernel with SYCL resource...");
 

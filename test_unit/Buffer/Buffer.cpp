@@ -350,26 +350,29 @@ TEST_CASE_METHOD(ProductionBufferTestFixture, "Buffer Resize Operations", "[buff
 	}
 
 	SECTION("Resize with resource change") {
-		DeviceBuffer<float> buffer(100);
-		Resource original_resource = buffer.resource();
-
 		auto devices = get_device_resources();
-		if (!devices.empty()) {
-			// Only test resource change if the target device is different from original
-			if (devices[0] != original_resource) {
-				buffer.resize(200, devices[0]);
-				REQUIRE(buffer.size() == 200);
-				REQUIRE(buffer.resource() == devices[0]);
-				REQUIRE(buffer.resource() != original_resource);
-			} else {
-				// If same device, just test resize functionality
-				buffer.resize(200, devices[0]);
-				REQUIRE(buffer.size() == 200);
-				REQUIRE(buffer.resource() == devices[0]);
-				REQUIRE(buffer.resource() == original_resource);
-			}
+		if (devices.empty()) {
+			SKIP("No device resources available for resource change test");
+		}
+		
+		DeviceBuffer<float> buffer(100, devices[0]);
+		Resource original_resource = buffer.resource();
+		
+		// Only test resource change if the target device is different from original
+		if (devices[0] != original_resource) {
+			buffer.resize(200, devices[0]);
+			REQUIRE(buffer.size() == 200);
+			REQUIRE(buffer.resource() == devices[0]);
+			REQUIRE(buffer.resource() != original_resource);
+		} else {
+			// If same device, just test resize functionality
+			buffer.resize(200, devices[0]);
+			REQUIRE(buffer.size() == 200);
+			REQUIRE(buffer.resource() == devices[0]);
+			REQUIRE(buffer.resource() == original_resource);
 		}
 	}
+	
 
 	SECTION("Resize with same parameters") {
 		DeviceBuffer<double> buffer(100);
@@ -809,21 +812,27 @@ TEST_CASE_METHOD(ProductionBufferTestFixture, "Buffer Edge Cases", "[buffer][edg
 
 		// Copy to a different resource (if available)
 		auto devices = get_device_resources();
-		if (!devices.empty()) {
-			DeviceBuffer<float> copy2(original, devices[0]);
-			REQUIRE(copy2.resource() == devices[0]);
-			REQUIRE(copy2.size() == 100);
-
-			std::vector<float> device_copied_data(100);
-			copy2.copy_to_host(device_copied_data);
-			REQUIRE(device_copied_data == test_data);
+		if (devices.empty()) {
+			SKIP("No device resources available for cross-device copy test");
 		}
+		
+		DeviceBuffer<float> copy2(original, devices[0]);
+		REQUIRE(copy2.resource() == devices[0]);
+		REQUIRE(copy2.size() == 100);
+
+		std::vector<float> device_copied_data(100);
+		copy2.copy_to_host(device_copied_data);
+		REQUIRE(device_copied_data == test_data);
 	}
 
 	SECTION("Move semantics") {
 		// Use available device resource
 		auto devices = get_device_resources();
-		Resource test_resource = devices.empty() ? Resource::CPU(0) : devices[0];
+		if (devices.empty()) {
+			SKIP("No device resources available for move semantics test");
+		}
+		
+		Resource test_resource = devices[0];
 
 		DeviceBuffer<int> original(50, test_resource);
 		void* original_ptr = original.data();

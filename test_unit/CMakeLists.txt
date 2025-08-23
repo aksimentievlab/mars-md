@@ -15,9 +15,9 @@ set(CORE_TEST_SOURCES
 
 # Math folder sources - explicitly list what to include in math tests
 set(MATH_SOURCES
-    #Math/RandomDevice.cpp
-    #Math/RandomProfile.cpp
-    #Math/Kernel_for_test.h
+    Math/RandomDevice.cpp
+    Math/RandomProfile.cpp
+    Math/Kernel_for_test.h
     # Add more math sources here as needed
     ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp
 )

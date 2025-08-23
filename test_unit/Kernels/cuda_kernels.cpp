@@ -104,14 +104,10 @@ TEST_CASE_METHOD(CUDAKernelTestFixture, "CUDA Kernel Launch", "[CUDA][kernels][l
 		// Simple scaling kernel - Lambda signature: (size_t, const float*, float*)
 		ScaleKernel scale_kernel;
 
-		// Create input and output tuples
-		auto inputs = std::make_tuple(std::ref(input_buf));
-		auto outputs = std::make_tuple(std::ref(output_buf));
-
-		// Launch kernel
+		// Launch kernel with streamlined call
 		KernelConfig config;
 		Event completion =
-			launch_kernel(get_cuda_resource(), n, config, inputs, outputs, scale_kernel);
+			launch_kernel(get_cuda_resource(), n, config, input_buf, output_buf, scale_kernel);
 
 		// Wait for completion and verify results
 		completion.wait(); // Temporarily commented out to test kernel launch
@@ -139,15 +135,12 @@ TEST_CASE_METHOD(CUDAKernelTestFixture, "CUDA Kernel Launch", "[CUDA][kernels][l
 		// Kernel with extra scalar parameter
 		MultiplyKernel multiply_kernel;
 
-		auto inputs = std::make_tuple(std::ref(input_buf));
-		auto outputs = std::make_tuple(std::ref(output_buf));
-
 		KernelConfig config;
 		Event completion = launch_kernel(get_cuda_resource(),
 										 n,
 										 config,
-										 inputs,
-										 outputs,
+										 input_buf,
+										 output_buf,
 										 multiply_kernel,
 										 multiplier);
 
@@ -186,15 +179,12 @@ TEST_CASE_METHOD(CUDAKernelTestFixture, "CUDA Kernel Performance", "[CUDA][kerne
 
 		SquareKernel square_kernel;
 
-		auto inputs = std::make_tuple(std::ref(input_buf));
-		auto outputs = std::make_tuple(std::ref(output_buf));
-
 		KernelConfig config;
 		config.block_size = {512, 1, 1}; // Larger block size for performance
 
 		auto start = std::chrono::high_resolution_clock::now();
 		Event completion =
-			launch_kernel(get_cuda_resource(), n, config, inputs, outputs, square_kernel);
+			launch_kernel(get_cuda_resource(), n, config, input_buf, output_buf, square_kernel);
 		completion.wait();
 		auto end = std::chrono::high_resolution_clock::now();
 

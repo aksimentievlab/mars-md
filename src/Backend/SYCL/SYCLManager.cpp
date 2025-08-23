@@ -7,6 +7,8 @@
 #include <sycl/sycl.hpp>
 #include <vector>
 #include <cstdlib>
+#include <chrono>
+#include <thread>
 
 namespace ARBD {
 namespace SYCL {
@@ -39,7 +41,7 @@ Manager::Device::create_queues(const sycl::device& dev, unsigned int id) {
 
 		// If successful, create all our wrapped queues
 		// Note: We need to construct each queue individually since Queue() is deleted
-		return std::array<Queue, NUM_QUEUES>{{Queue(dev),
+		return std::array<Queue, Manager::NUM_QUEUES>{{Queue(dev),
 											  Queue(dev),
 											  Queue(dev),
 											  Queue(dev),
@@ -54,7 +56,7 @@ Manager::Device::create_queues(const sycl::device& dev, unsigned int id) {
 		// Try fallback with empty properties
 		try {
 			sycl::property_list empty_props;
-			return std::array<Queue, NUM_QUEUES>{{Queue(dev, empty_props),
+			return std::array<Queue, Manager::NUM_QUEUES>{{Queue(dev, empty_props),
 												  Queue(dev, empty_props),
 												  Queue(dev, empty_props),
 												  Queue(dev, empty_props),
@@ -361,7 +363,9 @@ void Manager::load_info() {
 	// to avoid multi-device context issues
 	if (all_devices_.size() == 1) {
 		LOGINFO("Single device detected, selecting device 0 for single-device operation");
-		select_devices(std::span<const unsigned int>{&all_devices_[0].id_, 1});
+		// Use array index 0, not the device's internal ID
+		unsigned int device_index = 0;
+		select_devices(std::span<const unsigned int>{&device_index, 1});
 	} else {
 		// Multi-device case - use all discovered devices
 		// Copy all_devices_ to devices_ instead of moving to preserve all_devices_ for
@@ -443,6 +447,14 @@ void Manager::finalize() {
 		// First, synchronize all devices to ensure all operations complete
 		if (!devices_.empty()) {
 			sync();
+		}
+
+		// Minimal delay to let HipSYCL runtime stabilize
+		// This prevents worker thread crashes without performance degradation
+		try {
+			std::this_thread::sleep_for(std::chrono::milliseconds(10));
+		} catch (...) {
+			// Ignore any errors during the wait
 		}
 
 		// Clear current device reference first to prevent access during cleanup

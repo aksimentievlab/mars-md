@@ -180,18 +180,16 @@ struct UnifiedPolicy {
 	}
 	// Should be default async
 	static void prefetch(void* ptr, size_t bytes, int device_id, void* queue = nullptr) {
-		auto& q = queue ? *static_cast<sycl::queue*>(queue) : Manager::get_current_queue().get();
-		if (device_id >= 0) {
-			q.prefetch(ptr, bytes);
-		} else {
-			q.prefetch(ptr, bytes);
-		}
+		// SYCL prefetch is not standard and causes deadlocks in HipSYCL
+		// This is a performance hint, so it's safe to make it a no-op
+		(void)ptr; (void)bytes; (void)device_id; (void)queue; // Suppress unused parameter warnings
 	}
 
 	static void
 	mem_advise(void* ptr, size_t bytes, int advice, int device_id, void* queue = nullptr) {
-		auto& q = queue ? *static_cast<sycl::queue*>(queue) : Manager::get_current_queue().get();
-		q.mem_advise(ptr, bytes, advice);
+		// SYCL mem_advise is not standard and causes deadlocks in HipSYCL  
+		// This is a performance hint, so it's safe to make it a no-op
+		(void)ptr; (void)bytes; (void)advice; (void)device_id; (void)queue; // Suppress unused parameter warnings
 	}
 	static void copy_from_host(void* unified_dst,
 							   const void* host_src,
@@ -199,13 +197,8 @@ struct UnifiedPolicy {
 							   void* queue = nullptr,
 							   bool sync = false) {
 		std::memcpy(unified_dst, host_src, bytes);
-		// Optionally prefetch to the current device to warm it up
-		auto& q = queue ? *static_cast<sycl::queue*>(queue) : Manager::get_current_queue().get();
-		if (sync) {
-			q.prefetch(unified_dst, bytes).wait();
-		} else {
-			q.prefetch(unified_dst, bytes);
-		}
+		// Skip prefetch - causes deadlocks in HipSYCL
+		(void)queue; (void)sync; // Suppress unused parameter warnings
 	}
 
 	static void copy_to_host(void* host_dst,
@@ -213,14 +206,9 @@ struct UnifiedPolicy {
 							 size_t bytes,
 							 void* queue = nullptr,
 							 bool sync = false) {
-		// Prefetch to the host to ensure data is resident, then copy
-		auto& q = queue ? *static_cast<sycl::queue*>(queue) : Manager::get_current_queue().get();
-		if (sync) {
-			q.prefetch(const_cast<void*>(unified_src), bytes).wait();
-		} else {
-			q.prefetch(const_cast<void*>(unified_src), bytes);
-		}
+		// Skip prefetch - causes deadlocks in HipSYCL
 		std::memcpy(host_dst, unified_src, bytes);
+		(void)queue; (void)sync; // Suppress unused parameter warnings
 	}
 
 	static void copy_device_to_device(void* dst,

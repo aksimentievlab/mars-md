@@ -75,7 +75,7 @@ Event launch_cuda_kernel(const Resource& resource,
 	dim3 grid(local_config.grid_size.x, local_config.grid_size.y, local_config.grid_size.z);
 	dim3 block(local_config.block_size.x, local_config.block_size.y, local_config.block_size.z);
 
-	kernel_func<<<grid, block, local_config.shared_memory, stream>>>(thread_count, args...);
+	kernel_func<<<grid, block, local_config.shared_memory, stream>>>(thread_count, get_buffer_pointer(args)...);
 
 	// Check for launch errors
 	CUDA_CHECK(cudaGetLastError());
@@ -144,8 +144,8 @@ Event launch_cuda_kernel(const Resource& resource,
 	}
 
 	// Extract buffer pointers for kernel invocation
-	auto input_pointers = get_buffer_pointers(inputs);
-	auto output_pointers = get_buffer_pointers(outputs);
+	auto input_pointers = get_buffer_tuples(inputs);
+	auto output_pointers = get_buffer_tuples(outputs);
 	auto all_pointers = std::tuple_cat(input_pointers, output_pointers);
 
 	// Launch the kernel with extracted pointers by unpacking them

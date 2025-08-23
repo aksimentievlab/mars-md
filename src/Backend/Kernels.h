@@ -40,24 +40,24 @@ Event launch_kernel(const Resource& resource,
 
 #ifdef USE_CUDA
 	if (resource.type == ResourceType::CUDA) {
-		return launch_cuda_kernel(resource, thread_count, config, kernel_func, args...);
+		return launch_cuda_kernel(resource, thread_count, config, kernel_func, get_buffer_pointer(args)...);
 	}
 #endif
 
 #ifdef USE_SYCL
 	if (resource.type == ResourceType::SYCL) {
-		return launch_sycl_kernel(resource, thread_count, config, kernel_func, args...);
+		return launch_sycl_kernel(resource, thread_count, config, kernel_func, get_buffer_pointer(args)...);
 	}
 #endif
 
 #ifdef USE_METAL
 	if (resource.type == ResourceType::METAL) {
-		return launch_metal_kernel(resource, thread_count, config, kernel_func, args...);
+		return launch_metal_kernel(resource, thread_count, config, kernel_func, get_buffer_pointer(args)...);
 	}
 #endif
 
 	// CPU fallback
-	return launch_cpu_kernel(resource, thread_count, config, kernel_func, args...);
+	return launch_cpu_kernel(resource, thread_count, config, kernel_func, get_buffer_pointer(args)...);
 }
 
 template<typename InputTuple, typename OutputTuple, typename Functor, typename... Args>
@@ -104,95 +104,51 @@ launch_kernel(const Resource& resource,
 	}
 }
 
-/**
- * @brief Single output buffer (generators like Random)
- */
-template<typename OutputBuffer, typename Functor, typename... Args>
-std::enable_if_t<is_device_buffer_v<OutputBuffer> && !is_device_buffer_v<Functor> &&
-					 !is_string_v<Functor>,
-				 Event>
-launch_kernel(const Resource& resource,
-			  idx_t thread_count,
-			  const KernelConfig& config,
-			  OutputBuffer& output_buffer,
-			  Functor&& kernel_func,
-			  Args&&... args) {
 
-	auto inputs = std::make_tuple();
-	auto outputs = std::make_tuple(std::ref(output_buffer));
 
-	return launch_kernel(resource,
-						 thread_count,
-						 config,
-						 inputs,
-						 outputs,
-						 std::forward<Functor>(kernel_func),
-						 std::forward<Args>(args)...);
-}
-
-/**
- * @brief Single input + single output buffers (transforms)
- */
-template<typename InputBuffer, typename OutputBuffer, typename Functor, typename... Args>
-std::enable_if_t<is_device_buffer_v<InputBuffer> && is_device_buffer_v<OutputBuffer> &&
-					 !is_device_buffer_v<Functor> && !is_string_v<Functor>,
-				 Event>
-launch_kernel(const Resource& resource,
-			  idx_t thread_count,
-			  const KernelConfig& config,
-			  InputBuffer& input_buffer,
-			  OutputBuffer& output_buffer,
-			  Functor&& kernel_func,
-			  Args&&... args) {
-
-	auto inputs = std::make_tuple(std::ref(input_buffer));
-	auto outputs = std::make_tuple(std::ref(output_buffer));
-
-	return launch_kernel(resource,
-						 thread_count,
-						 config,
-						 inputs,
-						 outputs,
-						 std::forward<Functor>(kernel_func),
-						 std::forward<Args>(args)...);
-}
-
-/**
- * @brief Dual input + single output buffers (binary operations)
- */
-template<typename InputBuffer1,
-		 typename InputBuffer2,
-		 typename OutputBuffer,
-		 typename Functor,
-		 typename... Args>
-std::enable_if_t<is_device_buffer_v<InputBuffer1> && is_device_buffer_v<InputBuffer2> &&
-					 is_device_buffer_v<OutputBuffer> && !is_device_buffer_v<Functor> &&
-					 !is_string_v<Functor>,
-				 Event>
-launch_kernel(const Resource& resource,
-			  idx_t thread_count,
-			  const KernelConfig& config,
-			  InputBuffer1& input_buffer1,
-			  InputBuffer2& input_buffer2,
-			  OutputBuffer& output_buffer,
-			  Functor&& kernel_func,
-			  Args&&... args) {
-
-	auto inputs = std::make_tuple(std::ref(input_buffer1), std::ref(input_buffer2));
-	auto outputs = std::make_tuple(std::ref(output_buffer));
-
-	return launch_kernel(resource,
-						 thread_count,
-						 config,
-						 inputs,
-						 outputs,
-						 std::forward<Functor>(kernel_func),
-						 std::forward<Args>(args)...);
-}
 
 // ============================================================================
 // CPU Kernel Launcher (Host-only)
 // ============================================================================
+
+/**
+ * @brief CPU kernel launcher - streamlined interface
+ */
+template<typename Functor, typename... Args>
+Event launch_cpu_kernel(const Resource& resource,
+						idx_t thread_count,
+						const KernelConfig& config,
+						Functor kernel_func,
+						Args... args) {
+	
+	config.dependencies.wait_all();
+
+	unsigned int num_threads = std::thread::hardware_concurrency();
+	if (num_threads == 0) {
+		num_threads = 1;
+	}
+
+	std::vector<std::thread> threads;
+	idx_t chunk_size = (thread_count + num_threads - 1) / num_threads;
+
+	for (unsigned int t = 0; t < num_threads; ++t) {
+		threads.emplace_back([=]() {
+			idx_t start = t * chunk_size;
+			idx_t end = std::min(start + chunk_size, thread_count);
+			for (idx_t i = start; i < end; ++i) {
+				kernel_func(i, args...);
+			}
+		});
+	}
+
+	for (auto& thread : threads) {
+		if (thread.joinable()) {
+			thread.join();
+		}
+	}
+
+	return Event(nullptr, resource);
+}
 
 /**
  * @brief CPU kernel launcher - tuple-based interface
@@ -208,8 +164,8 @@ Event launch_cpu_kernel(const Resource& resource,
 
 	config.dependencies.wait_all();
 
-	auto input_ptrs = extract_buffer_pointers(inputs);
-	auto output_ptrs = extract_buffer_pointers(outputs);
+	auto input_ptrs = get_buffer_tuples(inputs);
+	auto output_ptrs = get_buffer_tuples(outputs);
 
 	unsigned int num_threads = std::thread::hardware_concurrency();
 	if (num_threads == 0) {
@@ -240,52 +196,6 @@ Event launch_cpu_kernel(const Resource& resource,
 	return Event(nullptr, resource);
 }
 
-/**
- * @brief CPU kernel launcher - single output buffer
- */
-template<typename OutputBuffer, typename Functor, typename... Args>
-Event launch_cpu_kernel(const Resource& resource,
-						idx_t thread_count,
-						const KernelConfig& config,
-						OutputBuffer& output_buffer,
-						Functor&& kernel_func,
-						Args&&... args) {
-
-	auto inputs = std::make_tuple();
-	auto outputs = std::make_tuple(std::ref(output_buffer));
-
-	return launch_cpu_kernel(resource,
-							 thread_count,
-							 inputs,
-							 outputs,
-							 config,
-							 std::forward<Functor>(kernel_func),
-							 std::forward<Args>(args)...);
-}
-
-/**
- * @brief CPU kernel launcher - single input, single output buffer
- */
-template<typename InputBuffer, typename OutputBuffer, typename Functor, typename... Args>
-Event launch_cpu_kernel(const Resource& resource,
-						idx_t thread_count,
-						const KernelConfig& config,
-						InputBuffer& input_buffer,
-						OutputBuffer& output_buffer,
-						Functor&& kernel_func,
-						Args&&... args) {
-
-	auto inputs = std::make_tuple(std::ref(input_buffer));
-	auto outputs = std::make_tuple(std::ref(output_buffer));
-
-	return launch_cpu_kernel(resource,
-							 thread_count,
-							 inputs,
-							 outputs,
-							 config,
-							 std::forward<Functor>(kernel_func),
-							 std::forward<Args>(args)...);
-}
 
 /**
  * @brief Kernel chaining

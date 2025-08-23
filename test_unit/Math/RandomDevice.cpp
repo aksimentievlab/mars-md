@@ -179,15 +179,15 @@ TEST_CASE_METHOD(RandomTestFixture,
 			Event random_event = rng.generate_uniform(random_buffer, 0.0f, 1.0f);
 			random_event.wait();
 
-			// Process with custom kernel using Kernels.h
-			KernelConfig config{.block_size = 256, .async = false};
+			// Process with new kernel structure - proper multi-GPU config
+			KernelConfig config;
+			config.block_size.x = 256;
+			config.sync = false; // Async for better multi-GPU performance
+			config.auto_configure(TEST_SIZE, resource);
 
-			// Create input and output tuples for launch_kernel
-			auto inputs = std::make_tuple(std::ref(random_buffer));
-			auto outputs = std::make_tuple(std::ref(processed_buffer));
-
+			// Launch kernel: resource, thread_count, config, functor, ...args
 			Event process_event =
-				launch_kernel(resource, TEST_SIZE, config, inputs, outputs, TransformKernel{});
+				launch_kernel(resource, TEST_SIZE, config, TransformKernel{}, random_buffer, processed_buffer);
 
 			process_event.wait();
 
@@ -269,15 +269,16 @@ TEST_CASE_METHOD(RandomTestFixture,
 			combine_events.add(uniform_event);
 			combine_events.add(gaussian_event);
 
-			// Create input and output tuples for the combine kernel
-			auto inputs = std::make_tuple(std::ref(uniform_buffer), std::ref(gaussian_buffer));
-			auto outputs = std::make_tuple(std::ref(combined_buffer));
+			// Configure kernel with proper dependencies for multi-GPU sync
+			KernelConfig combine_config;
+			combine_config.dependencies.add(uniform_event);
+			combine_config.dependencies.add(gaussian_event);
+			combine_config.sync = false;
+			combine_config.auto_configure(TEST_SIZE, resource);
 
-			// Simple combination: 70% uniform + 30% gaussian
-			Event combine_event;
-
-			combine_event =
-				launch_kernel(resource, TEST_SIZE, config, inputs, outputs, CombineKernel{});
+			// Launch combine kernel: functor first, then input/output buffers
+			Event combine_event =
+				launch_kernel(resource, TEST_SIZE, combine_config, CombineKernel{}, uniform_buffer, gaussian_buffer, combined_buffer);
 
 			combine_event.wait();
 
