@@ -19,14 +19,7 @@ constexpr size_t GRID_SIZE_X = 16;
 constexpr size_t GRID_SIZE_Y = 16;
 constexpr size_t GRID_SIZE_Z = 16;
 
-// Helper function to skip buffer transfer tests on macOS with SYCL
-inline void skip_if_sycl_on_macos() {
-#ifdef USE_SYCL
-#ifdef __APPLE__
-	SKIP("Skipping buffer transfer tests on macOS - unified memory architecture");
-#endif
-#endif
-}
+
 
 // ============================================================================
 // Backend Initialization Fixture
@@ -90,7 +83,7 @@ struct BackendInitFixture {
 // Vector3_t Buffer Tests
 // ============================================================================
 
-TEST_CASE_METHOD(BackendInitFixture, "Vector3_t Buffer Creation", "[buffer][vector3][creation]") {
+TEST_CASE_METHOD(BackendInitFixture, "Vector3_t Buffer Creation", "[Generic][vector3][creation]") {
 
 	SECTION("Basic Vector3_t<float> buffer creation") {
 		Resource resource = Resource::Local();
@@ -134,9 +127,9 @@ TEST_CASE_METHOD(BackendInitFixture, "Vector3_t Buffer Creation", "[buffer][vect
 
 TEST_CASE_METHOD(BackendInitFixture,
 				 "Vector3_t Buffer Host-Device Transfer",
-				 "[buffer][vector3][transfer]") {
+				 "[Generic][vector3][transfer]") {
 	// Skip buffer transfer tests on macOS when using SYCL due to unified memory architecture
-	skip_if_sycl_on_macos();
+	//skip_if_sycl_on_macos();
 
 	SECTION("Vector3_t<float> host to device to host") {
 		Resource resource = Resource::Local();
@@ -192,7 +185,7 @@ TEST_CASE_METHOD(BackendInitFixture,
 	}
 }
 
-TEST_CASE_METHOD(BackendInitFixture, "Vector3_t Buffer Move Semantics", "[buffer][vector3][move]") {
+TEST_CASE_METHOD(BackendInitFixture, "Vector3_t Buffer Move Semantics", "[Generic][vector3][move]") {
 
 	SECTION("Move constructor") {
 		Resource resource = Resource::Local();
@@ -235,7 +228,7 @@ TEST_CASE_METHOD(BackendInitFixture, "Vector3_t Buffer Move Semantics", "[buffer
 // Memory Alignment Tests
 // ============================================================================
 
-TEST_CASE_METHOD(BackendInitFixture, "Buffer Memory Alignment", "[buffer][alignment]") {
+TEST_CASE_METHOD(BackendInitFixture, "Buffer Memory Alignment", "[Generic][alignment]") {
 
 	SECTION("Vector3_t alignment requirements") {
 		Resource resource = Resource::Local();
@@ -272,7 +265,7 @@ TEST_CASE_METHOD(BackendInitFixture, "Buffer Memory Alignment", "[buffer][alignm
 // Performance and Stress Tests
 // ============================================================================
 
-TEST_CASE_METHOD(BackendInitFixture, "Buffer Performance Tests", "[buffer][performance]") {
+TEST_CASE_METHOD(BackendInitFixture, "Buffer Performance Tests", "[Generic][performance]") {
 
 	SECTION("Large Vector3_t buffer allocation") {
 		Resource resource = Resource::Local();

@@ -94,7 +94,7 @@ struct BackendInitFixture {
 // Pinned Buffer Tests
 // ============================================================================
 
-TEST_CASE_METHOD(BackendInitFixture, "Pinned Buffer Creation", "[buffer][pinned][creation]") {
+TEST_CASE_METHOD(BackendInitFixture, "Pinned Buffer Creation", "[pinned][creation]") {
 
 	SECTION("Basic pinned buffer creation") {
 		Resource resource = Resource::Local();
@@ -153,14 +153,15 @@ TEST_CASE_METHOD(BackendInitFixture, "Pinned Buffer Creation", "[buffer][pinned]
 	}
 }
 
+//Sometimes this failed on macs with SYCL for performance and memory.
 TEST_CASE_METHOD(BackendInitFixture,
 				 "Pinned Buffer Memory Operations",
-				 "[buffer][pinned][memory]") {
+				 "[pinned][memory]") {
 
 	SECTION("Host to pinned buffer transfer") {
 		Resource resource = Resource::Local();
 		
-		skip_if_sycl_on_macos();
+		//skip_if_sycl_on_macos();
 		
 		PinnedBuffer<float> pinned_buffer(PINNED_BUFFER_SIZE, resource);
 
@@ -180,7 +181,7 @@ TEST_CASE_METHOD(BackendInitFixture,
 	SECTION("Pinned buffer to device transfer") {
 		Resource resource = Resource::Local();
 		
-		skip_if_sycl_on_macos();
+		//skip_if_sycl_on_macos();
 		
 		PinnedBuffer<float> pinned_buffer(PINNED_BUFFER_SIZE, resource);
 
@@ -203,7 +204,7 @@ TEST_CASE_METHOD(BackendInitFixture,
 	SECTION("Device to pinned buffer transfer") {
 		Resource resource = Resource::Local();
 		
-		skip_if_sycl_on_macos();
+		//skip_if_sycl_on_macos();
 		
 		PinnedBuffer<float> pinned_buffer(PINNED_BUFFER_SIZE, resource);
 		DeviceBuffer<float> device_buffer(PINNED_BUFFER_SIZE);
@@ -226,7 +227,7 @@ TEST_CASE_METHOD(BackendInitFixture,
 	SECTION("Partial transfers") {
 		Resource resource = Resource::Local();
 		
-		skip_if_sycl_on_macos();
+		//skip_if_sycl_on_macos();
 		
 		PinnedBuffer<int> pinned_buffer(PINNED_BUFFER_SIZE, resource);
 
@@ -243,10 +244,10 @@ TEST_CASE_METHOD(BackendInitFixture,
 		REQUIRE(result_data == partial_data);
 	}
 }
-
-TEST_CASE_METHOD(BackendInitFixture, "Pinned Buffer Performance", "[buffer][pinned][performance]") {
+//Sometimes this failed on macs with SYCL for performance and memory
+TEST_CASE_METHOD(BackendInitFixture, "Pinned Buffer Performance", "[pinned][performance]") {
 	// Skip buffer transfer tests on macOS when using SYCL due to unified memory architecture
-	skip_if_sycl_on_macos();
+	//skip_if_sycl_on_macos();
 
 	SECTION("Pinned vs regular host memory performance") {
 		Resource resource = Resource::Local();
@@ -334,7 +335,7 @@ TEST_CASE_METHOD(BackendInitFixture, "Pinned Buffer Performance", "[buffer][pinn
 // Unified Buffer Tests
 // ============================================================================
 
-TEST_CASE_METHOD(BackendInitFixture, "Unified Buffer Creation", "[buffer][unified][creation]") {
+TEST_CASE_METHOD(BackendInitFixture, "Unified Buffer Creation", "[unified][creation]") {
 
 	SECTION("Basic unified buffer creation") {
 		Resource resource = Resource::Local();
@@ -389,12 +390,12 @@ TEST_CASE_METHOD(BackendInitFixture, "Unified Buffer Creation", "[buffer][unifie
 
 TEST_CASE_METHOD(BackendInitFixture,
 				 "Unified Buffer Memory Operations",
-				 "[buffer][unified][memory]") {
+				 "[unified][memory]") {
 
 	SECTION("Host to unified buffer transfer") {
 		Resource resource = Resource::Local();
 		
-		skip_if_sycl_on_macos();
+		//skip_if_sycl_on_macos();
 		
 		UnifiedBuffer<float> unified_buffer(UNIFIED_BUFFER_SIZE, resource);
 
@@ -414,7 +415,7 @@ TEST_CASE_METHOD(BackendInitFixture,
 	SECTION("Unified buffer to device transfer") {
 		Resource resource = Resource::Local();
 		
-		skip_if_sycl_on_macos();
+		//skip_if_sycl_on_macos();
 		
 		UnifiedBuffer<float> unified_buffer(UNIFIED_BUFFER_SIZE, resource);
 
@@ -437,7 +438,7 @@ TEST_CASE_METHOD(BackendInitFixture,
 	SECTION("Device to unified buffer transfer") {
 		Resource resource = Resource::Local();
 		
-		skip_if_sycl_on_macos();
+		//skip_if_sycl_on_macos();
 		
 		UnifiedBuffer<float> unified_buffer(UNIFIED_BUFFER_SIZE, resource);
 		DeviceBuffer<float> device_buffer(UNIFIED_BUFFER_SIZE);
@@ -512,9 +513,9 @@ TEST_CASE_METHOD(BackendInitFixture,
 
 TEST_CASE_METHOD(BackendInitFixture,
 				 "Unified Buffer Performance",
-				 "[buffer][unified][performance]") {
+				 "[unified][performance]") {
 	// Skip buffer transfer tests on macOS when using SYCL due to unified memory architecture
-	skip_if_sycl_on_macos();
+	//skip_if_sycl_on_macos();
 
 	SECTION("Unified vs device buffer performance") {
 		Resource resource = Resource::Local();
@@ -602,9 +603,9 @@ TEST_CASE_METHOD(BackendInitFixture,
 
 TEST_CASE_METHOD(BackendInitFixture,
 				 "Mixed Buffer Type Operations",
-				 "[buffer][mixed][operations]") {
+				 "[mixed][operations]") {
 	// Skip buffer transfer tests on macOS when using SYCL due to unified memory architecture
-	skip_if_sycl_on_macos();
+	//skip_if_sycl_on_macos();
 
 	SECTION("Pinned to unified to device transfer chain") {
 		Resource resource = Resource::Local();
@@ -677,12 +678,12 @@ TEST_CASE_METHOD(BackendInitFixture,
 }
 
 // ============================================================================
-// Stress Tests
+// Stress Tests-- this one passes on macos
 // ============================================================================
 
 TEST_CASE_METHOD(BackendInitFixture,
 				 "Pinned and Unified Buffer Stress Tests",
-				 "[buffer][stress][pinned][unified]") {
+				 "[stress][pinned][unified]") {
 
 	SECTION("Rapid allocation/deallocation") {
 		Resource resource = Resource::Local();
@@ -792,12 +793,12 @@ TEST_CASE_METHOD(BackendInitFixture,
 }
 
 // ============================================================================
-// Edge Cases and Error Handling
+// Edge Cases and Error Handling-- failed
 // ============================================================================
 
-TEST_CASE_METHOD(BackendInitFixture, "Buffer Edge Cases", "[buffer][edge_cases]") {
+TEST_CASE_METHOD(BackendInitFixture, "Buffer Edge Cases", "[edge_cases]") {
 	// Skip buffer transfer tests on macOS when using SYCL due to unified memory architecture
-	skip_if_sycl_on_macos();
+	//skip_if_sycl_on_macos();
 
 	SECTION("Zero-size buffer operations") {
 		Resource resource = Resource::Local();
@@ -1049,14 +1050,14 @@ TEST_CASE_METHOD(BackendInitFixture, "Buffer Edge Cases", "[buffer][edge_cases]"
 }
 
 // ============================================================================
-// Performance Benchmark Tests
+// Performance Benchmark Tests: Trace trap
 // ============================================================================
 
 TEST_CASE_METHOD(BackendInitFixture,
 				 "Buffer Performance Benchmarks",
-				 "[buffer][benchmark][performance]") {
+				 "[benchmark][performance]") {
 	// Skip buffer transfer tests on macOS when using SYCL due to unified memory architecture
-	skip_if_sycl_on_macos();
+	//skip_if_sycl_on_macos();
 
 	SECTION("Memory bandwidth test") {
 		Resource resource = Resource::Local();

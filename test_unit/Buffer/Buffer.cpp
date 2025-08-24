@@ -108,7 +108,7 @@ class ProductionBufferTestFixture {
 
 TEST_CASE_METHOD(ProductionBufferTestFixture,
 				 "Buffer Constructors - Backward Compatibility",
-				 "[buffer][constructors][compatibility]") {
+				 "[Buffer][constructors][compatibility]") {
 
 	SECTION("Size-only constructor (backward compatible)") {
 		// Creates buffer using best available device (prioritizes GPU)
@@ -146,7 +146,7 @@ TEST_CASE_METHOD(ProductionBufferTestFixture,
 
 TEST_CASE_METHOD(ProductionBufferTestFixture,
 				 "Buffer Constructors - Device Resources",
-				 "[buffer][constructors][devices]") {
+				 "[Buffer][constructors][devices]") {
 
 	auto devices = get_device_resources();
 	if (devices.empty()) {
@@ -186,7 +186,7 @@ TEST_CASE_METHOD(ProductionBufferTestFixture,
 
 TEST_CASE_METHOD(ProductionBufferTestFixture,
 				 "Buffer Copy and Move Operations",
-				 "[buffer][copy][move]") {
+				 "[Buffer][copy][move]") {
 
 	SECTION("Copy constructor") {
 		DeviceBuffer<float> original(100);
@@ -261,7 +261,7 @@ TEST_CASE_METHOD(ProductionBufferTestFixture,
 // Memory Operations Tests
 // ============================================================================
 
-TEST_CASE_METHOD(ProductionBufferTestFixture, "Buffer Memory Operations", "[buffer][memory]") {
+TEST_CASE_METHOD(ProductionBufferTestFixture, "Buffer Memory Operations", "[Buffer][memory]") {
 
 	SECTION("Host-device transfers") {
 		const size_t size = 1000;
@@ -331,7 +331,7 @@ TEST_CASE_METHOD(ProductionBufferTestFixture, "Buffer Memory Operations", "[buff
 // Resize Operations Tests
 // ============================================================================
 
-TEST_CASE_METHOD(ProductionBufferTestFixture, "Buffer Resize Operations", "[buffer][resize]") {
+TEST_CASE_METHOD(ProductionBufferTestFixture, "Buffer Resize Operations", "[Buffer][resize]") {
 
 	SECTION("Basic resize") {
 		DeviceBuffer<int> buffer(100);
@@ -390,7 +390,7 @@ TEST_CASE_METHOD(ProductionBufferTestFixture, "Buffer Resize Operations", "[buff
 
 TEST_CASE_METHOD(ProductionBufferTestFixture,
 				 "Buffer Thread Safety",
-				 "[buffer][threading][safety]") {
+				 "[Buffer][threading][safety]") {
 
 	auto devices = get_device_resources();
 
@@ -509,7 +509,7 @@ TEST_CASE_METHOD(ProductionBufferTestFixture,
 // Resource Management Tests
 // ============================================================================
 
-TEST_CASE_METHOD(ProductionBufferTestFixture, "Resource Management", "[buffer][resource]") {
+TEST_CASE_METHOD(ProductionBufferTestFixture, "Resource Management", "[Buffer][resource]") {
 
 	SECTION("Resource creation and properties") {
 		Resource cpu = Resource::CPU();
@@ -573,7 +573,7 @@ TEST_CASE_METHOD(ProductionBufferTestFixture, "Resource Management", "[buffer][r
 // ============================================================================
 
 #ifdef USE_CUDA
-TEST_CASE_METHOD(ProductionBufferTestFixture, "CUDA-Specific Buffer Operations", "[buffer][cuda]") {
+TEST_CASE_METHOD(ProductionBufferTestFixture, "CUDA-Specific Buffer Operations", "[Buffer][cuda]") {
 
 	if (CUDA::Manager::all_device_size() == 0) {
 		SKIP("No CUDA devices available");
@@ -645,7 +645,7 @@ TEST_CASE_METHOD(ProductionBufferTestFixture, "CUDA-Specific Buffer Operations",
 #endif
 
 #ifdef USE_SYCL
-TEST_CASE_METHOD(ProductionBufferTestFixture, "SYCL-Specific Buffer Operations", "[buffer][sycl]") {
+TEST_CASE_METHOD(ProductionBufferTestFixture, "SYCL-Specific Buffer Operations", "[Buffer][operations]") {
 
 	if (SYCL::Manager::devices().size() == 0) {
 		SKIP("No SYCL devices available");
@@ -664,7 +664,7 @@ TEST_CASE_METHOD(ProductionBufferTestFixture, "SYCL-Specific Buffer Operations",
 #ifdef USE_METAL
 TEST_CASE_METHOD(ProductionBufferTestFixture,
 				 "Metal-Specific Buffer Operations",
-				 "[buffer][metal]") {
+				 "[Buffer][metal]") {
 
 	if (METAL::Manager::device_count() == 0) {
 		SKIP("No Metal devices available");
@@ -695,7 +695,7 @@ TEST_CASE_METHOD(ProductionBufferTestFixture,
 // Performance and Stress Tests
 // ============================================================================
 
-TEST_CASE_METHOD(ProductionBufferTestFixture, "Buffer Performance Tests", "[buffer][performance]") {
+TEST_CASE_METHOD(ProductionBufferTestFixture, "Buffer Performance Tests", "[Buffer][performance]") {
 
 	SECTION("Large buffer allocation") {
 		const size_t large_size = 10000000; // 10M elements
@@ -733,7 +733,7 @@ TEST_CASE_METHOD(ProductionBufferTestFixture, "Buffer Performance Tests", "[buff
 // Edge Cases and Error Handling
 // ============================================================================
 
-TEST_CASE_METHOD(ProductionBufferTestFixture, "Buffer Edge Cases", "[buffer][edge_cases]") {
+TEST_CASE_METHOD(ProductionBufferTestFixture, "Buffer Edge Cases", "[Buffer][edge_cases]") {
 
 	SECTION("Zero-size buffers") {
 		DeviceBuffer<float> empty1(0);
@@ -852,7 +852,7 @@ TEST_CASE_METHOD(ProductionBufferTestFixture, "Buffer Edge Cases", "[buffer][edg
 
 TEST_CASE_METHOD(ProductionBufferTestFixture,
 				 "Production Buffer - Memory Operations",
-				 "[buffer][production][memory]") {
+				 "[Buffer][production][memory]") {
 
 	Resource resource = Resource(Resource::Local().type, 0);
 
@@ -922,7 +922,7 @@ TEST_CASE_METHOD(ProductionBufferTestFixture,
 
 TEST_CASE_METHOD(ProductionBufferTestFixture,
 				 "Production Buffer - Thread Safety",
-				 "[buffer][production][threading]") {
+				 "[Buffer][production][threading]") {
 
 	auto devices = get_device_resources();
 	if (devices.size() < 2) {
@@ -1053,7 +1053,7 @@ TEST_CASE_METHOD(ProductionBufferTestFixture,
 
 TEST_CASE_METHOD(ProductionBufferTestFixture,
 				 "Production Buffer - Resource Management",
-				 "[buffer][production][resource_mgmt]") {
+				 "[Buffer][production][resource_mgmt]") {
 
 	SECTION("Resource Local() detection") {
 		Resource local_resource = Resource::Local();
@@ -1094,7 +1094,7 @@ TEST_CASE_METHOD(ProductionBufferTestFixture,
 
 TEST_CASE_METHOD(ProductionBufferTestFixture,
 				 "Real-World Usage Patterns",
-				 "[buffer][integration][real_world]") {
+				 "[Buffer][integration][real_world]") {
 
 	SECTION("Legacy code compatibility") {
 		// Test that existing code patterns still work
@@ -1176,7 +1176,7 @@ TEST_CASE_METHOD(ProductionBufferTestFixture,
 
 TEST_CASE_METHOD(ProductionBufferTestFixture,
 				 "Advanced Memory Management",
-				 "[buffer][memory][advanced]") {
+				 "[Buffer][memory][advanced]") {
 
 	SECTION("Memory pool simulation") {
 		const size_t pool_size = 1000;
@@ -1261,7 +1261,7 @@ TEST_CASE_METHOD(ProductionBufferTestFixture,
 
 TEST_CASE_METHOD(ProductionBufferTestFixture,
 				 "Resource Creation Patterns",
-				 "[buffer][resource][patterns]") {
+				 "[Buffer][resource][patterns]") {
 
 	SECTION("Resource factory consistency") {
 		// Test all equivalent ways to create the same resource
@@ -1388,7 +1388,7 @@ TEST_CASE_METHOD(ProductionBufferTestFixture,
 // Stress Tests and Limits
 // ============================================================================
 
-TEST_CASE_METHOD(ProductionBufferTestFixture, "Buffer Stress Tests", "[buffer][stress][limits]") {
+TEST_CASE_METHOD(ProductionBufferTestFixture, "Buffer Stress Tests", "[Buffer][stress][limits]") {
 
 	SECTION("Rapid allocation/deallocation stress") {
 		const size_t iterations = 1000;
@@ -1475,7 +1475,7 @@ TEST_CASE_METHOD(ProductionBufferTestFixture, "Buffer Stress Tests", "[buffer][s
 
 TEST_CASE_METHOD(ProductionBufferTestFixture,
 				 "Production Readiness Validation",
-				 "[buffer][production][validation]") {
+				 "[Buffer][production][validation]") {
 
 	SECTION("Zero-downtime buffer swapping") {
 		const size_t buffer_size = 1000;

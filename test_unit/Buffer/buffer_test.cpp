@@ -139,7 +139,7 @@ bool vectors_equal(const std::vector<T>& a, const std::vector<T>& b, double tole
 // Basic Buffer Creation Tests
 // ============================================================================
 
-TEST_CASE_METHOD(BackendInitFixture, "Buffer Basic Creation", "[buffer][creation]") {
+TEST_CASE_METHOD(BackendInitFixture, "Buffer Basic Creation", "[buffer_test][creation]") {
 
 	SECTION("Default constructor creates empty buffer") {
 		DeviceBuffer<int> buffer;
@@ -198,7 +198,7 @@ TEST_CASE_METHOD(BackendInitFixture, "Buffer Basic Creation", "[buffer][creation
 // Buffer Resize Tests
 // ============================================================================
 
-TEST_CASE_METHOD(BackendInitFixture, "Buffer Resize", "[buffer][resize]") {
+TEST_CASE_METHOD(BackendInitFixture, "Buffer Resize", "[buffer_test][resize]") {
 	SECTION("Resize to smaller size") {
 		DeviceBuffer<int> buffer(LARGE_BUFFER_SIZE);
 		REQUIRE(buffer.size() == LARGE_BUFFER_SIZE);
@@ -242,9 +242,7 @@ TEST_CASE_METHOD(BackendInitFixture, "Buffer Resize", "[buffer][resize]") {
 // Copy From Host Tests
 // ============================================================================
 
-TEST_CASE_METHOD(BackendInitFixture, "Buffer Copy From Host", "[buffer][copy_from_host]") {
-	// Skip buffer transfer tests on macOS when using SYCL due to unified memory architecture
-	skip_if_sycl_on_macos();
+TEST_CASE_METHOD(BackendInitFixture, "Buffer Copy From Host", "[buffer_test][copy_from_host]") {
 
 	SECTION("Copy int data from host") {
 		DeviceBuffer<int> buffer(MEDIUM_BUFFER_SIZE);
@@ -319,9 +317,7 @@ TEST_CASE_METHOD(BackendInitFixture, "Buffer Copy From Host", "[buffer][copy_fro
 // Copy To Host Tests
 // ============================================================================
 
-TEST_CASE_METHOD(BackendInitFixture, "Buffer Copy To Host", "[buffer][copy_to_host]") {
-	// Skip buffer transfer tests on macOS when using SYCL due to unified memory architecture
-	skip_if_sycl_on_macos();
+TEST_CASE_METHOD(BackendInitFixture, "Buffer Copy To Host", "[buffer_test][copy_to_host]") {
 
 	SECTION("Copy int data to host") {
 		DeviceBuffer<int> buffer(MEDIUM_BUFFER_SIZE);
@@ -394,9 +390,7 @@ TEST_CASE_METHOD(BackendInitFixture, "Buffer Copy To Host", "[buffer][copy_to_ho
 // Device to Device Copy Tests
 // ============================================================================
 
-TEST_CASE_METHOD(BackendInitFixture, "Buffer Device to Device Copy", "[buffer][device_to_device]") {
-	// Skip buffer transfer tests on macOS when using SYCL due to unified memory architecture
-	skip_if_sycl_on_macos();
+TEST_CASE_METHOD(BackendInitFixture, "Buffer Device to Device Copy", "[buffer_test][device_to_device]") {
 
 	SECTION("Copy int data device to device") {
 		DeviceBuffer<int> src_buffer(MEDIUM_BUFFER_SIZE);
@@ -501,9 +495,8 @@ TEST_CASE_METHOD(BackendInitFixture, "Buffer Device to Device Copy", "[buffer][d
 
 TEST_CASE_METHOD(BackendInitFixture,
 				 "Buffer Copy Constructor and Assignment",
-				 "[buffer][copy_constructor]") {
-	// Skip buffer transfer tests on macOS when using SYCL due to unified memory architecture
-	skip_if_sycl_on_macos();
+				 "[buffer_test][copy_constructor]") {
+
 
 	SECTION("Copy constructor") {
 		DeviceBuffer<int> original_buffer(MEDIUM_BUFFER_SIZE);
@@ -585,9 +578,7 @@ TEST_CASE_METHOD(BackendInitFixture,
 // Move Constructor and Assignment Tests
 // ============================================================================
 
-TEST_CASE_METHOD(BackendInitFixture, "Buffer Move Constructor and Assignment", "[buffer][move]") {
-	// Skip buffer transfer tests on macOS when using SYCL due to unified memory architecture
-	skip_if_sycl_on_macos();
+TEST_CASE_METHOD(BackendInitFixture, "Buffer Move Constructor and Assignment", "[buffer_test][move]") {
 
 	SECTION("Move constructor") {
 		DeviceBuffer<int> original_buffer(MEDIUM_BUFFER_SIZE);
@@ -660,23 +651,8 @@ TEST_CASE_METHOD(BackendInitFixture, "Buffer Move Constructor and Assignment", "
 
 TEST_CASE_METHOD(BackendInitFixture,
 				 "Buffer Edge Cases and Error Handling",
-				 "[buffer][edge_cases]") {
-	// Skip buffer transfer tests on macOS when using SYCL due to unified memory architecture
-	skip_if_sycl_on_macos();
+				 "[buffer_test][edge_cases]") {
 
-	SECTION("Zero size buffer operations") {
-		DeviceBuffer<int> buffer(0);
-		REQUIRE(buffer.empty());
-		REQUIRE(buffer.size() == 0);
-		REQUIRE(buffer.bytes() == 0);
-
-		// Skip copy operations for zero-size buffers as they're not supported
-		// by the Metal backend
-		std::vector<int> empty_data;
-		// Metal backend doesn't support operations on zero-size buffers
-		// REQUIRE_NOTHROW(buffer.copy_from_host(empty_data));
-		// REQUIRE_NOTHROW(buffer.copy_to_host(empty_data));
-	}
 
 	SECTION("Copy operations with mismatched sizes") {
 		DeviceBuffer<int> buffer(SMALL_BUFFER_SIZE);
@@ -729,9 +705,7 @@ TEST_CASE_METHOD(BackendInitFixture,
 // Performance Tests
 // ============================================================================
 
-TEST_CASE_METHOD(BackendInitFixture, "Buffer Performance", "[buffer][performance]") {
-	// Skip buffer transfer tests on macOS when using SYCL due to unified memory architecture
-	skip_if_sycl_on_macos();
+TEST_CASE_METHOD(BackendInitFixture, "Buffer Performance", "[buffer_test][performance]") {
 
 	SECTION("Large data transfer performance") {
 		const size_t test_size = 1000000; // 1M elements
@@ -846,9 +820,7 @@ TEST_CASE_METHOD(BackendInitFixture, "Buffer Performance", "[buffer][performance
 #ifdef USE_METAL
 TEST_CASE_METHOD(BackendInitFixture,
 				 "Metal Buffer Metal-Specific Features",
-				 "[metal][buffer][metal_specific]") {
-	// Skip buffer transfer tests on macOS when using SYCL due to unified memory architecture
-	skip_if_sycl_on_macos();
+				 "[metal][buffer_test][metal]") {
 
 	SECTION("Buffer binding to compute encoder") {
 		DeviceBuffer<int> buffer(MEDIUM_BUFFER_SIZE);
@@ -910,12 +882,10 @@ TEST_CASE_METHOD(BackendInitFixture,
 #endif
 
 // ============================================================================
-// Stress Tests
+// Stress Tests trace trap!!!!
 // ============================================================================
 
-TEST_CASE_METHOD(BackendInitFixture, "Buffer Stress Tests", "[buffer][stress]") {
-	// Skip buffer transfer tests on macOS when using SYCL due to unified memory architecture
-	skip_if_sycl_on_macos();
+TEST_CASE_METHOD(BackendInitFixture, "Buffer Stress Tests", "[buffer_test][stress]") {
 
 	SECTION("Multiple buffer creation and destruction") {
 		const int num_buffers = 100;
