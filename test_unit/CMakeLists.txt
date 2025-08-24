@@ -10,6 +10,7 @@ set(CORE_TEST_SOURCES
     Buffer/buffer_test.cpp
     Buffer/Buffer.cpp
     Buffer/Pinned_Unified.cpp
+    Buffer/async_buffer_tests.cpp
     ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp
 )
 

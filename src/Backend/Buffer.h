@@ -374,14 +374,20 @@ class Buffer {
 	}
 
 	/**
-	 * @brief Copy data to host.
+	 * @brief Copy data to host (synchronous).
 	 */
 	void copy_to_host(std::vector<T>& host_dst) const {
 		host_dst.resize(count_);
-		copy_to_host(host_dst.data(), count_);
+		copy_to_host(host_dst.data(), count_, true);
 	}
 
-	void copy_to_host(T* host_dst, size_t num_elements) const {
+	/**
+	 * @brief Copy data to host with sync control.
+	 * @param host_dst Destination host pointer
+	 * @param num_elements Number of elements to copy
+	 * @param sync Whether to synchronize (default: true for backward compatibility)
+	 */
+	void copy_to_host(T* host_dst, size_t num_elements, bool sync = true) const {
 		if (num_elements > count_) {
 			ARBD_Exception(ExceptionType::ValueError, "Copy size exceeds buffer size");
 		}
@@ -392,23 +398,50 @@ class Buffer {
 							 device_ptr_,
 							 num_elements * sizeof(T),
 							 queue_,
-							 true); // Force sync
+							 sync);
 #if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__) && !defined(__METAL_VERSION__)
-		LOGTRACE("Copied {} bytes to host from {}", num_elements * sizeof(T), resource_.toString());
+		LOGTRACE("Copied {} bytes to host from {} ({}sync)", 
+				 num_elements * sizeof(T), 
+				 resource_.toString(),
+				 sync ? "" : "a");
 #endif
 	}
 
 	/**
-	 * @brief Copy data from host with automatic resize if needed.
+	 * @brief Copy data to host asynchronously.
+	 * @param host_dst Destination host pointer  
+	 * @param num_elements Number of elements to copy
+	 * @return void* Stream handle for synchronization
+	 */
+	void* copy_to_host_async(T* host_dst, size_t num_elements) const {
+		copy_to_host(host_dst, num_elements, false);
+		return queue_;
+	}
+
+	/**
+	 * @brief Copy data to host synchronously (explicit).
+	 */
+	void copy_to_host_sync(T* host_dst, size_t num_elements) const {
+		copy_to_host(host_dst, num_elements, true);
+	}
+
+	/**
+	 * @brief Copy data from host (synchronous with resize).
 	 */
 	void copy_from_host(const std::vector<T>& host_src) {
 		if (host_src.size() != count_) {
 			resize(host_src.size());
 		}
-		copy_from_host(host_src.data(), host_src.size());
+		copy_from_host(host_src.data(), host_src.size(), true);
 	}
 
-	void copy_from_host(const T* host_src, size_t num_elements) {
+	/**
+	 * @brief Copy data from host with sync control.
+	 * @param host_src Source host pointer
+	 * @param num_elements Number of elements to copy
+	 * @param sync Whether to synchronize (default: true for backward compatibility)
+	 */
+	void copy_from_host(const T* host_src, size_t num_elements, bool sync = true) {
 		if (num_elements > count_) {
 #if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__) && !defined(__METAL_VERSION__)
 			ARBD_Exception(ExceptionType::ValueError, "Copy size exceeds buffer size");
@@ -422,20 +455,47 @@ class Buffer {
 		if (!device_ptr_) {
 			ARBD_Exception(ExceptionType::ValueError, "Cannot copy to null buffer");
 		}
+		if (!host_src) {
+			ARBD_Exception(ExceptionType::ValueError, "Cannot copy from null host pointer");
+		}
 		Policy::copy_from_host(device_ptr_,
 							   host_src,
 							   num_elements * sizeof(T),
 							   queue_,
-							   true); // Force sync ?
+							   sync);
 #if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__) && !defined(__METAL_VERSION__)
-		LOGTRACE("Copied {} bytes from host to {}", num_elements * sizeof(T), resource_.toString());
+		LOGTRACE("Copied {} bytes from host to {} ({}sync)", 
+				 num_elements * sizeof(T), 
+				 resource_.toString(),
+				 sync ? "" : "a");
 #endif
 	}
 
 	/**
-	 * @brief Copy between device buffers.
+	 * @brief Copy data from host asynchronously.
+	 * @param host_src Source host pointer
+	 * @param num_elements Number of elements to copy
+	 * @return void* Stream handle for synchronization
 	 */
-	void copy_device_to_device(const Buffer& src, size_t num_elements) {
+	void* copy_from_host_async(const T* host_src, size_t num_elements) {
+		copy_from_host(host_src, num_elements, false);
+		return queue_;
+	}
+
+	/**
+	 * @brief Copy data from host synchronously (explicit).
+	 */
+	void copy_from_host_sync(const T* host_src, size_t num_elements) {
+		copy_from_host(host_src, num_elements, true);
+	}
+
+	/**
+	 * @brief Copy between device buffers with sync control.
+	 * @param src Source buffer
+	 * @param num_elements Number of elements to copy
+	 * @param sync Whether to synchronize (default: true for backward compatibility)
+	 */
+	void copy_device_to_device(const Buffer& src, size_t num_elements, bool sync = true) {
 		if (num_elements > count_ || num_elements > src.count_) {
 #if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__) && !defined(__METAL_VERSION__)
 			ARBD_Exception(ExceptionType::ValueError, "Copy size exceeds buffer size");
@@ -450,18 +510,116 @@ class Buffer {
 		if (!device_ptr_ || !src.device_ptr_) {
 			ARBD_Exception(ExceptionType::ValueError, "Cannot copy with null buffer(s)");
 		}
+		bool use_sync = sync; // Use provided sync parameter
 		Policy::copy_device_to_device(device_ptr_,
 									  src.device_ptr_,
 									  num_elements * sizeof(T),
 									  queue_,
-									  sync_);
+									  use_sync);
 #if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__) && !defined(__METAL_VERSION__)
-		LOGTRACE("Copied {} bytes device-to-device from {} to {}",
+		LOGTRACE("Copied {} bytes device-to-device from {} to {} ({}sync)",
 				 num_elements * sizeof(T),
 				 src.resource_.toString(),
-				 resource_.toString());
+				 resource_.toString(),
+				 use_sync ? "" : "a");
 #endif
 	}
+
+	/**
+	 * @brief Copy between device buffers asynchronously.
+	 * @param src Source buffer
+	 * @param num_elements Number of elements to copy
+	 * @return void* Stream handle for synchronization
+	 */
+	void* copy_device_to_device_async(const Buffer& src, size_t num_elements) {
+		copy_device_to_device(src, num_elements, false);
+		return queue_;
+	}
+
+	/**
+	 * @brief Copy between device buffers synchronously.
+	 */
+	void copy_device_to_device_sync(const Buffer& src, size_t num_elements) {
+		copy_device_to_device(src, num_elements, true);
+	}
+
+	/**
+	 * @brief Copy data to host asynchronously and return an Event.
+	 * @param host_dst Destination host pointer
+	 * @param num_elements Number of elements to copy
+	 * @return Event for synchronization
+	 */
+	Event copy_to_host_event(T* host_dst, size_t num_elements) const {
+		copy_to_host(host_dst, num_elements, false);
+		return create_event_from_stream();
+	}
+
+	/**
+	 * @brief Copy data from host asynchronously and return an Event.
+	 * @param host_src Source host pointer
+	 * @param num_elements Number of elements to copy
+	 * @return Event for synchronization
+	 */
+	Event copy_from_host_event(const T* host_src, size_t num_elements) {
+		copy_from_host(host_src, num_elements, false);
+		return create_event_from_stream();
+	}
+
+	/**
+	 * @brief Copy between device buffers asynchronously and return an Event.
+	 * @param src Source buffer
+	 * @param num_elements Number of elements to copy
+	 * @return Event for synchronization
+	 */
+	Event copy_device_to_device_event(const Buffer& src, size_t num_elements) {
+		copy_device_to_device(src, num_elements, false);
+		return create_event_from_stream();
+	}
+
+private:
+	/**
+	 * @brief Create an Event from the current stream.
+	 */
+	Event create_event_from_stream() const {
+		if (!queue_) {
+			return Event(nullptr, resource_);
+		}
+
+#ifdef USE_CUDA
+		if (resource_.type == ResourceType::CUDA) {
+			cudaEvent_t event;
+			CUDA_CHECK(cudaEventCreate(&event));
+			CUDA_CHECK(cudaEventRecord(event, static_cast<cudaStream_t>(queue_)));
+			return Event(event, resource_);
+		}
+#endif
+
+#ifdef USE_SYCL
+		if (resource_.type == ResourceType::SYCL) {
+			// For AdaptiveCpp, submit a simple single_task operation
+			sycl::queue* q = static_cast<sycl::queue*>(queue_);
+			auto event = q->submit([&](sycl::handler& h) {
+				h.single_task([]() {
+					// Empty single task to create a valid event
+				});
+			});
+			return Event(event, resource_);
+		}
+#endif
+
+#ifdef USE_METAL
+		if (resource_.type == ResourceType::METAL) {
+			// Metal event creation would go here
+			// For now, return null event
+			return Event(nullptr, resource_);
+		}
+#endif
+
+		// Host or unsupported device
+		return Event(nullptr, resource_);
+	}
+
+public:
 
 #ifdef USE_METAL
 	/**
@@ -615,11 +773,14 @@ class USMBuffer : public Buffer<T, Policy> {
 			  const std::vector<Resource>& resources,
 			  void* queue = nullptr,
 			  bool sync = true)
-		: Buffer<T, Policy>(capacity,
+		: Buffer<T, Policy>(capacity,  // Allocate capacity amount of memory
 							resources.empty() ? Resource{} : resources.front(),
 							queue,
 							sync),
-		  devices_(resources), capacity_(capacity), size_(count) {}
+		  devices_(resources), capacity_(capacity), size_(count) {
+		// Override the Buffer's internal count to reflect actual size, not capacity
+		this->count_ = count;
+	}
 
 	// Existing single-device helpers
 	void prefetch(int device_id = -1, void* queue = nullptr) {

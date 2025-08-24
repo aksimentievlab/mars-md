@@ -116,6 +116,7 @@ struct PinnedPolicy {
 								 void* queue = nullptr) {
 		auto& q = queue ? *static_cast<sycl::queue*>(queue) : Manager::get_current_queue().get();
 		SYCL_CHECK(q.memcpy(device_dst, pinned_src, bytes));
+		SYCL_CHECK(q.wait_and_throw());  // Ensure operation completes
 	}
 
 	static void download_from_device(void* pinned_dst,
@@ -125,6 +126,7 @@ struct PinnedPolicy {
 									 void* queue = nullptr) {
 		auto& q = queue ? *static_cast<sycl::queue*>(queue) : Manager::get_current_queue().get();
 		SYCL_CHECK(q.memcpy(pinned_dst, device_src, bytes));
+		SYCL_CHECK(q.wait_and_throw());  // Ensure operation completes
 	}
 
 	static void copy_from_host(void* pinned_dst,

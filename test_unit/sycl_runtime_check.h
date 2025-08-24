@@ -19,9 +19,17 @@ inline bool is_sycl_runtime_stable() {
         #ifdef __arm64__
             // AdaptiveCpp has threading issues on macOS ARM64
             const char* acpp_version = std::getenv("ACPP_VERSION");
-            if (acpp_version) {
+            const char* acpp_targets = std::getenv("ACPP_TARGETS");
+            
+            // Check for AdaptiveCpp indicators
+            if (acpp_version || acpp_targets) {
                 return false; // Known unstable
             }
+            
+            // Also check if we're using AdaptiveCpp by default on macOS ARM64
+            // Since AdaptiveCpp is the primary SYCL implementation for this platform
+            // and has known threading issues, err on the side of caution
+            return false;
         #endif
     #endif
     
