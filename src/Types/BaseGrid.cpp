@@ -7,7 +7,7 @@
  * @author Original: Jeff Comer <jcomer2@illinois.edu>
  * @author V2 Port: Pin-Yi Li with Claude 4.0 Sonnet
  *********************************************************************/
-#if !defined(__METAL_VERSION__) && !defined(__SYCL_DEVICE_ONLY__) && !defined(__CUDA_ARCH__)
+#ifdef HOST_GUARD
 #include "BaseGrid.h"
 #include "ARBDException.h"
 #include "ARBDLogger.h"
@@ -15,9 +15,9 @@
 #include <array>
 #include <cctype>
 #include <cstdio>
+#include <sstream>
 #include <string>
 #include <string_view>
-#include <sstream>
 
 namespace ARBD {
 

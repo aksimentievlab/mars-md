@@ -2,9 +2,9 @@
 #ifdef USE_SYCL
 #include "../Buffer.h"
 #include "../Events.h"
-#include "../Header.h"
 #include "../KernelConfig.h"
 #include "../Resource.h"
+#include "Header.h"
 #include "SYCLManager.h"
 #include <sycl/sycl.hpp>
 
@@ -20,7 +20,7 @@ Event launch_sycl_kernel(const Resource& resource,
 						 const KernelConfig& config,
 						 Functor kernel_func,
 						 Args... args) {
-	
+
 	// Auto-configure if needed
 	KernelConfig local_config = config;
 	local_config.auto_configure(thread_count, resource);
@@ -35,9 +35,7 @@ Event launch_sycl_kernel(const Resource& resource,
 	sycl::queue& queue = queue_wrapper_ptr->get();
 
 	// Pre-extract all buffer pointers to avoid capture issues
-	auto extracted_ptr_args = [&](){
-		return std::make_tuple(get_buffer_pointer(args)...);
-	}();
+	auto extracted_ptr_args = [&]() { return std::make_tuple(get_buffer_pointer(args)...); }();
 
 	// Submit kernel with dependency handling
 	auto sycl_event = queue.submit([&](sycl::handler& h) {
@@ -51,9 +49,7 @@ Event launch_sycl_kernel(const Resource& resource,
 			idx_t i = item.get_global_id(0);
 			if (i < thread_count) {
 				// Apply pre-extracted arguments - minimal overhead
-				std::apply([&](auto... ptrs) {
-					kernel_func(i, ptrs...);
-				}, extracted_ptr_args);
+				std::apply([&](auto... ptrs) { kernel_func(i, ptrs...); }, extracted_ptr_args);
 			}
 		});
 	});
@@ -104,14 +100,14 @@ Event launch_sycl_kernel(const Resource& resource,
 		auto output_ptrs = get_buffer_tuples(outputs);
 
 		// Combine all arguments
-		auto all_args = std::tuple_cat(input_ptrs, output_ptrs, std::make_tuple(std::forward<Args>(args)...));
+		auto all_args =
+			std::tuple_cat(input_ptrs, output_ptrs, std::make_tuple(std::forward<Args>(args)...));
 
 		h.parallel_for(execution_range, [=](sycl::nd_item<1> item) {
 			idx_t i = item.get_global_id(0);
 			if (i < thread_count) {
-				std::apply([&](auto&&... unpacked_args) { 
-					kernel_func(i, unpacked_args...);
-				}, all_args);
+				std::apply([&](auto&&... unpacked_args) { kernel_func(i, unpacked_args...); },
+						   all_args);
 			}
 		});
 	});

@@ -3,8 +3,8 @@
 #include <cstdio>
 #include <iostream>
 #include <memory>
-#include <string>
 #include <mutex>
+#include <string>
 
 // Include backend-specific headers
 #ifdef USE_CUDA
@@ -28,8 +28,8 @@
 #include "Backend/Buffer.h"
 #include "Backend/Events.h"
 #include "Backend/Resource.h"
-#include "Math/TypeName.h"
-#include "Math/Types.h"
+#include "Types/TypeName.h"
+#include "Types/Types.h"
 
 // Use Catch2 v3 amalgamated header (self-contained)
 
@@ -60,7 +60,7 @@ __global__ void cuda_op_kernel(R* result, T... args) {
 
 /**
  * @brief Unified backend manager for test execution across different compute backends
- * 
+ *
  * Singleton pattern to ensure SYCL is only initialized once across all tests
  */
 class TestBackendManager {
@@ -176,7 +176,8 @@ class TestBackendManager {
 	template<typename R>
 	R* allocate_device_memory(size_t count) {
 		if (!initialized_) {
-			std::cerr << "Warning: Backend not initialized, skipping memory allocation" << std::endl;
+			std::cerr << "Warning: Backend not initialized, skipping memory allocation"
+					  << std::endl;
 			return nullptr;
 		}
 #ifdef USE_CUDA
@@ -204,9 +205,10 @@ class TestBackendManager {
 	void free_device_memory(R* ptr) {
 		if (!ptr)
 			return;
-		
+
 		if (!initialized_) {
-			std::cerr << "Warning: Backend not initialized, skipping memory deallocation" << std::endl;
+			std::cerr << "Warning: Backend not initialized, skipping memory deallocation"
+					  << std::endl;
 			return;
 		}
 
@@ -411,6 +413,6 @@ struct DivOp {
 // =============================================================================
 
 namespace Tests {
-	inline TestBackendManager* TestBackendManager::instance_ = nullptr;
-	inline std::mutex TestBackendManager::mutex_;
+inline TestBackendManager* TestBackendManager::instance_ = nullptr;
+inline std::mutex TestBackendManager::mutex_;
 } // namespace Tests

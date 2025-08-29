@@ -5,7 +5,7 @@
  * using column-major layout for cross-platform GPU compatibility.
  *********************************************************************/
 #pragma once
-#include "Backend/Header.h"
+#include "Header.h"
 
 #ifdef __METAL_VERSION__
 #include "METAL/Matrix3.h"

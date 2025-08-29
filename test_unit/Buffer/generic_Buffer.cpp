@@ -1,7 +1,7 @@
 #include "../catch_boiler.h"
 #include "Backend/Buffer.h"
 #include "Backend/Resource.h"
-#include "Math/Vector3.h"
+#include "Types/Vector3.h"
 
 #include <chrono>
 #include <cmath>
@@ -18,8 +18,6 @@ constexpr size_t VECTOR_BUFFER_SIZE = 1024;
 constexpr size_t GRID_SIZE_X = 16;
 constexpr size_t GRID_SIZE_Y = 16;
 constexpr size_t GRID_SIZE_Z = 16;
-
-
 
 // ============================================================================
 // Backend Initialization Fixture
@@ -129,7 +127,7 @@ TEST_CASE_METHOD(BackendInitFixture,
 				 "Vector3_t Buffer Host-Device Transfer",
 				 "[Generic][vector3][transfer]") {
 	// Skip buffer transfer tests on macOS when using SYCL due to unified memory architecture
-	//skip_if_sycl_on_macos();
+	// skip_if_sycl_on_macos();
 
 	SECTION("Vector3_t<float> host to device to host") {
 		Resource resource = Resource::Local();
@@ -185,7 +183,9 @@ TEST_CASE_METHOD(BackendInitFixture,
 	}
 }
 
-TEST_CASE_METHOD(BackendInitFixture, "Vector3_t Buffer Move Semantics", "[Generic][vector3][move]") {
+TEST_CASE_METHOD(BackendInitFixture,
+				 "Vector3_t Buffer Move Semantics",
+				 "[Generic][vector3][move]") {
 
 	SECTION("Move constructor") {
 		Resource resource = Resource::Local();

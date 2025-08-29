@@ -12,15 +12,15 @@
 #pragma once
 #include "Backend/Buffer.h"
 #include "Backend/Events.h"
-#include "Backend/Header.h"
 #include "Backend/Kernels.h"
 #include "Backend/Resource.h"
+#include "Header.h"
 #include "NanoGridKernels.h"
 #include "nanovdb/GridHandle.h"
 #include "nanovdb/HostBuffer.h"
 #include "nanovdb/NanoVDB.h"
-#include "nanovdb/math/Stencils.h"
 #include "nanovdb/io/IO.h"
+#include "nanovdb/math/Stencils.h"
 
 namespace nanovdb {
 template<typename T, typename Policy>
@@ -39,38 +39,35 @@ using GridHandle = nanovdb::GridHandle<BufferT>;
 
 template<typename BufferT = DeviceBuffer<uint8_t>>
 class NanoGridAdapter {
-private:
+  private:
 	nanovdb::GridHandle<nanovdb::HostBuffer> nvdb_handle_;
 	BufferT arbd_buffer_;
 	Resource resource_;
 
-public:
+  public:
 	/**
 	 * @brief Create adapter from existing NanoVDB GridHandle
 	 */
-	explicit NanoGridAdapter(nanovdb::GridHandle<nanovdb::HostBuffer>&& handle, 
-						   const Resource& resource)
+	explicit NanoGridAdapter(nanovdb::GridHandle<nanovdb::HostBuffer>&& handle,
+							 const Resource& resource)
 		: nvdb_handle_(std::move(handle)), resource_(resource) {
-		
+
 		// Copy grid data to ARBD buffer for cross-backend access
 		size_t total_size = nvdb_handle_.bufferSize();
 		arbd_buffer_.resize(total_size, resource_);
-		arbd_buffer_.copy_from_host(
-			reinterpret_cast<const uint8_t*>(nvdb_handle_.data()), 
-			total_size
-		);
+		arbd_buffer_.copy_from_host(reinterpret_cast<const uint8_t*>(nvdb_handle_.data()),
+									total_size);
 	}
 
 	/**
 	 * @brief Load grid from file using NanoVDB I/O
 	 */
-	static NanoGridAdapter from_file(const std::string& filename, 
-								   const std::string& grid_name = "",
-								   const Resource& resource = get_best_available_resource()) {
-		auto handle = grid_name.empty() ? 
-			nanovdb::io::readGrid(filename) :
-			nanovdb::io::readGrid(filename, grid_name);
-			
+	static NanoGridAdapter from_file(const std::string& filename,
+									 const std::string& grid_name = "",
+									 const Resource& resource = get_best_available_resource()) {
+		auto handle = grid_name.empty() ? nanovdb::io::readGrid(filename)
+										: nanovdb::io::readGrid(filename, grid_name);
+
 		return NanoGridAdapter(std::move(handle), resource);
 	}
 
@@ -85,21 +82,28 @@ public:
 	/**
 	 * @brief Get ARBD buffer for kernel operations
 	 */
-	BufferT& buffer() { return arbd_buffer_; }
-	const BufferT& buffer() const { return arbd_buffer_; }
+	BufferT& buffer() {
+		return arbd_buffer_;
+	}
+	const BufferT& buffer() const {
+		return arbd_buffer_;
+	}
 
 	/**
 	 * @brief Get device pointer to grid data for kernels
 	 */
 	template<typename ValueT>
-	DEVICE_PTR(nanovdb::NanoGrid<ValueT>) device_grid() const {
+	DEVICE_PTR(nanovdb::NanoGrid<ValueT>)
+	device_grid() const {
 		return reinterpret_cast<DEVICE_PTR(nanovdb::NanoGrid<ValueT>)>(arbd_buffer_.data());
 	}
 
 	/**
 	 * @brief Get resource this adapter is allocated on
 	 */
-	const Resource& resource() const { return resource_; }
+	const Resource& resource() const {
+		return resource_;
+	}
 
 	/**
 	 * @brief Sync data back to host if needed
@@ -107,15 +111,16 @@ public:
 	void sync_to_host() {
 		std::vector<uint8_t> temp_data(arbd_buffer_.size());
 		arbd_buffer_.copy_to_host(temp_data.data(), arbd_buffer_.size());
-		
+
 		// Copy back to NanoVDB handle
-		std::memcpy(const_cast<void*>(nvdb_handle_.data()), 
-				   temp_data.data(), temp_data.size());
+		std::memcpy(const_cast<void*>(nvdb_handle_.data()), temp_data.data(), temp_data.size());
 	}
 
-	size_t size() const { return arbd_buffer_.size(); }
+	size_t size() const {
+		return arbd_buffer_.size();
+	}
 
-private:
+  private:
 	static Resource get_best_available_resource() {
 #ifdef USE_CUDA
 		try {
@@ -123,19 +128,22 @@ private:
 			if (cudaGetDevice(&device) == cudaSuccess) {
 				return Resource{ResourceType::CUDA, static_cast<size_t>(device)};
 			}
-		} catch (...) {}
+		} catch (...) {
+		}
 #endif
 #ifdef USE_SYCL
 		try {
 			auto& current_device = SYCL::Manager::get_current_device();
 			return Resource{ResourceType::SYCL, static_cast<size_t>(current_device.id())};
-		} catch (...) {}
+		} catch (...) {
+		}
 #endif
 #ifdef USE_METAL
 		try {
 			auto& current_device = METAL::Manager::get_current_device();
 			return Resource{ResourceType::METAL, static_cast<size_t>(current_device.id())};
-		} catch (...) {}
+		} catch (...) {
+		}
 #endif
 		return Resource{ResourceType::CPU, 0};
 	}
@@ -184,58 +192,61 @@ class NanoGrid {
 	// --- Stencil Operations ---
 	template<typename ValueT, typename CoordT>
 	Event compute_gradients(const DeviceBuffer<CoordT>& coords,
-						   DeviceBuffer<nanovdb::math::Vec3<ValueT>>& results,
-						   const nanovdb::NanoGrid<ValueT>* grid,
-						   const KernelConfig& config = KernelConfig{}) {
-		
+							DeviceBuffer<nanovdb::math::Vec3<ValueT>>& results,
+							const nanovdb::NanoGrid<ValueT>* grid,
+							const KernelConfig& config = KernelConfig{}) {
+
 		size_t num_points = coords.size();
 		results.resize(num_points, resource_);
-		
-		GradientStencilFunctor<ValueT, CoordT> func{
-			grid, coords.data(), results.data(), num_points
-		};
-		
+
+		GradientStencilFunctor<ValueT, CoordT> func{grid,
+													coords.data(),
+													results.data(),
+													num_points};
+
 		auto inputs = std::make_tuple(grid, coords.data(), results.data(), num_points);
 		auto outputs = std::make_tuple(results.data());
-		
+
 		return launch_kernel(resource_, num_points, config, inputs, outputs, func);
 	}
 
 	template<typename ValueT, typename CoordT>
 	Event compute_laplacians(const DeviceBuffer<CoordT>& coords,
-							DeviceBuffer<ValueT>& results,
-							const nanovdb::NanoGrid<ValueT>* grid,
-							const KernelConfig& config = KernelConfig{}) {
-		
+							 DeviceBuffer<ValueT>& results,
+							 const nanovdb::NanoGrid<ValueT>* grid,
+							 const KernelConfig& config = KernelConfig{}) {
+
 		size_t num_points = coords.size();
 		results.resize(num_points, resource_);
-		
-		LaplacianStencilFunctor<ValueT, CoordT> func{
-			grid, coords.data(), results.data(), num_points
-		};
-		
+
+		LaplacianStencilFunctor<ValueT, CoordT> func{grid,
+													 coords.data(),
+													 results.data(),
+													 num_points};
+
 		auto inputs = std::make_tuple(grid, coords.data(), results.data(), num_points);
 		auto outputs = std::make_tuple(results.data());
-		
+
 		return launch_kernel(resource_, num_points, config, inputs, outputs, func);
 	}
 
 	template<typename ValueT, typename PosT>
 	Event interpolate_values(const DeviceBuffer<PosT>& positions,
-							DeviceBuffer<ValueT>& results,
-							const nanovdb::NanoGrid<ValueT>* grid,
-							const KernelConfig& config = KernelConfig{}) {
-		
+							 DeviceBuffer<ValueT>& results,
+							 const nanovdb::NanoGrid<ValueT>* grid,
+							 const KernelConfig& config = KernelConfig{}) {
+
 		size_t num_points = positions.size();
 		results.resize(num_points, resource_);
-		
-		TrilinearInterpolationFunctor<ValueT, PosT> func{
-			grid, positions.data(), results.data(), num_points
-		};
-		
+
+		TrilinearInterpolationFunctor<ValueT, PosT> func{grid,
+														 positions.data(),
+														 results.data(),
+														 num_points};
+
 		auto inputs = std::make_tuple(grid, positions.data(), results.data(), num_points);
 		auto outputs = std::make_tuple(results.data());
-		
+
 		return launch_kernel(resource_, num_points, config, inputs, outputs, func);
 	}
 };

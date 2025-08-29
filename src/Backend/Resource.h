@@ -1,5 +1,6 @@
 #pragma once
 
+#include "ARBDException.h"
 #include "Header.h"
 #ifdef USE_CUDA
 #include "Backend/CUDA/CUDAManager.h"
@@ -14,8 +15,7 @@
 #include "Backend/METAL/METALManager.h"
 #endif
 
-#ifndef __METAL_VERSION__
-#include "ARBDException.h"
+#ifdef HOST_GUARD
 #include <vector>
 #endif
 

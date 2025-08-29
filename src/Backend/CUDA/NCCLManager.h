@@ -283,7 +283,6 @@ class NCCLManager {
 				  stream_id);
 	}
 
-
   private:
 	/**
 	 * @brief Convert C++ type to NCCL data type

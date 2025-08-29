@@ -2,9 +2,9 @@
 #include "Backend/Events.h"
 #include "Backend/Kernels.h"
 #include "Backend/Resource.h"
-#include "Math/Types.h"
-#include "Math/Vector3.h"
 #include "Random/Random.h"
+#include "Types/Types.h"
+#include "Types/Vector3.h"
 #include <cmath>
 #include <numeric>
 #include <vector>
@@ -33,7 +33,6 @@ inline double calculate_correlation(const std::vector<float>& x, const std::vect
 	return (denominator > 1e-10) ? (numerator / denominator) : 0.0;
 }
 
-
 struct TransformKernel {
 	HOST DEVICE void operator()(size_t i, const float* input, float* output) const {
 		// Transform: y = 2*x + 1
@@ -49,12 +48,6 @@ struct CombineKernel {
 	}
 };
 
-// template<typename... Args>
-// HOST DEVICE void operator()(size_t i, Args... args) const {
-
-// 	auto tuple_args = std::make_tuple(args...);
-// 	auto* input = std::get<0>(tuple_args);
-// 	auto* output = std::get<1>(tuple_args);
 // ============================================================================
 // Kernel Functors for Profiling Tests
 // ============================================================================
@@ -105,7 +98,7 @@ struct CalculateDistancesKernel {
 	HOST DEVICE void
 	operator()(size_t i, const ARBD::Vector3_t<float>* positions, float* distances) const {
 		ARBD::Vector3_t<float> pos = positions[i];
-		distances[i] = std::sqrt(pos.x * pos.x + pos.y * pos.y + pos.z * pos.z);
+		distances[i] = pos.length();
 	}
 };
 

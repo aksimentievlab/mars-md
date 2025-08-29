@@ -5,8 +5,8 @@
 #include "Backend/METAL/METALManager.h"
 #include "Backend/Resource.h"
 #include "Kernel_for_test.h"
-#include "Math/Types.h"
 #include "Random/Random.h"
+#include "Types/Types.h"
 #include <algorithm>
 #include <cmath>
 #include <numeric>
@@ -16,11 +16,11 @@ using namespace ARBD;
 using Catch::Approx;
 
 // Helper: Check if Metal is available, else skip
-#define REQUIRE_METAL_OR_SKIP() \
-    ARBD::METAL::Manager::load_info(); \
-    if (!ARBD::METAL::Manager::get_library()) { \
-        SKIP("Metal library not loaded - skipping Metal kernel test"); \
-    }
+#define REQUIRE_METAL_OR_SKIP()                                        \
+	ARBD::METAL::Manager::load_info();                                 \
+	if (!ARBD::METAL::Manager::get_library()) {                        \
+		SKIP("Metal library not loaded - skipping Metal kernel test"); \
+	}
 
 // Fix Vector3 type usage - Vector3 is defined as Vector3_t<float> in Types.h
 
@@ -175,14 +175,12 @@ TEST_CASE_METHOD(MetalRandomTestFixture,
 			auto inputs = std::make_tuple(random_buffer);
 			auto outputs = std::forward_as_tuple(processed_buffer);
 
-			Event process_event = launch_metal_kernel(
-				resource,
-				TEST_SIZE,
-				inputs,
-				outputs,
-				config,
-				"transform_kernel"
-			);
+			Event process_event = launch_metal_kernel(resource,
+													  TEST_SIZE,
+													  inputs,
+													  outputs,
+													  config,
+													  "transform_kernel");
 
 			process_event.wait();
 
@@ -269,14 +267,8 @@ TEST_CASE_METHOD(MetalRandomTestFixture,
 			auto outputs = std::forward_as_tuple(combined_buffer);
 
 			// Simple combination: 70% uniform + 30% gaussian
-			Event combine_event = launch_metal_kernel(
-				resource,
-				TEST_SIZE,
-				inputs,
-				outputs,
-				config,
-				"combine_kernel"
-			);
+			Event combine_event =
+				launch_metal_kernel(resource, TEST_SIZE, inputs, outputs, config, "combine_kernel");
 
 			combine_event.wait();
 
@@ -631,7 +623,9 @@ TEST_CASE_METHOD(MetalRandomTestFixture,
 // Error Handling and Edge Cases - Metal Backend
 // ============================================================================
 
-TEST_CASE_METHOD(MetalRandomTestFixture, "Metal Random Error Handling", "[random][error][edge_cases][metal]"){
+TEST_CASE_METHOD(MetalRandomTestFixture,
+				 "Metal Random Error Handling",
+				 "[random][error][edge_cases][metal]"){
 
 	SECTION("Invalid resource handling"){
 		Resource invalid_resource(ResourceType::CPU,

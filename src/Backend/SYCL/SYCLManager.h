@@ -3,7 +3,7 @@
 #ifdef USE_SYCL
 #include "ARBDException.h"
 #include "ARBDLogger.h"
-#include "Backend/Header.h"
+#include "Header.h"
 #include <array>
 #include <chrono>
 #include <iostream>

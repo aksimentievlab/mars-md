@@ -9,7 +9,7 @@
  *********************************************************************/
 #pragma once
 
-#if !defined(__METAL_VERSION__) && !defined(__SYCL_DEVICE_ONLY__) && !defined(__CUDA_ARCH__)
+#ifdef HOST_GUARD
 #include "ARBDException.h"
 #include "ARBDLogger.h"
 #include <algorithm>
@@ -18,14 +18,14 @@
 #include <span>
 #include <string_view>
 #include <vector>
-#endif
+#endif // HOST_GUARD
 
-#include "Backend/Header.h"
+#include "Header.h"
 #include "IO/FileHandle.h"
-#include "Math/IndexList.h"
-#include "Math/Matrix3.h"
-#include "Math/Types.h"
-#include "Math/Vector3.h"
+#include "IndexList.h"
+#include "Matrix3.h"
+#include "Types.h"
+#include "Vector3.h"
 
 namespace ARBD {
 

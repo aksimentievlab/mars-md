@@ -4,7 +4,6 @@
 #include "Backend/Profiler.h"
 #include "Backend/Resource.h"
 #include "Kernel_for_test.h"
-#include "Math/Types.h"
 #include "Random/Random.h"
 #include <algorithm>
 #include <chrono>
@@ -14,7 +13,7 @@
 
 using namespace ARBD;
 using namespace ARBD::Profiling;
-//using Catch::Approx;
+// using Catch::Approx;
 using Catch::Matchers::WithinAbs;
 
 // Backend initialization helper - only initialize if not already done

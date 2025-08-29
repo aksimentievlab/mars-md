@@ -19,11 +19,11 @@
 #endif
 
 #ifdef __METAL_VERSION__
-#include <metal_stdlib>
 #include <metal_atomic>
+#include <metal_stdlib>
 #endif
 
-#if !defined(__METAL_VERSION__) && !defined(__SYCL_DEVICE_ONLY__) && !defined(__CUDA_ARCH__)
+#ifdef HOST_GUARD
 #include <cassert>
 #include <climits>
 #include <cstdio>
@@ -45,7 +45,8 @@ HOST DEVICE inline void atomic_or(T* addr, T val) {
 #elif defined(__SYCL_DEVICE_ONLY__)
 	// SYCL atomic operations need proper address space qualification
 	if (addr != nullptr) {
-		sycl::atomic_ref<T, sycl::memory_order::relaxed, sycl::memory_scope::device>(*addr).fetch_or(val);
+		sycl::atomic_ref<T, sycl::memory_order::relaxed, sycl::memory_scope::device>(*addr)
+			.fetch_or(val);
 	}
 #elif defined(__METAL_VERSION__)
 	// Metal doesn't have built-in atomic OR, so we use compare-and-swap
@@ -53,8 +54,11 @@ HOST DEVICE inline void atomic_or(T* addr, T val) {
 	do {
 		old_val = *addr;
 		new_val = old_val | val;
-	} while (!atomic_compare_exchange_weak_explicit(addr, &old_val, new_val, 
-		std::memory_order_relaxed, std::memory_order_relaxed));
+	} while (!atomic_compare_exchange_weak_explicit(addr,
+													&old_val,
+													new_val,
+													std::memory_order_relaxed,
+													std::memory_order_relaxed));
 #else
 	// Host fallback - not atomic but safe for single-threaded host code
 	*addr |= val;
@@ -71,7 +75,8 @@ HOST DEVICE inline void atomic_and(T* addr, T val) {
 #elif defined(__SYCL_DEVICE_ONLY__)
 	// SYCL atomic operations need proper address space qualification
 	if (addr != nullptr) {
-		sycl::atomic_ref<T, sycl::memory_order::relaxed, sycl::memory_scope::device>(*addr).fetch_and(val);
+		sycl::atomic_ref<T, sycl::memory_order::relaxed, sycl::memory_scope::device>(*addr)
+			.fetch_and(val);
 	}
 #elif defined(__METAL_VERSION__)
 	// Metal doesn't have built-in atomic AND, so we use compare-and-swap
@@ -79,8 +84,11 @@ HOST DEVICE inline void atomic_and(T* addr, T val) {
 	do {
 		old_val = *addr;
 		new_val = old_val & val;
-	} while (!atomic_compare_exchange_weak_explicit(addr, &old_val, new_val, 
-		std::memory_order_relaxed, std::memory_order_relaxed));
+	} while (!atomic_compare_exchange_weak_explicit(addr,
+													&old_val,
+													new_val,
+													std::memory_order_relaxed,
+													std::memory_order_relaxed));
 #else
 	// Host fallback - not atomic but safe for single-threaded host code
 	*addr &= val;
@@ -92,7 +100,7 @@ HOST DEVICE inline void atomic_and(T* addr, T val) {
 // Device-safe bitmask implementation
 /**
  * @brief Device-safe bitmask class with proper backend support
- * 
+ *
  * This class addresses the critical device safety issues:
  * - Proper atomic operations for all backends
  * - Correct address space qualifiers
@@ -100,14 +108,14 @@ HOST DEVICE inline void atomic_and(T* addr, T val) {
  * - Thread-safe operations
  */
 class Bitmask {
-public:
+  public:
 	typedef size_t idx_t;
 	typedef unsigned int data_t;
 
-private:
+  private:
 	idx_t len;
 	const static idx_t data_stride = CHAR_BIT * sizeof(data_t) / sizeof(char);
-	
+
 	// Backend-specific pointer types with proper address space qualifiers
 #ifdef __METAL_VERSION__
 	device data_t* __restrict__ mask;
@@ -115,13 +123,13 @@ private:
 	data_t* __restrict__ mask;
 #endif
 
-public:
+  public:
 	/**
 	 * @brief Constructor for device-safe bitmask
 	 * @param length Number of bits in the mask
 	 * @param device_mask Pointer to pre-allocated device memory (nullptr for host-only)
 	 */
-	HOST DEVICE Bitmask(const idx_t length, data_t* device_mask = nullptr) 
+	HOST DEVICE Bitmask(const idx_t length, data_t* device_mask = nullptr)
 		: len(length), mask(device_mask) {
 		// No allocation in device code - memory must be pre-allocated
 #if !defined(__METAL_VERSION__) && !defined(__SYCL_DEVICE_ONLY__) && !defined(__CUDA_ARCH__)
@@ -153,12 +161,12 @@ public:
 	HOST DEVICE void set_mask(idx_t i, bool value) {
 		assert(i < len);
 		assert(mask != nullptr); // Device safety check
-		
+
 		// Additional safety check for corrupted pointers
 		if (mask == nullptr || mask == reinterpret_cast<data_t*>(0x4110000041000000)) {
 			return; // Skip operation if pointer is corrupted
 		}
-		
+
 		idx_t ci = i / data_stride;
 		data_t change_bit = (data_t(1) << (i - ci * data_stride));
 
@@ -177,12 +185,12 @@ public:
 	HOST DEVICE bool get_mask(const idx_t i) const {
 		assert(i < len);
 		assert(mask != nullptr); // Device safety check
-		
+
 		// Additional safety check for corrupted pointers
 		if (mask == nullptr || mask == reinterpret_cast<data_t*>(0x4110000041000000)) {
 			return false; // Return false if pointer is corrupted
 		}
-		
+
 		const idx_t ci = i / data_stride;
 		return (mask[ci] & (data_t(1) << (i - ci * data_stride))) != 0;
 	}
@@ -322,7 +330,8 @@ public:
 
 		// Allocate device memory for the Bitmask object itself
 		if (device_obj == nullptr) {
-			device_obj = static_cast<Bitmask*>(ARBD::BackendPolicy::allocate(resource, sizeof(Bitmask)));
+			device_obj =
+				static_cast<Bitmask*>(ARBD::BackendPolicy::allocate(resource, sizeof(Bitmask)));
 		}
 
 		// Allocate and copy mask data if needed
@@ -387,7 +396,8 @@ public:
 			// Free the device mask data if it exists and is valid
 			if (obj_tmp.len > 0 && obj_tmp.mask != nullptr) {
 				// Validate pointer before deallocation
-				if (obj_tmp.mask != reinterpret_cast<data_t*>(0x4110000041000000)) { // Check for corrupted pointer
+				if (obj_tmp.mask !=
+					reinterpret_cast<data_t*>(0x4110000041000000)) { // Check for corrupted pointer
 					ARBD::BackendPolicy::deallocate(obj_tmp.mask);
 				}
 			}
@@ -401,7 +411,7 @@ public:
 		} catch (const std::exception& e) {
 			// Log the error but don't throw from cleanup
 			LOGWARN("Warning: Failed to cleanup device Bitmask properly: {}", e.what());
-			
+
 			// Try to free the device object even if mask cleanup failed
 			try {
 				ARBD::BackendPolicy::deallocate(device_obj);
@@ -424,7 +434,7 @@ public:
 	}
 #endif
 
-private:
+  private:
 	// Disable default constructor to prevent unsafe usage
 	Bitmask() = delete;
 };
@@ -438,7 +448,7 @@ private:
  * @brief Base class for bitmask implementations
  */
 class BitmaskBase {
-public:
+  public:
 	BitmaskBase(const size_t len) : len(len) {}
 	virtual ~BitmaskBase() = default;
 
@@ -456,20 +466,20 @@ public:
 		LOGINFO("\n");
 	}
 
-protected:
+  protected:
 	size_t len;
 };
 
 /**
  * @brief Device-safe sparse bitmask implementation for large sparse bit arrays
- * 
+ *
  * This implementation uses a fixed-size array of chunk pointers instead of std::map
  * to ensure device compatibility. The trade-off is that it has a maximum number
  * of chunks, but this is typically sufficient for most use cases.
  */
 template<size_t chunk_size = 64, size_t max_chunks = 1024>
 class SparseBitmask : public BitmaskBase {
-public:
+  public:
 	typedef typename Bitmask::data_t chunk_data_t;
 	typedef typename Bitmask::idx_t idx_t;
 
@@ -477,7 +487,7 @@ public:
 		: BitmaskBase(len), meta_len((len - 1) / chunk_size + 1), meta_mask(meta_len) {
 		static_assert(chunk_size > 0, "Chunk size must be positive");
 		static_assert(max_chunks > 0, "Max chunks must be positive");
-		
+
 		// Initialize chunk pointers to nullptr
 		for (size_t i = 0; i < max_chunks; ++i) {
 			chunk_ptrs[i] = nullptr;
@@ -513,7 +523,7 @@ public:
 			if (value) {
 				// Need to create chunk
 				meta_mask.set_mask(chunk_idx, true);
-				
+
 				// Allocate new chunk (host-only operation)
 #if !defined(__METAL_VERSION__) && !defined(__SYCL_DEVICE_ONLY__) && !defined(__CUDA_ARCH__)
 				chunk_ptrs[chunk_idx] = new Bitmask(chunk_size);
@@ -606,18 +616,18 @@ public:
 		MemoryStats stats = {0, 0, 0, 0};
 		stats.allocated_chunks = get_allocated_chunks();
 		stats.total_bits = len;
-		
+
 		// Count used bits
 		for (size_t i = 0; i < len; ++i) {
 			if (get_mask(i)) {
 				++stats.used_bits;
 			}
 		}
-		
+
 		// Calculate memory usage
-		stats.memory_bytes = sizeof(SparseBitmask) + 
-			stats.allocated_chunks * chunk_size * sizeof(chunk_data_t) / 8;
-		
+		stats.memory_bytes =
+			sizeof(SparseBitmask) + stats.allocated_chunks * chunk_size * sizeof(chunk_data_t) / 8;
+
 		return stats;
 	}
 
@@ -637,7 +647,7 @@ public:
 	/**
 	 * @brief Copy constructor
 	 */
-	SparseBitmask(const SparseBitmask& other) 
+	SparseBitmask(const SparseBitmask& other)
 		: BitmaskBase(other.len), meta_len(other.meta_len), meta_mask(other.meta_mask) {
 		// Copy chunk pointers
 		for (size_t i = 0; i < max_chunks; ++i) {
@@ -656,12 +666,12 @@ public:
 		if (this != &other) {
 			// Clean up existing chunks
 			clear();
-			
+
 			// Copy from other
 			len = other.len;
 			meta_len = other.meta_len;
 			meta_mask = other.meta_mask;
-			
+
 			// Copy chunk pointers
 			for (size_t i = 0; i < max_chunks; ++i) {
 				if (other.chunk_ptrs[i] != nullptr) {
@@ -677,7 +687,7 @@ public:
 	/**
 	 * @brief Move constructor
 	 */
-	SparseBitmask(SparseBitmask&& other) noexcept 
+	SparseBitmask(SparseBitmask&& other) noexcept
 		: BitmaskBase(other.len), meta_len(other.meta_len), meta_mask(std::move(other.meta_mask)) {
 		// Move chunk pointers
 		for (size_t i = 0; i < max_chunks; ++i) {
@@ -695,27 +705,27 @@ public:
 		if (this != &other) {
 			// Clean up existing chunks
 			clear();
-			
+
 			// Move from other
 			len = other.len;
 			meta_len = other.meta_len;
 			meta_mask = std::move(other.meta_mask);
-			
+
 			// Move chunk pointers
 			for (size_t i = 0; i < max_chunks; ++i) {
 				chunk_ptrs[i] = other.chunk_ptrs[i];
 				other.chunk_ptrs[i] = nullptr;
 			}
-			
+
 			other.len = 0;
 			other.meta_len = 0;
 		}
 		return *this;
 	}
 
-private:
+  private:
 	size_t meta_len;
-	Bitmask meta_mask;				  // Tracks which chunks are allocated
+	Bitmask meta_mask;				 // Tracks which chunks are allocated
 	Bitmask* chunk_ptrs[max_chunks]; // Fixed-size array of chunk pointers (device-safe)
 };
 #endif

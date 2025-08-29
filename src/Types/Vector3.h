@@ -4,8 +4,8 @@
  * @brief Declaration of templated Vector3_t class with conditional Metal support.
  *********************************************************************/
 #pragma once
+#include "Header.h"
 
-#include "Backend/Header.h"
 // Metal-specific implementation
 #ifdef __METAL_VERSION__
 #include "METAL/Vector3.h"

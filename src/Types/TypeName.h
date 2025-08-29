@@ -1,5 +1,5 @@
 #pragma once
-#if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__) && !defined(__METAL_VERSION__)
+#ifdef HOST_GUARD
 #include <cstdlib>
 #include <memory>
 #include <string>
@@ -11,7 +11,7 @@
 #else
 #define HAS_CXXABI 0
 #endif
-#include "Backend/Header.h"
+#include "Header.h"
 
 namespace ARBD {
 

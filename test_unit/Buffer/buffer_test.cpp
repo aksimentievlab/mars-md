@@ -1,6 +1,6 @@
 #include "../catch_boiler.h"
 #include "Backend/Buffer.h"
-#include "Math/Vector3.h"
+#include "Types/Vector3.h"
 
 #ifdef USE_CUDA
 #include "Backend/CUDA/CUDAManager.h"
@@ -390,7 +390,9 @@ TEST_CASE_METHOD(BackendInitFixture, "Buffer Copy To Host", "[buffer_test][copy_
 // Device to Device Copy Tests
 // ============================================================================
 
-TEST_CASE_METHOD(BackendInitFixture, "Buffer Device to Device Copy", "[buffer_test][device_to_device]") {
+TEST_CASE_METHOD(BackendInitFixture,
+				 "Buffer Device to Device Copy",
+				 "[buffer_test][device_to_device]") {
 
 	SECTION("Copy int data device to device") {
 		DeviceBuffer<int> src_buffer(MEDIUM_BUFFER_SIZE);
@@ -497,7 +499,6 @@ TEST_CASE_METHOD(BackendInitFixture,
 				 "Buffer Copy Constructor and Assignment",
 				 "[buffer_test][copy_constructor]") {
 
-
 	SECTION("Copy constructor") {
 		DeviceBuffer<int> original_buffer(MEDIUM_BUFFER_SIZE);
 		auto host_data = generate_test_data<int>(MEDIUM_BUFFER_SIZE);
@@ -578,7 +579,9 @@ TEST_CASE_METHOD(BackendInitFixture,
 // Move Constructor and Assignment Tests
 // ============================================================================
 
-TEST_CASE_METHOD(BackendInitFixture, "Buffer Move Constructor and Assignment", "[buffer_test][move]") {
+TEST_CASE_METHOD(BackendInitFixture,
+				 "Buffer Move Constructor and Assignment",
+				 "[buffer_test][move]") {
 
 	SECTION("Move constructor") {
 		DeviceBuffer<int> original_buffer(MEDIUM_BUFFER_SIZE);
@@ -652,7 +655,6 @@ TEST_CASE_METHOD(BackendInitFixture, "Buffer Move Constructor and Assignment", "
 TEST_CASE_METHOD(BackendInitFixture,
 				 "Buffer Edge Cases and Error Handling",
 				 "[buffer_test][edge_cases]") {
-
 
 	SECTION("Copy operations with mismatched sizes") {
 		DeviceBuffer<int> buffer(SMALL_BUFFER_SIZE);

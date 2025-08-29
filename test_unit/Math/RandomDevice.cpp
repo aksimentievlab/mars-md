@@ -4,7 +4,6 @@
 #include "Backend/Kernels.h"
 #include "Backend/Resource.h"
 #include "Kernel_for_test.h"
-#include "Math/Types.h"
 #include "Random/Random.h"
 #include <algorithm>
 #include <cmath>
@@ -186,8 +185,12 @@ TEST_CASE_METHOD(RandomTestFixture,
 			config.auto_configure(TEST_SIZE, resource);
 
 			// Launch kernel: resource, thread_count, config, functor, ...args
-			Event process_event =
-				launch_kernel(resource, TEST_SIZE, config, TransformKernel{}, random_buffer, processed_buffer);
+			Event process_event = launch_kernel(resource,
+												TEST_SIZE,
+												config,
+												TransformKernel{},
+												random_buffer,
+												processed_buffer);
 
 			process_event.wait();
 
@@ -277,8 +280,13 @@ TEST_CASE_METHOD(RandomTestFixture,
 			combine_config.auto_configure(TEST_SIZE, resource);
 
 			// Launch combine kernel: functor first, then input/output buffers
-			Event combine_event =
-				launch_kernel(resource, TEST_SIZE, combine_config, CombineKernel{}, uniform_buffer, gaussian_buffer, combined_buffer);
+			Event combine_event = launch_kernel(resource,
+												TEST_SIZE,
+												combine_config,
+												CombineKernel{},
+												uniform_buffer,
+												gaussian_buffer,
+												combined_buffer);
 
 			combine_event.wait();
 

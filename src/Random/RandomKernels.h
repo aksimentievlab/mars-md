@@ -1,6 +1,6 @@
 #pragma once
-#include "Backend/Header.h"
-#include "Math/Vector3.h"
+#include "Header.h"
+#include "Types/Vector3.h"
 #include "random/philox.h"
 #ifdef __CUDACC__
 #include <cuda_runtime.h>
