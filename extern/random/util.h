@@ -27,7 +27,7 @@
 
 #ifndef OPENRAND_UTIL_H_
 #define OPENRAND_UTIL_H_
-#include "Backend/Header.h"
+#include "Header.h"
 #include <cmath>
 #include <cstdint>
 #include <type_traits>
@@ -46,54 +46,53 @@ namespace openrand {
 // NOTE: nvcc compiler replaces floating point variants with cuda built-in
 // versions
 
-constexpr uint32_t DEFAULT_GLOBAL_SEED =
-    0xAAAAAAAA;  // equal number of 0 and 1 bits
+constexpr uint32_t DEFAULT_GLOBAL_SEED = 0xAAAAAAAA; // equal number of 0 and 1 bits
 
-template <typename T>
+template<typename T>
 inline OPENRAND_DEVICE T sin(T x) {
-  if constexpr (std::is_same_v<T, float>)
-    return sinf(x);
-  else if constexpr (std::is_same_v<T, double>)
-    return std::sin(x);
+	if constexpr (std::is_same_v<T, float>)
+		return sinf(x);
+	else if constexpr (std::is_same_v<T, double>)
+		return std::sin(x);
 }
 
-template <typename T>
+template<typename T>
 inline OPENRAND_DEVICE T cos(T x) {
-  if constexpr (std::is_same_v<T, float>)
-    return cosf(x);
-  else if constexpr (std::is_same_v<T, double>)
-    return std::cos(x);
+	if constexpr (std::is_same_v<T, float>)
+		return cosf(x);
+	else if constexpr (std::is_same_v<T, double>)
+		return std::cos(x);
 }
 
-template <typename T>
+template<typename T>
 inline OPENRAND_DEVICE T log(T x) {
-  if constexpr (std::is_same_v<T, float>)
-    return logf(x);
-  else if constexpr (std::is_same_v<T, double>)
-    return std::log(x);
+	if constexpr (std::is_same_v<T, float>)
+		return logf(x);
+	else if constexpr (std::is_same_v<T, double>)
+		return std::log(x);
 }
 
-template <typename T>
+template<typename T>
 inline OPENRAND_DEVICE T sqrt(T x) {
-  if constexpr (std::is_same_v<T, float>)
-    return sqrtf(x);
-  else if constexpr (std::is_same_v<T, double>)
-    return std::sqrt(x);
+	if constexpr (std::is_same_v<T, float>)
+		return sqrtf(x);
+	else if constexpr (std::is_same_v<T, double>)
+		return std::sqrt(x);
 }
 
-template <typename T>
+template<typename T>
 struct vec2 {
-  T x, y;
+	T x, y;
 };
 
-template <typename T>
+template<typename T>
 struct vec3 {
-  T x, y, z;
+	T x, y, z;
 };
 
-template <typename T>
+template<typename T>
 struct vec4 {
-  T x, y, z, w;
+	T x, y, z, w;
 };
 
 // for GPU, better to be explicit about the type and size
@@ -111,13 +110,12 @@ using double4 = vec4<double>;
 
 // CRTP: helper struct to check if Derived has internal counter
 // that enables O(1) state forwarding
-template <typename T, typename = std::void_t<>>
+template<typename T, typename = std::void_t<>>
 struct has_counter : std::false_type {};
 
-template <typename T>
-struct has_counter<T, std::void_t<decltype(std::declval<T>()._ctr)>>
-    : std::true_type {};
+template<typename T>
+struct has_counter<T, std::void_t<decltype(std::declval<T>()._ctr)>> : std::true_type {};
 
-}  // namespace openrand
+} // namespace openrand
 
 #endif
