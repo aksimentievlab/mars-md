@@ -35,8 +35,20 @@ class Random {
 		config.sync = false; // Async for better multi-GPU performance
 		config.auto_configure(output.size(), resource_);
 		
-		UniformFunctor<T> func{min_val, max_val, seed_, base_ctr_, global_seed_};
+		// Capture current counter value and advance it for next use
+		uint32_t current_ctr = base_ctr_;
+		base_ctr_ += static_cast<uint32_t>(output.size()); // Advance by number of elements
+		
+		#ifdef USE_METAL
+		if constexpr (std::is_integral_v<T>) {
+			return launch_metal_kernel(resource_, output.size(), config, "uniform_integer_kernel", min_val, max_val, seed_, current_ctr, global_seed_, output);
+		} else {
+			return launch_metal_kernel(resource_, output.size(), config, "uniform_functor_kernel", min_val, max_val, seed_, current_ctr, global_seed_, output);
+		}
+		#else
+		UniformFunctor<T> func{min_val, max_val, seed_, current_ctr, global_seed_};
 		return launch_kernel(resource_, output.size(), config, func, output);
+		#endif
 	}
 
 	// --- GAUSSIAN DISTRIBUTION ---
@@ -46,8 +58,12 @@ class Random {
 		config.sync = false; // Async for better multi-GPU performance
 		config.auto_configure(output.size(), resource_);
 		
+		#ifdef USE_METAL
+		return launch_metal_kernel(resource_, output.size(), config, "gaussian_functor_kernel", mean, stddev, seed_, base_ctr_, global_seed_, output);
+		#else
 		GaussianFunctor<T> func{mean, stddev, output.size(), seed_, base_ctr_, global_seed_};
 		return launch_kernel(resource_, output.size(), config, func, output);
+		#endif
 	}
 
 	// --- GAUSSIAN DISTRIBUTION FOR VECTOR3 ---
@@ -57,7 +73,9 @@ class Random {
 		KernelConfig config;
 		config.sync = false; // Async for better multi-GPU performance
 		config.auto_configure(output.size(), resource_);
-		
+		#ifdef USE_METAL
+		return launch_metal_kernel(resource_, output.size(), config, "gaussian_vector3_functor_kernel", mean, stddev, seed_, base_ctr_, global_seed_, output);
+		#else
 		GaussianFunctor<Vector3_t<T>> func{mean,
 										   stddev,
 										   output.size(),
@@ -65,6 +83,7 @@ class Random {
 										   base_ctr_,
 										   global_seed_};
 		return launch_kernel(resource_, output.size(), config, func, output);
+		#endif
 	}
 };
 

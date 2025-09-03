@@ -66,12 +66,11 @@ struct BackendInitFixture {
 				METAL::Manager::load_info();
 				if (!METAL::Manager::devices().empty()) {
 					METAL::Manager::use(0);
-					std::cout << "Initialized Metal with " << METAL::Manager::devices().size()
-							  << " device(s)" << std::endl;
+					LOGDEBUG("Initialized Metal with {} device(s)", METAL::Manager::devices().size());
 				}
 #endif
 			} catch (const std::exception& e) {
-				std::cerr << "Warning: Backend initialization failed: " << e.what() << std::endl;
+				LOGWARN("Backend initialization failed: {}", e.what());
 			}
 		}
 	}
@@ -173,8 +172,6 @@ TEST_CASE_METHOD(BackendInitFixture, "Pinned Buffer Memory Operations", "[pinned
 
 	SECTION("Pinned buffer to device transfer") {
 		Resource resource = Resource::Local();
-
-		// skip_if_sycl_on_macos();
 
 		PinnedBuffer<float> pinned_buffer(PINNED_BUFFER_SIZE, resource);
 
@@ -464,7 +461,7 @@ TEST_CASE_METHOD(BackendInitFixture, "Unified Buffer Memory Operations", "[unifi
 		}
 #endif
 #ifdef USE_METAL
-		for (size_t i = 0; i < METAL::Manager::device_count(); ++i) {
+		for (size_t i = 0; i < METAL::Manager::get_device_count(); ++i) {
 			devices.emplace_back(ResourceType::METAL, i);
 		}
 #endif
@@ -632,7 +629,7 @@ TEST_CASE_METHOD(BackendInitFixture, "Mixed Buffer Type Operations", "[mixed][op
 		}
 #endif
 #ifdef USE_METAL
-		for (size_t i = 0; i < METAL::Manager::device_count(); ++i) {
+		for (size_t i = 0; i < METAL::Manager::get_device_count(); ++i) {
 			devices.emplace_back(ResourceType::METAL, i);
 		}
 #endif

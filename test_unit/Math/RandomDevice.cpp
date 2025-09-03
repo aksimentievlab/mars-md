@@ -160,7 +160,7 @@ struct RandomTestFixture {
 
 TEST_CASE_METHOD(RandomTestFixture,
 				 "Random + Kernels Integration",
-				 "[random][kernels][integration]") {
+				 "[randomdevice][kernels][integration]") {
 
 	auto test_kernel_integration = [this](const Resource& resource) {
 		if (!resource.is_device()) {
@@ -184,13 +184,25 @@ TEST_CASE_METHOD(RandomTestFixture,
 			config.sync = false; // Async for better multi-GPU performance
 			config.auto_configure(TEST_SIZE, resource);
 
-			// Launch kernel: resource, thread_count, config, functor, ...args
-			Event process_event = launch_kernel(resource,
+			// Launch kernel based on backend type
+			Event process_event;
+			#ifdef USE_METAL
+				// Use Metal-specific kernel launching
+				process_event = launch_metal_kernel(resource,
+													TEST_SIZE,
+													config,
+													"transform_kernel",
+													random_buffer,
+													processed_buffer);
+			#else
+				// Use generic kernel launching for other backends
+				process_event = launch_kernel(resource,
 												TEST_SIZE,
 												config,
 												TransformKernel{},
 												random_buffer,
 												processed_buffer);
+			#endif
 
 			process_event.wait();
 
@@ -279,14 +291,27 @@ TEST_CASE_METHOD(RandomTestFixture,
 			combine_config.sync = false;
 			combine_config.auto_configure(TEST_SIZE, resource);
 
-			// Launch combine kernel: functor first, then input/output buffers
-			Event combine_event = launch_kernel(resource,
+			// Launch combine kernel based on backend type
+			Event combine_event;
+			#ifdef USE_METAL
+				// Use Metal-specific kernel launching
+				combine_event = launch_metal_kernel(resource,
+													TEST_SIZE,
+													combine_config,
+													"combine_kernel",
+													uniform_buffer,
+													gaussian_buffer,
+													combined_buffer);
+			#else
+				// Use generic kernel launching for other backends
+				combine_event = launch_kernel(resource,
 												TEST_SIZE,
 												combine_config,
 												CombineKernel{},
 												uniform_buffer,
 												gaussian_buffer,
 												combined_buffer);
+			#endif
 
 			combine_event.wait();
 
@@ -330,7 +355,7 @@ TEST_CASE_METHOD(RandomTestFixture,
 
 TEST_CASE_METHOD(RandomTestFixture,
 				 "Random Device Creation and Initialization",
-				 "[random][device][creation]") {
+				 "[randomdevice][device][creation]") {
 
 	auto test_device_creation = [](const Resource& resource, const std::string& backend_name) {
 		if (!resource.is_device()) {
@@ -379,7 +404,7 @@ TEST_CASE_METHOD(RandomTestFixture,
 
 TEST_CASE_METHOD(RandomTestFixture,
 				 "Random Number Generation with Kernels",
-				 "[random][kernels][generation]") {
+				 "[randomdevice][kernels][generation]") {
 
 	auto test_random_generation = [this](const Resource& resource) {
 		if (!resource.is_device()) {
@@ -401,20 +426,31 @@ TEST_CASE_METHOD(RandomTestFixture,
 			std::vector<float> host_results(TEST_SIZE);
 			device_buffer.copy_to_host(host_results);
 
-			// Debug output - check first few values
+			// Debug output - check first 10, middle 10, and last 10 values
+			size_t mid_start = host_results.size() / 2 - 5;
+			size_t last_start = host_results.size() - 10;
+			
 			LOGINFO("{} first 10 uniform values: [{:.3f}, {:.3f}, {:.3f}, {:.3f}, {:.3f}, {:.3f}, "
 					"{:.3f}, {:.3f}, {:.3f}, {:.3f}]",
 					backend_name,
-					host_results[0],
-					host_results[1],
-					host_results[2],
-					host_results[3],
-					host_results[4],
-					host_results[5],
-					host_results[6],
-					host_results[7],
-					host_results[8],
-					host_results[9]);
+					host_results[0], host_results[1], host_results[2], host_results[3], host_results[4],
+					host_results[5], host_results[6], host_results[7], host_results[8], host_results[9]);
+					
+			LOGINFO("{} middle 10 uniform values ({}->{}): [{:.3f}, {:.3f}, {:.3f}, {:.3f}, {:.3f}, {:.3f}, "
+					"{:.3f}, {:.3f}, {:.3f}, {:.3f}]",
+					backend_name, mid_start, mid_start + 9,
+					host_results[mid_start], host_results[mid_start + 1], host_results[mid_start + 2], 
+					host_results[mid_start + 3], host_results[mid_start + 4], host_results[mid_start + 5], 
+					host_results[mid_start + 6], host_results[mid_start + 7], host_results[mid_start + 8], 
+					host_results[mid_start + 9]);
+					
+			LOGINFO("{} last 10 uniform values ({}->{}): [{:.3f}, {:.3f}, {:.3f}, {:.3f}, {:.3f}, {:.3f}, "
+					"{:.3f}, {:.3f}, {:.3f}, {:.3f}]",
+					backend_name, last_start, last_start + 9,
+					host_results[last_start], host_results[last_start + 1], host_results[last_start + 2], 
+					host_results[last_start + 3], host_results[last_start + 4], host_results[last_start + 5], 
+					host_results[last_start + 6], host_results[last_start + 7], host_results[last_start + 8], 
+					host_results[last_start + 9]);
 
 			// Statistical tests
 			double mean = TestUtils::calculate_mean(host_results);
@@ -541,7 +577,7 @@ TEST_CASE_METHOD(RandomTestFixture,
 
 TEST_CASE_METHOD(RandomTestFixture,
 				 "Random Performance and State Tests",
-				 "[random][performance][state]") {
+				 "[randomdevice][performance][state]") {
 
 	auto test_performance = [this](const Resource& resource) {
 		if (!resource.is_device()) {
@@ -662,7 +698,7 @@ TEST_CASE_METHOD(RandomTestFixture,
 // Error Handling and Edge Cases
 // ============================================================================
 
-TEST_CASE_METHOD(RandomTestFixture, "Random Error Handling", "[random][error][edge_cases]"){
+TEST_CASE_METHOD(RandomTestFixture, "Random Error Handling", "[randomdevice][error][edge_cases]"){
 
 	SECTION("Invalid resource handling"){
 		Resource invalid_resource(ResourceType::CPU,

@@ -3,7 +3,7 @@
 
 #include "Backend/METAL/METALManager.h"
 #include "Backend/Resource.h"
-#include "Math/Bitmask.h"
+#include "Types/Bitmask.h"
 #include <memory>
 #include <vector>
 

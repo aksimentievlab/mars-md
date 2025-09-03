@@ -2,24 +2,24 @@
 using namespace metal;
 
 // Simple vector addition kernel for testing
-kernel void scalar_add(device const float* a [[buffer(0)]],
-                      device const float* b [[buffer(1)]],
-                      device float* result [[buffer(2)]],
+kernel void scalar_add(device const float* a [[buffer(3)]],
+                      device const float* b [[buffer(4)]],
+                      device float* result [[buffer(5)]],
                       uint index [[thread_position_in_grid]]) {
     result[index] = a[index] + b[index];
 }
 
 // Simple scalar multiplication kernel
-kernel void scalar_multiply(device const float* input [[buffer(0)]],
-                           device float* output [[buffer(1)]],
-                           constant float& scalar [[buffer(2)]],
+kernel void scalar_multiply(device const float* input [[buffer(3)]],
+                           device float* output [[buffer(4)]],
+                           constant float& scalar [[buffer(5)]],
                            uint index [[thread_position_in_grid]]) {
     output[index] = input[index] * scalar;
 }
 
 // Simple reduction sum kernel (partial reduction)
-kernel void reduce_sum(device const float* input [[buffer(0)]],
-                      device float* output [[buffer(1)]],
+kernel void reduce_sum(device const float* input [[buffer(3)]],
+                      device float* output [[buffer(4)]],
                       uint index [[thread_position_in_grid]],
                       uint threads_per_group [[threads_per_threadgroup]]) {
     threadgroup float shared_data[256]; // Shared memory for the threadgroup
@@ -51,13 +51,17 @@ kernel void reduce_sum(device const float* input [[buffer(0)]],
 }
 
 // Matrix multiplication kernel (simple version)
-kernel void matrix_multiply(device const float* A [[buffer(0)]],
-                           device const float* B [[buffer(1)]],
-                           device float* C [[buffer(2)]],
-                           constant uint& N [[buffer(3)]],
+kernel void matrix_multiply(device const float* A [[buffer(3)]],
+                           device const float* B [[buffer(4)]],
+                           device float* C [[buffer(5)]],
+                           constant uint& grid_width [[buffer(0)]],
+                           constant uint& grid_height [[buffer(1)]],
                            uint2 gid [[thread_position_in_grid]]) {
     uint row = gid.y;
     uint col = gid.x;
+    
+    // Use grid dimensions from kernel config
+    uint N = grid_width;  // Matrix dimension = grid width
     
     if (row >= N || col >= N) return;
     
@@ -70,30 +74,44 @@ kernel void matrix_multiply(device const float* A [[buffer(0)]],
 }
 
 // Simple fill kernel
-kernel void fill_buffer(device float* output [[buffer(0)]],
-                       constant float& value [[buffer(1)]],
+kernel void fill_buffer(device float* output [[buffer(3)]],
+                       constant float& value [[buffer(4)]],
                        uint index [[thread_position_in_grid]]) {
     output[index] = value;
 } 
 
 
-kernel void zero_buffer(device float* buffer [[buffer(0)]],
+kernel void zero_buffer(device float* buffer [[buffer(3)]],
                        uint index [[thread_position_in_grid]]) {
     buffer[index] = 0.0f;
 }
 
-kernel void add_arrays(device const float* a [[buffer(0)]],
-                      device const float* b [[buffer(1)]],
-                      device float* result [[buffer(2)]],
+kernel void add_arrays(device const float* a [[buffer(3)]],
+                      device const float* b [[buffer(4)]],
+                      device float* result [[buffer(5)]],
                       uint index [[thread_position_in_grid]]) {
     result[index] = a[index] + b[index];
+}
+
+// Debug version that writes buffer values directly to help diagnose the issue
+kernel void debug_add_arrays(device const float* a [[buffer(3)]],
+                             device const float* b [[buffer(4)]],
+                             device float* result [[buffer(5)]],
+                             uint index [[thread_position_in_grid]]) {
+    // Write debugging information - every thread writes to its index to prove execution
+    result[index] = 777.0f + (float)index; // Proof that kernel executed
+    
+    // First thread writes additional debug info
+    if (index == 0) {
+        result[0] = a[0];  // First element of buffer a - this will overwrite the 777
+    }
 }
 
 // Simple debug kernel that just writes a constant value
 kernel void debug_write_constant(device float* result [[buffer(0)]],
                                 uint index [[thread_position_in_grid]]) {
-    // Always write to index 0 regardless of thread position to test basic memory access
-    result[0] = 42.0f;  // Write a constant to test if kernel executes
+    // Write to the thread's index to test if kernel executes
+    result[index] = 42.0f + index;  // Write a different value to each index
 }
 
 // Packed version: input buffer contains [a_data..., b_data...]
@@ -112,21 +130,4 @@ kernel void add_arrays_packed(device const float* packed_input [[buffer(0)]],
     float b_val = packed_input[1 + n + index];  // b[index] 
     
     result[index] = a_val + b_val;
-}
-
-kernel void matmul_kernel(device const float* A [[buffer(0)]],
-                         device const float* B [[buffer(1)]],
-                         device float* C [[buffer(2)]],
-                         constant size_t& M [[buffer(3)]],
-                         constant size_t& N [[buffer(4)]],
-                         constant size_t& K [[buffer(5)]],
-                         uint2 gid [[thread_position_in_grid]]) {
-    
-    if (gid.x >= N || gid.y >= M) return;
-    
-    float sum = 0.0f;
-    for (size_t k = 0; k < K; ++k) {
-        sum += A[gid.y * K + k] * B[k * N + gid.x];
-    }
-    C[gid.y * N + gid.x] = sum;
 }

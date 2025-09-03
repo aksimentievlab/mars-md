@@ -18,7 +18,7 @@ TEST_CASE("Manager Basic Initialization", "[Manager][Backend]") {
 		// Check that we found some devices
 		const auto& all_devices = ARBD::METAL::Manager::all_devices();
 		REQUIRE(!all_devices.empty());
-		LOGINFO("Found {} Metal devices", all_devices.size());
+		LOGDEBUG("Found {} Metal devices", all_devices.size());
 
 		// Check that at least one device is usable
 		REQUIRE_NOTHROW(ARBD::METAL::Manager::load_info());
@@ -44,12 +44,12 @@ TEST_CASE("Manager Basic Initialization", "[Manager][Backend]") {
 			REQUIRE(device.metal_device() != nullptr);
 
 			// Log device characteristics
-			LOGINFO("Device {}: {}", i, device.name());
-			LOGINFO("  Low power: {}", device.is_low_power());
-			LOGINFO("  Removable: {}", device.is_removable());
-			LOGINFO("  Unified memory: {}", device.has_unified_memory());
-			LOGINFO("  Max threads per group: {}", device.max_threads_per_group());
-			LOGINFO("  Recommended max working set: {:.1f} MB",
+			LOGDEBUG("Device {}: {}", i, device.name());
+			LOGDEBUG("  Low power: {}", device.is_low_power());
+			LOGDEBUG("  Removable: {}", device.is_removable());
+			LOGDEBUG("  Unified memory: {}", device.has_unified_memory());
+			LOGDEBUG("  Max threads per group: {}", device.max_threads_per_group());
+			LOGDEBUG("  Recommended max working set: {:.1f} MB",
 					static_cast<float>(device.recommended_max_working_set_size()) /
 						(1024.0f * 1024.0f));
 		}
@@ -151,10 +151,10 @@ TEST_CASE("Manager Command Queue Management", "[Manager][Backend]") {
 		REQUIRE(&queue1 != &queue2);
 
 		// The underlying Metal queues might be the same or different depending on implementation
-		LOGINFO("Queue 1 address: {}, Queue 2 address: {}",
+		LOGDEBUG("Queue 1 address: {}, Queue 2 address: {}",
 				static_cast<void*>(&queue1),
 				static_cast<void*>(&queue2));
-		LOGINFO("Queue 1 MTL queue: {}, Queue 2 MTL queue: {}", queue1.get(), queue2.get());
+		LOGDEBUG("Queue 1 MTL queue: {}, Queue 2 MTL queue: {}", queue1.get(), queue2.get());
 	}
 
 	SECTION("Command buffer operations") {
@@ -167,7 +167,7 @@ TEST_CASE("Manager Command Queue Management", "[Manager][Backend]") {
 
 		// Command buffer should be in uncommitted state initially
 		// We can't test much without actual compute shaders
-		LOGINFO("Created command buffer: {}", cmd_buffer);
+		LOGDEBUG("Created command buffer: {}", cmd_buffer);
 
 		// Queue will be cleaned up automatically when it goes out of scope
 	}
@@ -244,7 +244,7 @@ TEST_CASE("Manager Memory Management", "[Manager][Backend]") {
 
 		REQUIRE_NOTHROW(ARBD::METAL::Manager::deallocate_raw(ptr));
 
-		LOGINFO("Successfully allocated and freed {:.1f} MB buffer",
+		LOGDEBUG("Successfully allocated and freed {:.1f} MB buffer",
 				static_cast<float>(large_size) / (1024.0f * 1024.0f));
 	}
 }
@@ -257,7 +257,7 @@ TEST_CASE("Manager Library and Function Management", "[Manager][Backend]") {
 		auto* library = ARBD::METAL::Manager::get_library();
 
 		if (library != nullptr) {
-			LOGINFO("Metal library loaded successfully");
+			LOGDEBUG("Metal library loaded successfully");
 
 			// Test function preloading
 			REQUIRE_NOTHROW(ARBD::METAL::Manager::preload_all_functions());
@@ -265,7 +265,7 @@ TEST_CASE("Manager Library and Function Management", "[Manager][Backend]") {
 			// Try to get function names (this might fail if no functions are available)
 			auto* function_names = library->functionNames();
 			if (function_names && function_names->count() > 0) {
-				LOGINFO("Found {} functions in Metal library", function_names->count());
+				LOGDEBUG("Found {} functions in Metal library", function_names->count());
 
 				// Test getting a function (if any exist)
 				for (NS::UInteger i = 0; i < std::min(function_names->count(), NS::UInteger(5));
@@ -273,20 +273,20 @@ TEST_CASE("Manager Library and Function Management", "[Manager][Backend]") {
 					auto* name = static_cast<NS::String*>(function_names->object(i));
 					if (name) {
 						std::string func_name = name->utf8String();
-						LOGINFO("Function {}: {}", i, func_name);
+						LOGDEBUG("Function {}: {}", i, func_name);
 
 						// Test getting function
 						auto* function = ARBD::METAL::Manager::get_function(func_name);
 						if (function) {
-							LOGINFO("  Successfully retrieved function: {}", func_name);
+							LOGDEBUG("  Successfully retrieved function: {}", func_name);
 						}
 					}
 				}
 			} else {
-				LOGINFO("No functions found in Metal library (library might be empty)");
+				LOGDEBUG("No functions found in Metal library (library might be empty)");
 			}
 		} else {
-			LOGINFO("No Metal library available - this is normal without compiled shaders");
+			LOGDEBUG("No Metal library available - this is normal without compiled shaders");
 		}
 	}
 
@@ -306,15 +306,15 @@ TEST_CASE("Manager Library and Function Management", "[Manager][Backend]") {
 						auto* pipeline_state =
 							ARBD::METAL::Manager::get_compute_pipeline_state(func_name);
 						if (pipeline_state) {
-							LOGINFO("Successfully created pipeline state for: {}", func_name);
+							LOGDEBUG("Successfully created pipeline state for: {}", func_name);
 
 							// Test pipeline properties
 							REQUIRE(pipeline_state->maxTotalThreadsPerThreadgroup() > 0);
-							LOGINFO("  Max threads per threadgroup: {}",
+							LOGDEBUG("  Max threads per threadgroup: {}",
 									pipeline_state->maxTotalThreadsPerThreadgroup());
 						}
 					} catch (const ARBD::Exception& e) {
-						LOGINFO("Expected failure creating pipeline for {}: {}",
+						LOGDEBUG("Expected failure creating pipeline for {}: {}",
 								func_name,
 								e.what());
 					}
@@ -333,12 +333,12 @@ TEST_CASE("Manager Device Properties", "[Manager][Backend]") {
 		for (size_t i = 0; i < all_devices.size(); ++i) {
 			const auto& device = all_devices[i];
 
-			LOGINFO("Device {} properties:", i);
-			LOGINFO("  Name: {}", device.name());
-			LOGINFO("  Low power: {}", device.is_low_power());
-			LOGINFO("  Removable: {}", device.is_removable());
-			LOGINFO("  Unified memory: {}", device.has_unified_memory());
-			LOGINFO("  Max threads per group: {}", device.max_threads_per_group());
+			LOGDEBUG("Device {} properties:", i);
+			LOGDEBUG("  Name: {}", device.name());
+			LOGDEBUG("  Low power: {}", device.is_low_power());
+			LOGDEBUG("  Removable: {}", device.is_removable());
+			LOGDEBUG("  Unified memory: {}", device.has_unified_memory());
+			LOGDEBUG("  Max threads per group: {}", device.max_threads_per_group());
 
 			// All Metal devices should support compute
 			REQUIRE(device.supports_compute());

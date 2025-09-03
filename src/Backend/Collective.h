@@ -1,5 +1,6 @@
 // src/Backend/Collectives.h
 #pragma once
+#ifndef __METAL_VERSION__
 #include "Buffer.h"
 #include "Events.h"
 #include "Resource.h"
@@ -245,3 +246,4 @@ class DeviceMesh {
 	}
 };
 } // namespace ARBD
+#endif

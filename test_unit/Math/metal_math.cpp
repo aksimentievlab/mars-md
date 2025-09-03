@@ -8,8 +8,8 @@
 // Metal Vector3 and Matrix3 Kernel Tests
 // -----------------------------------------------------------------------------
 
-#include "Math/Vector3.h"
-#include "Math/Matrix3.h"
+#include "Types/Vector3.h"
+#include "Types/Matrix3.h"
 
 using namespace ARBD;
 
@@ -54,10 +54,12 @@ TEST_CASE("Metal Vector3 Basic Arithmetic Kernels", "[metal][vector3][kernels]")
     ARBD::Event event = ARBD::launch_metal_kernel(
         metal_res,
         n,
-        std::make_tuple(buf_a, buf_b,buf_scalar),  // Input buffers
-        std::forward_as_tuple(buf_out), // Output buffers
         config,
-        "vector_operations_kernel"
+        "vector_operations_kernel",
+        buf_a,
+        buf_b,
+        buf_scalar,
+        buf_out
     );
 
     event.wait();
@@ -99,10 +101,11 @@ TEST_CASE("Metal Vector3 Cross Product Kernel", "[metal][vector3][cross][kernels
     ARBD::Event event = ARBD::launch_metal_kernel(
         metal_res,
         n,
-        std::make_tuple(buf_a, buf_b),
-        std::forward_as_tuple(buf_out),
         config,
-        "cross_product_kernel"
+        "cross_product_kernel",
+        buf_a,
+        buf_b,
+        buf_out
     );
 
     event.wait();
@@ -141,10 +144,11 @@ TEST_CASE("Metal Vector3 Length and Normalization Kernel", "[metal][vector3][len
     ARBD::Event event = ARBD::launch_metal_kernel(
         metal_res,
         n,
-        std::make_tuple(buf_in),
-        std::forward_as_tuple(buf_out, buf_lengths),
         config,
-        "length_operations_kernel"
+        "length_operations_kernel",
+        buf_in,
+        buf_out,
+        buf_lengths
     );
 
     event.wait();
@@ -207,10 +211,11 @@ TEST_CASE("Metal Matrix3 Elementwise Multiplication Kernel", "[metal][matrix3][k
     ARBD::Event event = ARBD::launch_metal_kernel(
         metal_res,
         n,
-        std::make_tuple(buf_a, buf_b),
-        std::forward_as_tuple(buf_out),
         config,
-        "matrix3_mult_kernel"
+        "matrix3_mult_kernel",
+        buf_a,
+        buf_b,
+        buf_out
     );
 
     event.wait();

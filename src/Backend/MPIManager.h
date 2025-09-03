@@ -1,5 +1,6 @@
 // src/Backend/MPI/MPIManager.h
 #pragma once
+#ifndef __METAL_VERSION__
 #include "Backend/Buffer.h"
 #include "Backend/Events.h"
 #include "Backend/Resource.h"
@@ -116,3 +117,4 @@ class Manager {
 };
 
 } // namespace ARBD::MPI
+#endif

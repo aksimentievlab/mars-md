@@ -11,7 +11,6 @@
 #ifdef HOST_GUARD
 #include "ARBDException.h"
 #include "ARBDLogger.h"
-#include <algorithm>
 #include <initializer_list>
 #include <string>
 #endif

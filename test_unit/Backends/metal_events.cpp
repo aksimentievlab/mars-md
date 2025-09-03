@@ -5,7 +5,6 @@
 #include "../catch_boiler.h"
 #include "Backend/Events.h"
 #include "Backend/METAL/METALManager.h"
-#include <Metal/Metal.hpp>
 
 using namespace ARBD;
 

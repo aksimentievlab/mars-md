@@ -5,7 +5,7 @@
  * @version 0.1
  * @date 2025-08-22
  */
-#include <cstddef>
+
 #ifdef __CUDACC__
 #define HOST __host__
 #define DEVICE __device__
@@ -14,8 +14,24 @@
 #define DEVICE
 #endif
 
+#ifdef __METAL_VERSION__
+#include <metal_stdlib>
+#endif
+
+#ifdef __SYCL_DEVICE_ONLY__
+#include <sycl/sycl.hpp>
+#endif
+
+#ifdef __CUDA_ARCH__
+#include <cuda_runtime.h>
+#endif
+
 #if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__) && !defined(__METAL_VERSION__)
 #define HOST_GUARD
+#include <cstddef>
+#include <cmath>
+#include <cstdint>
+#include <type_traits>
 #endif
 
 // Suppress narrowing conversion warnings

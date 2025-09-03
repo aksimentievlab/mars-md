@@ -1,28 +1,11 @@
+#pragma once
+#ifndef __METAL_VERSION__
 #include "Backend/Resource.h"
 #include <map>
 #include <mutex>
 #include <vector>
 
 namespace ARBD {
-
-class StreamPool {
-  public:
-	void* acquire_stream(const Resource& res, StreamType type = StreamType::Compute) {
-		// Delegate to Resource's stream management
-		return res.get_stream(type);
-	}
-
-	void release_stream(void* stream, const Resource& res) {
-		// No need to release - backend managers handle stream lifecycle
-		(void)stream; // Suppress unused parameter warning
-		(void)res;    // Suppress unused parameter warning
-	}
-
-	void sync_all_streams(const Resource& res) {
-		// Delegate to Resource's synchronization
-		res.synchronize_streams();
-	}
-};
 
 template<typename T>
 class MemoryPool {
@@ -111,6 +94,7 @@ class MemoryPool {
 	}
 };
 
+
 // Global memory pool for temporary allocations
 inline MemoryPool<idx_t>& get_temp_pool() {
 	static MemoryPool<idx_t> pool;
@@ -131,3 +115,4 @@ constexpr int ACCESSED_BY = 2;
 } // namespace MemoryAdvise
 
 } // namespace ARBD
+#endif

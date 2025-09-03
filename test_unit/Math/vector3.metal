@@ -6,7 +6,7 @@
 #include <metal_stdlib>
 using namespace metal;
 
-#include "Math/Vector3.h"
+#include "Types/Vector3.h"
 
 using namespace ARBD;
 
@@ -21,10 +21,10 @@ kernel void debug_kernel(
 
 // Basic vector operations kernel - matches test expectations
 kernel void vector_operations_kernel(
-    device MetalVector3* input_a    [[buffer(0)]],
-    device MetalVector3* input_b    [[buffer(1)]],
-    device float* input_c         [[buffer(2)]],
-    device MetalVector3* output     [[buffer(3)]],
+    device MetalVector3* input_a    [[buffer(3)]],
+    device MetalVector3* input_b    [[buffer(4)]],
+    device float* input_c         [[buffer(5)]],
+    device MetalVector3* output     [[buffer(6)]],
     uint index                      [[thread_position_in_grid]]
 ) {
     Vector3_t<float> a = Vector3_t<float>(input_a[index].x, input_a[index].y, input_a[index].z);
@@ -41,9 +41,9 @@ kernel void vector_operations_kernel(
 
 // Cross product kernel - matches test expectations
 kernel void cross_product_kernel(
-    device MetalVector3* input_a    [[buffer(0)]],
-    device MetalVector3* input_b    [[buffer(1)]],
-    device MetalVector3* output     [[buffer(2)]],
+    device MetalVector3* input_a    [[buffer(3)]],
+    device MetalVector3* input_b    [[buffer(4)]],
+    device MetalVector3* output     [[buffer(5)]],
     uint index                      [[thread_position_in_grid]]
 ) {
     Vector3_t<float> a = Vector3_t<float>(input_a[index].x, input_a[index].y, input_a[index].z);
@@ -56,9 +56,9 @@ kernel void cross_product_kernel(
 
 // Length and normalization kernel - matches test expectations
 kernel void length_operations_kernel(
-    device MetalVector3* input      [[buffer(0)]],
-    device MetalVector3* output     [[buffer(1)]],
-    device float* lengths           [[buffer(2)]],
+    device MetalVector3* input      [[buffer(3)]],
+    device MetalVector3* output     [[buffer(4)]],
+    device float* lengths           [[buffer(5)]],
     uint index                      [[thread_position_in_grid]]
 ) {
     Vector3_t<float> v = Vector3_t<float>(input[index].x, input[index].y, input[index].z);
@@ -78,9 +78,9 @@ kernel void length_operations_kernel(
 
 // Element-wise operations kernel
 kernel void element_operations_kernel(
-    device MetalVector3* input_a    [[buffer(0)]],
-    device MetalVector3* input_b    [[buffer(1)]],
-    device MetalVector3* output     [[buffer(2)]],
+    device MetalVector3* input_a    [[buffer(3)]],
+    device MetalVector3* input_b    [[buffer(4)]],
+    device MetalVector3* output     [[buffer(5)]],
     uint index                      [[thread_position_in_grid]]
 ) {
     Vector3_t<float> a = Vector3_t<float>(input_a[index].x, input_a[index].y, input_a[index].z);
@@ -97,11 +97,11 @@ kernel void element_operations_kernel(
 
 // Physics simulation kernel example
 kernel void particle_update_kernel(
-    device MetalVector3* positions  [[buffer(0)]],
-    device MetalVector3* velocities [[buffer(1)]],
-    device MetalVector3* forces     [[buffer(2)]],
-    constant float& dt              [[buffer(3)]],
-    constant float& mass            [[buffer(4)]],
+    device MetalVector3* positions  [[buffer(3)]],
+    device MetalVector3* velocities [[buffer(4)]],
+    device MetalVector3* forces     [[buffer(5)]],
+    constant float& dt              [[buffer(6)]],
+    constant float& mass            [[buffer(7)]],
     uint index                      [[thread_position_in_grid]]
 ) {
     Vector3_t<float> pos = Vector3_t<float>(positions[index].x, positions[index].y, positions[index].z);
@@ -120,11 +120,11 @@ kernel void particle_update_kernel(
 
 // Field gradient kernel example
 kernel void field_gradient_kernel(
-    device MetalVector3* field      [[buffer(0)]],
-    device MetalVector3* gradient   [[buffer(1)]],
-    constant float& dx              [[buffer(2)]],
-    constant float& dy              [[buffer(3)]],
-    constant float& dz              [[buffer(4)]],
+    device MetalVector3* field      [[buffer(3)]],
+    device MetalVector3* gradient   [[buffer(4)]],
+    constant float& dx              [[buffer(5)]],
+    constant float& dy              [[buffer(6)]],
+    constant float& dz              [[buffer(7)]],
     uint index                      [[thread_position_in_grid]]
 ) {
     Vector3_t<float> center = Vector3_t<float>(field[index].x, field[index].y, field[index].z);

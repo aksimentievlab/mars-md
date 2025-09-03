@@ -93,8 +93,8 @@ void* Resource::get_stream(size_t stream_id, StreamType stream_type) const {
 	if (type == ResourceType::METAL) {
 		try {
 			auto& device = METAL::Manager::get_device(id);
-			// Return pointer to the specific queue
-			return &device.get_queue(stream_id);
+			// Return pointer to the specific queue as void*
+			return reinterpret_cast<void*>(const_cast<METAL::Queue*>(&device.get_queue(stream_id)));
 		} catch (...) {
 			return nullptr;
 		}

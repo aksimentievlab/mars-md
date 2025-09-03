@@ -108,8 +108,8 @@ using PinnedPolicy = SYCL::PinnedPolicy;
 using UnifiedPolicy = SYCL::UnifiedPolicy;
 #elif defined(USE_METAL)
 using BackendPolicy = METAL::Policy;
-using PinnedPolicy = METAL::Policy;
-using UnifiedPolicy = METAL::Policy;
+using PinnedPolicy = METAL::PinnedPolicy;
+using UnifiedPolicy = METAL::UnifiedPolicy;
 #else
 #error "No backend selected. Please define USE_CUDA, USE_SYCL, or USE_METAL."
 #endif
@@ -287,6 +287,7 @@ class Buffer {
 		// Copy existing data to new buffer before deallocating old buffer
 		if (device_ptr_ && new_ptr && count_ > 0) {
 			size_t copy_size = std::min(count_, count) * sizeof(T);
+			
 			// Use appropriate copy method based on policy type
 			if constexpr (std::is_same_v<Policy, PinnedPolicy>) {
 				// For pinned memory, use memcpy since it's host-accessible
@@ -342,6 +343,10 @@ class Buffer {
 	 */
 	DEVICE_PTR(T) device_data() {
 		return static_cast<DEVICE_PTR(T)>(device_ptr_);
+	}
+
+	const DEVICE_PTR(T) device_data() const {
+		return static_cast<const DEVICE_PTR(T)>(device_ptr_);
 	}
 
 	DEVICE_PTR(T) deviceData() { // Alias
@@ -609,8 +614,17 @@ private:
 
 #ifdef USE_METAL
 		if (resource_.type == ResourceType::METAL) {
-			// Metal event creation would go here
-			// For now, return null event
+			// Create a Metal command buffer for the event
+			auto& device = METAL::Manager::get_current_device();
+			auto& queue = device.get_next_queue();
+			void* cmd_buffer = queue.create_command_buffer();
+			if (cmd_buffer) {
+				// Create a Metal event wrapper around the command buffer
+				METAL::Event metal_event(cmd_buffer);
+				// Commit the command buffer to make it valid
+				metal_event.commit();
+				return Event(std::move(metal_event), resource_);
+			}
 			return Event(nullptr, resource_);
 		}
 #endif
@@ -1013,7 +1027,7 @@ auto get_buffer_tuples(const std::tuple<Buffers...>& buffer_tuple) {
 template<typename T>
 constexpr auto get_buffer_pointer(T&& arg) {
 	if constexpr (is_device_buffer_v<std::decay_t<T>>) {
-		return arg.data();
+		return arg.device_data();
 	} else {
 		return std::forward<T>(arg);
 	}

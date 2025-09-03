@@ -51,79 +51,43 @@ if(USE_METAL AND APPLE)
         ${QUARTZCORE_FRAMEWORK}
     )
 
-    # Compile Metal shaders
-    set(METAL_SHADER_DIR ${CMAKE_CURRENT_SOURCE_DIR}/*)
-    set(METAL_OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR})
-
-    # Find all .metal files
-    file(GLOB METAL_SOURCES ${METAL_SHADER_DIR}/*.metal)
-
-    # Create a list to hold the compiled .air files
-    set(METAL_AIR_FILES)
-
-    # Compile each .metal file to .air
-    foreach(METAL_SOURCE ${METAL_SOURCES})
-        get_filename_component(METAL_NAME ${METAL_SOURCE} NAME_WE)
-        set(AIR_FILE ${METAL_OUTPUT_DIR}/${METAL_NAME}.air)
-
-        add_custom_command(
-            OUTPUT ${AIR_FILE}
-            COMMAND xcrun -sdk macosx metal -c ${METAL_SOURCE} -o ${AIR_FILE} -I${CMAKE_SOURCE_DIR}/src
-            DEPENDS ${METAL_SOURCE}
-            COMMENT "Compiling Metal shader: ${METAL_NAME}.metal"
-            VERBATIM
-        )
-
-        list(APPEND METAL_AIR_FILES ${AIR_FILE})
-    endforeach()
-
-    # Create the Metal library
-    set(METAL_LIBRARY ${METAL_OUTPUT_DIR}/default.metallib)
-    add_custom_command(
-        OUTPUT ${METAL_LIBRARY}
-        COMMAND xcrun -sdk macosx metallib ${METAL_AIR_FILES} -o ${METAL_LIBRARY}
-        DEPENDS ${METAL_AIR_FILES}
-        COMMENT "Creating Metal library: default.metallib"
-        VERBATIM
-    )
-
-    # Create a custom target for Metal shaders
-    add_custom_target(metal_shaders ALL DEPENDS ${METAL_LIBRARY})
-
-    # Copy the Metal library to the test working directory
-    add_custom_command(
-        TARGET metal_shaders POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy ${METAL_LIBRARY} ${CMAKE_CURRENT_BINARY_DIR}/
-        COMMENT "Copying Metal library to test directory"
-        VERBATIM
-    )
-
     # Metal backend tests - use core sources + Metal-specific sources
     add_executable(arbd_test_metal
         ${CORE_TEST_SOURCES}
         Backends/metal_backend.cpp
-        Backends/metal_buffer_test.cpp
-        Math/metal_bitmask.cpp
-        Kernels/metal_kernels.cpp)
+        Backends/metal_events.cpp
+        Backends/metal_manager.cpp
+        Kernels/metal_kernels.cpp
+        Kernels/metal_matmul.cpp
+        )
     target_include_directories(arbd_test_metal PRIVATE ${METAL_TEST_INCLUDES})
     target_link_libraries(arbd_test_metal PRIVATE ${METAL_TEST_LIBS})
-    add_dependencies(arbd_test_metal metal_shaders)
+    # Make test depend on main project's Metal shaders
+    if(TARGET metal_shaders_main)
+        add_dependencies(arbd_test_metal metal_shaders_main)
+    endif()
 
     add_test(NAME Metal_Tests COMMAND arbd_test_metal)
     set_tests_properties(Metal_Tests PROPERTIES
-        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+        WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
     )
 
     # Metal math tests - use all math sources
     add_executable(arbd_test_metal_math
         ${MATH_SOURCES}
-        Math/metal_bitmask.cpp)
+        Math/metal_bitmask.cpp
+        Math/metal_math.cpp
+    )
     target_include_directories(arbd_test_metal_math PRIVATE ${METAL_TEST_INCLUDES})
     target_link_libraries(arbd_test_metal_math PRIVATE ${METAL_TEST_LIBS})
+    # Make test depend on main project's Metal shaders
+    if(TARGET metal_shaders_main)
+        add_dependencies(arbd_test_metal_math metal_shaders_main)
+    endif()
 
     add_test(NAME Metal_Math_Tests COMMAND arbd_test_metal_math)
     set_tests_properties(Metal_Math_Tests PROPERTIES
-        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+        WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
     )
 
     # Add to common list

@@ -19,7 +19,7 @@ Event launch_sycl_kernel(const Resource& resource,
 						 idx_t thread_count,
 						 const KernelConfig& config,
 						 Functor kernel_func,
-						 Args... args) {
+						 Args&&... args) {
 
 	// Auto-configure if needed
 	KernelConfig local_config = config;
@@ -34,27 +34,29 @@ Event launch_sycl_kernel(const Resource& resource,
 	auto* queue_wrapper_ptr = static_cast<ARBD::SYCL::Queue*>(local_config.get_queue(resource));
 	sycl::queue& queue = queue_wrapper_ptr->get();
 
-	// Pre-extract all buffer pointers to avoid capture issues
-	auto extracted_ptr_args = [&]() { return std::make_tuple(get_buffer_pointer(args)...); }();
-
-	// Submit kernel with dependency handling
+	// Submit kernel with zero tuple overhead - direct pointer extraction
 	auto sycl_event = queue.submit([&](sycl::handler& h) {
 		// Handle dependencies
 		if (!config.dependencies.empty()) {
 			h.depends_on(config.dependencies.get_sycl_events());
 		}
 
-		// Launch kernel with pre-extracted pointers
+		// Extract pointers individually to avoid any tuple overhead
+		auto extracted_ptrs = [&]() {
+			return [=](auto... ptrs) {
+				return [=](idx_t i) { kernel_func(i, ptrs...); };
+			}(get_buffer_pointer(args)...);
+		}();
+
 		h.parallel_for(execution_range, [=](sycl::nd_item<1> item) {
 			idx_t i = item.get_global_id(0);
 			if (i < thread_count) {
-				// Apply pre-extracted arguments - minimal overhead
-				std::apply([&](auto... ptrs) { kernel_func(i, ptrs...); }, extracted_ptr_args);
+				// Direct kernel call - zero tuple overhead
+				extracted_ptrs(i);
 			}
 		});
 	});
 
-	// Sync if requested
 	if (config.sync) {
 		sycl_event.wait();
 	}

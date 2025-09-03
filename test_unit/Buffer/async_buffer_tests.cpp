@@ -58,8 +58,8 @@ class AsyncBufferTestFixture {
 #ifdef USE_METAL
 			METAL::Manager::init();
 			METAL::Manager::load_info();
-			if (METAL::Manager::device_count() > 0) {
-				for (size_t i = 0; i < METAL::Manager::device_count(); ++i) {
+			if (METAL::Manager::get_device_count() > 0) {
+				for (size_t i = 0; i < METAL::Manager::get_device_count(); ++i) {
 					available_resources.emplace_back(ResourceType::METAL, i);
 				}
 			}

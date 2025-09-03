@@ -1,10 +1,15 @@
 #pragma once
 #include "Header.h"
 #include "Types/Vector3.h"
-#include "random/philox.h"
+#include "philox.h"
 #ifdef __CUDACC__
 #include <cuda_runtime.h>
 #include <thrust/tuple.h>
+#elif defined(__METAL_VERSION__)
+#include <metal_stdlib>
+using namespace metal;
+#elif defined(__SYCL_DEVICE_ONLY__)
+#include <sycl/sycl.hpp>
 #else
 #include <cmath>
 #endif

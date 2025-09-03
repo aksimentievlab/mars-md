@@ -30,7 +30,7 @@ struct kerneldim3 {
  * @param block_size The block size for the kernel launch.
  * @param shared_memory The shared memory size for the kernel launch.
  * @param sync Whether to sync the kernel launch.
- * @param async Whether to async the kernel launch.
+ * @param async deprecated. use sync instead.
  * @param dependencies The dependencies for the kernel launch.
  * @param queue_id The queue id for the kernel launch.
  * @param explicit_queue The explicit queue for the kernel launch. Will override queue_id.
@@ -43,7 +43,7 @@ struct KernelConfig {
 	kerneldim3 grid_size{0, 0, 0};
 	kerneldim3 block_size{256, 1, 1};
 	idx_t shared_memory{0};
-	bool sync{false};
+	bool sync{false}; //use this only. async is deprecated.
 	bool async{!sync}; // FOR LEGACY COMPATIBILITY
 	EventList dependencies;
 	int queue_id{0};
@@ -123,6 +123,49 @@ struct KernelConfig {
 			} catch (...) {
 				LOGWARN("Failed to query CUDA device limits, using default block size");
 				block_size = {256, 1, 1};
+			}
+		}
+#endif
+
+#ifdef USE_METAL
+		if (resource.type == ResourceType::METAL) {
+			try {
+				auto& device = METAL::Manager::devices()[resource.id];
+				
+				// Get the already-queried maximum threads per threadgroup from the device
+				idx_t max_threads_per_threadgroup = device.max_threads_per_group();
+				
+				// Metal also has per-dimension limits (typically 1024x1024x64)
+				// For simplicity, we'll use conservative limits that work on all devices
+				idx_t max_threads_x = 1024;
+				idx_t max_threads_y = 1024; 
+				idx_t max_threads_z = 64;
+				
+				// Clamp each dimension to Metal limits
+				block_size.x = std::min(block_size.x, max_threads_x);
+				block_size.y = std::min(block_size.y, max_threads_y);
+				block_size.z = std::min(block_size.z, max_threads_z);
+				
+				// Ensure total threads per threadgroup doesn't exceed device limit
+				idx_t total_threads = block_size.x * block_size.y * block_size.z;
+				if (total_threads > max_threads_per_threadgroup) {
+					double scale_factor = 
+						std::sqrt(static_cast<double>(max_threads_per_threadgroup) / total_threads);
+					block_size.x = std::max(1UL, static_cast<idx_t>(block_size.x * scale_factor));
+					block_size.y = std::max(1UL, static_cast<idx_t>(block_size.y * scale_factor));
+					block_size.z = std::max(1UL, static_cast<idx_t>(block_size.z * scale_factor));
+				}
+				
+				LOGDEBUG("Metal block size clamped to ({}, {}, {}) for device with max threads per "
+						 "threadgroup {}",
+						 block_size.x,
+						 block_size.y,
+						 block_size.z,
+						 max_threads_per_threadgroup);
+						 
+			} catch (...) {
+				LOGWARN("Failed to query Metal device limits, using default block size");
+				block_size = {32, 1, 1}; // Metal-optimized default
 			}
 		}
 #endif

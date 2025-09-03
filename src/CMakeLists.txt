@@ -1,6 +1,5 @@
 
 set(LIB_SOURCES
-    ARBDException.cpp
     SignalManager.cpp
     Backend/Resource.cpp
     #Math/BaseGrid.cpp
@@ -30,22 +29,23 @@ if(USE_CUDA)
     message(STATUS "src: CUDA is enabled for lib${PROJECT_NAME}. CUDA runtime linking may be handled by compiler or main executable.")
 endif()
 
-# Conditionally add Metal specific source files (.mm) to the library
+# Conditionally add Metal specific source files to the library
 if(USE_METAL)
     message(STATUS "src: Adding Metal specific sources to lib${PROJECT_NAME}")
     list(APPEND LIB_SOURCES
-        Backend/METAL/METALManager.cpp        # Objective-C++ implementation file
-        #Simulation/Integrator/IntegratorMetal.mm # Future Metal integrator
-        #Simulation/Interactions/ExampleForceMetal.mm # Future Metal force calculations
+        Backend/METAL/METALManager.cpp 
     )
-    # Ensure the OBJCXX language is enabled in your top-level project() call
-    # when USE_METAL is ON, so CMake knows how to compile .mm files.
     message(STATUS "src: Metal is enabled for lib${PROJECT_NAME}. Metal framework linking handled by main executable.")
 endif()
 
 # Define the library with all collected sources.
 add_library("lib${PROJECT_NAME}" ${LIB_SOURCES})
 target_link_libraries("lib${PROJECT_NAME}" PUBLIC nanovdb)
+
+# Make the library depend on Metal shaders if Metal is enabled
+if(USE_METAL AND TARGET metal_shaders_main)
+    add_dependencies("lib${PROJECT_NAME}" metal_shaders_main)
+endif()
 
 # --- Include Directories ---
 # CMAKE_CURRENT_SOURCE_DIR in this file refers to the "src" directory.

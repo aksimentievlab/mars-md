@@ -29,6 +29,10 @@
 #endif
 #endif
 
+#ifdef USE_METAL
+#include "METAL/METALKernels.h"
+#endif
+
 namespace ARBD {
 
 template<typename Functor, typename... Args>
@@ -52,7 +56,8 @@ Event launch_kernel(const Resource& resource,
 
 #ifdef USE_METAL
 	if (resource.type == ResourceType::METAL) {
-		return launch_metal_kernel(resource, thread_count, config, kernel_func, get_buffer_pointer(args)...);
+		throw_value_error("Metal backend requires a kernel name (string), not a functor. "
+						  "Please use launch_metal_kernel with a kernel name.");
 	}
 #endif
 

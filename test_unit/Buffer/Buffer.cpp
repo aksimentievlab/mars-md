@@ -55,8 +55,8 @@ class ProductionBufferTestFixture {
 #ifdef USE_METAL
 			METAL::Manager::init();
 			METAL::Manager::load_info();
-			if (METAL::Manager::device_count() > 0) {
-				for (size_t i = 0; i < METAL::Manager::device_count(); ++i) {
+			if (METAL::Manager::get_device_count() > 0) {
+				for (size_t i = 0; i < METAL::Manager::get_device_count(); ++i) {
 					available_resources.emplace_back(ResourceType::METAL, i);
 				}
 			}
@@ -544,7 +544,7 @@ TEST_CASE_METHOD(ProductionBufferTestFixture, "Resource Management", "[Buffer][r
 #endif
 
 #ifdef USE_METAL
-		if (METAL::Manager::device_count() > 0) {
+		if (METAL::Manager::get_device_count() > 0) {
 			Resource metal1 = Resource::METAL();
 			Resource metal2 = Resource::METAL(0);
 			REQUIRE(metal1 == metal2);
@@ -660,7 +660,7 @@ TEST_CASE_METHOD(ProductionBufferTestFixture,
 				 "Metal-Specific Buffer Operations",
 				 "[Buffer][metal]") {
 
-	if (METAL::Manager::device_count() == 0) {
+	if (METAL::Manager::get_device_count() == 0) {
 		SKIP("No Metal devices available");
 	}
 
@@ -1327,7 +1327,7 @@ TEST_CASE_METHOD(ProductionBufferTestFixture,
 #endif
 
 #ifdef USE_METAL
-		if (METAL::Manager::device_count() > 0) {
+		if (METAL::Manager::get_device_count() > 0) {
 			all_resources.push_back(Resource::METAL(0));
 		}
 #endif

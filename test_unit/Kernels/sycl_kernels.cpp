@@ -107,16 +107,12 @@ TEST_CASE_METHOD(SYCLKernelTestFixture,
 			output[i] = input[i] * 3.0f;
 		};
 
-		// Create tuples for inputs and outputs
-		auto inputs = std::tie(input_buf);
-		auto outputs = std::tie(output_buf);
-
 		KernelConfig config;
 		config.block_size = {64, 1, 1};
 		config.sync = true;
 
-		// Use the backend-specific function directly
-		auto event = launch_sycl_kernel(sycl_resource, n, inputs, outputs, config, scale_kernel);
+		// Test the new non-tuple interface with device_data() fix
+		auto event = launch_sycl_kernel(sycl_resource, n, config, scale_kernel, input_buf, output_buf);
 		event.wait();
 
 		// Verify results
@@ -124,6 +120,7 @@ TEST_CASE_METHOD(SYCLKernelTestFixture,
 		output_buf.copy_to_host(result);
 
 		for (size_t i = 0; i < n; ++i) {
+			printf("result[%zu] = %f\n", i, result[i]);
 			REQUIRE(std::abs(result[i] - 6.0f) < 1e-6f);
 		}
 	}

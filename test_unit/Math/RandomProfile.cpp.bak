@@ -368,95 +368,114 @@ TEST_CASE_METHOD(ProfiledRandomTestFixture,
 			{
 				PROFILE_RANGE("Kernel::CircleTest", backend_type);
 
-				std::vector<float> x_host(NUM_SAMPLES), y_host(NUM_SAMPLES);
-				std::vector<int> inside_host(NUM_SAMPLES);
+				#ifdef USE_METAL
+					// Use Metal kernel for circle test
+					KernelConfig config;
+					config.sync = false;
+					config.auto_configure(NUM_SAMPLES, resource);
 
-				x_coords.copy_to_host(x_host);
-				y_coords.copy_to_host(y_host);
+					// Launch Metal kernel for circle test
+					Event circle_event = launch_metal_kernel(resource,
+															NUM_SAMPLES,
+															config,
+															"circle_test_kernel",
+															x_coords,
+															y_coords,
+															inside_circle);
+					circle_event.wait();
+				#else
+					// Use CPU-based circle test for other backends
+					std::vector<float> x_host(NUM_SAMPLES), y_host(NUM_SAMPLES);
+					std::vector<int> inside_host(NUM_SAMPLES);
 
-				// Debug: Check first few random numbers
-				LOGINFO("First 10 x coordinates: {:.3f}, {:.3f}, {:.3f}, {:.3f}, {:.3f}, {:.3f}, "
-						"{:.3f}, {:.3f}, {:.3f}, {:.3f}",
-						x_host[0],
-						x_host[1],
-						x_host[2],
-						x_host[3],
-						x_host[4],
-						x_host[5],
-						x_host[6],
-						x_host[7],
-						x_host[8],
-						x_host[9]);
-				LOGINFO("First 10 y coordinates: {:.3f}, {:.3f}, {:.3f}, {:.3f}, {:.3f}, {:.3f}, "
-						"{:.3f}, {:.3f}, {:.3f}, {:.3f}",
-						y_host[0],
-						y_host[1],
-						y_host[2],
-						y_host[3],
-						y_host[4],
-						y_host[5],
-						y_host[6],
-						y_host[7],
-						y_host[8],
-						y_host[9]);
+					x_coords.copy_to_host(x_host);
+					y_coords.copy_to_host(y_host);
 
-				// Check range of all values
-				auto [x_min, x_max] = std::minmax_element(x_host.begin(), x_host.end());
-				auto [y_min, y_max] = std::minmax_element(y_host.begin(), y_host.end());
-				LOGINFO("X range: [{:.3f}, {:.3f}], Y range: [{:.3f}, {:.3f}]",
-						*x_min,
-						*x_max,
-						*y_min,
-						*y_max);
+					// Debug: Check first few random numbers
+					LOGINFO("First 10 x coordinates: {:.3f}, {:.3f}, {:.3f}, {:.3f}, {:.3f}, {:.3f}, "
+							"{:.3f}, {:.3f}, {:.3f}, {:.3f}",
+							x_host[0],
+							x_host[1],
+							x_host[2],
+							x_host[3],
+							x_host[4],
+							x_host[5],
+							x_host[6],
+							x_host[7],
+							x_host[8],
+							x_host[9]);
+					LOGINFO("First 10 y coordinates: {:.3f}, {:.3f}, {:.3f}, {:.3f}, {:.3f}, {:.3f}, "
+							"{:.3f}, {:.3f}, {:.3f}, {:.3f}",
+							y_host[0],
+							y_host[1],
+							y_host[2],
+							y_host[3],
+							y_host[4],
+							y_host[5],
+							y_host[6],
+							y_host[7],
+							y_host[8],
+							y_host[9]);
 
-				// Statistical analysis of the random numbers
-				double x_mean = std::accumulate(x_host.begin(), x_host.end(), 0.0) / x_host.size();
-				double y_mean = std::accumulate(y_host.begin(), y_host.end(), 0.0) / y_host.size();
-				LOGINFO("X mean: {:.6f} (should be ~0.0), Y mean: {:.6f} (should be ~0.0)",
-						x_mean,
-						y_mean);
+					// Check range of all values
+					auto [x_min, x_max] = std::minmax_element(x_host.begin(), x_host.end());
+					auto [y_min, y_max] = std::minmax_element(y_host.begin(), y_host.end());
+					LOGINFO("X range: [{:.3f}, {:.3f}], Y range: [{:.3f}, {:.3f}]",
+							*x_min,
+							*x_max,
+							*y_min,
+							*y_max);
 
-				int debug_count = 0;
-				int total_positive_x = 0, total_positive_y = 0;
-				double sum_dist_sq = 0.0;
+					// Statistical analysis of the random numbers
+					double x_mean = std::accumulate(x_host.begin(), x_host.end(), 0.0) / x_host.size();
+					double y_mean = std::accumulate(y_host.begin(), y_host.end(), 0.0) / y_host.size();
+					LOGINFO("X mean: {:.6f} (should be ~0.0), Y mean: {:.6f} (should be ~0.0)",
+							x_mean,
+							y_mean);
 
-				for (size_t i = 0; i < NUM_SAMPLES; ++i) {
-					float dist_sq = x_host[i] * x_host[i] + y_host[i] * y_host[i];
-					inside_host[i] = (dist_sq <= 1.0f) ? 1 : 0;
+					int debug_count = 0;
+					int total_positive_x = 0, total_positive_y = 0;
+					double sum_dist_sq = 0.0;
 
-					// Additional statistics
-					if (x_host[i] > 0)
-						total_positive_x++;
-					if (y_host[i] > 0)
-						total_positive_y++;
-					sum_dist_sq += dist_sq;
+					for (size_t i = 0; i < NUM_SAMPLES; ++i) {
+						float dist_sq = x_host[i] * x_host[i] + y_host[i] * y_host[i];
+						inside_host[i] = (dist_sq <= 1.0f) ? 1 : 0;
 
-					// Debug first few calculations
-					if (i < 10) {
-						LOGINFO("Point {}: ({:.3f}, {:.3f}) -> dist_sq={:.3f}, inside={}",
-								i,
-								x_host[i],
-								y_host[i],
-								dist_sq,
-								inside_host[i]);
+						// Additional statistics
+						if (x_host[i] > 0)
+							total_positive_x++;
+						if (y_host[i] > 0)
+							total_positive_y++;
+						sum_dist_sq += dist_sq;
+
+						// Debug first few calculations
+						if (i < 10) {
+							LOGINFO("Point {}: ({:.3f}, {:.3f}) -> dist_sq={:.3f}, inside={}",
+									i,
+									x_host[i],
+									y_host[i],
+									dist_sq,
+									inside_host[i]);
+						}
+						if (inside_host[i] == 1)
+							debug_count++;
 					}
-					if (inside_host[i] == 1)
-						debug_count++;
+
+					double mean_dist_sq = sum_dist_sq / NUM_SAMPLES;
+					LOGINFO("Debug: Found {} points inside circle out of {} samples",
+							debug_count,
+							NUM_SAMPLES);
+					LOGINFO("Positive X: {} (should be ~{}), Positive Y: {} (should be ~{})",
+							total_positive_x,
+							NUM_SAMPLES / 2,
+							total_positive_y,
+							NUM_SAMPLES / 2);
+					LOGINFO("Mean distance squared: {:.6f} (should be ~0.667 for uniform in [-1,1]²)",
+							mean_dist_sq);
+
+					inside_circle.copy_from_host(inside_host);
 				}
-
-				double mean_dist_sq = sum_dist_sq / NUM_SAMPLES;
-				LOGINFO("Debug: Found {} points inside circle out of {} samples",
-						debug_count,
-						NUM_SAMPLES);
-				LOGINFO("Positive X: {} (should be ~{}), Positive Y: {} (should be ~{})",
-						total_positive_x,
-						NUM_SAMPLES / 2,
-						total_positive_y,
-						NUM_SAMPLES / 2);
-				LOGINFO("Mean distance squared: {:.6f} (should be ~0.667 for uniform in [-1,1]²)",
-						mean_dist_sq);
-
-				inside_circle.copy_from_host(inside_host);
+				#endif
 			}
 
 			// Calculate π estimate
@@ -516,19 +535,22 @@ TEST_CASE_METHOD(ProfiledRandomTestFixture,
 				KernelConfig config;
 				config.sync = false;
 				config.auto_configure(NUM_WALKERS, resource);
+
+				Event init_event;
 				#ifdef USE_METAL
-				Event init_event = launch_metal_kernel(resource,
-												   NUM_WALKERS,
-												   config,
-												   "initialize_walkers_kernel",
-												   walker_positions);
+					// Use Metal kernel for initializing walkers
+					init_event = launch_metal_kernel(resource,
+													NUM_WALKERS,
+													config,
+													"initialize_walkers_kernel",
+													walker_positions);
 				#else
-				// New structure: functor first, then output buffer
-				Event init_event = launch_kernel(resource,
-												 NUM_WALKERS,
-												 config,
-												 InitializeWalkersKernel{},
-												 walker_positions);
+					// Use generic kernel for other backends
+					init_event = launch_kernel(resource,
+												NUM_WALKERS,
+												config,
+												InitializeWalkersKernel{},
+												walker_positions);
 				#endif
 
 				init_event.wait();
@@ -541,22 +563,25 @@ TEST_CASE_METHOD(ProfiledRandomTestFixture,
 				config.sync = false;
 				config.auto_configure(NUM_WALKERS, resource);
 
-				// Input-output kernel: functor, input, output
+				Event walk_event;
 				#ifdef USE_METAL
-				Event walk_event = launch_metal_kernel(resource,
-												   NUM_WALKERS,
-												   config,
-												   "random_walk_kernel",
-												   random_steps,
-												   walker_positions);
+					// Use Metal kernel for random walk simulation
+					walk_event = launch_metal_kernel(resource,
+													NUM_WALKERS,
+													config,
+													"random_walk_kernel",
+													random_steps,
+													walker_positions);
 				#else
-				Event walk_event = launch_kernel(resource,
-												 NUM_WALKERS,
-												 config,
-												 RandomWalkKernel{NUM_STEPS, NUM_WALKERS},
-												 random_steps,
-												 walker_positions);
+					// Use generic kernel for other backends
+					walk_event = launch_kernel(resource,
+												NUM_WALKERS,
+												config,
+												RandomWalkKernel{NUM_STEPS, NUM_WALKERS},
+												random_steps,
+												walker_positions);
 				#endif
+
 				walk_event.wait();
 			}
 
@@ -567,22 +592,25 @@ TEST_CASE_METHOD(ProfiledRandomTestFixture,
 				config.sync = false;
 				config.auto_configure(NUM_WALKERS, resource);
 
-				// Input-output kernel for distance calculation
+				Event distance_event;
 				#ifdef USE_METAL
-				Event distance_event = launch_metal_kernel(resource,
-												   NUM_WALKERS,
-												   config,
-												   "calculate_distances_kernel",
-												   walker_positions,
-												   final_distances);
+					// Use Metal kernel for distance calculation
+					distance_event = launch_metal_kernel(resource,
+														NUM_WALKERS,
+														config,
+														"calculate_distances_kernel",
+														walker_positions,
+														final_distances);
 				#else
-				Event distance_event = launch_kernel(resource,
-													 NUM_WALKERS,
-													 config,
-													 CalculateDistancesKernel{},
-													 walker_positions,
-													 final_distances);
+					// Use generic kernel for other backends
+					distance_event = launch_kernel(resource,
+													NUM_WALKERS,
+													config,
+													CalculateDistancesKernel{},
+													walker_positions,
+													final_distances);
 				#endif
+
 				distance_event.wait();
 			}
 
@@ -641,20 +669,23 @@ TEST_CASE_METHOD(ProfiledRandomTestFixture,
 				config.sync = false;
 				config.auto_configure(TOTAL_POINTS, resource);
 
+				Event smooth_event;
 				#ifdef USE_METAL
-				Event smooth_event = launch_metal_kernel(resource,
-												   TOTAL_POINTS,
-												   config,
-												   "smoothing_filter_kernel",
-												   noise_values,
-												   smoothed_noise);
+					// Use Metal kernel for smoothing filter
+					smooth_event = launch_metal_kernel(resource,
+														TOTAL_POINTS,
+														config,
+														"smoothing_filter_kernel",
+														noise_values,
+														smoothed_noise);
 				#else
-				Event smooth_event = launch_kernel(resource,
-												   TOTAL_POINTS,
-												   config,
-												   SmoothingFilterKernel{GRID_SIZE},
-												   noise_values,
-												   smoothed_noise);
+					// Use generic kernel for other backends
+					smooth_event = launch_kernel(resource,
+												TOTAL_POINTS,
+												config,
+												SmoothingFilterKernel{GRID_SIZE},
+												noise_values,
+												smoothed_noise);
 				#endif
 
 				smooth_event.wait();
@@ -667,20 +698,23 @@ TEST_CASE_METHOD(ProfiledRandomTestFixture,
 				config.sync = false;
 				config.auto_configure(TOTAL_POINTS, resource);
 
+				Event gradient_event;
 				#ifdef USE_METAL
-				Event gradient_event = launch_metal_kernel(resource,
-												   TOTAL_POINTS,
-												   config,
-												   "gradient_calculation_kernel",
-												   smoothed_noise,
-												   gradient_magnitude);
+					// Use Metal kernel for gradient calculation
+					gradient_event = launch_metal_kernel(resource,
+														 TOTAL_POINTS,
+														 config,
+														 "gradient_calculation_kernel",
+														 smoothed_noise,
+														 gradient_magnitude);
 				#else
-				Event gradient_event = launch_kernel(resource,
-													 TOTAL_POINTS,
-													 config,
-													 GradientCalculationKernel{GRID_SIZE},
-													 smoothed_noise,
-													 gradient_magnitude);
+					// Use generic kernel for other backends
+					gradient_event = launch_kernel(resource,
+												 TOTAL_POINTS,
+												 config,
+												 GradientCalculationKernel{GRID_SIZE},
+												 smoothed_noise,
+												 gradient_magnitude);
 				#endif
 
 				gradient_event.wait();

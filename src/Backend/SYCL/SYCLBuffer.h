@@ -3,9 +3,10 @@
 #include "ARBDException.h"
 #include "Backend/Resource.h"
 #include "Backend/SYCL/SYCLManager.h"
+#include <sycl/sycl.hpp>
 #include <cstddef>
 #include <cstring>
-#include <sycl/sycl.hpp>
+
 
 namespace ARBD {
 namespace SYCL {

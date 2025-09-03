@@ -1,15 +1,15 @@
 #include <metal_stdlib>
 using namespace metal;
 
-#include "Math/Matrix3.h"
+#include "Types/Matrix3.h"
 
 using namespace ARBD;
 
 // Element-wise matrix multiplication kernel - matches test expectations
 kernel void matrix3_mult_kernel(
-    device MetalMatrix3* input_a    [[buffer(0)]],
-    device MetalMatrix3* input_b    [[buffer(1)]],
-    device MetalMatrix3* output     [[buffer(2)]],
+    device MetalMatrix3* input_a    [[buffer(3)]],
+    device MetalMatrix3* input_b    [[buffer(4)]],
+    device MetalMatrix3* output     [[buffer(5)]],
     uint index                      [[thread_position_in_grid]]
 ) {
     Matrix3_t<float> a = Matrix3_t<float>(input_a[index]);
@@ -45,9 +45,9 @@ kernel void matrix3_mult_kernel(
 
 // Test kernel to verify Matrix3_t Metal compatibility
 kernel void test_matrix3_kernel(
-    device float* output [[buffer(0)]],
-    constant MetalMatrix3& input_matrix [[buffer(1)]],
-    constant MetalVector3& input_vector [[buffer(2)]],
+    device float* output [[buffer(3)]],
+    constant MetalMatrix3& input_matrix [[buffer(4)]],
+    constant MetalVector3& input_vector [[buffer(5)]],
     uint tid [[thread_position_in_grid]]) {
     
     // Test basic matrix operations

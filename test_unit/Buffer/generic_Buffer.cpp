@@ -31,8 +31,7 @@ struct BackendInitFixture {
 			CUDA::Manager::load_info();
 			if (!CUDA::Manager::devices().empty()) {
 				CUDA::Manager::use(0);
-				std::cout << "Initialized CUDA with " << CUDA::Manager::devices().size()
-						  << " device(s)" << std::endl;
+				LOGDEBUG("Initialized CUDA with {} device(s)", CUDA::Manager::devices().size());
 			}
 #endif
 
@@ -41,8 +40,7 @@ struct BackendInitFixture {
 			SYCL::Manager::load_info();
 			if (!SYCL::Manager::devices().empty()) {
 				SYCL::Manager::use(0);
-				std::cout << "Initialized SYCL with " << SYCL::Manager::devices().size()
-						  << " device(s)" << std::endl;
+				LOGDEBUG("Initialized SYCL with {} device(s)", SYCL::Manager::devices().size());
 			}
 #endif
 
@@ -51,12 +49,11 @@ struct BackendInitFixture {
 			METAL::Manager::load_info();
 			if (!METAL::Manager::devices().empty()) {
 				METAL::Manager::use(0);
-				std::cout << "Initialized Metal with " << METAL::Manager::devices().size()
-						  << " device(s)" << std::endl;
+				LOGDEBUG("Initialized Metal with {} device(s)", METAL::Manager::devices().size());
 			}
 #endif
 		} catch (const std::exception& e) {
-			std::cerr << "Warning: Backend initialization failed: " << e.what() << std::endl;
+			LOGWARN("Backend initialization failed: {}", e.what());
 		}
 	}
 
@@ -72,7 +69,7 @@ struct BackendInitFixture {
 			METAL::Manager::finalize();
 #endif
 		} catch (const std::exception& e) {
-			std::cerr << "Warning: Backend finalization failed: " << e.what() << std::endl;
+			LOGWARN("Backend finalization failed: {}", e.what());
 		}
 	}
 };

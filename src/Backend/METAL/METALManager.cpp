@@ -4,7 +4,6 @@
 #define NS_PRIVATE_IMPLEMENTATION
 #define CA_PRIVATE_IMPLEMENTATION
 #define MTL_PRIVATE_IMPLEMENTATION
-#include <Metal/Metal.hpp>
 #include <chrono>
 
 namespace ARBD {
@@ -278,7 +277,7 @@ std::chrono::nanoseconds Event::get_execution_time() const {
 
 Manager::Device::Device(void* device, unsigned int id) : id_(id), device_(device) {
 	query_device_properties();
-	LOGINFO("Metal Device {} initialized: {}", id_, name_.c_str());
+	LOGDEBUG("Metal Device {} initialized: {}", id_, name_.c_str());
 
 	for (size_t i = 0; i < queues_.size(); ++i) {
 		queues_[i] = Queue(device_);
@@ -362,7 +361,7 @@ void Manager::Device::query_device_properties() {
 	recommended_max_working_set_size_ = pDevice->recommendedMaxWorkingSetSize();
 
 	// Log device information
-	LOGINFO("Metal Device {}: {} (Unified Memory: {}, Low Power: {}, Removable: {})",
+	LOGDEBUG("Metal Device {}: {} (Unified Memory: {}, Low Power: {}, Removable: {})",
 			id_,
 			name_,
 			has_unified_memory_,
@@ -375,7 +374,7 @@ void Manager::Device::query_device_properties() {
 // ===================================================================
 
 void Manager::init() {
-	LOGINFO("Initializing Metal Manager...");
+	LOGDEBUG("Initializing Metal Manager...");
 
 	// Initialize caches if not already initialized
 	if (!function_cache_) {
@@ -395,32 +394,39 @@ void Manager::init() {
 	}
 
 	// Inform about Metal's unified memory architecture
-	LOGINFO("Metal initialized with unified memory architecture - host and device memory share the "
+	LOGDEBUG("Metal initialized with unified memory architecture - host and device memory share the "
 			"same address space");
 
 	MTL::Device* pDefaultDevice = all_devices_[0].metal_device();
 	NS::Error* pError = nullptr;
 
-	// Try loading from file first - try multiple possible paths
+	// Try loading from file first - try standard locations
 	std::vector<std::string> possible_paths = {
-		"default.metallib",
-		"./default.metallib",
-		"UnitTest/default.metallib",
-		"build/macos-metal-debug/default.metallib"
+		"default.metallib",           // Current directory (from CMake copy)
+		"./default.metallib",         // Explicit current directory
+		"test_unit/default.metallib"  // Test directory (fallback)
 	};
+	
+	LOGDEBUG("Attempting to load Metal library from {} possible paths", possible_paths.size());
 	
 	bool library_loaded = false;
 	for (const auto& path_str : possible_paths) {
+		LOGDEBUG("Trying to load Metal library from: {}", path_str);
 		NS::String* path = NS::String::string(path_str.c_str(), NS::UTF8StringEncoding);
 		if (auto* file_lib = pDefaultDevice->newLibrary(path, &pError)) {
 			library_ = file_lib;
-			LOGINFO("Loaded Metal library from file: {}", path_str);
+			LOGDEBUG("Successfully loaded Metal library from file: {}", path_str);
 			library_loaded = true;
 			break;
 		} else {
-			LOGWARN("Failed to load Metal library from: {} (error: {})", 
+			LOGDEBUG("Failed to load Metal library from: {} (error: {})", 
 				path_str, 
-				pError ? pError->localizedDescription()->utf8String() : "Unknown error");
+				pError ? pError->localizedDescription()->utf8String() : "Not found");
+		}
+		// Reset error for next iteration
+		if (pError) {
+			pError->release();
+			pError = nullptr;
 		}
 	}
 	
@@ -428,9 +434,9 @@ void Manager::init() {
 	if (!library_loaded) {
 		if (auto* default_lib = pDefaultDevice->newDefaultLibrary()) {
 			library_ = default_lib;
-			LOGINFO("Loaded default Metal library");
+			LOGDEBUG("Loaded default Metal library");
 		} else {
-			LOGINFO("No Metal compute library found. Memory management and basic operations are "
+			LOGDEBUG("No Metal compute library found. Memory management and basic operations are "
 					"available. "
 					"Compile .metal shaders to enable compute kernels. ({})",
 					pError ? pError->localizedDescription()->utf8String() : "No library found");
@@ -441,7 +447,7 @@ void Manager::init() {
 		preload_all_functions();
 	}
 
-	LOGINFO("Found {} Metal device(s). Metal Manager initialized.", all_devices_.size());
+	LOGDEBUG("Found {} Metal device(s). Metal Manager initialized.", all_devices_.size());
 }
 
 Manager::Device& Manager::get_current_device() {
@@ -467,7 +473,7 @@ void Manager::discover_devices() {
 		return;
 	}
 
-	LOGINFO("Discovering Metal devices...");
+	LOGDEBUG("Discovering Metal devices...");
 	all_devices_.clear();
 
 	for (NS::UInteger i = 0; i < mtl_devices->count(); ++i) {
@@ -502,7 +508,7 @@ void Manager::discover_devices() {
 		all_devices_[i].set_id(i);
 	}
 
-	LOGINFO("Discovered {} Metal device(s)", all_devices_.size());
+	LOGDEBUG("Discovered {} Metal device(s)", all_devices_.size());
 
 	// Inform about Metal's single-device nature
 	if (all_devices_.size() > 1) {
@@ -530,7 +536,7 @@ void Manager::init_devices() {
 		LOGWARN("No Metal devices selected for use.");
 		return;
 	}
-	LOGINFO("Initializing {} selected Metal devices...", devices_.size());
+	LOGDEBUG("Initializing {} selected Metal devices...", devices_.size());
 	current_device_ = 0;
 }
 
@@ -561,7 +567,7 @@ void Manager::finalize() {
 	}
 	devices_.clear();
 	all_devices_.clear();
-	LOGINFO("Metal Manager finalized.");
+	LOGDEBUG("Metal Manager finalized.");
 }
 
 MTL::CommandQueue* Manager::get_current_queue() {
@@ -573,7 +579,7 @@ MTL::CommandQueue* Manager::get_current_queue() {
 
 MTL::Library* Manager::get_library() {
 	if (!library_) {
-		LOGINFO("Metal compute library not available. Call load_info() and compile .metal shaders "
+		LOGDEBUG("Metal compute library not available. Call load_info() and compile .metal shaders "
 				 "first.");
 		return nullptr;
 	}
@@ -676,7 +682,7 @@ void Manager::select_devices(std::span<const unsigned int> device_ids) {
 
 	current_device_ = 0;
 	init_devices();
-	LOGINFO("Selected {} Metal device(s)", devices_.size());
+	LOGDEBUG("Selected {} Metal device(s)", devices_.size());
 }
 
 void Manager::use(int device_id) {
@@ -703,7 +709,7 @@ void Manager::use(int device_id) {
 				device_id);
 	}
 
-	LOGINFO("Switched from Metal device {} to {}: {}",
+	LOGDEBUG("Switched from Metal device {} to {}: {}",
 			old_device,
 			device_id,
 			devices_[device_id].name());
@@ -779,56 +785,6 @@ std::vector<unsigned int> Manager::get_low_power_device_ids() {
 	return low_power_ids;
 }
 
-/*
-void* Manager::allocate_raw(size_t size) {
-	if (devices_.empty()) {
-		ARBD_Exception(ExceptionType::ValueError, "No Metal devices available for allocation");
-	}
-
-	if (size == 0) {
-		LOGWARN("Attempted to allocate 0 bytes");
-		return nullptr;
-	}
-
-	auto& device = get_current_device();
-	MTL::Device* pDevice = device.metal_device();
-	MTL::Buffer* pBuffer = pDevice->newBuffer(size, MTL::ResourceStorageModeShared);
-
-	if (!pBuffer) {
-		ARBD_Exception(ExceptionType::MetalRuntimeError,
-					   "Metal buffer allocation failed for size {}", size);
-	}
-
-	void* contents = pBuffer->contents();
-
-	std::lock_guard<std::mutex> lock(metal_buffer_map_mutex);
-	metal_buffer_map[contents] = pBuffer;
-
-	LOGINFO("Allocated {} bytes on Metal device {}", size, device.id());
-	return contents;
-}
-
-void Manager::deallocate_raw(void* ptr) {
-	if (!ptr) {
-		LOGINFO("Attempted to deallocate null pointer");
-		return;
-	}
-
-	std::lock_guard<std::mutex> lock(metal_buffer_map_mutex);
-	auto it = metal_buffer_map.find(ptr);
-
-	if (it != metal_buffer_map.end()) {
-		MTL::Buffer* pBuffer = it->second;
-		pBuffer->release();
-		metal_buffer_map.erase(it);
-		LOGINFO("Deallocated Metal buffer at {}", ptr);
-	} else {
-		LOGWARN(
-			"Attempted to deallocate a raw Metal pointer that was not tracked by the manager: {}",
-			ptr);
-	}
-}
-*/
 
 void Manager::preload_all_functions() {
 	if (!library_) {
@@ -836,7 +792,7 @@ void Manager::preload_all_functions() {
 		return;
 	}
 
-	LOGINFO("Preloading Metal compute functions...");
+	LOGDEBUG("Preloading Metal compute functions...");
 
 	// Get all function names from the library
 	NS::Array* function_names = library_->functionNames();
@@ -851,7 +807,7 @@ void Manager::preload_all_functions() {
 		NS::String* name = static_cast<NS::String*>(function_names->object(i));
 		if (name) {
 			std::string func_name = name->utf8String();
-			LOGINFO("Found function: {}", func_name);
+			LOGDEBUG("Found function: {}", func_name);
 			MTL::Function* function = library_->newFunction(name);
 			if (function) {
 				(*function_cache_)[func_name] = function;
@@ -859,7 +815,7 @@ void Manager::preload_all_functions() {
 		}
 	}
 
-	LOGINFO("Preloaded {} Metal functions", function_cache_->size());
+	LOGDEBUG("Preloaded {} Metal functions", function_cache_->size());
 }
 
 MTL::Function* Manager::get_function(const std::string& function_name) {
@@ -918,14 +874,14 @@ void Manager::reset_device_selection() {
 	if (!all_devices_.empty()) {
 		devices_ = all_devices_;
 		current_device_ = 0;
-		LOGINFO("Reset device selection to all available devices");
+		LOGDEBUG("Reset device selection to all available devices");
 	}
 }
 
 void Manager::enable_profiling(bool enable) {
 	// Metal profiling is handled at the command buffer level
 	// This is a placeholder for future profiling implementation
-	LOGINFO("Metal profiling {} (implementation pending)", enable ? "enabled" : "disabled");
+	LOGDEBUG("Metal profiling {} (implementation pending)", enable ? "enabled" : "disabled");
 }
 
 bool Manager::is_profiling_enabled() noexcept {

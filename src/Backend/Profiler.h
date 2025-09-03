@@ -1,5 +1,5 @@
 #pragma once
-
+#ifndef __METAL_VERSION__
 #include "ARBDLogger.h"
 #include "Backend/Events.h"
 #include "Backend/Resource.h"
@@ -24,7 +24,7 @@
 #endif
 
 #ifdef USE_METAL
-#include <Metal/Metal.hpp>
+#include "Metal/Metal.hpp"
 #include <QuartzCore/QuartzCore.h>
 #endif
 
@@ -939,3 +939,4 @@ class ProfileManager {
 
 } // namespace Profiling
 } // namespace ARBD
+#endif

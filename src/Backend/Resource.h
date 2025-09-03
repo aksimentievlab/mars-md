@@ -530,10 +530,11 @@ class Resource {
 };
 
 /**
- * @brief A collection of resources.
+ * @brief A collection of resources. Stored on CPU only.
  */
+#ifdef HOST_GUARD
 struct ResourceCollection {
 	std::vector<Resource> resources;
 };
-
+#endif
 } // namespace ARBD
