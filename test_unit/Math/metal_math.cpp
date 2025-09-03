@@ -139,7 +139,12 @@ TEST_CASE("Metal Vector3 Length and Normalization Kernel", "[metal][vector3][len
 
     ARBD::KernelConfig config;
     config.async = false;
-    config.grid_size = {n, 1, 1};
+    config.auto_configure(n, metal_res);  // Use the improved auto_configure
+    
+    // Debug: Print the configured grid and block sizes
+    LOGINFO("Auto-configured: grid_size=({}, {}, {}), block_size=({}, {}, {}), n={}", 
+            config.grid_size.x, config.grid_size.y, config.grid_size.z,
+            config.block_size.x, config.block_size.y, config.block_size.z, n);
 
     ARBD::Event event = ARBD::launch_metal_kernel(
         metal_res,
@@ -148,7 +153,8 @@ TEST_CASE("Metal Vector3 Length and Normalization Kernel", "[metal][vector3][len
         "length_operations_kernel",
         buf_in,
         buf_out,
-        buf_lengths
+        buf_lengths,
+        static_cast<uint>(n)  // Pass array size for bounds checking
     );
 
     event.wait();

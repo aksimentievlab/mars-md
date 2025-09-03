@@ -22,20 +22,14 @@ inline MetalGridConfig calculate_metal_grid_config(idx_t thread_count,
 
 	// For Metal, grid_size from config represents number of threadgroups (CUDA-style)
 	// but Metal's dispatch needs total thread count, so we need to convert
-	if (config.grid_size.x > 0 || config.grid_size.y > 0 || config.grid_size.z > 0) {
+	if (config.grid_size.x > 0) {
 		// Convert from number of threadgroups to total threads
 		// config.grid_size.x is number of threadgroups, config.block_size.x is threads per group
 		NS::UInteger total_threads_x = config.grid_size.x * config.block_size.x;
-		NS::UInteger total_threads_y = std::max((NS::UInteger)1, (NS::UInteger)config.grid_size.y) * 
-										std::max((NS::UInteger)1, (NS::UInteger)config.block_size.y);
-		NS::UInteger total_threads_z = std::max((NS::UInteger)1, (NS::UInteger)config.grid_size.z) * 
-										std::max((NS::UInteger)1, (NS::UInteger)config.block_size.z);
+		NS::UInteger total_threads_y = (config.grid_size.y > 0) ? config.grid_size.y * config.block_size.y : 1;
+		NS::UInteger total_threads_z = (config.grid_size.z > 0) ? config.grid_size.z * config.block_size.z : 1;
 		
-		result.grid_size = MTL::Size::Make(
-			std::max((NS::UInteger)1, total_threads_x),
-			std::max((NS::UInteger)1, total_threads_y), 
-			std::max((NS::UInteger)1, total_threads_z)
-		);
+		result.grid_size = MTL::Size::Make(total_threads_x, total_threads_y, total_threads_z);
 	} else {
 		// Fall back to 1D grid with total thread count
 		result.grid_size = MTL::Size::Make(thread_count, 1, 1);

@@ -59,8 +59,12 @@ kernel void length_operations_kernel(
     device MetalVector3* input      [[buffer(3)]],
     device MetalVector3* output     [[buffer(4)]],
     device float* lengths           [[buffer(5)]],
+    constant uint& array_size       [[buffer(6)]],
     uint index                      [[thread_position_in_grid]]
 ) {
+    // Bounds check - only process valid indices
+    if (index >= array_size) return;
+    
     Vector3_t<float> v = Vector3_t<float>(input[index].x, input[index].y, input[index].z);
     
     // Calculate length

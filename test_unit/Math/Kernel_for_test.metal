@@ -35,11 +35,13 @@ kernel void random_walk_kernel(const device Vector3_t<float>* steps [[buffer(3)]
                               constant uint& grid_height [[buffer(1)]],
                               uint walker_id [[thread_position_in_grid]]) {
     
-    // Use grid dimensions from kernel config instead of hardcoded values
-    uint num_walkers = grid_width;  // Number of walkers = grid width
-    uint num_steps = grid_height;   // Number of steps = grid height
+    // Use hardcoded values for now since we can't pass them as parameters
+    uint num_walkers = 1000;  // NUM_WALKERS
+    uint num_steps = 100000;  // NUM_STEPS
     
     if (walker_id >= num_walkers) return;
+    
+
     
     Vector3_t<float> pos = positions[walker_id];
     
@@ -51,13 +53,7 @@ kernel void random_walk_kernel(const device Vector3_t<float>* steps [[buffer(3)]
         uint step_idx = start_step + step;
         Vector3_t<float> step_vec = steps[step_idx];
         
-        // Normalize step to unit length
-        float length = step_vec.length();
-        if (length > 0.0f) {
-            step_vec = step_vec / length;
-        }
-        
-        // Take the step
+        // Take the step (no normalization - use the full Gaussian-distributed step)
         pos = pos + step_vec;
     }
     

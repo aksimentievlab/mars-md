@@ -55,12 +55,16 @@ kernel void gaussian_functor_kernel(constant float& mean [[buffer(3)]],
 }
 
 // Vector3 Gaussian random number generation kernel
-kernel void gaussian_vector3_functor_kernel(constant ARBD::Vector3_t<float>& mean [[buffer(3)]],
-                                           constant ARBD::Vector3_t<float>& stddev [[buffer(4)]],
-                                           constant uint64_t& base_seed [[buffer(5)]],
-                                           constant uint32_t& base_ctr [[buffer(6)]],
-                                           constant uint32_t& global_seed [[buffer(7)]],
-                                           device ARBD::Vector3_t<float>* output [[buffer(8)]],
+kernel void gaussian_vector3_functor_kernel(constant float& mean_x [[buffer(3)]],
+                                           constant float& mean_y [[buffer(4)]],
+                                           constant float& mean_z [[buffer(5)]],
+                                           constant float& stddev_x [[buffer(6)]],
+                                           constant float& stddev_y [[buffer(7)]],
+                                           constant float& stddev_z [[buffer(8)]],
+                                           constant uint64_t& base_seed [[buffer(9)]],
+                                           constant uint32_t& base_ctr [[buffer(10)]],
+                                           constant uint32_t& global_seed [[buffer(11)]],
+                                           device ARBD::Vector3_t<float>* output [[buffer(12)]],
                                            uint index [[thread_position_in_grid]]) {
     // Create a fresh PhiloxRNG instance with deterministic parameters
     openrand::PhiloxRNG rng(base_seed, base_ctr + index, global_seed);
@@ -70,7 +74,7 @@ kernel void gaussian_vector3_functor_kernel(constant ARBD::Vector3_t<float>& mea
     uint32_t i3 = rng.draw();
     uint32_t i4 = rng.draw();
     
-    // Generate three Gaussian values using Box-Muller (needs 3 uniform values)
+    // Generate three Gaussian values using Box-Muller (needs 4 uniform values for 2 pairs)
     float u1_x = (int2float(i1) < 1e-7f) ? 1e-7f : int2float(i1);
     float u2_x = (int2float(i2) < 1e-7f) ? 1e-7f : int2float(i2);
     float u1_y = (int2float(i3) < 1e-7f) ? 1e-7f : int2float(i3);
@@ -82,12 +86,16 @@ kernel void gaussian_vector3_functor_kernel(constant ARBD::Vector3_t<float>& mea
     float r2 = sqrt(-2.0f * log(u1_y));
     float theta2 = 2.0f * 3.1415926535f * u2_y;
     
-    ARBD::Vector3_t<float> gauss_pair1(r1 * cos(theta1), r1 * sin(theta1), 0.0f);
-    ARBD::Vector3_t<float> gauss_pair2(r2 * cos(theta2), r2 * sin(theta2), 0.0f);
+    // Generate two independent Gaussian pairs
+    float gauss1_x = r1 * cos(theta1);
+    float gauss1_y = r1 * sin(theta1);
+    float gauss2_x = r2 * cos(theta2);
+    // float gauss2_y = r2 * sin(theta2); // Not used for z-component
     
-    output[index] = ARBD::Vector3_t<float>(mean.x + stddev.x * gauss_pair1.x,
-                                           mean.y + stddev.y * gauss_pair2.y,
-                                           mean.z + stddev.z * gauss_pair2.x);
+    // Use three independent values for x, y, z components
+    output[index] = ARBD::Vector3_t<float>(mean_x + stddev_x * gauss1_x,
+                                           mean_y + stddev_y * gauss1_y,
+                                           mean_z + stddev_z * gauss2_x);
 }
 
 // Integer uniform random number generation kernel

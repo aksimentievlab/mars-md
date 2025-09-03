@@ -112,8 +112,9 @@ struct GaussianFunctor<ARBD::Vector3_t<T>> {
 		ARBD::Vector3_t<T> gauss_pair1 = box_muller(u1_x, u2_x);
 		ARBD::Vector3_t<T> gauss_pair2 = box_muller(u1_y, u2_y);
 
+		// Use three independent values for x, y, z components
 		output[i] = ARBD::Vector3_t<T>(mean.x + stddev.x * gauss_pair1.x,
-									   mean.y + stddev.y * gauss_pair2.y,
+									   mean.y + stddev.y * gauss_pair1.y,
 									   mean.z + stddev.z * gauss_pair2.x);
 	}
 };

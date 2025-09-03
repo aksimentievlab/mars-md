@@ -1,3 +1,4 @@
+#ifdef USE_METAL
 #include <unistd.h>
 #include "../catch_boiler.h"
 #include "Backend/Buffer.h"
@@ -68,8 +69,9 @@ TEST_CASE("Metal Matrix multiply kernel", "[metal][kernels][matmul]") {
 	dB.copy_from_host(hB, K * N);
 
 	ARBD::KernelConfig config;
-	config.grid_size = {N, M, 1};  // width=cols, height=rows, depth=1
-	config.block_size = {16, 16, 1};  // 2D threadgroup
+	config.async = false;  // Force synchronous execution for testing
+	// Use the new 2D auto-configure for efficient matrix multiplication
+	config.auto_configure_2d(N, M, metal_res);  // width=cols, height=rows
 
 	// Launch precompiled kernel: matmul_kernel
 	ARBD::Event evt = ARBD::launch_metal_kernel(
@@ -90,3 +92,4 @@ TEST_CASE("Metal Matrix multiply kernel", "[metal][kernels][matmul]") {
 		REQUIRE(hC[i] == Catch::Approx(hC_expected[i]).margin(1e-5f));
 	}
 }
+#endif // USE_METAL

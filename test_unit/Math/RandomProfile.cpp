@@ -508,6 +508,17 @@ TEST_CASE_METHOD(ProfiledRandomTestFixture,
 				PROFILE_RANGE("Random::GenerateSteps", backend_type);
 				Event steps_event = rng.generate_gaussian(random_steps, mean, dev);
 				steps_event.wait();
+				
+				// Debug: Check what values were generated
+				std::vector<Vector3> debug_steps(10);
+				random_steps.copy_to_host(debug_steps);
+				LOGINFO("{} Random walk debug - first 5 steps: ({:.3f}, {:.3f}, {:.3f}), ({:.3f}, {:.3f}, {:.3f}), ({:.3f}, {:.3f}, {:.3f}), ({:.3f}, {:.3f}, {:.3f}), ({:.3f}, {:.3f}, {:.3f})", 
+					backend_name,
+					debug_steps[0].x, debug_steps[0].y, debug_steps[0].z,
+					debug_steps[1].x, debug_steps[1].y, debug_steps[1].z,
+					debug_steps[2].x, debug_steps[2].y, debug_steps[2].z,
+					debug_steps[3].x, debug_steps[3].y, debug_steps[3].z,
+					debug_steps[4].x, debug_steps[4].y, debug_steps[4].z);
 			}
 
 			// Initialize walker positions to origin
@@ -558,6 +569,17 @@ TEST_CASE_METHOD(ProfiledRandomTestFixture,
 												 walker_positions);
 				#endif
 				walk_event.wait();
+				
+				// Debug: Check walker positions after random walk
+				std::vector<Vector3> debug_positions(5);
+				walker_positions.copy_to_host(debug_positions);
+				LOGINFO("{} Random walk debug - first 5 walker positions: ({:.3f}, {:.3f}, {:.3f}), ({:.3f}, {:.3f}, {:.3f}), ({:.3f}, {:.3f}, {:.3f}), ({:.3f}, {:.3f}, {:.3f}), ({:.3f}, {:.3f}, {:.3f})", 
+					backend_name,
+					debug_positions[0].x, debug_positions[0].y, debug_positions[0].z,
+					debug_positions[1].x, debug_positions[1].y, debug_positions[1].z,
+					debug_positions[2].x, debug_positions[2].y, debug_positions[2].z,
+					debug_positions[3].x, debug_positions[3].y, debug_positions[3].z,
+					debug_positions[4].x, debug_positions[4].y, debug_positions[4].z);
 			}
 
 			// Calculate final distances from origin

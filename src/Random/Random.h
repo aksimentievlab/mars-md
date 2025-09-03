@@ -74,7 +74,7 @@ class Random {
 		config.sync = false; // Async for better multi-GPU performance
 		config.auto_configure(output.size(), resource_);
 		#ifdef USE_METAL
-		return launch_metal_kernel(resource_, output.size(), config, "gaussian_vector3_functor_kernel", mean, stddev, seed_, base_ctr_, global_seed_, output);
+		return launch_metal_kernel(resource_, output.size(), config, "gaussian_vector3_functor_kernel", mean.x, mean.y, mean.z, stddev.x, stddev.y, stddev.z, seed_, base_ctr_, global_seed_, output);
 		#else
 		GaussianFunctor<Vector3_t<T>> func{mean,
 										   stddev,
