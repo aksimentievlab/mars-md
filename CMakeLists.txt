@@ -368,6 +368,69 @@ if(USE_METAL)
 endif()
 # --- End Metal Configuration ---
 
+# --- Metal Shader Compilation ---
+if(USE_METAL)
+    # Set up Metal shader compilation at project level
+    set(METAL_OUTPUT_DIR ${CMAKE_BINARY_DIR})
+    
+    # Find all Metal source files in the src directory
+    file(GLOB_RECURSE METAL_SOURCES
+        ${CMAKE_SOURCE_DIR}/src/*.metal
+        ${CMAKE_SOURCE_DIR}/src/Random/*.metal
+    )
+    
+    # Also include test Metal files to ensure all kernels are available
+    file(GLOB_RECURSE TEST_METAL_SOURCES
+        ${CMAKE_SOURCE_DIR}/test_unit/*.metal
+        ${CMAKE_SOURCE_DIR}/test_unit/Kernels/*.metal
+        ${CMAKE_SOURCE_DIR}/test_unit/Math/*.metal
+    )
+    
+    # Combine all Metal sources
+    list(APPEND METAL_SOURCES ${TEST_METAL_SOURCES})
+    
+    if(METAL_SOURCES)
+        message(STATUS "Found Metal shader sources: ${METAL_SOURCES}")
+        
+        # Create a list to hold the compiled .air files
+        set(METAL_AIR_FILES)
+        
+        # Compile each .metal file to .air
+        foreach(METAL_SOURCE ${METAL_SOURCES})
+            get_filename_component(METAL_NAME ${METAL_SOURCE} NAME_WE)
+            set(AIR_FILE ${METAL_OUTPUT_DIR}/${METAL_NAME}.air)
+            
+            add_custom_command(
+                OUTPUT ${AIR_FILE}
+                COMMAND xcrun -sdk macosx metal -c ${METAL_SOURCE} -o ${AIR_FILE} -I${CMAKE_SOURCE_DIR}/src -gline-tables-only -frecord-sources
+                DEPENDS ${METAL_SOURCE}
+                COMMENT "Compiling Metal shader: ${METAL_NAME}.metal"
+                VERBATIM
+            )
+            
+            list(APPEND METAL_AIR_FILES ${AIR_FILE})
+        endforeach()
+        
+        # Create the Metal library for the main project
+        set(METAL_LIBRARY ${METAL_OUTPUT_DIR}/default.metallib)
+        add_custom_command(
+            OUTPUT ${METAL_LIBRARY}
+            COMMAND xcrun -sdk macosx metallib ${METAL_AIR_FILES} -o ${METAL_LIBRARY}
+            DEPENDS ${METAL_SOURCES} ${METAL_AIR_FILES}
+            COMMENT "Creating Metal library: default.metallib"
+            VERBATIM
+        )
+        
+        # Create a custom target for Metal shaders
+        add_custom_target(metal_shaders_main ALL DEPENDS ${METAL_LIBRARY})
+        
+        message(STATUS "Metal shader compilation configured for main project")
+    else()
+        message(STATUS "No Metal shader sources found in src directory")
+    endif()
+endif()
+# --- End Metal Shader Compilation ---
+
 ## Set flags and definitions after project()
 if(USE_CUDA)
   add_definitions(-DUSE_CUDA) # Kept for CUDA-specific sections in C++
@@ -409,6 +472,11 @@ if(USE_CUDA)
         # src/SimManager.cu
         # src/useful.cu
     )
+endif()
+
+# Make the main executable depend on Metal shaders if Metal is enabled
+if(USE_METAL AND TARGET metal_shaders_main)
+    add_dependencies("${PROJECT_NAME}" metal_shaders_main)
 endif()
 
 if(USE_PYBIND)
