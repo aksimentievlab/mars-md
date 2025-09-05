@@ -6,8 +6,8 @@
  * @brief Kernel functors for CellDecomposition operations
  *********************************************************************/
 
-#include "Math/Types.h"
-#include "Math/BaseGrid.h"
+#include "Types/Types.h"
+#include "Types/BaseGrid.h"
 
 namespace ARBD {
 

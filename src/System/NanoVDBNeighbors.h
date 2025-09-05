@@ -1,10 +1,10 @@
 #pragma once
 
-#include "Math/NanoGridHandle.h"
+#include "Types/NanoGridHandle.h"
 #include "Backend/Buffer.h"
 #include "Backend/Events.h"
 #include "Backend/Kernels.h"
-#include "Math/Vector3.h"
+#include "Types/Vector3.h"
 #include <nanovdb/math/Stencils.h>
 
 namespace ARBD {
@@ -113,8 +113,7 @@ private:
     
     template<typename StencilT, typename PosT, typename NeighborT>
     NeighborT find_neighbors_in_region(const StencilT& stencil, const PosT& pos, float cutoff) {
-        // Implement neighbor finding logic using stencil values
-        // This is highly application-specific
+        //todo: Implement neighbor finding logic using stencil values
         NeighborT neighbors;
         // ... implementation details ...
         return neighbors;

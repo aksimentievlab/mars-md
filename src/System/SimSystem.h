@@ -3,8 +3,8 @@
 #include "ARBDException.h"
 #include "ARBDLogger.h"
 #include "Backend/Buffer.h"
-#include "Math/IndexList.h"
-#include "Math/Types.h"
+#include "Types/IndexList.h"
+#include "Types/Types.h"
 #include "Backend/Resource.h"
 #include <array>
 #include <iostream> // For logging placeholders

@@ -15,7 +15,7 @@
 
 #pragma once
 
-#include "Math/Types.h"
+#include "Types/Types.h"
 
 namespace ARBD {
 class Decomposer;

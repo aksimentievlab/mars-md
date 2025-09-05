@@ -1,6 +1,6 @@
 #include "Configuration.h"
-#include "Math/BaseGrid.h"
-#include "Math/Types.h"
+#include "Types/BaseGrid.h"
+#include "Types/Types.h"
 #include <cassert>
 #include <time.h> /* time */
 

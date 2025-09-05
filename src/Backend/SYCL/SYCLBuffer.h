@@ -39,8 +39,8 @@ struct Policy {
 		if (ptr) {
 			// For deallocation, we need to use the current queue context
 			// since we don't have the original resource information
-			auto& queue = Manager::get_current_queue();
-			SYCL_CHECK(sycl::free(ptr, queue.get()));
+			auto& current_queue = Manager::get_current_queue();
+			SYCL_CHECK(sycl::free(ptr, current_queue.get()));
 		}
 	}
 

@@ -14,9 +14,9 @@
 #include "ARBDLogger.h"
 #include "IO/FileHandle.h"
 #include "IO/Reader.h"
-#include "Math/BaseGrid.h"
-#include "Math/Types.h"
-#include "Math/Vector3.h"
+#include "Types/BaseGrid.h"
+#include "Types/Types.h"
+#include "Types/Vector3.h"
 #include "System/SimSystem.h"
 
 #include <algorithm> // sort
@@ -49,21 +49,25 @@
 // Forward declerations
 using String = std::string;
 namespace ARBD {
+class Bond;
+class Exclude;
 class Angle;
 class Dihedral;
 using Vecangle = Dihedral;
 struct Restraint;
+struct BondAngle;
+struct ProductPotentialConf;
+
 
 class Configuration {
 	struct compare {
 		bool operator()(const std::string& lhs, const std::string& rhs);
-		// bool operator()(const Bond& lhs, const Bond& rhs);
-		// bool operator()(const Exclude& lhs, const Exclude& rhs);
-		// bool operator()(const Angle& lhs, const Angle& rhs);
-		// bool operator()(const Dihedral& lhs, const Dihedral& rhs);
-		//  bool operator()(const Vecangle& lhs, const Vecangle& rhs);
-		// bool operator()(const BondAngle& lhs, const BondAngle& rhs);
-		// bool operator()(const ProductPotentialConf& lhs, const ProductPotentialConf& rhs);
+		 bool operator()(const Bond& lhs, const Bond& rhs);
+		 bool operator()(const Exclude& lhs, const Exclude& rhs);
+		 bool operator()(const Angle& lhs, const Angle& rhs);
+		 bool operator()(const Dihedral& lhs, const Dihedral& rhs);
+		 bool operator()(const BondAngle& lhs, const BondAngle& rhs);
+		 bool operator()(const ProductPotentialConf& lhs, const ProductPotentialConf& rhs);
 	};
 
 	void setDefaults();
@@ -205,7 +209,7 @@ class Configuration {
 	BaseGrid<float>* kTGrid;
 	BaseGrid<float>* tGrid;
 	BaseGrid<float>* sigmaT;
-	unsigned long randoSeed;
+	unsigned long randomSeed;
 
 	// Other parameters.
 	int rigidBodyGridGridPeriod;

@@ -30,8 +30,8 @@ Event launch_sycl_kernel(const Resource& resource,
 	sycl::range<1> local_range(local_config.block_size.x);
 	sycl::nd_range<1> execution_range(global_range, local_range);
 
-	// Get queue from config or resource
-	auto* queue_wrapper_ptr = static_cast<ARBD::SYCL::Queue*>(local_config.get_queue(resource));
+	// Get queue from resource
+	auto* queue_wrapper_ptr = static_cast<ARBD::SYCL::Queue*>(resource.get_stream());
 	sycl::queue& queue = queue_wrapper_ptr->get();
 
 	// Submit kernel with zero tuple overhead - direct pointer extraction
@@ -86,8 +86,8 @@ Event launch_sycl_kernel(const Resource& resource,
 	sycl::range<1> local_range(local_config.block_size.x);
 	sycl::nd_range<1> execution_range(global_range, local_range);
 
-	// Get queue
-	auto* queue_wrapper_ptr = static_cast<ARBD::SYCL::Queue*>(local_config.get_queue(resource));
+	// Get queue from resource
+	auto* queue_wrapper_ptr = static_cast<ARBD::SYCL::Queue*>(resource.get_stream());
 	sycl::queue& queue = queue_wrapper_ptr->get();
 
 	// Submit kernel
