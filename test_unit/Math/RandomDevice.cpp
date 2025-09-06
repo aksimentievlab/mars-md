@@ -186,23 +186,23 @@ TEST_CASE_METHOD(RandomTestFixture,
 
 			// Launch kernel based on backend type
 			Event process_event;
-			#ifdef USE_METAL
-				// Use Metal-specific kernel launching
-				process_event = launch_metal_kernel(resource,
-													TEST_SIZE,
-													config,
-													"transform_kernel",
-													random_buffer,
-													processed_buffer);
-			#else
-				// Use generic kernel launching for other backends
-				process_event = launch_kernel(resource,
+#ifdef USE_METAL
+			// Use Metal-specific kernel launching
+			process_event = launch_metal_kernel(resource,
 												TEST_SIZE,
 												config,
-												TransformKernel{},
+												"transform_kernel",
 												random_buffer,
 												processed_buffer);
-			#endif
+#else
+			// Use generic kernel launching for other backends
+			process_event = launch_kernel(resource,
+										  TEST_SIZE,
+										  config,
+										  TransformKernel{},
+										  random_buffer,
+										  processed_buffer);
+#endif
 
 			process_event.wait();
 
@@ -293,25 +293,25 @@ TEST_CASE_METHOD(RandomTestFixture,
 
 			// Launch combine kernel based on backend type
 			Event combine_event;
-			#ifdef USE_METAL
-				// Use Metal-specific kernel launching
-				combine_event = launch_metal_kernel(resource,
-													TEST_SIZE,
-													combine_config,
-													"combine_kernel",
-													uniform_buffer,
-													gaussian_buffer,
-													combined_buffer);
-			#else
-				// Use generic kernel launching for other backends
-				combine_event = launch_kernel(resource,
+#ifdef USE_METAL
+			// Use Metal-specific kernel launching
+			combine_event = launch_metal_kernel(resource,
 												TEST_SIZE,
 												combine_config,
-												CombineKernel{},
+												"combine_kernel",
 												uniform_buffer,
 												gaussian_buffer,
 												combined_buffer);
-			#endif
+#else
+			// Use generic kernel launching for other backends
+			combine_event = launch_kernel(resource,
+										  TEST_SIZE,
+										  combine_config,
+										  CombineKernel{},
+										  uniform_buffer,
+										  gaussian_buffer,
+										  combined_buffer);
+#endif
 
 			combine_event.wait();
 
@@ -429,27 +429,53 @@ TEST_CASE_METHOD(RandomTestFixture,
 			// Debug output - check first 10, middle 10, and last 10 values
 			size_t mid_start = host_results.size() / 2 - 5;
 			size_t last_start = host_results.size() - 10;
-			
+
 			LOGINFO("{} first 10 uniform values: [{:.3f}, {:.3f}, {:.3f}, {:.3f}, {:.3f}, {:.3f}, "
 					"{:.3f}, {:.3f}, {:.3f}, {:.3f}]",
 					backend_name,
-					host_results[0], host_results[1], host_results[2], host_results[3], host_results[4],
-					host_results[5], host_results[6], host_results[7], host_results[8], host_results[9]);
-					
-			LOGINFO("{} middle 10 uniform values ({}->{}): [{:.3f}, {:.3f}, {:.3f}, {:.3f}, {:.3f}, {:.3f}, "
+					host_results[0],
+					host_results[1],
+					host_results[2],
+					host_results[3],
+					host_results[4],
+					host_results[5],
+					host_results[6],
+					host_results[7],
+					host_results[8],
+					host_results[9]);
+
+			LOGINFO("{} middle 10 uniform values ({}->{}): [{:.3f}, {:.3f}, {:.3f}, {:.3f}, "
+					"{:.3f}, {:.3f}, "
 					"{:.3f}, {:.3f}, {:.3f}, {:.3f}]",
-					backend_name, mid_start, mid_start + 9,
-					host_results[mid_start], host_results[mid_start + 1], host_results[mid_start + 2], 
-					host_results[mid_start + 3], host_results[mid_start + 4], host_results[mid_start + 5], 
-					host_results[mid_start + 6], host_results[mid_start + 7], host_results[mid_start + 8], 
+					backend_name,
+					mid_start,
+					mid_start + 9,
+					host_results[mid_start],
+					host_results[mid_start + 1],
+					host_results[mid_start + 2],
+					host_results[mid_start + 3],
+					host_results[mid_start + 4],
+					host_results[mid_start + 5],
+					host_results[mid_start + 6],
+					host_results[mid_start + 7],
+					host_results[mid_start + 8],
 					host_results[mid_start + 9]);
-					
-			LOGINFO("{} last 10 uniform values ({}->{}): [{:.3f}, {:.3f}, {:.3f}, {:.3f}, {:.3f}, {:.3f}, "
+
+			LOGINFO("{} last 10 uniform values ({}->{}): [{:.3f}, {:.3f}, {:.3f}, {:.3f}, {:.3f}, "
+					"{:.3f}, "
 					"{:.3f}, {:.3f}, {:.3f}, {:.3f}]",
-					backend_name, last_start, last_start + 9,
-					host_results[last_start], host_results[last_start + 1], host_results[last_start + 2], 
-					host_results[last_start + 3], host_results[last_start + 4], host_results[last_start + 5], 
-					host_results[last_start + 6], host_results[last_start + 7], host_results[last_start + 8], 
+					backend_name,
+					last_start,
+					last_start + 9,
+					host_results[last_start],
+					host_results[last_start + 1],
+					host_results[last_start + 2],
+					host_results[last_start + 3],
+					host_results[last_start + 4],
+					host_results[last_start + 5],
+					host_results[last_start + 6],
+					host_results[last_start + 7],
+					host_results[last_start + 8],
 					host_results[last_start + 9]);
 
 			// Statistical tests

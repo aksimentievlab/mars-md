@@ -107,12 +107,15 @@ TEST_CASE_METHOD(SYCLKernelTestFixture,
 			output[i] = input[i] * 3.0f;
 		};
 
+		auto inputs = std::tie(input_buf);
+		auto outputs = std::tie(output_buf);
+
 		KernelConfig config;
 		config.block_size = {64, 1, 1};
 		config.sync = true;
 
-		// Test the new non-tuple interface with device_data() fix
-		auto event = launch_sycl_kernel(sycl_resource, n, config, scale_kernel, input_buf, output_buf);
+		// Use the tuple-based interface that properly handles const-correctness
+		auto event = launch_sycl_kernel(sycl_resource, n, inputs, outputs, config, scale_kernel);
 		event.wait();
 
 		// Verify results
@@ -306,18 +309,19 @@ TEST_CASE_METHOD(SYCLKernelTestFixture, "SYCL Error Handling", "[sycl][kernels][
 
 	SECTION("Large configuration values") {
 		const size_t n = 100;
-		DeviceBuffer<float> buffer(n);
+		DeviceBuffer<float> input_buffer(n);
+		DeviceBuffer<float> output_buffer(n);
 
 		// Initialize buffer
 		std::vector<float> data(n, 1.0f);
-		buffer.copy_from_host(data);
+		input_buffer.copy_from_host(data);
 
 		auto simple_kernel = [](size_t i, const float* input, float* output) {
 			output[i] = input[i] + 1.0f;
 		};
 
-		auto inputs = std::tie(buffer);
-		auto outputs = std::tie(buffer); // In-place operation
+		auto inputs = std::tie(input_buffer);
+		auto outputs = std::tie(output_buffer); // Separate buffers to avoid in-place issues
 
 		// Test with very large block size (should be handled internally)
 		std::vector<kerneldim3> oversized_blocks = {
@@ -341,14 +345,14 @@ TEST_CASE_METHOD(SYCLKernelTestFixture, "SYCL Error Handling", "[sycl][kernels][
 
 			// Verify computation correctness
 			std::vector<float> result(n);
-			buffer.copy_to_host(result);
+			output_buffer.copy_to_host(result);
 
 			for (size_t i = 0; i < n; ++i) {
 				REQUIRE(std::abs(result[i] - 2.0f) < 1e-6f);
 			}
 
-			// Reset buffer for next iteration
-			buffer.copy_from_host(data);
+			// Reset input buffer for next iteration
+			input_buffer.copy_from_host(data);
 		}
 	}
 }

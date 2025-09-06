@@ -1,7 +1,8 @@
 /*********************************************************************
  * @file  Vector3.h
  *
- * @brief Declaration of templated Vector3_t class with conditional Metal support.
+ * @brief Declaration of templated Vector3_t class with conditional backend support.
+ * Supports CUDA, SYCL, Metal, and HOST backends.
  *********************************************************************/
 #pragma once
 #include "Header.h"
@@ -25,21 +26,11 @@
 #include <cuda/std/type_traits>
 #endif
 
-namespace ARBD {
+#ifdef __SYCL_DEVICE_ONLY__
+#include <sycl/sycl.hpp>
+#endif
 
-// Address space pointer macros for non-Metal backends
-#ifndef DEVICE_PTR
-#define DEVICE_PTR(T) T*
-#endif
-#ifndef CONSTANT_PTR
-#define CONSTANT_PTR(T) const T*
-#endif
-#ifndef THREAD_PTR
-#define THREAD_PTR(T) T*
-#endif
-#ifndef THREADGROUP_PTR
-#define THREADGROUP_PTR(T) T*
-#endif
+namespace ARBD {
 
 /**
  * 3D vector utility class with common operations implemented on CPU and GPU.
@@ -68,10 +59,11 @@ class alignas(4 * sizeof(T)) Vector3_t {
 	// Cross product with template type deduction
 	template<typename U>
 	HOST DEVICE constexpr auto cross(const Vector3_t<U>& w) const {
-#ifdef __CUDA_ARCH__
-		using TU = T; // CUDA limitation for device code
-#else
+#ifdef HOST_GUARD
 		using TU = typename std::common_type<T, U>::type;
+#else
+		// Device-safe fallback: use the larger type or default to T
+		using TU = T;
 #endif
 		Vector3_t<TU> v;
 		v.x = y * w.z - z * w.y;
@@ -135,30 +127,33 @@ class alignas(4 * sizeof(T)) Vector3_t {
 	// Binary operators with type deduction
 	template<typename U>
 	HOST DEVICE constexpr auto operator+(const Vector3_t<U>& w) const {
-#ifdef __CUDA_ARCH__
-		using TU = T; // CUDA limitation for device code
-#else
+#ifdef HOST_GUARD
 		using TU = typename std::common_type<T, U>::type;
+#else
+		// Device-safe fallback: use the larger type or default to T
+		using TU = T;
 #endif
 		return Vector3_t<TU>(x + w.x, y + w.y, z + w.z);
 	}
 
 	template<typename U>
 	HOST DEVICE constexpr auto operator-(const Vector3_t<U>& w) const {
-#ifdef __CUDA_ARCH__
-		using TU = T;
-#else
+#ifdef HOST_GUARD
 		using TU = typename std::common_type<T, U>::type;
+#else
+		// Device-safe fallback: use the larger type or default to T
+		using TU = T;
 #endif
 		return Vector3_t<TU>(x - w.x, y - w.y, z - w.z);
 	}
 
 	template<typename U>
 	HOST DEVICE constexpr auto operator*(U s) const {
-#ifdef __CUDA_ARCH__
-		using TU = T;
-#else
+#ifdef HOST_GUARD
 		using TU = typename std::common_type<T, U>::type;
+#else
+		// Device-safe fallback: use the larger type or default to T
+		using TU = T;
 #endif
 		return Vector3_t<TU>(s * x, s * y, s * z);
 	}
@@ -181,10 +176,11 @@ class alignas(4 * sizeof(T)) Vector3_t {
 
 	// Only enable for floating point types - simplified for GPU compatibility
 	HOST DEVICE auto length() const {
-#ifdef __CUDA_ARCH__
-		return sqrtf(length2());
-#else
+#ifdef HOST_GUARD
 		return std::sqrt(length2());
+#else
+		// Device-safe fallback: use CUDA math functions
+		return sqrtf(length2());
 #endif
 	}
 
@@ -200,29 +196,32 @@ class alignas(4 * sizeof(T)) Vector3_t {
 
 	// Element-wise operations
 	HOST DEVICE auto element_floor() const {
-#ifdef __CUDA_ARCH__
-		return Vector3_t<T>(floorf(x), floorf(y), floorf(z));
-#else
+#ifdef HOST_GUARD
 		return Vector3_t<T>(std::floor(x), std::floor(y), std::floor(z));
+#else
+		// Device-safe fallback: use CUDA math functions
+		return Vector3_t<T>(floorf(x), floorf(y), floorf(z));
 #endif
 	}
 
 	template<typename U>
 	HOST DEVICE constexpr auto element_mult(const U w[]) const {
-#ifdef __CUDA_ARCH__
-		using TU = T;
-#else
+#ifdef HOST_GUARD
 		using TU = typename std::common_type<T, U>::type;
+#else
+		// Device-safe fallback: use the larger type or default to T
+		using TU = T;
 #endif
 		return Vector3_t<TU>(x * w[0], y * w[1], z * w[2]);
 	}
 
 	template<typename U>
 	HOST DEVICE constexpr auto element_mult(const Vector3_t<U>& w) const {
-#ifdef __CUDA_ARCH__
-		using TU = T;
-#else
+#ifdef HOST_GUARD
 		using TU = typename std::common_type<T, U>::type;
+#else
+		// Device-safe fallback: use the larger type or default to T
+		using TU = T;
 #endif
 		return Vector3_t<TU>(x * w.x, y * w.y, z * w.z);
 	}
@@ -230,46 +229,51 @@ class alignas(4 * sizeof(T)) Vector3_t {
 	// Static element-wise operations
 	template<typename U>
 	HOST DEVICE static constexpr auto element_mult(const Vector3_t<T>& v, const Vector3_t<U>& w) {
-#ifdef __CUDA_ARCH__
-		using TU = T;
-#else
+#ifdef HOST_GUARD
 		using TU = typename std::common_type<T, U>::type;
+#else
+		// Device-safe fallback: use the larger type or default to T
+		using TU = T;
 #endif
 		return Vector3_t<TU>(v.x * w.x, v.y * w.y, v.z * w.z);
 	}
 
 	template<typename U>
 	HOST DEVICE static constexpr auto element_mult(const Vector3_t<T>& v, const U w[]) {
-#ifdef __CUDA_ARCH__
-		using TU = T;
-#else
+#ifdef HOST_GUARD
 		using TU = typename std::common_type<T, U>::type;
+#else
+		// Device-safe fallback: use the larger type or default to T
+		using TU = T;
 #endif
 		return Vector3_t<TU>(v.x * w[0], v.y * w[1], v.z * w[2]);
 	}
 
 	HOST DEVICE static auto element_sqrt(const Vector3_t<T>& w) {
-#ifdef __CUDA_ARCH__
-		return Vector3_t<T>(sqrtf(w.x), sqrtf(w.y), sqrtf(w.z));
-#else
+#ifdef HOST_GUARD
 		return Vector3_t<T>(std::sqrt(w.x), std::sqrt(w.y), std::sqrt(w.z));
+#else
+		// Device-safe fallback: use CUDA math functions
+		return Vector3_t<T>(sqrtf(w.x), sqrtf(w.y), sqrtf(w.z));
 #endif
 	}
 
 	// Numeric limits
 	HOST DEVICE static constexpr T highest() {
-#ifdef __CUDA_ARCH__
-		return cuda::std::numeric_limits<T>::max();
-#else
+#ifdef HOST_GUARD
 		return std::numeric_limits<T>::max();
+#else
+		// Device-safe fallback: use CUDA numeric limits
+		return cuda::std::numeric_limits<T>::max();
 #endif
 	}
 
 	HOST DEVICE static constexpr T lowest() {
-#ifdef __CUDA_ARCH__
-		return cuda::std::numeric_limits<T>::lowest();
-#else
+#ifdef HOST_GUARD
 		return std::numeric_limits<T>::lowest();
+#else
+		// Device-safe fallback: use CUDA numeric limits
+		return cuda::std::numeric_limits<T>::lowest();
 #endif
 	}
 
@@ -303,10 +307,11 @@ class alignas(4 * sizeof(T)) Vector3_t {
 // Free function operators
 template<typename T, typename U>
 HOST DEVICE constexpr auto operator/(U s, const Vector3_t<T>& v) {
-#ifdef __CUDA_ARCH__
-	using TU = T;
-#else
+#ifdef HOST_GUARD
 	using TU = typename std::common_type<T, U>::type;
+#else
+	// Device-safe fallback: use the larger type or default to T
+	using TU = T;
 #endif
 	return Vector3_t<TU>(s / v.x, s / v.y, s / v.z);
 }

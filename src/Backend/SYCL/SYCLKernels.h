@@ -1,4 +1,5 @@
 #pragma once
+#include "Header.h"
 #ifdef USE_SYCL
 #include "../Buffer.h"
 #include "../Events.h"
@@ -19,44 +20,42 @@ Event launch_sycl_kernel(const Resource& resource,
 						 idx_t thread_count,
 						 const KernelConfig& config,
 						 Functor kernel_func,
-						 Args&&... args) {
+						 Args... args) {
 
 	// Auto-configure if needed
 	KernelConfig local_config = config;
-	local_config.auto_configure(thread_count, resource);
+	// Auto-configuration should be done by caller before calling this function
 
 	// Calculate SYCL execution ranges
 	sycl::range<1> global_range(local_config.grid_size.x * local_config.block_size.x);
 	sycl::range<1> local_range(local_config.block_size.x);
 	sycl::nd_range<1> execution_range(global_range, local_range);
 
-	// Get queue from resource
+	// Get queue from config or resource
 	auto* queue_wrapper_ptr = static_cast<ARBD::SYCL::Queue*>(resource.get_stream());
 	sycl::queue& queue = queue_wrapper_ptr->get();
 
-	// Submit kernel with zero tuple overhead - direct pointer extraction
+	// Pre-extract all buffer pointers to avoid capture issues
+	auto extracted_ptr_args = [&]() { return std::make_tuple(get_buffer_pointer(args)...); }();
+
+	// Submit kernel with dependency handling
 	auto sycl_event = queue.submit([&](sycl::handler& h) {
 		// Handle dependencies
 		if (!config.dependencies.empty()) {
 			h.depends_on(config.dependencies.get_sycl_events());
 		}
 
-		// Extract pointers individually to avoid any tuple overhead
-		auto extracted_ptrs = [&]() {
-			return [=](auto... ptrs) {
-				return [=](idx_t i) { kernel_func(i, ptrs...); };
-			}(get_buffer_pointer(args)...);
-		}();
-
+		// Launch kernel with pre-extracted pointers
 		h.parallel_for(execution_range, [=](sycl::nd_item<1> item) {
 			idx_t i = item.get_global_id(0);
 			if (i < thread_count) {
-				// Direct kernel call - zero tuple overhead
-				extracted_ptrs(i);
+				// Apply pre-extracted arguments - minimal overhead
+				std::apply([&](auto... ptrs) { kernel_func(i, ptrs...); }, extracted_ptr_args);
 			}
 		});
 	});
 
+	// Sync if requested
 	if (config.sync) {
 		sycl_event.wait();
 	}
@@ -79,7 +78,11 @@ Event launch_sycl_kernel(const Resource& resource,
 
 	// Auto-configure if needed
 	KernelConfig local_config = config;
-	local_config.auto_configure(thread_count, resource);
+	if (local_config.grid_size.x == 0 && local_config.grid_size.y == 0 &&
+		local_config.grid_size.z == 0) {
+		local_config.auto_configure(thread_count, resource);
+	}
+	local_config.validate_block_size(resource);
 
 	// Calculate SYCL execution ranges
 	sycl::range<1> global_range(local_config.grid_size.x * local_config.block_size.x);

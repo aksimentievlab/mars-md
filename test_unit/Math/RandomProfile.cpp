@@ -508,17 +508,29 @@ TEST_CASE_METHOD(ProfiledRandomTestFixture,
 				PROFILE_RANGE("Random::GenerateSteps", backend_type);
 				Event steps_event = rng.generate_gaussian(random_steps, mean, dev);
 				steps_event.wait();
-				
+
 				// Debug: Check what values were generated
 				std::vector<Vector3> debug_steps(10);
 				random_steps.copy_to_host(debug_steps);
-				LOGINFO("{} Random walk debug - first 5 steps: ({:.3f}, {:.3f}, {:.3f}), ({:.3f}, {:.3f}, {:.3f}), ({:.3f}, {:.3f}, {:.3f}), ({:.3f}, {:.3f}, {:.3f}), ({:.3f}, {:.3f}, {:.3f})", 
-					backend_name,
-					debug_steps[0].x, debug_steps[0].y, debug_steps[0].z,
-					debug_steps[1].x, debug_steps[1].y, debug_steps[1].z,
-					debug_steps[2].x, debug_steps[2].y, debug_steps[2].z,
-					debug_steps[3].x, debug_steps[3].y, debug_steps[3].z,
-					debug_steps[4].x, debug_steps[4].y, debug_steps[4].z);
+				LOGINFO("{} Random walk debug - first 5 steps: ({:.3f}, {:.3f}, {:.3f}), ({:.3f}, "
+						"{:.3f}, {:.3f}), ({:.3f}, {:.3f}, {:.3f}), ({:.3f}, {:.3f}, {:.3f}), "
+						"({:.3f}, {:.3f}, {:.3f})",
+						backend_name,
+						debug_steps[0].x,
+						debug_steps[0].y,
+						debug_steps[0].z,
+						debug_steps[1].x,
+						debug_steps[1].y,
+						debug_steps[1].z,
+						debug_steps[2].x,
+						debug_steps[2].y,
+						debug_steps[2].z,
+						debug_steps[3].x,
+						debug_steps[3].y,
+						debug_steps[3].z,
+						debug_steps[4].x,
+						debug_steps[4].y,
+						debug_steps[4].z);
 			}
 
 			// Initialize walker positions to origin
@@ -527,20 +539,20 @@ TEST_CASE_METHOD(ProfiledRandomTestFixture,
 				KernelConfig config;
 				config.sync = false;
 				config.auto_configure(NUM_WALKERS, resource);
-				#ifdef USE_METAL
+#ifdef USE_METAL
 				Event init_event = launch_metal_kernel(resource,
-												   NUM_WALKERS,
-												   config,
-												   "initialize_walkers_kernel",
-												   walker_positions);
-				#else
+													   NUM_WALKERS,
+													   config,
+													   "initialize_walkers_kernel",
+													   walker_positions);
+#else
 				// New structure: functor first, then output buffer
 				Event init_event = launch_kernel(resource,
 												 NUM_WALKERS,
 												 config,
 												 InitializeWalkersKernel{},
 												 walker_positions);
-				#endif
+#endif
 
 				init_event.wait();
 			}
@@ -552,34 +564,46 @@ TEST_CASE_METHOD(ProfiledRandomTestFixture,
 				config.sync = false;
 				config.auto_configure(NUM_WALKERS, resource);
 
-				// Input-output kernel: functor, input, output
-				#ifdef USE_METAL
+// Input-output kernel: functor, input, output
+#ifdef USE_METAL
 				Event walk_event = launch_metal_kernel(resource,
-												   NUM_WALKERS,
-												   config,
-												   "random_walk_kernel",
-												   random_steps,
-												   walker_positions);
-				#else
+													   NUM_WALKERS,
+													   config,
+													   "random_walk_kernel",
+													   random_steps,
+													   walker_positions);
+#else
 				Event walk_event = launch_kernel(resource,
 												 NUM_WALKERS,
 												 config,
 												 RandomWalkKernel{NUM_STEPS, NUM_WALKERS},
 												 random_steps,
 												 walker_positions);
-				#endif
+#endif
 				walk_event.wait();
-				
+
 				// Debug: Check walker positions after random walk
 				std::vector<Vector3> debug_positions(5);
 				walker_positions.copy_to_host(debug_positions);
-				LOGINFO("{} Random walk debug - first 5 walker positions: ({:.3f}, {:.3f}, {:.3f}), ({:.3f}, {:.3f}, {:.3f}), ({:.3f}, {:.3f}, {:.3f}), ({:.3f}, {:.3f}, {:.3f}), ({:.3f}, {:.3f}, {:.3f})", 
-					backend_name,
-					debug_positions[0].x, debug_positions[0].y, debug_positions[0].z,
-					debug_positions[1].x, debug_positions[1].y, debug_positions[1].z,
-					debug_positions[2].x, debug_positions[2].y, debug_positions[2].z,
-					debug_positions[3].x, debug_positions[3].y, debug_positions[3].z,
-					debug_positions[4].x, debug_positions[4].y, debug_positions[4].z);
+				LOGINFO("{} Random walk debug - first 5 walker positions: ({:.3f}, {:.3f}, "
+						"{:.3f}), ({:.3f}, {:.3f}, {:.3f}), ({:.3f}, {:.3f}, {:.3f}), ({:.3f}, "
+						"{:.3f}, {:.3f}), ({:.3f}, {:.3f}, {:.3f})",
+						backend_name,
+						debug_positions[0].x,
+						debug_positions[0].y,
+						debug_positions[0].z,
+						debug_positions[1].x,
+						debug_positions[1].y,
+						debug_positions[1].z,
+						debug_positions[2].x,
+						debug_positions[2].y,
+						debug_positions[2].z,
+						debug_positions[3].x,
+						debug_positions[3].y,
+						debug_positions[3].z,
+						debug_positions[4].x,
+						debug_positions[4].y,
+						debug_positions[4].z);
 			}
 
 			// Calculate final distances from origin
@@ -589,22 +613,22 @@ TEST_CASE_METHOD(ProfiledRandomTestFixture,
 				config.sync = false;
 				config.auto_configure(NUM_WALKERS, resource);
 
-				// Input-output kernel for distance calculation
-				#ifdef USE_METAL
+// Input-output kernel for distance calculation
+#ifdef USE_METAL
 				Event distance_event = launch_metal_kernel(resource,
-												   NUM_WALKERS,
-												   config,
-												   "calculate_distances_kernel",
-												   walker_positions,
-												   final_distances);
-				#else
+														   NUM_WALKERS,
+														   config,
+														   "calculate_distances_kernel",
+														   walker_positions,
+														   final_distances);
+#else
 				Event distance_event = launch_kernel(resource,
 													 NUM_WALKERS,
 													 config,
 													 CalculateDistancesKernel{},
 													 walker_positions,
 													 final_distances);
-				#endif
+#endif
 				distance_event.wait();
 			}
 
@@ -663,21 +687,21 @@ TEST_CASE_METHOD(ProfiledRandomTestFixture,
 				config.sync = false;
 				config.auto_configure(TOTAL_POINTS, resource);
 
-				#ifdef USE_METAL
+#ifdef USE_METAL
 				Event smooth_event = launch_metal_kernel(resource,
-												   TOTAL_POINTS,
-												   config,
-												   "smoothing_filter_kernel",
-												   noise_values,
-												   smoothed_noise);
-				#else
+														 TOTAL_POINTS,
+														 config,
+														 "smoothing_filter_kernel",
+														 noise_values,
+														 smoothed_noise);
+#else
 				Event smooth_event = launch_kernel(resource,
 												   TOTAL_POINTS,
 												   config,
 												   SmoothingFilterKernel{GRID_SIZE},
 												   noise_values,
 												   smoothed_noise);
-				#endif
+#endif
 
 				smooth_event.wait();
 			}
@@ -689,21 +713,21 @@ TEST_CASE_METHOD(ProfiledRandomTestFixture,
 				config.sync = false;
 				config.auto_configure(TOTAL_POINTS, resource);
 
-				#ifdef USE_METAL
+#ifdef USE_METAL
 				Event gradient_event = launch_metal_kernel(resource,
-												   TOTAL_POINTS,
-												   config,
-												   "gradient_calculation_kernel",
-												   smoothed_noise,
-												   gradient_magnitude);
-				#else
+														   TOTAL_POINTS,
+														   config,
+														   "gradient_calculation_kernel",
+														   smoothed_noise,
+														   gradient_magnitude);
+#else
 				Event gradient_event = launch_kernel(resource,
 													 TOTAL_POINTS,
 													 config,
 													 GradientCalculationKernel{GRID_SIZE},
 													 smoothed_noise,
 													 gradient_magnitude);
-				#endif
+#endif
 
 				gradient_event.wait();
 			}

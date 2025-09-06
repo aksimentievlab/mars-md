@@ -41,16 +41,31 @@ Event launch_kernel(const Resource& resource,
 					const KernelConfig& config,
 					Functor kernel_func,
 					Args... args) {
+	// Auto-configure the kernel if grid_size is not set (default 0,0,0)
+	KernelConfig local_config = config;
+	if (local_config.grid_size.x == 0 && local_config.grid_size.y == 0 &&
+		local_config.grid_size.z == 0) {
+		local_config.auto_configure(thread_count, resource);
+	}
+	local_config.validate_block_size(resource);
 
 #ifdef USE_CUDA
 	if (resource.type == ResourceType::CUDA) {
-		return launch_cuda_kernel(resource, thread_count, config, kernel_func, get_buffer_pointer(args)...);
+		return launch_cuda_kernel(resource,
+								  thread_count,
+								  local_config,
+								  kernel_func,
+								  get_buffer_pointer(args)...);
 	}
 #endif
 
 #ifdef USE_SYCL
 	if (resource.type == ResourceType::SYCL) {
-		return launch_sycl_kernel(resource, thread_count, config, kernel_func, get_buffer_pointer(args)...);
+		return launch_sycl_kernel(resource,
+								  thread_count,
+								  local_config,
+								  kernel_func,
+								  get_buffer_pointer(args)...);
 	}
 #endif
 
@@ -62,7 +77,11 @@ Event launch_kernel(const Resource& resource,
 #endif
 
 	// CPU fallback
-	return launch_cpu_kernel(resource, thread_count, config, kernel_func, get_buffer_pointer(args)...);
+	return launch_cpu_kernel(resource,
+							 thread_count,
+							 local_config,
+							 kernel_func,
+							 get_buffer_pointer(args)...);
 }
 
 template<typename InputTuple, typename OutputTuple, typename Functor, typename... Args>
@@ -109,8 +128,54 @@ launch_kernel(const Resource& resource,
 	}
 }
 
+// ============================================================================
+// Dimensional Kernel Launchers (1D, 2D, 3D)
+// ============================================================================
 
+/**
+ * @brief 1D kernel launcher with auto-configuration
+ */
+template<typename Functor, typename... Args>
+Event launch_kernel_1d(const Resource& resource,
+					   idx_t thread_count,
+					   KernelConfig config,
+					   Functor kernel_func,
+					   Args... args) {
+	config.auto_configure(thread_count, resource);
+	config.validate_block_size(resource);
+	return launch_kernel(resource, thread_count, config, kernel_func, args...);
+}
 
+/**
+ * @brief 2D kernel launcher with auto-configuration
+ */
+template<typename Functor, typename... Args>
+Event launch_kernel_2d(const Resource& resource,
+					   idx_t width,
+					   idx_t height,
+					   KernelConfig config,
+					   Functor kernel_func,
+					   Args... args) {
+	config.auto_configure_2d(width, height, resource);
+	config.validate_block_size(resource);
+	return launch_kernel(resource, width * height, config, kernel_func, args...);
+}
+
+/**
+ * @brief 3D kernel launcher with auto-configuration
+ */
+template<typename Functor, typename... Args>
+Event launch_kernel_3d(const Resource& resource,
+					   idx_t width,
+					   idx_t height,
+					   idx_t depth,
+					   KernelConfig config,
+					   Functor kernel_func,
+					   Args... args) {
+	config.auto_configure_3d(width, height, depth, resource);
+	config.validate_block_size(resource);
+	return launch_kernel(resource, width * height * depth, config, kernel_func, args...);
+}
 
 // ============================================================================
 // CPU Kernel Launcher (Host-only)
@@ -125,7 +190,7 @@ Event launch_cpu_kernel(const Resource& resource,
 						const KernelConfig& config,
 						Functor kernel_func,
 						Args... args) {
-	
+
 	config.dependencies.wait_all();
 
 	unsigned int num_threads = std::thread::hardware_concurrency();
@@ -200,75 +265,6 @@ Event launch_cpu_kernel(const Resource& resource,
 
 	return Event(nullptr, resource);
 }
-
-
-/**
- * @brief Kernel chaining
- * Kernel chain on a single resource with same stream/Queue
- */
-template<typename Backend>
-class KernelChain {
-  private:
-	const Resource& resource_;
-	EventList events_;
-
-  public:
-	explicit KernelChain(const Resource& resource) : resource_(resource) {}
-
-	template<typename InputTuple, typename OutputTuple, typename Functor, typename... Args>
-	KernelChain& then(idx_t thread_count,
-					  InputTuple& inputs,
-					  OutputTuple& outputs,
-					  Functor&& kernel,
-					  const KernelConfig& config = {},
-					  Args&&... args) {
-
-		KernelConfig new_config = config;
-		new_config.dependencies = events_;
-		new_config.sync = false;
-
-		Event completion_event = launch_kernel<Backend>(resource_,
-														thread_count,
-														inputs,
-														outputs,
-														new_config,
-														std::forward<Functor>(kernel),
-														std::forward<Args>(args)...);
-
-		events_.clear();
-		events_.add(completion_event);
-		return *this;
-	}
-
-	template<typename InputTuple, typename OutputTuple, typename... Args>
-	KernelChain& then(idx_t thread_count,
-					  InputTuple& inputs,
-					  OutputTuple& outputs,
-					  const std::string& kernel_name,
-					  const KernelConfig& config = {},
-					  Args&&... args) {
-
-		KernelConfig new_config = config;
-		new_config.dependencies = events_;
-		new_config.sync = false;
-
-		Event completion_event = launch_kernel<Backend>(resource_,
-														thread_count,
-														inputs,
-														outputs,
-														new_config,
-														kernel_name,
-														std::forward<Args>(args)...);
-
-		events_.clear();
-		events_.add(completion_event);
-		return *this;
-	}
-
-	void wait() {
-		events_.wait_all();
-	}
-};
 
 // ============================================================================
 // Result Wrapper for Kernel Calls

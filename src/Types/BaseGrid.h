@@ -12,16 +12,13 @@
 #ifdef HOST_GUARD
 #include "ARBDException.h"
 #include "ARBDLogger.h"
-#include <algorithm>
-#include <concepts>
-#include <memory>
+#include "IO/FileHandle.h"
 #include <span>
 #include <string_view>
 #include <vector>
 #endif // HOST_GUARD
 
 #include "Header.h"
-#include "IO/FileHandle.h"
 #include "IndexList.h"
 #include "Matrix3.h"
 #include "Types.h"
@@ -90,7 +87,7 @@ class BaseGrid {
 	Matrix3 basis_inv_; ///< Inverse of basis matrix (cached for performance)
 
 // Host-side storage (not accessible from device)
-#if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__)
+#ifdef HOST_GUARD
 	std::vector<T> values_; ///< Grid values in contiguous memory (host-only)
 #endif
 
@@ -112,7 +109,7 @@ class BaseGrid {
 	 */
 	BaseGrid()
 		: config_{}
-#if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__)
+#ifdef HOST_GUARD
 		  ,
 		  values_(1, T{0})
 #endif
@@ -136,7 +133,7 @@ class BaseGrid {
 							nz);
 		}
 
-#if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__)
+#ifdef HOST_GUARD
 		values_.resize(config_.total_size(), T{0});
 #endif
 
@@ -162,7 +159,7 @@ class BaseGrid {
 								Vector3(0, 0, abs_box.z / nz));
 		config_.origin = -T(0.5) * abs_box;
 
-#if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__)
+#ifdef HOST_GUARD
 		values_.resize(config_.total_size(), T{0});
 #endif
 
@@ -174,7 +171,7 @@ class BaseGrid {
 	 * @brief Copy constructor
 	 */
 	HOST BaseGrid(const BaseGrid& other) : config_(other.config_), basis_inv_(other.basis_inv_) {
-#if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__)
+#ifdef HOST_GUARD
 		values_ = other.values_;
 #endif
 		LOGINFO("BaseGrid - Copy");
@@ -187,7 +184,7 @@ class BaseGrid {
 		: config_(std::move(other.config_)), basis_inv_(std::move(other.basis_inv_)),
 		  device_ptr_(std::exchange(other.device_ptr_, nullptr)),
 		  device_dirty_(std::exchange(other.device_dirty_, false)) {
-#if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__)
+#ifdef HOST_GUARD
 		values_ = std::move(other.values_);
 #endif
 	}
@@ -199,7 +196,7 @@ class BaseGrid {
 		if (this != &other) {
 			config_ = other.config_;
 			basis_inv_ = other.basis_inv_;
-#if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__)
+#ifdef HOST_GUARD
 			values_ = other.values_;
 #endif
 			device_ptr_ = nullptr; // Force reallocation on device
@@ -215,7 +212,7 @@ class BaseGrid {
 		if (this != &other) {
 			config_ = std::move(other.config_);
 			basis_inv_ = std::move(other.basis_inv_);
-#if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__)
+#ifdef HOST_GUARD
 			values_ = std::move(other.values_);
 #endif
 			device_ptr_ = std::exchange(other.device_ptr_, nullptr);
@@ -272,7 +269,7 @@ class BaseGrid {
 /**
  * @brief Access grid values (host-only - uses std::vector)
  */
-#if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__)
+#ifdef HOST_GUARD
 	HOST T& operator[](idx_t index) {
 		device_dirty_ = true;
 		return values_[index];
@@ -318,6 +315,7 @@ class BaseGrid {
 	/**
 	 * @brief Get span view of data (C++20, host-only)
 	 */
+#ifdef HOST_GUARD
 	HOST std::span<T> span() noexcept {
 		device_dirty_ = true;
 		return std::span<T>(values_);
@@ -326,11 +324,12 @@ class BaseGrid {
 		return std::span<const T>(values_);
 	}
 #endif
+#endif
 
 /**
  * @brief Get device pointer for backend operations (if available)
  */
-#if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__)
+#ifdef HOST_GUARD
 	HOST T* get_device_pointer() const noexcept {
 		return device_ptr_;
 	}
@@ -419,7 +418,7 @@ class BaseGrid {
 /**
  * @brief Zero all grid values
  */
-#if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__)
+#ifdef HOST_GUARD
 	HOST void zero() {
 		std::fill(values_.begin(), values_.end(), T{0});
 		device_dirty_ = true;
@@ -429,7 +428,7 @@ class BaseGrid {
 /**
  * @brief Add constant to all grid values
  */
-#if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__)
+#ifdef HOST_GUARD
 	HOST void shift(T value) {
 		for (auto& v : values_)
 			v += value;
@@ -440,7 +439,7 @@ class BaseGrid {
 /**
  * @brief Scale all grid values by constant
  */
-#if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__)
+#ifdef HOST_GUARD
 	HOST void scale(T factor) {
 		for (auto& v : values_)
 			v *= factor;
@@ -448,10 +447,10 @@ class BaseGrid {
 	}
 #endif
 
-/**
- * @brief Compute mean of all grid values
- */
-#if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__)
+	/**
+	 * @brief Compute mean of all grid values
+	 */
+#ifdef HOST_GUARD
 	HOST T mean() const {
 		T sum = T{0};
 		for (const auto& v : values_)
@@ -463,7 +462,7 @@ class BaseGrid {
 /**
  * @brief Element-wise multiplication with another grid
  */
-#if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__)
+#ifdef HOST_GUARD
 	HOST BaseGrid& multiply(const BaseGrid& other) {
 		if (values_.size() != other.values_.size()) {
 			throw Exception(ExceptionType::ValueError,
@@ -520,7 +519,7 @@ class BaseGrid {
 	 * @brief Interpolate value at world position using trilinear interpolation
 	 */
 	HOST DEVICE T interpolate(const Vector3& world_pos) const {
-#if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__)
+#ifdef HOST_GUARD
 		return interpolate_grid_point(values_.data(),
 									  world_pos,
 									  config_.origin,
@@ -540,7 +539,7 @@ class BaseGrid {
 	 * @brief Get value at nearest grid point
 	 */
 	HOST DEVICE T get_value(const Vector3& world_pos) const {
-#if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__)
+#ifdef HOST_GUARD
 		return get_value_nearest(values_.data(),
 								 world_pos,
 								 config_.origin,
@@ -560,7 +559,7 @@ class BaseGrid {
 	 * @brief Compute gradient at world position using finite differences
 	 */
 	HOST DEVICE Vector3 compute_gradient(const Vector3& world_pos) const {
-#if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__)
+#ifdef HOST_GUARD
 		return compute_gradient<T>(values_.data(),
 								   world_pos,
 								   config_.origin,
@@ -620,12 +619,10 @@ class BaseGrid {
 	 * @brief Get 3x3x3 neighborhood around a grid point (device-safe)
 	 */
 	HOST DEVICE NeighborList<T> get_neighbor_list(idx_t ix, idx_t iy, idx_t iz) const {
-#if (!defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__))
+#ifdef HOST_GUARD
 		LOGINFO("get_neighbor_list: calling get_neighbor_list_from_grid");
 		return get_neighbor_list_from_grid(values_.data(), ix, iy, iz, config_.dimensions);
 #else
-		// On device, this would need to be called with explicit grid pointer
-		LOGINFO("get_neighbor_list: returning empty NeighborList");
 		return NeighborList<T>{}; // Return empty - device code should use free functions
 #endif
 	}
@@ -634,7 +631,7 @@ class BaseGrid {
 	 * @brief Get neighbor value at relative offset (device-safe)
 	 */
 	HOST DEVICE T get_neighbor(idx_t ix, idx_t iy, idx_t iz, int di, int dj, int dk) const {
-#if (!defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__))
+#ifdef HOST_GUARD
 		LOGINFO("get_neighbor on HOST: ix={}, iy={}, iz={}, di={}, dj={}, dk={}",
 				ix,
 				iy,
@@ -730,7 +727,7 @@ class BaseGrid {
 	|  I/O OPERATIONS     |
 	\*===================*/
 
-#if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__)
+#ifdef HOST_GUARD
 
 	/**
 	 * @brief Write grid to file (various formats supported)

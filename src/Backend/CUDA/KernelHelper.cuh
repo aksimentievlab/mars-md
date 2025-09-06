@@ -64,7 +64,7 @@ Event launch_cuda_kernel(const Resource& resource,
 
 	// Auto-configure if needed
 	KernelConfig local_config = config;
-	local_config.auto_configure(thread_count, resource);
+	// Auto-configuration should be done by caller before calling this function
 
 	// Set device context
 	int old_device;
@@ -75,7 +75,8 @@ Event launch_cuda_kernel(const Resource& resource,
 	dim3 grid(local_config.grid_size.x, local_config.grid_size.y, local_config.grid_size.z);
 	dim3 block(local_config.block_size.x, local_config.block_size.y, local_config.block_size.z);
 
-	kernel_func<<<grid, block, local_config.shared_memory, stream>>>(thread_count, get_buffer_pointer(args)...);
+	kernel_func<<<grid, block, local_config.shared_memory, stream>>>(thread_count,
+																	 get_buffer_pointer(args)...);
 
 	// Check for launch errors
 	CUDA_CHECK(cudaGetLastError());
@@ -106,7 +107,7 @@ Event launch_cuda_kernel(const Resource& resource,
 
 #ifdef __CUDACC__
 	KernelConfig local_config = config;
-	local_config.auto_configure(thread_count, resource);
+	// Auto-configuration should be done by caller before calling this function
 
 	dim3 grid(local_config.grid_size.x, local_config.grid_size.y, local_config.grid_size.z);
 	dim3 block(local_config.block_size.x, local_config.block_size.y, local_config.block_size.z);

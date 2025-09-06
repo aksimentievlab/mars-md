@@ -4,11 +4,8 @@
  * @brief Declaration of templated Array class.
  *********************************************************************/
 #pragma once
-#include "ARBDException.h"
-#include "ARBDLogger.h"
-#include "Backend/Buffer.h"
-#include "Backend/Resource.h"
-#include "TypeName.h"
+
+#include "Header.h"
 
 namespace ARBD {
 template<typename T>

@@ -43,7 +43,7 @@ struct KernelConfig {
 	kerneldim3 grid_size{0, 0, 0};
 	kerneldim3 block_size{256, 1, 1};
 	idx_t shared_memory{0};
-	bool sync{false}; //use this only. async is deprecated.
+	bool sync{false};  // use this only. async is deprecated.
 	bool async{!sync}; // FOR LEGACY COMPATIBILITY
 	EventList dependencies;
 	int queue_id{0};
@@ -131,38 +131,38 @@ struct KernelConfig {
 		if (resource.type == ResourceType::METAL) {
 			try {
 				auto& device = METAL::Manager::devices()[resource.id];
-				
+
 				// Get the already-queried maximum threads per threadgroup from the device
 				idx_t max_threads_per_threadgroup = device.max_threads_per_group();
-				
+
 				// Metal also has per-dimension limits (typically 1024x1024x64)
 				// For simplicity, we'll use conservative limits that work on all devices
 				idx_t max_threads_x = 1024;
-				idx_t max_threads_y = 1024; 
+				idx_t max_threads_y = 1024;
 				idx_t max_threads_z = 64;
-				
+
 				// Clamp each dimension to Metal limits
 				block_size.x = std::min(block_size.x, max_threads_x);
 				block_size.y = std::min(block_size.y, max_threads_y);
 				block_size.z = std::min(block_size.z, max_threads_z);
-				
+
 				// Ensure total threads per threadgroup doesn't exceed device limit
 				idx_t total_threads = block_size.x * block_size.y * block_size.z;
 				if (total_threads > max_threads_per_threadgroup) {
-					double scale_factor = 
+					double scale_factor =
 						std::sqrt(static_cast<double>(max_threads_per_threadgroup) / total_threads);
 					block_size.x = std::max(1UL, static_cast<idx_t>(block_size.x * scale_factor));
 					block_size.y = std::max(1UL, static_cast<idx_t>(block_size.y * scale_factor));
 					block_size.z = std::max(1UL, static_cast<idx_t>(block_size.z * scale_factor));
 				}
-				
+
 				LOGDEBUG("Metal block size clamped to ({}, {}, {}) for device with max threads per "
 						 "threadgroup {}",
 						 block_size.x,
 						 block_size.y,
 						 block_size.z,
 						 max_threads_per_threadgroup);
-						 
+
 			} catch (...) {
 				LOGWARN("Failed to query Metal device limits, using default block size");
 				block_size = {32, 1, 1}; // Metal-optimized default
@@ -194,7 +194,7 @@ struct KernelConfig {
 			block_size.x = 16;
 			block_size.y = 16;
 			block_size.z = 1;
-			
+
 			grid_size.x = (width + block_size.x - 1) / block_size.x;
 			grid_size.y = (height + block_size.y - 1) / block_size.y;
 			grid_size.z = 1;
@@ -207,7 +207,7 @@ struct KernelConfig {
 			block_size.x = 8;
 			block_size.y = 8;
 			block_size.z = 1;
-			
+
 			grid_size.x = (width + block_size.x - 1) / block_size.x;
 			grid_size.y = (height + block_size.y - 1) / block_size.y;
 			grid_size.z = 1;
@@ -221,7 +221,7 @@ struct KernelConfig {
 			block_size.x = 8;
 			block_size.y = 8;
 			block_size.z = 1;
-			
+
 			grid_size.x = (width + block_size.x - 1) / block_size.x;
 			grid_size.y = (height + block_size.y - 1) / block_size.y;
 			grid_size.z = 1;
@@ -237,7 +237,7 @@ struct KernelConfig {
 			block_size.x = 8;
 			block_size.y = 8;
 			block_size.z = 4;
-			
+
 			grid_size.x = (width + block_size.x - 1) / block_size.x;
 			grid_size.y = (height + block_size.y - 1) / block_size.y;
 			grid_size.z = (depth + block_size.z - 1) / block_size.z;
@@ -250,7 +250,7 @@ struct KernelConfig {
 			block_size.x = 4;
 			block_size.y = 4;
 			block_size.z = 4;
-			
+
 			grid_size.x = (width + block_size.x - 1) / block_size.x;
 			grid_size.y = (height + block_size.y - 1) / block_size.y;
 			grid_size.z = (depth + block_size.z - 1) / block_size.z;
@@ -264,7 +264,7 @@ struct KernelConfig {
 			block_size.x = 4;
 			block_size.y = 4;
 			block_size.z = 4;
-			
+
 			grid_size.x = (width + block_size.x - 1) / block_size.x;
 			grid_size.y = (height + block_size.y - 1) / block_size.y;
 			grid_size.z = (depth + block_size.z - 1) / block_size.z;
@@ -272,7 +272,7 @@ struct KernelConfig {
 #endif
 	}
 
-private:
+  private:
 	void auto_configure_1d(idx_t thread_count, const Resource& resource) {
 		// Backend-specific 1D auto-configuration
 #ifdef USE_CUDA
@@ -301,11 +301,11 @@ private:
 			block_size.x = 32; // Metal SIMD width (optimal for most kernels)
 			block_size.y = 1;  // 1D processing
 			block_size.z = 1;  // 1D processing
-			
+
 			// Calculate number of threadgroups needed
 			grid_size.x = (thread_count + block_size.x - 1) / block_size.x;
-			grid_size.y = 1;  // 1D processing
-			grid_size.z = 1;  // 1D processing
+			grid_size.y = 1; // 1D processing
+			grid_size.z = 1; // 1D processing
 		}
 #endif
 	}
