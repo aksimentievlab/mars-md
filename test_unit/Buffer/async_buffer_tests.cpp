@@ -156,11 +156,13 @@ TEST_CASE_METHOD(AsyncBufferTestFixture,
 	SECTION("Async copy_to_host") {
 		DeviceBuffer<int> buffer(buffer_size, device);
 
-		// Initialize buffer with known data
+		// Initialize buffer with known data using async copy and proper synchronization
 		std::vector<int> host_data(buffer_size, 42);
-		buffer.copy_from_host_sync(host_data.data(), buffer_size);
+		void* init_stream = buffer.copy_from_host_async(host_data.data(), buffer_size);
+		REQUIRE(init_stream != nullptr);
+		synchronize_stream(init_stream, device);
 
-		// Perform async copy to host
+		// Perform async copy to host using the same stream as the buffer
 		std::vector<int> result_data(buffer_size);
 		void* stream = buffer.copy_to_host_async(result_data.data(), buffer_size);
 		REQUIRE(stream != nullptr);

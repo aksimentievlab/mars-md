@@ -84,6 +84,7 @@ Event launch_kernel(const Resource& resource,
 							 get_buffer_pointer(args)...);
 }
 
+/*
 template<typename InputTuple, typename OutputTuple, typename Functor, typename... Args>
 std::enable_if_t<!is_device_buffer_v<InputTuple> && !is_device_buffer_v<OutputTuple>, Event>
 launch_kernel(const Resource& resource,
@@ -127,6 +128,7 @@ launch_kernel(const Resource& resource,
 		throw;
 	}
 }
+*/
 
 // ============================================================================
 // Dimensional Kernel Launchers (1D, 2D, 3D)

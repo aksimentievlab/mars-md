@@ -66,7 +66,8 @@ struct BackendInitFixture {
 				METAL::Manager::load_info();
 				if (!METAL::Manager::devices().empty()) {
 					METAL::Manager::use(0);
-					LOGDEBUG("Initialized Metal with {} device(s)", METAL::Manager::devices().size());
+					LOGDEBUG("Initialized Metal with {} device(s)",
+							 METAL::Manager::devices().size());
 				}
 #endif
 			} catch (const std::exception& e) {
@@ -204,8 +205,10 @@ TEST_CASE_METHOD(BackendInitFixture, "Pinned Buffer Memory Operations", "[pinned
 		std::iota(test_data.begin(), test_data.end(), 100.0f);
 		device_buffer.copy_from_host(test_data);
 
-		// Copy from device to pinned using PINBuffer specific method
-		REQUIRE_NOTHROW(pinned_buffer.upload_to_device(device_buffer.data(), PINNED_BUFFER_SIZE));
+		// Get data from device buffer to host, then upload to pinned buffer using PINBuffer method
+		std::vector<float> host_data(PINNED_BUFFER_SIZE);
+		device_buffer.copy_to_host(host_data.data(), PINNED_BUFFER_SIZE);
+		REQUIRE_NOTHROW(pinned_buffer.upload_to_device(host_data.data(), PINNED_BUFFER_SIZE));
 
 		// Verify pinned buffer has correct data using PINBuffer specific method
 		std::vector<float> pinned_result(PINNED_BUFFER_SIZE);

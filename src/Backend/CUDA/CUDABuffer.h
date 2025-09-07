@@ -25,9 +25,8 @@ struct Policy {
 		CUDA_CHECK(cudaSetDevice(static_cast<int>(resource.id)));
 
 		void* ptr = nullptr;
-		cudaStream_t stream = queue ? static_cast<cudaStream_t>(queue)
-									: Manager::get_device(resource.id).get_next_stream();
-		CUDA_CHECK(cudaMallocAsync(&ptr, bytes, stream));
+
+		CUDA_CHECK(cudaMalloc(&ptr, bytes));
 
 		// Restore previous device context
 		CUDA_CHECK(cudaSetDevice(old_device));
@@ -37,9 +36,9 @@ struct Policy {
 
 	static void deallocate(void* ptr, void* queue = nullptr, bool sync = true) {
 		if (ptr) {
-			cudaStream_t stream = queue ? static_cast<cudaStream_t>(queue)
-										: Manager::get_current_device().get_next_stream();
-			CUDA_CHECK(cudaFreeAsync(ptr, stream));
+			// Use synchronous deallocation for reliable cleanup
+			// This ensures proper cleanup without stream dependencies
+			CUDA_CHECK(cudaFree(ptr));
 		}
 	}
 
@@ -51,10 +50,10 @@ struct Policy {
 		if (!host_dst || !device_src || bytes == 0)
 			return;
 
-		// Use cudaMemcpyDefault for automatic device context handling
 		if (sync) {
 			CUDA_CHECK(cudaMemcpy(host_dst, device_src, bytes, cudaMemcpyDefault));
 		} else {
+			// Use the provided queue if available, otherwise get a new stream
 			cudaStream_t stream = queue ? static_cast<cudaStream_t>(queue)
 										: Manager::get_current_device().get_next_stream();
 			CUDA_CHECK(cudaMemcpyAsync(host_dst, device_src, bytes, cudaMemcpyDefault, stream));
@@ -69,7 +68,6 @@ struct Policy {
 		if (!device_dst || !host_src || bytes == 0)
 			return;
 
-		// For cross-device operations, use cudaMemcpyDefault which handles device contexts
 		if (sync) {
 			CUDA_CHECK(cudaMemcpy(device_dst, host_src, bytes, cudaMemcpyDefault));
 		} else {
@@ -87,10 +85,10 @@ struct Policy {
 		if (!dst || !src || bytes == 0)
 			return;
 
-		// For device-to-device copy, use cudaMemcpyDefault which handles peer access automatically
 		if (sync) {
 			CUDA_CHECK(cudaMemcpy(dst, src, bytes, cudaMemcpyDefault));
 		} else {
+			// Use the provided queue if available, otherwise get a new stream
 			cudaStream_t stream = queue ? static_cast<cudaStream_t>(queue)
 										: Manager::get_current_device().get_next_stream();
 			CUDA_CHECK(cudaMemcpyAsync(dst, src, bytes, cudaMemcpyDefault, stream));
@@ -168,7 +166,15 @@ struct UnifiedPolicy {
 	}
 
 	static void mem_advise(void* ptr, size_t bytes, int advice, int device_id) {
-		CUDA_CHECK(cudaMemAdvise(ptr, bytes, static_cast<cudaMemoryAdvise>(advice), device_id));
+		// Validate parameters before calling cudaMemAdvise
+		if (!ptr || bytes == 0) {
+			return; // No-op for invalid pointers or zero bytes
+		}
+
+		cudaMemoryAdvise cuda_advice =
+			(advice == 0) ? cudaMemAdviseSetReadMostly : static_cast<cudaMemoryAdvise>(advice);
+
+		CUDA_CHECK(cudaMemAdvise(ptr, bytes, cuda_advice, device_id));
 	}
 
 	static void copy_from_host(void* unified_dst,
