@@ -61,7 +61,6 @@ Event launch_cuda_kernel(const Resource& resource,
 	for (const auto& dep_event : config.dependencies.get_cuda_events()) {
 		CUDA_CHECK(cudaStreamWaitEvent(stream, dep_event, 0));
 	}
-
 	// Auto-configure if needed
 	KernelConfig local_config = config;
 	// Auto-configuration should be done by caller before calling this function
@@ -99,10 +98,10 @@ Event launch_cuda_kernel(const Resource& resource,
 template<typename InputTuple, typename OutputTuple, typename Functor, typename... Args>
 Event launch_cuda_kernel(const Resource& resource,
 						 idx_t thread_count,
-						 const InputTuple& inputs,
-						 const OutputTuple& outputs,
 						 const KernelConfig& config,
 						 Functor&& kernel_func,
+						 const InputTuple& inputs,
+						 const OutputTuple& outputs,
 						 Args&&... args) {
 
 #ifdef __CUDACC__

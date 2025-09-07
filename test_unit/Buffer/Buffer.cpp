@@ -155,23 +155,6 @@ TEST_CASE_METHOD(ProductionBufferTestFixture,
 		REQUIRE(buffer.resource() == device);
 		REQUIRE(buffer.data() != nullptr);
 	}
-
-	/*
-	SECTION("Generic buffer with automatic policy selection") {
-		// Test CPU resource
-		GenericBuffer<float> cpu_buffer(1000, Resource::CPU());
-		REQUIRE(cpu_buffer.size() == 1000);
-		REQUIRE(cpu_buffer.resource().type == Resource::Local().type);
-
-		// Test device resource (if available)
-		auto devices = get_device_resources();
-		if (!devices.empty()) {
-			GenericBuffer<float> device_buffer(500, devices[0]);
-			REQUIRE(device_buffer.size() == 500);
-			REQUIRE(device_buffer.resource() == devices[0]);
-		}
-	}
-	*/
 }
 
 // ============================================================================
@@ -348,10 +331,10 @@ TEST_CASE_METHOD(ProductionBufferTestFixture, "Buffer Resize Operations", "[Buff
 		if (devices.empty()) {
 			SKIP("No device resources available for resource change test");
 		}
-		
+
 		DeviceBuffer<float> buffer(100, devices[0]);
 		Resource original_resource = buffer.resource();
-		
+
 		// Only test resource change if the target device is different from original
 		if (devices[0] != original_resource) {
 			buffer.resize(200, devices[0]);
@@ -366,7 +349,6 @@ TEST_CASE_METHOD(ProductionBufferTestFixture, "Buffer Resize Operations", "[Buff
 			REQUIRE(buffer.resource() == original_resource);
 		}
 	}
-	
 
 	SECTION("Resize with same parameters") {
 		DeviceBuffer<double> buffer(100);
@@ -639,7 +621,9 @@ TEST_CASE_METHOD(ProductionBufferTestFixture, "CUDA-Specific Buffer Operations",
 #endif
 
 #ifdef USE_SYCL
-TEST_CASE_METHOD(ProductionBufferTestFixture, "SYCL-Specific Buffer Operations", "[Buffer][operations][sycl]") {
+TEST_CASE_METHOD(ProductionBufferTestFixture,
+				 "SYCL-Specific Buffer Operations",
+				 "[Buffer][operations][sycl]") {
 
 	if (SYCL::Manager::devices().size() == 0) {
 		SKIP("No SYCL devices available");
@@ -809,7 +793,7 @@ TEST_CASE_METHOD(ProductionBufferTestFixture, "Buffer Edge Cases", "[Buffer][edg
 		if (devices.empty()) {
 			SKIP("No device resources available for cross-device copy test");
 		}
-		
+
 		DeviceBuffer<float> copy2(original, devices[0]);
 		REQUIRE(copy2.resource() == devices[0]);
 		REQUIRE(copy2.size() == 100);
@@ -825,7 +809,7 @@ TEST_CASE_METHOD(ProductionBufferTestFixture, "Buffer Edge Cases", "[Buffer][edg
 		if (devices.empty()) {
 			SKIP("No device resources available for move semantics test");
 		}
-		
+
 		Resource test_resource = devices[0];
 
 		DeviceBuffer<int> original(50, test_resource);
