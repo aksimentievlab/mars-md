@@ -1,46 +1,42 @@
 // SimManager.cu, from GrandBorwnTown.cu/cuh...etc
-#include "System/SimManager.h"
-#include "Random/Random.h"
+#include "../SimManager.h"
 #include "ARBDLogger.h"
-#include "ARBDException.h"
-#include "Math/Types.h"
-#include <memory>
+#include "Random/Random.h"
+#include "Types/Types.h"
 
 namespace ARBD {
 
 void SimManager::run() {
-    LOGINFO("Starting simulation...");
+	LOGINFO("Starting simulation...");
 
-    Patch p;
-    LOGINFO("Initialized patch");
+	Patch p;
+	LOGINFO("Initialized patch");
 
-    RandomCPU<128> cpu_rng;
-    LOGINFO("Initialized CPU RNG");
-    
-    cpu_rng.init(42);
-    
-    std::cout << "CPU RNG test:\n";
-    for (int i = 0; i < 5; ++i) {
-        float rand_num = cpu_rng.gaussian();
-        std::cout << "  Gaussian(" << i << "): " << rand_num << "\n";
-    }
+	Random<128> cpu_rng;
+	LOGINFO("Initialized CPU RNG");
 
-    Vector3 rand_vec = cpu_rng.gaussian_vector();
-    std::cout << "Random vector: ("
-              << rand_vec.x << ", "
-              << rand_vec.y << ", "
-              << rand_vec.z << ")\n";
+	cpu_rng.init(42);
 
-    for (size_t step = 0; step < 10; ++step) {
-        LOGINFO("Processing step {}", step);
-        p.compute();
-        
-        #ifdef __CUDACC__
-        cudaDeviceSynchronize();
-        #endif
-    }
+	std::cout << "CPU RNG test:\n";
+	for (int i = 0; i < 5; ++i) {
+		float rand_num = cpu_rng.gaussian();
+		std::cout << "  Gaussian(" << i << "): " << rand_num << "\n";
+	}
 
-    LOGINFO("Simulation complete");
+	Vector3 rand_vec = cpu_rng.gaussian_vector();
+	std::cout << "Random vector: (" << rand_vec.x << ", " << rand_vec.y << ", " << rand_vec.z
+			  << ")\n";
+
+	for (size_t step = 0; step < 10; ++step) {
+		LOGINFO("Processing step {}", step);
+		p.compute();
+
+#ifdef __CUDACC__
+		cudaDeviceSynchronize();
+#endif
+	}
+
+	LOGINFO("Simulation complete");
 }
 
 } // namespace ARBD

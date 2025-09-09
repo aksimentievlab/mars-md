@@ -3,7 +3,7 @@
 #include "ARBDException.h"
 #include "ARBDLogger.h"
 #include "Backend/Resource.h"
-#include "Math/NanoGridHandle.h"
+#include "Types/NanoGridHandle.h"
 #include <nanovdb/io/IO.h>
 #include <string>
 #include <vector>

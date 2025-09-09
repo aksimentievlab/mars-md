@@ -248,7 +248,7 @@ class Bitmask {
 		mask = ptr;
 	}
 
-#if !defined(__METAL_VERSION__) && !defined(__SYCL_DEVICE_ONLY__) && !defined(__CUDA_ARCH__)
+#ifdef HOST_GUARD
 	/**
 	 * @brief Copy constructor
 	 */
@@ -439,7 +439,7 @@ class Bitmask {
 	Bitmask() = delete;
 };
 
-#if !defined(__METAL_VERSION__) && !defined(__SYCL_DEVICE_ONLY__) && !defined(__CUDA_ARCH__)
+#ifdef HOST_GUARD
 // ============================================================================
 // Host-Only Sparse Bitmask Implementation
 // ============================================================================
@@ -525,7 +525,7 @@ class SparseBitmask : public BitmaskBase {
 				meta_mask.set_mask(chunk_idx, true);
 
 				// Allocate new chunk (host-only operation)
-#if !defined(__METAL_VERSION__) && !defined(__SYCL_DEVICE_ONLY__) && !defined(__CUDA_ARCH__)
+#ifdef HOST_GUARD
 				chunk_ptrs[chunk_idx] = new Bitmask(chunk_size);
 #endif
 			} else {

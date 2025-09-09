@@ -3,12 +3,11 @@
 #ifdef USE_MPI
 #include <mpi.h>
 #endif
-#include "Header.h"
 
-#ifdef USE_CUDA
-#include <cuda.h> // Or <cuda.h> depending on CUDAManager's needs
-#include <cuda_runtime.h>
-#endif
+#include "Backend/Resource.h"
+#include "Configuration.h"
+#include "System/SimManager.h"
+#include "System/SimSystem.h"
 
 #include "SignalManager.h"
 #include <cstdio>	// For printf
@@ -23,10 +22,16 @@
 
 // Consider moving constants to a dedicated configuration header or class
 const unsigned int kDefaultIMDPort = 71992;
+const unsigned int kDefaultNodes = 1;
+const unsigned int kDefaultGpus = 0;
+unsigned int gpus[] = {kDefaultGpus};
 
 struct ProgramOptions {
 	std::string configFile;
 	std::string outputFile;
+	std::vector<int> gpuIds;
+	int numGpus = 0;
+	int numNodes = 1;
 };
 
 bool parse_basic_args(int argc, char* argv[], ProgramOptions& opts) {
@@ -36,38 +41,17 @@ bool parse_basic_args(int argc, char* argv[], ProgramOptions& opts) {
 		printf("  -h, --help         Display this help and exit\n");
 		printf("  --info             Output basic CPU and CUDA information (stubbed) and exit\n");
 		printf("  --version          Output version information and exit\n");
-		printf("\n  (More options will be enabled as components are modernized)\n");
-		// printf("  -r, --replicas=    Number of replicas to run\n");
-		// printf("  -g, --gpu=         Index of gpu to use (defaults to 0)\n");
-		// printf("  -i, --imd=         IMD port (defaults to %u)\n", kDefaultIMDPort);
-		// printf("  -d, --debug        Debug mode\n");
-		// printf("  --safe             Do not use CUDAs that may timeout\n");
-		// printf("  --unsafe           Use CUDAs that may timeout (default)\n");
+		printf("  -i, --imd=         IMD port (defaults to %u)\n", kDefaultIMDPort);
+		printf("  -g, --gpus=        Number of GPUs to use (defaults to %u)\n", kDefaultGpus);
+		printf("  -gid, --gpu_ids=   List of GPU IDs to use (e.g., --gid 0 1 2 3)\n");
+		printf("  -n, --nodes=       Number of nodes to use (defaults to %u)\n", kDefaultNodes);
 		return false; // Indicates help was shown, program should exit
 	} else if (argc == 2 && (strcmp(argv[1], "--version") == 0)) {
 		printf("%s %s\n", argv[0], VERSION);
 		return false; // Indicates version was shown, program should exit
 	} else if (argc == 2 && (strcmp(argv[1], "--info") == 0)) {
-#ifdef USE_CUDA
-
-		printf("CUDA is enabled.\n");
-		// Add a very simple device query here for Week 1 if possible
-		int deviceCount = 0;
-		cudaError_t err = cudaGetDeviceCount(&deviceCount);
-		if (err == cudaSuccess) {
-			printf("Number of CUDA devices found: %d\n", deviceCount);
-			for (int i = 0; i < deviceCount; ++i) {
-				cudaDeviceProp deviceProp;
-				cudaGetDeviceProperties(&deviceProp, i);
-				printf("  Device %d: %s\n", i, deviceProp.name);
-			}
-		} else {
-			printf("cudaGetDeviceCount failed: %s\n", cudaGetErrorString(err));
-		}
-#else
-		printf("ARBD not compiled with CUDA support.\n");
-#endif
-		printf("Basic system info (more details to come).\n");
+		printf("Use the main program to see detailed resource information.\n");
+		printf("Example: %s --help\n", argv[0]);
 		return false;	   // Indicates info was shown, program should exit
 	} else if (argc < 3) { // Expecting at least program_name, config, output
 		printf("%s: missing arguments (expected CONFIGFILE OUTPUT)\n", argv[0]);
@@ -75,47 +59,58 @@ bool parse_basic_args(int argc, char* argv[], ProgramOptions& opts) {
 		return false; // Indicates error, program should exit
 	}
 
-	if (argc >= 3) { // Simplistic check
-		opts.configFile = argv[argc - 2];
-		opts.outputFile = argv[argc - 1];
-		// if (argc >= 4) { // Optional seed
-		//     try {
-		//         opts.seed = std::stoi(argv[argc - 1]);
-		//         opts.outputFile = argv[argc - 2]; // Adjust if seed is last
-		//         opts.configFile = argv[argc - 3];
-		//     } catch (const std::exception& e) {
-		//         printf("Warning: Could not parse seed, using default.\n");
-		//     }
-		// }
-		return true; // Arguments parsed (minimally)
+	// Parse command line arguments
+	for (int i = 1; i < argc; ++i) {
+		if (strcmp(argv[i], "-g") == 0 || strcmp(argv[i], "--gpus") == 0) {
+			if (i + 1 < argc) {
+				opts.numGpus = atoi(argv[i + 1]);
+				++i; // Skip next argument
+			}
+		} else if (strcmp(argv[i], "-gid") == 0 || strcmp(argv[i], "--gpu_ids") == 0) {
+			// Parse GPU IDs until we hit another flag or end of args
+			++i;
+			while (i < argc && argv[i][0] != '-') {
+				opts.gpuIds.push_back(atoi(argv[i]));
+				++i;
+			}
+			--i; // Back up one since we'll increment in the loop
+		} else if (strcmp(argv[i], "-n") == 0 || strcmp(argv[i], "--nodes") == 0) {
+			if (i + 1 < argc) {
+				opts.numNodes = atoi(argv[i + 1]);
+				++i; // Skip next argument
+			}
+		}
 	}
-	return false; // Should not reach here if logic above is correct
+
+	// Find config and output files (last two non-flag arguments)
+	int fileArgs = 0;
+	for (int i = argc - 1; i >= 1 && fileArgs < 2; --i) {
+		if (argv[i][0] != '-') {
+			if (fileArgs == 0) {
+				opts.outputFile = argv[i];
+			} else if (fileArgs == 1) {
+				opts.configFile = argv[i];
+			}
+			++fileArgs;
+		}
+	}
+
+	if (opts.configFile.empty() || opts.outputFile.empty()) {
+		printf("%s: missing arguments (expected CONFIGFILE OUTPUT)\n", argv[0]);
+		printf("Try '%s --help' for more information.\n", argv[0]);
+		return false;
+	}
+
+	return true;
 }
 
 int main(int argc, char* argv[]) {
 	// MPI Initialization (kept as is, conditional)
-#ifdef USE_MPI
-	MPI_Init(NULL, NULL);
-	int world_rank = 0; // Default for non-MPI runs
-	// int world_size = 1;
-	MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
-	// MPI_Comm_size(MPI_COMM_WORLD, &world_size);
-	// char processor_name[MPI_MAX_PROCESSOR_NAME];
-	// int name_len;
-	// MPI_Get_processor_name(processor_name, &name_len);
-	// if (world_rank == 0) { // Print once
-	//     printf("MPI Initialized. Hello from rank %d on %s (%d total ranks)\n",
-	//            world_rank, processor_name, world_size);
-	// }
-#endif
 
-	// ARBD::SignalManager::manage_segfault();
+	ARBD::SignalManager::manage_segfault();
 
 	ProgramOptions options;
 	if (!parse_basic_args(argc, argv, options)) {
-#ifdef USE_MPI
-		MPI_Finalize();
-#endif
 		return (argc < 3 &&
 				!(argc == 2 &&
 				  (strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "-h") == 0 ||
@@ -131,32 +126,139 @@ int main(int argc, char* argv[]) {
 	std::cout << "Config File: " << options.configFile << std::endl;
 	std::cout << "Output Target: " << options.outputFile << std::endl;
 
+	std::cout << "Initializing Simulation Manager..." << std::endl;
+
+	// Load and validate configuration → convert to runtime config
+	// Pseudocode: cfg = Configuration::Load(options.configFile)
+	//            conf = cfg.to_sim_conf()
+	ARBD::Configuration cfg = ARBD::Configuration::Load(options.configFile);
+	ARBD::SimSystem::Conf conf = cfg.to_sim_conf();
+
+	// Discover/select resources based on user preferences and available backends
+	ARBD::ResourceCollection resources;
+
 #ifdef USE_CUDA
-	std::cout << "Initializing CUDA Manager..." << std::endl;
-	// CUDAManager::init(); // Call the static init method
-	// CUDAManager::select_gpus({0}); // Example: Select CUDA 0 for now
-	// size_t n_gpus = CUDAManager::allGpuSize();
-	// std::cout << "Number of available CUDAs: " << n_gpus << std::endl;
-	// if (n_gpus > 0) {
-	//     std::cout << "Selected CUDA(s) for simulation." << std::endl;
-	// } else {
-	//     std::cout << "No CUDAs available or selected for simulation." << std::endl;
-	// }
+	std::cout << "ARBD compiled with CUDA support." << std::endl;
+	int deviceCount = 0;
+	if (cudaGetDeviceCount(&deviceCount) == cudaSuccess && deviceCount > 0) {
+		// If user specified GPU IDs, use those
+		if (!options.gpuIds.empty()) {
+			for (int gpuId : options.gpuIds) {
+				if (gpuId >= 0 && gpuId < deviceCount) {
+					resources.resources.push_back(ARBD::Resource::CUDA(gpuId));
+				} else {
+					std::cout << "Warning: GPU ID " << gpuId << " is invalid (available: 0-"
+							  << (deviceCount - 1) << ")" << std::endl;
+				}
+			}
+		}
+		// If user specified number of GPUs, use first N devices
+		else if (options.numGpus > 0) {
+			int gpusToUse = std::min(options.numGpus, deviceCount);
+			for (int i = 0; i < gpusToUse; ++i) {
+				resources.resources.push_back(ARBD::Resource::CUDA(i));
+			}
+		}
+		// Default: use all available GPUs
+		else {
+			for (int i = 0; i < deviceCount; ++i) {
+				resources.resources.push_back(ARBD::Resource::CUDA(i));
+			}
+		}
+	}
+
+	// Fallback to CPU if no GPUs available or selected
+	if (resources.resources.empty()) {
+		std::cout << "No GPUs available. Falling back to CPU." << std::endl;
+		resources.resources.push_back(ARBD::Resource::CPU());
+	}
+
+#elif defined(USE_SYCL)
+	std::cout << "ARBD compiled with SYCL support." << std::endl;
+
+	if (!options.gpuIds.empty()) {
+		for (int gpuId : options.gpuIds) {
+			resources.resources.push_back(ARBD::Resource::SYCL(gpuId));
+		}
+	}
+	// If user specified number of GPUs, try first N devices
+	else if (options.numGpus > 0) {
+		for (int i = 0; i < options.numGpus; ++i) {
+			resources.resources.push_back(ARBD::Resource::SYCL(i));
+		}
+	}
+	// Default: try device 0
+	else {
+		resources.resources.push_back(ARBD::Resource::SYCL(0));
+	}
+
+	// Fallback to CPU if no SYCL devices available
+	if (resources.resources.empty()) {
+		std::cout << "No SYCL devices available. Falling back to CPU." << std::endl;
+		resources.resources.push_back(ARBD::Resource::CPU());
+	}
+
+#elif defined(USE_METAL)
+	std::cout << "ARBD compiled with METAL support." << std::endl;
+	// For SYCL/Metal/OpenMP, force GPU ID to 0 and ignore user GPU specifications
+	options.gpuIds.clear();
+	options.gpuIds.push_back(0);
+	options.numGpus = 1;
+
+	resources.resources.push_back(ARBD::Resource::METAL(0));
+
 #else
-	std::cout << "CUDA support is disabled." << std::endl;
+	std::cout << "ARBD compiled with CPU-only support." << std::endl;
+	// For CPU-only builds, ignore GPU specifications
+	options.gpuIds.clear();
+	options.numGpus = 0;
+	resources.resources.push_back(ARBD::Resource::CPU());
 #endif
 
-	std::cout << "Initializing Simulation Manager..." << std::endl;
-	// SimManager sim; // Instantiate SimManager
-	// The constructor might take configuration options later.
-	// For Week 1, it might be a default constructor.
+	// Validate all selected resources and remove invalid ones
+	std::cout << "Validating " << resources.resources.size() << " compute resource(s)..."
+			  << std::endl;
+	std::vector<ARBD::Resource> validResources;
 
-	// The main simulation run is commented out for Week 1
-	// std::cout << "Starting simulation ..." << std::endl;
-	// sim.run();
-	// std::cout << "Simulation finished (stubbed)." << std::endl;
+	for (const auto& res : resources.resources) {
+		try {
+			// Create a copy to validate (validate() is const)
+			ARBD::Resource resCopy = res;
+			resCopy.validate();
+			validResources.push_back(res);
+			std::cout << "✓ " << res.toString() << " validated successfully" << std::endl;
+		} catch (const ARBD::Exception& e) {
+			std::cout << "✗ " << res.toString() << " validation failed: " << e.what() << std::endl;
+		}
+	}
 
-	// Commented out original complex argument parsing and simulation setup
+	// Update resources with only valid ones
+	resources.resources = validResources;
+
+	// If no valid resources, fallback to CPU
+	if (resources.resources.empty()) {
+		std::cout << "No valid compute resources found. Falling back to CPU." << std::endl;
+		resources.resources.push_back(ARBD::Resource::CPU());
+	}
+
+	std::cout << "Selected " << resources.resources.size() << " compute resource(s): ";
+	for (const auto& res : resources.resources) {
+		std::cout << res.toString() << " ";
+	}
+	std::cout << std::endl;
+
+	// Build system and manager
+	ARBD::SimSystem sys(conf, resources);
+	ARBD::SimManager manager(sys, resources);
+
+	// Single initialization-time domain decomposition
+	sys.decompose_system();
+
+	// Main simulation loop orchestration lives in SimManager::run()
+	// Pseudocode inside run(): build neighbor lists, schedule patch ops,
+	// halo exchange (if multi-resource), integrate, write outputs
+	manager.run();
+
 	/*
 	bool debug = false, safe = false;
 	int replicas = 1;

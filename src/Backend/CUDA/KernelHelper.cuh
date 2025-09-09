@@ -63,7 +63,6 @@ Event launch_cuda_kernel(const Resource& resource,
 	}
 	// Auto-configure if needed
 	KernelConfig local_config = config;
-	// Auto-configuration should be done by caller before calling this function
 
 	// Set device context
 	int old_device;

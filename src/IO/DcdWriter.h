@@ -14,8 +14,7 @@
 #include "ARBDLogger.h"
 #include "Backend/Buffer.h"
 #include "Backend/Resource.h"
-#include "Math/Types.h"
-#include "Math/Vector3.h"
+#include "Types/Types.h"
 
 #include <cstring>
 #include <ctime>

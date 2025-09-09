@@ -30,21 +30,29 @@ namespace BackendTypes {
 using simd_int = int;
 using simd_float = float;
 using simd_double = double;
+using simd_int2 = int2;
+using simd_float2 = float2;
 #elif defined(__SYCL_DEVICE_ONLY__)
 // SYCL SIMD types
 using simd_int = int;
 using simd_float = float;
 using simd_double = double;
+using simd_int2 = sycl::vec<int, 2>;
+using simd_float2 = sycl::vec<float, 2>;
 #elif defined(__METAL_VERSION__)
 // Metal SIMD types
 using simd_int = int;
 using simd_float = float;
 using simd_double = double;
+using simd_int2 = metal::int2;
+using simd_float2 = metal::float2;
 #else
 // CPU SIMD types (could use std::simd in C++20)
 using simd_int = int;
 using simd_float = float;
 using simd_double = double;
+using simd_int2 = std::array<int, 2>;
+using simd_float2 = std::array<float, 2>;
 #endif
 
 // Backend-specific alignment requirements

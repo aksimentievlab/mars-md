@@ -26,10 +26,15 @@ Event launch_sycl_kernel(const Resource& resource,
 	KernelConfig local_config = config;
 	// Auto-configuration should be done by caller before calling this function
 
-	// Calculate SYCL execution ranges
-	sycl::range<1> global_range(local_config.grid_size.x * local_config.block_size.x);
-	sycl::range<1> local_range(local_config.block_size.x);
-	sycl::nd_range<1> execution_range(global_range, local_range);
+	// Calculate SYCL execution ranges (3D) - map to maintain x=fastest varying like CUDA/Metal
+	// SYCL: last dimension (index 2) is fastest, so map x->2, y->1, z->0
+	sycl::range<3> global_range(local_config.grid_size.z * local_config.block_size.z,
+								local_config.grid_size.y * local_config.block_size.y,
+								local_config.grid_size.x * local_config.block_size.x);
+	sycl::range<3> local_range(local_config.block_size.z,
+							   local_config.block_size.y,
+							   local_config.block_size.x);
+	sycl::nd_range<3> execution_range(global_range, local_range);
 
 	// Get queue from config or resource
 	auto* queue_wrapper_ptr = static_cast<ARBD::SYCL::Queue*>(resource.get_stream());
@@ -46,8 +51,16 @@ Event launch_sycl_kernel(const Resource& resource,
 		}
 
 		// Launch kernel with pre-extracted pointers
-		h.parallel_for(execution_range, [=](sycl::nd_item<1> item) {
-			idx_t i = item.get_global_id(0);
+		h.parallel_for(execution_range, [=](sycl::nd_item<3> item) {
+			// Extract coordinates: SYCL maps z->0, y->1, x->2 to keep x fastest varying
+			idx_t gx = static_cast<idx_t>(item.get_global_id(2));
+			idx_t gy = static_cast<idx_t>(item.get_global_id(1));
+			idx_t gz = static_cast<idx_t>(item.get_global_id(0));
+
+			idx_t nx = static_cast<idx_t>(item.get_global_range(2));
+			idx_t ny = static_cast<idx_t>(item.get_global_range(1));
+
+			idx_t i = (gz * ny + gy) * nx + gx;
 			if (i < thread_count) {
 				// Apply pre-extracted arguments - minimal overhead
 				std::apply([&](auto... ptrs) { kernel_func(i, ptrs...); }, extracted_ptr_args);
@@ -62,67 +75,5 @@ Event launch_sycl_kernel(const Resource& resource,
 
 	return Event(sycl_event, resource);
 }
-
-/**
- * @brief Legacy tuple-based interface for backward compatibility
- * @deprecated Use the streamlined version above for better performance
- */
-template<typename InputTuple, typename OutputTuple, typename Functor, typename... Args>
-Event launch_sycl_kernel(const Resource& resource,
-						 idx_t thread_count,
-						 const InputTuple& inputs,
-						 const OutputTuple& outputs,
-						 const KernelConfig& config,
-						 Functor&& kernel_func,
-						 Args&&... args) {
-
-	// Auto-configure if needed
-	KernelConfig local_config = config;
-	if (local_config.grid_size.x == 0 && local_config.grid_size.y == 0 &&
-		local_config.grid_size.z == 0) {
-		local_config.auto_configure(thread_count, resource);
-	}
-	local_config.validate_block_size(resource);
-
-	// Calculate SYCL execution ranges
-	sycl::range<1> global_range(local_config.grid_size.x * local_config.block_size.x);
-	sycl::range<1> local_range(local_config.block_size.x);
-	sycl::nd_range<1> execution_range(global_range, local_range);
-
-	// Get queue from resource
-	auto* queue_wrapper_ptr = static_cast<ARBD::SYCL::Queue*>(resource.get_stream());
-	sycl::queue& queue = queue_wrapper_ptr->get();
-
-	// Submit kernel
-	auto sycl_event = queue.submit([&](sycl::handler& h) {
-		// Handle dependencies
-		if (!config.dependencies.empty()) {
-			h.depends_on(config.dependencies.get_sycl_events());
-		}
-
-		// Extract buffer pointers from tuples
-		auto input_ptrs = get_buffer_tuples(inputs);
-		auto output_ptrs = get_buffer_tuples(outputs);
-
-		// Combine all arguments
-		auto all_args =
-			std::tuple_cat(input_ptrs, output_ptrs, std::make_tuple(std::forward<Args>(args)...));
-
-		h.parallel_for(execution_range, [=](sycl::nd_item<1> item) {
-			idx_t i = item.get_global_id(0);
-			if (i < thread_count) {
-				std::apply([&](auto&&... unpacked_args) { kernel_func(i, unpacked_args...); },
-						   all_args);
-			}
-		});
-	});
-
-	if (config.sync) {
-		sycl_event.wait();
-	}
-
-	return Event(sycl_event, resource);
-}
-
 } // namespace ARBD
 #endif

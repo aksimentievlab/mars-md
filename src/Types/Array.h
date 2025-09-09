@@ -12,8 +12,6 @@ template<typename T>
 struct Array {
 	size_t num;
 	T* values;
-
-	// Minimal interface for legacy compatibility
 	Array(size_t count) : num(count), values(new T[count]) {}
 	~Array() {
 		delete[] values;

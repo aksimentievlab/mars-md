@@ -37,35 +37,22 @@ namespace ARBD {
 
 template<typename Functor, typename... Args>
 Event launch_kernel(const Resource& resource,
-					idx_t thread_count,
 					const KernelConfig& config,
 					Functor kernel_func,
 					Args... args) {
 	// Auto-configure the kernel if grid_size is not set (default 0,0,0)
 	KernelConfig local_config = config;
-	if (local_config.grid_size.x == 0 && local_config.grid_size.y == 0 &&
-		local_config.grid_size.z == 0) {
-		local_config.auto_configure(thread_count, resource);
-	}
 	local_config.validate_block_size(resource);
 
 #ifdef USE_CUDA
 	if (resource.type == ResourceType::CUDA) {
-		return launch_cuda_kernel(resource,
-								  thread_count,
-								  local_config,
-								  kernel_func,
-								  get_buffer_pointer(args)...);
+		return launch_cuda_kernel(resource, local_config, kernel_func, get_buffer_pointer(args)...);
 	}
 #endif
 
 #ifdef USE_SYCL
 	if (resource.type == ResourceType::SYCL) {
-		return launch_sycl_kernel(resource,
-								  thread_count,
-								  local_config,
-								  kernel_func,
-								  get_buffer_pointer(args)...);
+		return launch_sycl_kernel(resource, local_config, kernel_func, get_buffer_pointer(args)...);
 	}
 #endif
 
@@ -77,58 +64,8 @@ Event launch_kernel(const Resource& resource,
 #endif
 
 	// CPU fallback
-	return launch_cpu_kernel(resource,
-							 thread_count,
-							 local_config,
-							 kernel_func,
-							 get_buffer_pointer(args)...);
+	return launch_cpu_kernel(resource, local_config, kernel_func, get_buffer_pointer(args)...);
 }
-
-/*
-template<typename InputTuple, typename OutputTuple, typename Functor, typename... Args>
-std::enable_if_t<!is_device_buffer_v<InputTuple> && !is_device_buffer_v<OutputTuple>, Event>
-launch_kernel(const Resource& resource,
-			  idx_t thread_count,
-			  const KernelConfig& config,
-			  InputTuple& inputs,
-			  OutputTuple& outputs,
-			  Functor&& kernel_func,
-			  Args&&... args) {
-	try {
-#ifdef USE_CUDA
-		return launch_cuda_kernel(resource,
-								  thread_count,
-								  inputs,
-								  outputs,
-								  config,
-								  std::forward<Functor>(kernel_func),
-								  std::forward<Args>(args)...);
-#elif defined(USE_SYCL)
-		return launch_sycl_kernel(resource,
-								  thread_count,
-								  inputs,
-								  outputs,
-								  config,
-								  std::forward<Functor>(kernel_func),
-								  std::forward<Args>(args)...);
-#elif defined(USE_METAL)
-		throw_value_error("METAL backend requires a kernel name (string), not a functor. "
-						  "Please use launch_metal_kernel.");
-#else
-		return launch_cpu_kernel(resource,
-								 thread_count,
-								 inputs,
-								 outputs,
-								 config,
-								 std::forward<Functor>(kernel_func),
-								 std::forward<Args>(args)...);
-#endif
-	} catch (const std::exception& e) {
-		LOGERROR("Error in launch_kernel: {}", e.what());
-		throw;
-	}
-}
-*/
 
 // ============================================================================
 // Dimensional Kernel Launchers (1D, 2D, 3D)
@@ -143,9 +80,8 @@ Event launch_kernel_1d(const Resource& resource,
 					   KernelConfig config,
 					   Functor kernel_func,
 					   Args... args) {
-	config.auto_configure(thread_count, resource);
-	config.validate_block_size(resource);
-	return launch_kernel(resource, thread_count, config, kernel_func, args...);
+	config = KernelConfig::for_1d(thread_count, resource);
+	return launch_kernel(resource, config, kernel_func, args...);
 }
 
 /**
@@ -158,9 +94,8 @@ Event launch_kernel_2d(const Resource& resource,
 					   KernelConfig config,
 					   Functor kernel_func,
 					   Args... args) {
-	config.auto_configure_2d(width, height, resource);
-	config.validate_block_size(resource);
-	return launch_kernel(resource, width * height, config, kernel_func, args...);
+	config = KernelConfig::for_2d(width, height, resource);
+	return launch_kernel(resource, config, kernel_func, args...);
 }
 
 /**
@@ -174,9 +109,8 @@ Event launch_kernel_3d(const Resource& resource,
 					   KernelConfig config,
 					   Functor kernel_func,
 					   Args... args) {
-	config.auto_configure_3d(width, height, depth, resource);
-	config.validate_block_size(resource);
-	return launch_kernel(resource, width * height * depth, config, kernel_func, args...);
+	config = KernelConfig::for_3d(width, height, depth, resource);
+	return launch_kernel(resource, config, kernel_func, args...);
 }
 
 // ============================================================================
@@ -188,7 +122,6 @@ Event launch_kernel_3d(const Resource& resource,
  */
 template<typename Functor, typename... Args>
 Event launch_cpu_kernel(const Resource& resource,
-						idx_t thread_count,
 						const KernelConfig& config,
 						Functor kernel_func,
 						Args... args) {
@@ -199,7 +132,8 @@ Event launch_cpu_kernel(const Resource& resource,
 	if (num_threads == 0) {
 		num_threads = 1;
 	}
-
+	idx_t thread_count = config.grid_size.x * config.block_size.x * config.grid_size.y *
+						 config.block_size.y * config.grid_size.z * config.block_size.z;
 	std::vector<std::thread> threads;
 	idx_t chunk_size = (thread_count + num_threads - 1) / num_threads;
 
@@ -209,52 +143,6 @@ Event launch_cpu_kernel(const Resource& resource,
 			idx_t end = std::min(start + chunk_size, thread_count);
 			for (idx_t i = start; i < end; ++i) {
 				kernel_func(i, args...);
-			}
-		});
-	}
-
-	for (auto& thread : threads) {
-		if (thread.joinable()) {
-			thread.join();
-		}
-	}
-
-	return Event(nullptr, resource);
-}
-
-/**
- * @brief CPU kernel launcher - tuple-based interface
- */
-template<typename InputTuple, typename OutputTuple, typename Functor, typename... Args>
-Event launch_cpu_kernel(const Resource& resource,
-						idx_t thread_count,
-						const InputTuple& inputs,
-						const OutputTuple& outputs,
-						const KernelConfig& config,
-						Functor&& kernel_func,
-						Args... args) {
-
-	config.dependencies.wait_all();
-
-	auto input_ptrs = get_buffer_tuples(inputs);
-	auto output_ptrs = get_buffer_tuples(outputs);
-
-	unsigned int num_threads = std::thread::hardware_concurrency();
-	if (num_threads == 0) {
-		num_threads = 1;
-	}
-
-	std::vector<std::thread> threads;
-	idx_t chunk_size = (thread_count + num_threads - 1) / num_threads;
-
-	for (unsigned int t = 0; t < num_threads; ++t) {
-		threads.emplace_back([=]() {
-			idx_t start = t * chunk_size;
-			idx_t end = std::min(start + chunk_size, thread_count);
-			for (idx_t i = start; i < end; ++i) {
-				auto all_args = std::tuple_cat(input_ptrs, output_ptrs);
-				std::apply([&](auto&&... unpacked_args) { kernel_func(i, unpacked_args...); },
-						   all_args);
 			}
 		});
 	}
@@ -363,7 +251,7 @@ class KernelGraph {
 		auto launcher = [=, this]() -> Event {
 			KernelConfig config = base_config;
 			config.async = true;
-			return launch_kernel(resource_, thread_count, config, kernel_func, args...);
+			return launch_kernel(resource_, config, kernel_func, args...);
 		};
 
 		nodes_.emplace_back(KernelNode{launcher, {}, node_id, name, Event{}, false});
@@ -507,7 +395,7 @@ class KernelPipeline {
 		config.dependencies = pipeline_events_;
 		config.async = true;
 
-		Event completion = launch_kernel(resource_, thread_count, config, kernel_func, args...);
+		Event completion = launch_kernel(resource_, config, kernel_func, args...);
 
 		pipeline_events_.clear();
 		pipeline_events_.add(completion);
@@ -523,5 +411,95 @@ class KernelPipeline {
 		return pipeline_events_;
 	}
 };
+
+/*
+template<typename InputTuple, typename OutputTuple, typename Functor, typename... Args>
+std::enable_if_t<!is_device_buffer_v<InputTuple> && !is_device_buffer_v<OutputTuple>, Event>
+launch_kernel(const Resource& resource,
+			  idx_t thread_count,
+			  const KernelConfig& config,
+			  InputTuple& inputs,
+			  OutputTuple& outputs,
+			  Functor&& kernel_func,
+			  Args&&... args) {
+	try {
+#ifdef USE_CUDA
+		return launch_cuda_kernel(resource,
+								  thread_count,
+								  inputs,
+								  outputs,
+								  config,
+								  std::forward<Functor>(kernel_func),
+								  std::forward<Args>(args)...);
+#elif defined(USE_SYCL)
+		return launch_sycl_kernel(resource,
+								  thread_count,
+								  inputs,
+								  outputs,
+								  config,
+								  std::forward<Functor>(kernel_func),
+								  std::forward<Args>(args)...);
+#elif defined(USE_METAL)
+		throw_value_error("METAL backend requires a kernel name (string), not a functor. "
+						  "Please use launch_metal_kernel.");
+#else
+		return launch_cpu_kernel(resource,
+								 thread_count,
+								 inputs,
+								 outputs,
+								 config,
+								 std::forward<Functor>(kernel_func),
+								 std::forward<Args>(args)...);
+#endif
+	} catch (const std::exception& e) {
+		LOGERROR("Error in launch_kernel: {}", e.what());
+		throw;
+	}
+}
+ * @brief CPU kernel launcher - tuple-based interface
+
+template<typename InputTuple, typename OutputTuple, typename Functor, typename... Args>
+Event launch_cpu_kernel(const Resource& resource,
+						idx_t thread_count,
+						const InputTuple& inputs,
+						const OutputTuple& outputs,
+						const KernelConfig& config,
+						Functor&& kernel_func,
+						Args... args) {
+
+	config.dependencies.wait_all();
+
+	auto input_ptrs = get_buffer_tuples(inputs);
+	auto output_ptrs = get_buffer_tuples(outputs);
+
+	unsigned int num_threads = std::thread::hardware_concurrency();
+	if (num_threads == 0) {
+		num_threads = 1;
+	}
+
+	std::vector<std::thread> threads;
+	idx_t chunk_size = (thread_count + num_threads - 1) / num_threads;
+
+	for (unsigned int t = 0; t < num_threads; ++t) {
+		threads.emplace_back([=]() {
+			idx_t start = t * chunk_size;
+			idx_t end = std::min(start + chunk_size, thread_count);
+			for (idx_t i = start; i < end; ++i) {
+				auto all_args = std::tuple_cat(input_ptrs, output_ptrs);
+				std::apply([&](auto&&... unpacked_args) { kernel_func(i, unpacked_args...); },
+						   all_args);
+			}
+		});
+	}
+
+	for (auto& thread : threads) {
+		if (thread.joinable()) {
+			thread.join();
+		}
+	}
+
+	return Event(nullptr, resource);
+}
+*/
 
 } // namespace ARBD

@@ -1,5 +1,6 @@
 #pragma once
-#include "Math/BaseGrid.h"
+#include "Types/BaseGrid.h"
+#include "Types/Vector3.h"
 #include <string>
 
 namespace ARBD {
@@ -11,11 +12,21 @@ struct Particle {
 	Vector3 force;
 	bool is_dummy = false;
 	bool has_orientation = false;
+	Particle& operator=(const Particle& src) {
+		id = src.id;
+		type_id = src.type_id;
+		position = src.position;
+		momentum = src.momentum;
+		force = src.force;
+		is_dummy = src.is_dummy;
+		has_orientation = src.has_orientation;
+		return *this;
+	}
 };
 
 class ParticleType {
   public:
-	std::string name;
+	char name[32];
 	struct Properties {
 		int id;
 		float mass;
@@ -29,7 +40,7 @@ class ParticleType {
 		float* pmf_scale;
 	};
 	BaseGrid<float>** pmf;
-	BoundaryCondition* pmf_boundary_conditions;
+	GridConfig<float>::BoundaryCondition* pmf_boundary_conditions;
 	BaseGrid<float>* diffusionGrid;
 	BaseGrid<float>* forceGrid;
 	using props = Properties;

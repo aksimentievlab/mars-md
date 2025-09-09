@@ -17,7 +17,6 @@
 #include <string_view>
 #include <vector>
 #endif // HOST_GUARD
-
 #include "Header.h"
 #include "IndexList.h"
 #include "Matrix3.h"
@@ -26,41 +25,27 @@
 
 namespace ARBD {
 
-/**
- * @brief Boundary condition types for grid operations
- */
-enum class BoundaryCondition : int {
-	Dirichlet = 0, ///< Fixed value at boundary
-	Neumann = 1,   ///< Fixed derivative at boundary
-	Periodic = 2   ///< Periodic boundary conditions
-};
+// Forward declarations
+class FileHandle;
+template<typename T>
+class BaseGrid;
 
-/**
- * @brief Interpolation orders supported by the grid
- */
-enum class InterpolationOrder : int {
-	Linear = 1, ///< Linear interpolation
-	Cubic = 3	///< Cubic interpolation
-};
-
-/**
- * @brief Grid configuration structure for initialization
- */
-template<typename T = float>
-struct GridConfig {
-	Vector3_t<T> origin{0, 0, 0};		  ///< Origin point of the grid
-	Matrix3_t<T> basis{T(1)};			  ///< Basis vectors defining grid spacing
-	Vector3_t<idx_t> dimensions{1, 1, 1}; ///< Grid dimensions (nx, ny, nz)
-	BoundaryCondition boundary = BoundaryCondition::Periodic;
-
-	HOST DEVICE constexpr idx_t total_size() const noexcept {
-		return dimensions.x * dimensions.y * dimensions.z;
-	}
-
-	HOST DEVICE constexpr bool is_valid() const noexcept {
-		return dimensions.x > 0 && dimensions.y > 0 && dimensions.z > 0;
-	}
-};
+namespace DXReader {
+template<typename T>
+void write_grid(const BaseGrid<T>&, std::string_view);
+template<typename T>
+void write_grid(const BaseGrid<T>&, std::string_view, std::string_view);
+template<typename T>
+void write_dx_format(const BaseGrid<T>&, const FileHandle&, std::string_view);
+template<typename T>
+void write_data_format(const BaseGrid<T>&, const FileHandle&);
+template<typename T>
+BaseGrid<T> read_from_file(std::string_view);
+template<typename T>
+void read_dx_format(BaseGrid<T>&, const FileHandle&);
+template<typename T>
+void write_average_profile(const BaseGrid<T>&, std::string_view, int);
+} // namespace DXReader
 
 /**
  * @brief Template-based for different data types (float, double)
@@ -723,32 +708,33 @@ class BaseGrid {
 	 */
 	friend HOST DEVICE idx_t wrap_index(int index, idx_t size);
 
+	/**
+	 * @brief Friend declarations for DXReader I/O functions
+	 */
+	template<typename U>
+	friend void DXReader::write_grid(const BaseGrid<U>&, std::string_view);
+	template<typename U>
+	friend void DXReader::write_grid(const BaseGrid<U>&, std::string_view, std::string_view);
+	template<typename U>
+	friend void DXReader::write_dx_format(const BaseGrid<U>&, const FileHandle&, std::string_view);
+	template<typename U>
+	friend void DXReader::write_data_format(const BaseGrid<U>&, const FileHandle&);
+	template<typename U>
+	friend BaseGrid<U> DXReader::read_from_file(std::string_view);
+	template<typename U>
+	friend void DXReader::read_dx_format(BaseGrid<U>&, const FileHandle&);
+	template<typename U>
+	friend void DXReader::write_average_profile(const BaseGrid<U>&, std::string_view, int);
+
 	/*===================*\
 	|  I/O OPERATIONS     |
 	\*===================*/
 
-#ifdef HOST_GUARD
-
-	/**
-	 * @brief Write grid to file (various formats supported)
-	 */
-	void write(std::string_view filename) const;
-	void write(std::string_view filename, std::string_view comments) const;
-	void write_dx_format(const FileHandle& file, std::string_view comments = "") const;
-	void write_data_format(const FileHandle& file) const;
-
-	/**
-	 * @brief Read grid from file
-	 */
-	static BaseGrid read_from_file(std::string_view filename);
-	void read_dx_format(const FileHandle& file);
-
-	/**
-	 * @brief Write average profile along axis
-	 */
-	void write_average_profile(std::string_view filename, int axis) const;
-
-#endif
+	// I/O operations have been moved to IO/dxreader.h for better separation
+	// Use DXReader::write_grid(), DXReader::read_from_file(), etc.
+	// Example usage:
+	//   DXReader::write_grid(my_grid, "output.dx");
+	//   auto grid = DXReader::read_from_file<float>("input.dx");
 };
 
 // Type aliases for common usage

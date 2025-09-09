@@ -30,6 +30,6 @@ inline std::string string_format(const char* format, Args... args) {
 
 using Vector3 = Vector3_t<float>;
 using Matrix3 = Matrix3_t<float>;
-using VecArray = std::vector<Vector3>;
+// using VecArray = std::vector<Vector3>;
 
 } // namespace ARBD

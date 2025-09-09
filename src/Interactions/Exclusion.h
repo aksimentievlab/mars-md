@@ -1,11 +1,13 @@
 #pragma once
 
-#include "Backend/Header.h"
-#include "Bonded/Bond.h"
-#include "Math/Types.h"
+#include "Backend/Resource.h"
+#include "Bonded/Bond_IO.h"
+#include "Header.h"
 #include "System/SimSystem.h"
+#include "Types/Types.h"
 
 namespace ARBD {
+using int2 = BackendTypes::simd_int2;
 
 class Exclude {
   public:

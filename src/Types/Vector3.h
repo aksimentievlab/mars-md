@@ -27,20 +27,6 @@
 
 namespace ARBD {
 
-// Address space pointer macros for non-Metal backends
-#ifndef DEVICE_PTR
-#define DEVICE_PTR(T) T*
-#endif
-#ifndef CONSTANT_PTR
-#define CONSTANT_PTR(T) const T*
-#endif
-#ifndef THREAD_PTR
-#define THREAD_PTR(T) T*
-#endif
-#ifndef THREADGROUP_PTR
-#define THREADGROUP_PTR(T) T*
-#endif
-
 /**
  * 3D vector utility class with common operations implemented on CPU and GPU.
  *
