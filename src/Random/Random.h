@@ -31,10 +31,8 @@ class Random {
 	// --- UNIFORM DISTRIBUTION ---
 	template<typename T>
 	Event generate_uniform(DeviceBuffer<T>& output, T min_val, T max_val) {
-		KernelConfig config;
+		KernelConfig config = KernelConfig::for_1d(output.size(), resource_);
 		config.sync = false; // Async for better multi-GPU performance
-		config.auto_configure(output.size(), resource_);
-
 		// Capture current counter value and advance it for next use
 		uint32_t current_ctr = base_ctr_;
 		base_ctr_ += static_cast<uint32_t>(output.size()); // Advance by number of elements
@@ -72,9 +70,8 @@ class Random {
 	// --- GAUSSIAN DISTRIBUTION ---
 	template<typename T>
 	Event generate_gaussian(DeviceBuffer<T>& output, T mean, T stddev) {
-		KernelConfig config;
+		KernelConfig config = KernelConfig::for_1d(output.size(), resource_);
 		config.sync = false; // Async for better multi-GPU performance
-		config.auto_configure(output.size(), resource_);
 
 #ifdef USE_METAL
 		return launch_metal_kernel(resource_,
@@ -97,9 +94,8 @@ class Random {
 	template<typename T>
 	Event
 	generate_gaussian(DeviceBuffer<Vector3_t<T>>& output, Vector3_t<T> mean, Vector3_t<T> stddev) {
-		KernelConfig config;
+		KernelConfig config = KernelConfig::for_1d(output.size(), resource_);
 		config.sync = false; // Async for better multi-GPU performance
-		config.auto_configure(output.size(), resource_);
 #ifdef USE_METAL
 		return launch_metal_kernel(resource_,
 								   output.size(),

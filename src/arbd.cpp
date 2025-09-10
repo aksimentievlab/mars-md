@@ -4,6 +4,7 @@
 #include <mpi.h>
 #endif
 
+#include "ARBDException.h"
 #include "Backend/Resource.h"
 #include "Configuration.h"
 #include "System/SimManager.h"
@@ -128,14 +129,7 @@ int main(int argc, char* argv[]) {
 
 	std::cout << "Initializing Simulation Manager..." << std::endl;
 
-	// Load and validate configuration → convert to runtime config
-	// Pseudocode: cfg = Configuration::Load(options.configFile)
-	//            conf = cfg.to_sim_conf()
-	ARBD::Configuration cfg = ARBD::Configuration::Load(options.configFile);
-	ARBD::SimSystem::Conf conf = cfg.to_sim_conf();
-
-	// Discover/select resources based on user preferences and available backends
-	ARBD::ResourceCollection resources;
+	ARBD::ResourceCollection resource_collection;
 
 #ifdef USE_CUDA
 	std::cout << "ARBD compiled with CUDA support." << std::endl;
@@ -145,7 +139,7 @@ int main(int argc, char* argv[]) {
 		if (!options.gpuIds.empty()) {
 			for (int gpuId : options.gpuIds) {
 				if (gpuId >= 0 && gpuId < deviceCount) {
-					resources.resources.push_back(ARBD::Resource::CUDA(gpuId));
+					resource_collection.resources.push_back(ARBD::Resource::CUDA(gpuId));
 				} else {
 					std::cout << "Warning: GPU ID " << gpuId << " is invalid (available: 0-"
 							  << (deviceCount - 1) << ")" << std::endl;
@@ -156,21 +150,21 @@ int main(int argc, char* argv[]) {
 		else if (options.numGpus > 0) {
 			int gpusToUse = std::min(options.numGpus, deviceCount);
 			for (int i = 0; i < gpusToUse; ++i) {
-				resources.resources.push_back(ARBD::Resource::CUDA(i));
+				resource_collection.resources.push_back(ARBD::Resource::CUDA(i));
 			}
 		}
 		// Default: use all available GPUs
 		else {
 			for (int i = 0; i < deviceCount; ++i) {
-				resources.resources.push_back(ARBD::Resource::CUDA(i));
+				resource_collection.resources.push_back(ARBD::Resource::CUDA(i));
 			}
 		}
 	}
 
 	// Fallback to CPU if no GPUs available or selected
-	if (resources.resources.empty()) {
+	if (resource_collection.resources.empty()) {
 		std::cout << "No GPUs available. Falling back to CPU." << std::endl;
-		resources.resources.push_back(ARBD::Resource::CPU());
+		resource_collection.resources.push_back(ARBD::Resource::CPU());
 	}
 
 #elif defined(USE_SYCL)
@@ -178,24 +172,24 @@ int main(int argc, char* argv[]) {
 
 	if (!options.gpuIds.empty()) {
 		for (int gpuId : options.gpuIds) {
-			resources.resources.push_back(ARBD::Resource::SYCL(gpuId));
+			resource_collection.resources.push_back(ARBD::Resource::SYCL(gpuId));
 		}
 	}
 	// If user specified number of GPUs, try first N devices
 	else if (options.numGpus > 0) {
 		for (int i = 0; i < options.numGpus; ++i) {
-			resources.resources.push_back(ARBD::Resource::SYCL(i));
+			resource_collection.resources.push_back(ARBD::Resource::SYCL(i));
 		}
 	}
 	// Default: try device 0
 	else {
-		resources.resources.push_back(ARBD::Resource::SYCL(0));
+		resource_collection.resources.push_back(ARBD::Resource::SYCL(0));
 	}
 
 	// Fallback to CPU if no SYCL devices available
-	if (resources.resources.empty()) {
+	if (resource_collection.resources.empty()) {
 		std::cout << "No SYCL devices available. Falling back to CPU." << std::endl;
-		resources.resources.push_back(ARBD::Resource::CPU());
+		resource_collection.resources.push_back(ARBD::Resource::CPU());
 	}
 
 #elif defined(USE_METAL)
@@ -205,22 +199,22 @@ int main(int argc, char* argv[]) {
 	options.gpuIds.push_back(0);
 	options.numGpus = 1;
 
-	resources.resources.push_back(ARBD::Resource::METAL(0));
+	resource_collection.resources.push_back(ARBD::Resource::METAL(0));
 
 #else
 	std::cout << "ARBD compiled with CPU-only support." << std::endl;
 	// For CPU-only builds, ignore GPU specifications
 	options.gpuIds.clear();
 	options.numGpus = 0;
-	resources.resources.push_back(ARBD::Resource::CPU());
+	resource_collection.resources.push_back(ARBD::Resource::CPU());
 #endif
 
 	// Validate all selected resources and remove invalid ones
-	std::cout << "Validating " << resources.resources.size() << " compute resource(s)..."
+	std::cout << "Validating " << resource_collection.resources.size() << " compute resource(s)..."
 			  << std::endl;
 	std::vector<ARBD::Resource> validResources;
 
-	for (const auto& res : resources.resources) {
+	for (const auto& res : resource_collection.resources) {
 		try {
 			// Create a copy to validate (validate() is const)
 			ARBD::Resource resCopy = res;
@@ -233,34 +227,39 @@ int main(int argc, char* argv[]) {
 	}
 
 	// Update resources with only valid ones
-	resources.resources = validResources;
+	resource_collection.resources = validResources;
 
 	// If no valid resources, fallback to CPU
-	if (resources.resources.empty()) {
+	if (resource_collection.resources.empty()) {
 		std::cout << "No valid compute resources found. Falling back to CPU." << std::endl;
-		resources.resources.push_back(ARBD::Resource::CPU());
+		resource_collection.resources.push_back(ARBD::Resource::CPU());
 	}
 
-	std::cout << "Selected " << resources.resources.size() << " compute resource(s): ";
-	for (const auto& res : resources.resources) {
+	std::cout << "Selected " << resource_collection.resources.size() << " compute resource(s): ";
+	for (const auto& res : resource_collection.resources) {
 		std::cout << res.toString() << " ";
 	}
 	std::cout << std::endl;
 
+	// Load and validate configuration → convert to runtime config
+	// Pseudocode: cfg = Configuration::Load(options.configFile)
+	//            conf = cfg.to_sim_conf()
+	// ARBD::Configuration cfg = ARBD::Configuration::Load(options.configFile);
+	// ARBD::SimSystem::Conf conf = cfg.to_sim_conf();
+
 	// Build system and manager
-	ARBD::SimSystem sys(conf, resources);
-	ARBD::SimManager manager(sys, resources);
+	// ARBD::SimSystem sys(conf, resource_collection);
+	// ARBD::SimManager manager(sys, resource_collection);
 
 	// Single initialization-time domain decomposition
-	sys.decompose_system();
+	// sys.decompose_system();
 
 	// Main simulation loop orchestration lives in SimManager::run()
 	// Pseudocode inside run(): build neighbor lists, schedule patch ops,
 	// halo exchange (if multi-resource), integrate, write outputs
-	manager.run();
+	// manager.run();
 
 	/*
-	bool debug = false, safe = false;
 	int replicas = 1;
 	unsigned int imd_port = 0;
 	bool imd_on = false;

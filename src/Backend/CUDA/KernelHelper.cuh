@@ -14,29 +14,6 @@ using namespace cuda::std;
 #endif
 
 namespace ARBD {
-
-#ifdef __CUDACC__
-template<typename Functor, typename... Args>
-__global__ void cuda_kernel_wrapper(idx_t n, Functor kernel, Args... args) {
-	idx_t i = blockIdx.x * blockDim.x + threadIdx.x;
-	if (i < n) {
-		kernel(i, args...);
-	}
-}
-template<typename Functor, typename... Args>
-void launch_cuda_wrapper_impl(dim3 grid,
-							  dim3 block,
-							  idx_t shared_mem,
-							  cudaStream_t stream,
-							  idx_t thread_count,
-							  Functor&& kernel_func,
-							  Args&&... args) {
-	cuda_kernel_wrapper<<<grid, block, shared_mem, stream>>>(thread_count,
-															 std::forward<Functor>(kernel_func),
-															 std::forward<Args>(args)...);
-}
-#endif
-
 /**
  * @brief Generic CUDA kernel implementation with full template support.
  *
@@ -49,7 +26,6 @@ void launch_cuda_wrapper_impl(dim3 grid,
 
 template<typename Functor, typename... Args>
 Event launch_cuda_kernel(const Resource& resource,
-						 idx_t thread_count,
 						 const KernelConfig& config,
 						 Functor kernel_func,
 						 Args... args) {
@@ -72,7 +48,8 @@ Event launch_cuda_kernel(const Resource& resource,
 	// Launch kernel directly
 	dim3 grid(local_config.grid_size.x, local_config.grid_size.y, local_config.grid_size.z);
 	dim3 block(local_config.block_size.x, local_config.block_size.y, local_config.block_size.z);
-
+	idx_t thread_count =
+		local_config.problem_size.x * local_config.problem_size.y * local_config.problem_size.z;
 	kernel_func<<<grid, block, local_config.shared_memory, stream>>>(thread_count,
 																	 get_buffer_pointer(args)...);
 
@@ -93,7 +70,7 @@ Event launch_cuda_kernel(const Resource& resource,
 #endif
 }
 
-// Overloaded version for input and output buffers
+/**  Overloaded version for input and output buffers
 template<typename InputTuple, typename OutputTuple, typename Functor, typename... Args>
 Event launch_cuda_kernel(const Resource& resource,
 						 idx_t thread_count,
@@ -192,5 +169,6 @@ Event launch_cuda_kernel(const Resource& resource,
 	throw_not_implemented("launch_cuda_kernel_impl can only be used in CUDA compilation units");
 #endif
 }
+*/
 
 } // namespace ARBD

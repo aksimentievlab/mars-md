@@ -28,8 +28,8 @@ struct kerneldim3 {
  * It also provides methods for auto-configuring the kernel based on the resource type.
  * @param grid_size The grid size for the kernel launch.
  * @param block_size The block size for the kernel launch.
- * @param total_thread_size The total thread size for the kernel launch.1
- * @note Thread count is not necessarily the same as the total_thread_size!
+ * @param problem_size The problem size for the kernel launch.
+ * @note problem size is not necessarily the same as the total_thread_size!
  * @param shared_memory The shared memory size for the kernel launch.
  * @param sync Whether to sync the kernel launch.
  * @param async deprecated. use sync instead.
@@ -56,7 +56,6 @@ struct KernelConfig {
 		KernelConfig config;
 		config.problem_size = {size_x, 1, 1};
 		config.auto_configure_1d(size_x, resource);
-		config.validate_block_size(resource);
 		return config;
 	}
 
@@ -64,7 +63,6 @@ struct KernelConfig {
 		KernelConfig config;
 		config.problem_size = {size_x, size_y, 1};
 		config.auto_configure_2d(size_x, size_y, resource);
-		config.validate_block_size(resource);
 		return config;
 	}
 
@@ -72,7 +70,6 @@ struct KernelConfig {
 		KernelConfig config;
 		config.problem_size = {size_x, size_y, size_z};
 		config.auto_configure_3d(size_x, size_y, size_z, resource);
-		config.validate_block_size(resource);
 		return config;
 	}
 	inline void validate_block_size(const Resource& resource) {
@@ -208,31 +205,40 @@ struct KernelConfig {
 		}
 	}
 
+	/**
+	 * @brief Make sure problem size is not 0.
+	 */
+	inline void set_problem_size() {
+		if (problem_size.x == 0 && grid_size.x > 0 && block_size.x > 0) {
+			problem_size.x = grid_size.x * block_size.x;
+		}
+		if (problem_size.y == 0 && grid_size.y > 0 && block_size.y > 0) {
+			problem_size.y = grid_size.y * block_size.y;
+		}
+		if (problem_size.z == 0 && grid_size.z > 0 && block_size.z > 0) {
+			problem_size.z = grid_size.z * block_size.z;
+		}
+	}
+
   private:
 	void auto_configure_1d(idx_t thread_count, const Resource& resource) {
 		// Backend-specific 1D auto-configuration
-#ifdef USE_CUDA
-		if (resource.type == ResourceType::CUDA) {
+		switch (resource.type) {
+		case ResourceType::CUDA:
 			// Use CUDA-specific configuration
 			block_size.x = 256; // Optimal for most CUDA kernels
 			grid_size.x = (thread_count + block_size.x - 1) / block_size.x;
 			grid_size.y = 1;
 			grid_size.z = 1;
-		}
-#endif
-
-#ifdef USE_SYCL
-		if (resource.type == ResourceType::SYCL) {
+			break;
+		case ResourceType::SYCL:
 			// SYCL work-group configuration
 			block_size.x = 64; // Typical SYCL work-group size
 			grid_size.x = (thread_count + block_size.x - 1) / block_size.x;
 			grid_size.y = 1;
 			grid_size.z = 1;
-		}
-#endif
-
-#ifdef USE_METAL
-		if (resource.type == ResourceType::METAL) {
+			break;
+		case ResourceType::METAL:
 			// Metal threadgroup configuration - use optimal threadgroup size
 			block_size.x = 32; // Metal SIMD width (optimal for most kernels)
 			block_size.y = 1;  // 1D processing
@@ -242,14 +248,21 @@ struct KernelConfig {
 			grid_size.x = (thread_count + block_size.x - 1) / block_size.x;
 			grid_size.y = 1; // 1D processing
 			grid_size.z = 1; // 1D processing
+			break;
+		default:
+			// CPU fallback
+			block_size.x = 64; // CPU SIMD width (optimal for most kernels)
+			grid_size.x = (thread_count + block_size.x - 1) / block_size.x;
+			grid_size.y = 1;
+			grid_size.z = 1;
+			break;
 		}
-#endif
 	}
 
 	void auto_configure_2d(idx_t width, idx_t height, const Resource& resource) {
 		// Backend-specific 2D auto-configuration
-#ifdef USE_CUDA
-		if (resource.type == ResourceType::CUDA) {
+		switch (resource.type) {
+		case ResourceType::CUDA:
 			// CUDA 2D configuration - use 16x16 blocks for good occupancy
 			block_size.x = 16;
 			block_size.y = 16;
@@ -258,11 +271,8 @@ struct KernelConfig {
 			grid_size.x = (width + block_size.x - 1) / block_size.x;
 			grid_size.y = (height + block_size.y - 1) / block_size.y;
 			grid_size.z = 1;
-		}
-#endif
-
-#ifdef USE_SYCL
-		if (resource.type == ResourceType::SYCL) {
+			break;
+		case ResourceType::SYCL:
 			// SYCL 2D work-group configuration
 			block_size.x = 8;
 			block_size.y = 8;
@@ -271,11 +281,8 @@ struct KernelConfig {
 			grid_size.x = (width + block_size.x - 1) / block_size.x;
 			grid_size.y = (height + block_size.y - 1) / block_size.y;
 			grid_size.z = 1;
-		}
-#endif
-
-#ifdef USE_METAL
-		if (resource.type == ResourceType::METAL) {
+			break;
+		case ResourceType::METAL:
 			// Metal 2D threadgroup configuration
 			// Use 8x8 threadgroups for good memory access patterns and SIMD efficiency
 			block_size.x = 8;
@@ -285,14 +292,24 @@ struct KernelConfig {
 			grid_size.x = (width + block_size.x - 1) / block_size.x;
 			grid_size.y = (height + block_size.y - 1) / block_size.y;
 			grid_size.z = 1;
+			break;
+		default:
+			// CPU 2D configuration - use 8x8 blocks for good occupancy
+			block_size.x = 8;
+			block_size.y = 8;
+			block_size.z = 1;
+
+			grid_size.x = (width + block_size.x - 1) / block_size.x;
+			grid_size.y = (height + block_size.y - 1) / block_size.y;
+			grid_size.z = 1;
+			break;
 		}
-#endif
 	}
 
 	void auto_configure_3d(idx_t width, idx_t height, idx_t depth, const Resource& resource) {
 		// Backend-specific 3D auto-configuration
-#ifdef USE_CUDA
-		if (resource.type == ResourceType::CUDA) {
+		switch (resource.type) {
+		case ResourceType::CUDA:
 			// CUDA 3D configuration - use 8x8x4 blocks
 			block_size.x = 8;
 			block_size.y = 8;
@@ -301,11 +318,8 @@ struct KernelConfig {
 			grid_size.x = (width + block_size.x - 1) / block_size.x;
 			grid_size.y = (height + block_size.y - 1) / block_size.y;
 			grid_size.z = (depth + block_size.z - 1) / block_size.z;
-		}
-#endif
-
-#ifdef USE_SYCL
-		if (resource.type == ResourceType::SYCL) {
+			break;
+		case ResourceType::SYCL:
 			// SYCL 3D work-group configuration
 			block_size.x = 4;
 			block_size.y = 4;
@@ -314,13 +328,20 @@ struct KernelConfig {
 			grid_size.x = (width + block_size.x - 1) / block_size.x;
 			grid_size.y = (height + block_size.y - 1) / block_size.y;
 			grid_size.z = (depth + block_size.z - 1) / block_size.z;
-		}
-#endif
-
-#ifdef USE_METAL
-		if (resource.type == ResourceType::METAL) {
+			break;
+		case ResourceType::METAL:
 			// Metal 3D threadgroup configuration
-			// Use 4x4x4 threadgroups (64 threads total, good for Metal)
+			block_size.x = 4;
+			block_size.y = 4;
+			block_size.z = 4;
+
+			grid_size.x = (width + block_size.x - 1) / block_size.x;
+			grid_size.y = (height + block_size.y - 1) / block_size.y;
+			grid_size.z = (depth + block_size.z - 1) / block_size.z;
+			break;
+
+		default:
+			// CPU 3D configuration - use 4x4x4 blocks
 			block_size.x = 4;
 			block_size.y = 4;
 			block_size.z = 4;
@@ -329,7 +350,6 @@ struct KernelConfig {
 			grid_size.y = (height + block_size.y - 1) / block_size.y;
 			grid_size.z = (depth + block_size.z - 1) / block_size.z;
 		}
-#endif
 	}
 
 	void* get_queue(const Resource& resource) const {

@@ -1,7 +1,14 @@
 /*********************************************************************
  * @file  Patch.h
  *
- * @brief Declaration of PatchManagerOp class.
+ * @brief Declaration of PatchManagerOp class. Is a Singleton class that manages the patches for the
+ * system. It:
+ * 1. Manages the patches for the system.
+ * 2. Manages the metadata for the patches.
+ * 3. Manages the communication between the patches.
+ * 4. Manages the computation for the patches.
+ * 5. Manages the neighbor list for the patches.
+ * 6. Manages the pair list for the patches.
  *
  * @details This file contains the declaration of the abstract base
  *          class PatchManagerOp, which operates on Patch data. It also
@@ -15,56 +22,21 @@
 
 #pragma once
 
+#include "Objects/Patch/BasePatch.h"
+#include "SimSystem.h"
 #include "Types/Types.h"
 
 namespace ARBD {
 class Decomposer;
 class CellDecomposer;
-class Patch;
 
 class PatchManager {
 	friend Decomposer;
 	friend CellDecomposer;
 
   public:
-	// PatchManager(idx_t num, short thread_id, short gpu_id, SimSystem& sys);
-	// PatchManager(idx_t num, short thread_id, short gpu_id);
-	PatchManager() : num(0), capacity(0), patch_idx(++global_patch_idx) {}
-	PatchManager(idx_t capacity) : num(0), capacity(capacity), patch_idx(++global_patch_idx) {}
+	PatchManager(SimSystem& sys);
 
-	// Copy constructor
-	PatchManager(const PatchManager& other)
-		: num(other.num), capacity(other.capacity), patch_idx(++global_patch_idx) {
-		LOGTRACE("Copy constructing {} @{}",
-				 type_name<decltype(*this)>().c_str(),
-				 static_cast<void*>(this));
-	}
-	// Move constructor
-	PatchManager(PatchManager&& other)
-		: num(std::move(other.num)), capacity(std::move(other.capacity)),
-		  patch_idx(std::move(other.patch_idx)) {
-		LOGTRACE("Move constructing {} @{}",
-				 type_name<decltype(*this)>().c_str(),
-				 static_cast<void*>(this));
-	}
-	// Move assignment operator
-	PatchManager& operator=(PatchManager&& other) {
-		LOGTRACE("Move assigning {} @{}",
-				 type_name<decltype(*this)>().c_str(),
-				 static_cast<void*>(this));
-		num = std::move(other.num);
-		capacity = std::move(other.capacity);
-		patch_idx = std::move(other.patch_idx);
-		// lower_bound = std::move(other.lower_bound);
-		// upper_bound = std::move(other.upper_bound);
-		return *this;
-	}
-
-	~PatchManager() {
-		LOGTRACE("Destroying {} @{}",
-				 type_name<decltype(*this)>().c_str(),
-				 static_cast<void*>(this));
-	}
 	/**
 	 * @brief Metadata for each patch.
 	 * @details This is used to store the metadata for each patch.
@@ -73,12 +45,6 @@ class PatchManager {
 		Metadata() : num(0), capacity(0), min(Vector3(0.0f)), max(Vector3(0.0f)){};
 		Metadata(const PatchManager& p)
 			: num(p.num), capacity(p.capacity), min(p.lower_bound), max(p.upper_bound){};
-		Metadata(const Metadata& other)
-			: num(other.num), capacity(other.capacity), min(other.min), max(other.max){};
-		idx_t num;
-		idx_t capacity;
-		Vector3 min;
-		Vector3 max;
 	};
 
 	const Vector3 get_min() const {

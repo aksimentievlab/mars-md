@@ -11,7 +11,6 @@
  *********************************************************************/
 #pragma once
 
-#include "PatchOp.h"
 #include <cassert>
 #include <iostream>
 #include <map>
@@ -43,7 +42,3 @@ class Integrator : public PatchOp {
   protected:
 	static std::map<Conf, Integrator*> _integrators;
 };
-
-#include "Integrator/CPU.h"
-#include "Integrator/CUDA.h"
-#include "Integrator/kernels.h"

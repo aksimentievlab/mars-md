@@ -1,7 +1,7 @@
 #include "Backend/CUDA/KernelHelper.cuh"
-#include "Math/Types.h"
-#include "Math/Vector3.h"
 #include "Random/RandomKernels.h"
+#include "Types/Types.h"
+#include "Types/Vector3.h"
 
 // Include any other necessary headers
 #include "Backend/Buffer.h"
@@ -15,50 +15,43 @@ using BufferVector3 = DeviceBuffer<ARBD::Vector3_t<float>>;
 
 // Random kernel template instantiations
 // UniformFunctor template instantiations
-template Event launch_cuda_kernel<std::tuple<>, std::tuple<BufferFloat&>, UniformFunctor<float>&>(
-	const Resource& resource,
-	size_t thread_count,
-	const std::tuple<>& inputs,
-	const std::tuple<BufferFloat&>& outputs,
-	const KernelConfig& config,
-	UniformFunctor<float>& kernel_func);
-
-template Event launch_cuda_kernel<std::tuple<>,
-								  std::tuple<BufferVector3&>,
-								  UniformFunctor<ARBD::Vector3_t<float>>&>(
-	const Resource& resource,
-	size_t thread_count,
-	const std::tuple<>& inputs,
-	const std::tuple<BufferVector3&>& outputs,
-	const KernelConfig& config,
-	UniformFunctor<ARBD::Vector3_t<float>>& kernel_func);
-
+template Event launch_cuda_kernel(const Resource& resource,
+								  const KernelConfig& config,
+								  UniformFunctor<float>& kernel_func,
+								  float min_val,
+								  float max_val,
+								  uint64_t seed_,
+								  uint32_t current_ctr,
+								  uint32_t global_seed_,
+								  BufferFloat& output);
 // GaussianFunctor template instantiations
-template Event launch_cuda_kernel<std::tuple<>, std::tuple<BufferFloat&>, GaussianFunctor<float>&>(
-	const Resource& resource,
-	size_t thread_count,
-	const std::tuple<>& inputs,
-	const std::tuple<BufferFloat&>& outputs,
-	const KernelConfig& config,
-	GaussianFunctor<float>& kernel_func);
-
-template Event launch_cuda_kernel<std::tuple<>,
-								  std::tuple<BufferVector3&>,
-								  GaussianFunctor<ARBD::Vector3_t<float>>&>(
-	const Resource& resource,
-	size_t thread_count,
-	const std::tuple<>& inputs,
-	const std::tuple<BufferVector3&>& outputs,
-	const KernelConfig& config,
-	GaussianFunctor<ARBD::Vector3_t<float>>& kernel_func);
+template Event launch_cuda_kernel(const Resource& resource,
+								  const KernelConfig& config,
+								  GaussianFunctor<float>& kernel_func,
+								  float mean,
+								  float stddev,
+								  uint64_t seed_,
+								  uint32_t current_ctr,
+								  uint32_t global_seed_,
+								  BufferFloat& output);
+template Event launch_cuda_kernel(const Resource& resource,
+								  const KernelConfig& config,
+								  GaussianFunctor<Vector3>& kernel_func,
+								  float mean,
+								  float stddev,
+								  uint64_t seed_,
+								  uint32_t current_ctr,
+								  uint32_t global_seed_,
+								  BufferVector3& output);
 
 // Also need int version for UniformFunctor
-template Event
-launch_cuda_kernel<std::tuple<>, std::tuple<DeviceBuffer<int>&>, UniformFunctor<int>&>(
-	const Resource& resource,
-	size_t thread_count,
-	const std::tuple<>& inputs,
-	const std::tuple<DeviceBuffer<int>&>& outputs,
-	const KernelConfig& config,
-	UniformFunctor<int>& kernel_func);
+template Event launch_cuda_kernel(const Resource& resource,
+								  const KernelConfig& config,
+								  UniformFunctor<int>& kernel_func,
+								  int min_val,
+								  int max_val,
+								  uint64_t seed_,
+								  uint32_t current_ctr,
+								  uint32_t global_seed_,
+								  DeviceBuffer<int>& output);
 } // namespace ARBD

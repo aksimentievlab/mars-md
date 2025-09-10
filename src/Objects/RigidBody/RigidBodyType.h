@@ -12,7 +12,10 @@ struct RigidBody {
 	Vector3 position;
 	Matrix3 orientation;
 	Vector3 momentum;
+	Vector3 angularMomentum;
 	Vector3 force;
+	Vector3 torque;
+
 	bool is_dummy = false;
 	bool has_orientation = false;
 	RigidBody& operator=(const RigidBody& src) {
@@ -45,8 +48,7 @@ class RigidBodyType {
 		float* meanPmf;
 		float* pmf_scale;
 	};
-	BaseGrid<float>** pmf;
-	GridConfig<float>::BoundaryCondition* pmf_boundary_conditions;
+	BaseGrid<float>** pmfGrid;
 	BaseGrid<float>* diffusionGrid;
 	BaseGrid<float>* forceGrid;
 	using props = Properties;

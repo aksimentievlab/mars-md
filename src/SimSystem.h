@@ -1,11 +1,22 @@
 #pragma once
+/**
+ * @file SimSystem.h
+ * @author Pin-Yi Li <pinyili2@illinois.edu>
+ * @brief Simulation system class. Stores the system configuration and objects that won't change
+ * during the simulation.
+ * @version 0.1
+ * @date 2025-09-09
+ *
+ * @copyright Copyright (c) 2025
+ *
+ */
 
 #include "ARBDException.h"
 #include "ARBDLogger.h"
 #include "Backend/Buffer.h"
+#include "Backend/Resource.h"
 #include "Types/IndexList.h"
 #include "Types/Types.h"
-#include "Backend/Resource.h"
 #include <array>
 #include <iostream> // For logging placeholders
 #include <memory>
@@ -18,11 +29,21 @@ namespace ARBD {
 // Forward-declare SimSystem to be used in the Decomposer interface
 class SimSystem;
 
-struct Temperature {
+struct Temperature { // Temperature grids can be stored here?
 	float value;
 };
 struct Length {
 	float value;
+};
+
+struct OutputPeriod {
+	float Period;
+	float EnergyPeriod;
+};
+struct SimSteps {
+	float timestep;
+	int steps;
+	int decompPeriod;
 };
 
 class BoundaryConditions {
@@ -108,15 +129,16 @@ class SimSystem {
 		enum class Periodicity { AllPeriodic, TwoDimensional, OneDimensional, Open };
 		enum class Algorithm { BD, Langevin, DPD };
 		enum class ReactionScheme { None, Simple };
-
+		enum class OutputFormat { DCD, PDB, HDF5 };
 		Temperature temperature{298.15f};
 		Periodicity periodicity{Periodicity::AllPeriodic};
 		DecomposerType decomposer{DecomposerType::Cell};
 		Algorithm algorithm{Algorithm::Langevin};
 		ReactionScheme reaction_scheme{ReactionScheme::None};
-
+		OutputPeriod OutputPeriod{100, 10};
+		OutputFormat outputFormat{OutputFormat::DCD};
+		Length cutoff{50.0f};
 		std::array<float, 3> box_lengths{5000.0f, 5000.0f, 5000.0f};
-		float cutoff{50.0f};
 	};
 
 	/**
@@ -143,7 +165,6 @@ class SimSystem {
 		default:
 			throw std::runtime_error("Unsupported periodicity specified in configuration.");
 		}
-
 		// 2. Create the chosen decomposer instance (Factory Pattern)
 		switch (conf.decomposer) {
 		case Conf::DecomposerType::Cell:

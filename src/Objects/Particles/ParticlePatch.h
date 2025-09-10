@@ -9,9 +9,28 @@
 #include "Types/Types.h"
 
 namespace ARBD {
+struct Particle {
+	int id;
+	int type_id;
+	Vector3 position;
+	Vector3 momentum;
+	Vector3 force;
+	bool is_dummy = false;
+	bool has_orientation = false;
+	Particle& operator=(const Particle& src) {
+		id = src.id;
+		type_id = src.type_id;
+		position = src.position;
+		momentum = src.momentum;
+		force = src.force;
+		is_dummy = src.is_dummy;
+		has_orientation = src.has_orientation;
+		return *this;
+	}
+};
 
 template<typename Pos, typename Force>
-class Patch {
+class ParticlePatch {
 	int num_replicas;
 
   public:
@@ -127,7 +146,7 @@ class Patch : public BasePatch {
 	void compute();
 
 	// Communication
-	size_t send_particles(Proxy<Patch>* destination); // Same as send_children?
+	// size_t send_particles(Proxy<Patch>* destination); // Same as send_children?
 	// void send_particles_filtered( Proxy<Patch> destination,
 	// std::function<bool(size_t, Patch::Data)> = [](size_t idx, Patch::Data
 	// d)->bool { return true; } );
@@ -136,8 +155,8 @@ class Patch : public BasePatch {
 	// template<typename T>
 	// size_t send_particles_filtered( Proxy<Patch>& destination, T filter );
 	// // [](size_t idx, Patch::Data d)->bool { return true; } );
-	size_t send_particles_filtered(Proxy<Patch>& destination,
-								   std::function<bool(size_t, Data)> filter);
+	// size_t send_particles_filtered(Proxy<Patch>& destination,
+	//							   std::function<bool(size_t, Data)> filter);
 	// [](size_t idx, Patch::Data d)->bool { return true; } );
 
 	void clear() {

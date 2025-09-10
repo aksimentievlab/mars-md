@@ -4,31 +4,17 @@
 #include <string>
 
 namespace ARBD {
-struct Particle {
-	int id;
-	int type_id;
-	Vector3 position;
-	Vector3 momentum;
-	Vector3 force;
-	bool is_dummy = false;
-	bool has_orientation = false;
-	Particle& operator=(const Particle& src) {
-		id = src.id;
-		type_id = src.type_id;
-		position = src.position;
-		momentum = src.momentum;
-		force = src.force;
-		is_dummy = src.is_dummy;
-		has_orientation = src.has_orientation;
-		return *this;
-	}
-};
 
 class ParticleType {
+  private:
+	void clear();
+	void copy(const ParticleType& src);
+
   public:
-	char name[32];
+	std::string name;
 	struct Properties {
 		int id;
+		int num; // number of particles of this type
 		float mass;
 		float charge;
 		float radius;
@@ -39,10 +25,19 @@ class ParticleType {
 		float* meanPmf;
 		float* pmf_scale;
 	};
-	BaseGrid<float>** pmf;
-	GridConfig<float>::BoundaryCondition* pmf_boundary_conditions;
+	BaseGrid<float>** pmfGrid;
 	BaseGrid<float>* diffusionGrid;
-	BaseGrid<float>* forceGrid;
+	BaseGrid<Vector3>* forceGrid;
 	using props = Properties;
+
+	ParticleType(const std::string& name) : name(name){};
+	ParticleType(const ParticleType& src) {
+		copy(src);
+	};
+	ParticleType& operator=(const ParticleType& src);
+	~ParticleType() {
+		clear();
+	};
 };
+
 } // namespace ARBD

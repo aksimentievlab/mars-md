@@ -1,9 +1,5 @@
 #pragma once
-#include "Header.h"
-#ifdef __SYCL_DEVICE_ONLY__
-#include <sycl/sycl.hpp>
-#endif
-#ifdef HOST_GUARD
+
 #include "ARBDException.h"
 #include <chrono>
 #include <cstdio>
@@ -124,23 +120,9 @@ inline LogLevel Logger::current_level = LogLevel::INFO;
 // ============================================================================
 // Simple printf-based logging for CUDA devices
 // Note: Use printf-style format strings (%d, %s, %f, etc.) in device code
-#else
-#if defined(__SYCL_DEVICE_ONLY__)
-extern sycl::stream global_stream;
-// SYCL device code - use sycl::stream (requires stream object)
-#define LOGTRACE(fmt, ...) global_stream << "[DEVICE-TRACE]: " << fmt << "\n"
-#define LOGDEBUG(fmt, ...) global_stream << "[DEVICE-DEBUG]: " << fmt << "\n"
-#define LOGINFO(fmt, ...) global_stream << "[DEVICE-INFO]: " << fmt << "\n"
-#define LOGWARN(fmt, ...) global_stream << "[DEVICE-WARN]: " << fmt << "\n"
-#define LOGERROR(fmt, ...) global_stream << "[DEVICE-ERROR]: " << fmt << "\n"
-#define LOGCRITICAL(fmt, ...) global_stream << "[DEVICE-CRITICAL]: " << fmt << "\n"
-
-#else
-#define LOGTRACE(fmt, ...) printf("[DEVICE-TRACE]: " fmt "\n", ##__VA_ARGS__)
-#define LOGDEBUG(fmt, ...) printf("[DEVICE-DEBUG]: " fmt "\n", ##__VA_ARGS__)
-#define LOGINFO(fmt, ...) printf("[DEVICE-INFO]: " fmt "\n", ##__VA_ARGS__)
-#define LOGWARN(fmt, ...) printf("[DEVICE-WARN]: " fmt "\n", ##__VA_ARGS__)
-#define LOGERROR(fmt, ...) printf("[DEVICE-ERROR]: " fmt "\n", ##__VA_ARGS__)
-#define LOGCRITICAL(fmt, ...) printf("[DEVICE-CRITICAL]: " fmt "\n", ##__VA_ARGS__)
-#endif // HOST_GUARD
-#endif
+#define DEVICETRACE(fmt, ...) printf("[CUDA-TRACE]: " fmt "\n", ##__VA_ARGS__)
+#define DEVICEDEBUG(fmt, ...) printf("[CUDA-DEBUG]: " fmt "\n", ##__VA_ARGS__)
+#define DEVICEINFO(fmt, ...) printf("[CUDA-INFO]: " fmt "\n", ##__VA_ARGS__)
+#define DEVICEWARN(fmt, ...) printf("[CUDA-WARN]: " fmt "\n", ##__VA_ARGS__)
+#define DEVICEERROR(fmt, ...) printf("[CUDA-ERROR]: " fmt "\n", ##__VA_ARGS__)
+#define DEVICECRITICAL(fmt, ...) printf("[CUDA-CRITICAL]: " fmt "\n", ##__VA_ARGS__)

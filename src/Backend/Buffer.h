@@ -125,6 +125,8 @@ using UnifiedPolicy = METAL::UnifiedPolicy;
  * @tparam T The element type.
  * @tparam Policy The memory management policy (CUDA, SYCL, or Metal).
  */
+enum class BufferAccess : uint8_t { read_only, write_only, read_write };
+
 template<typename T, typename Policy>
 class Buffer {
   protected:
@@ -135,6 +137,8 @@ class Buffer {
 	T* host_ptr_{nullptr};	 // Host memory pointer
 	void* queue_{nullptr};	 // Queue/Stream pointer
 	bool sync_{false};		 // Sync flag
+
+	BufferAccess buffer_access_{BufferAccess::read_write};
 
   public:
 	/**
@@ -287,7 +291,7 @@ class Buffer {
 		// Copy existing data to new buffer before deallocating old buffer
 		if (device_ptr_ && new_ptr && count_ > 0) {
 			size_t copy_size = std::min(count_, count) * sizeof(T);
-			
+
 			// Use appropriate copy method based on policy type
 			if constexpr (std::is_same_v<Policy, PinnedPolicy>) {
 				// For pinned memory, use memcpy since it's host-accessible
@@ -399,14 +403,10 @@ class Buffer {
 		if (!device_ptr_) {
 			ARBD_Exception(ExceptionType::ValueError, "Cannot copy from null buffer");
 		}
-		Policy::copy_to_host(host_dst,
-							 device_ptr_,
-							 num_elements * sizeof(T),
-							 queue_,
-							 sync);
+		Policy::copy_to_host(host_dst, device_ptr_, num_elements * sizeof(T), queue_, sync);
 #if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__) && !defined(__METAL_VERSION__)
-		LOGTRACE("Copied {} bytes to host from {} ({}sync)", 
-				 num_elements * sizeof(T), 
+		LOGTRACE("Copied {} bytes to host from {} ({}sync)",
+				 num_elements * sizeof(T),
 				 resource_.toString(),
 				 sync ? "" : "a");
 #endif
@@ -414,7 +414,7 @@ class Buffer {
 
 	/**
 	 * @brief Copy data to host asynchronously.
-	 * @param host_dst Destination host pointer  
+	 * @param host_dst Destination host pointer
 	 * @param num_elements Number of elements to copy
 	 * @return void* Stream handle for synchronization
 	 */
@@ -463,14 +463,10 @@ class Buffer {
 		if (!host_src) {
 			ARBD_Exception(ExceptionType::ValueError, "Cannot copy from null host pointer");
 		}
-		Policy::copy_from_host(device_ptr_,
-							   host_src,
-							   num_elements * sizeof(T),
-							   queue_,
-							   sync);
+		Policy::copy_from_host(device_ptr_, host_src, num_elements * sizeof(T), queue_, sync);
 #if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__) && !defined(__METAL_VERSION__)
-		LOGTRACE("Copied {} bytes from host to {} ({}sync)", 
-				 num_elements * sizeof(T), 
+		LOGTRACE("Copied {} bytes from host to {} ({}sync)",
+				 num_elements * sizeof(T),
 				 resource_.toString(),
 				 sync ? "" : "a");
 #endif
@@ -581,7 +577,7 @@ class Buffer {
 		return create_event_from_stream();
 	}
 
-private:
+  private:
 	/**
 	 * @brief Create an Event from the current stream.
 	 */
@@ -633,8 +629,7 @@ private:
 		return Event(nullptr, resource_);
 	}
 
-public:
-
+  public:
 #ifdef USE_METAL
 	/**
 	 * @brief Bind buffer to Metal compute encoder.
@@ -787,7 +782,7 @@ class USMBuffer : public Buffer<T, Policy> {
 			  const std::vector<Resource>& resources,
 			  void* queue = nullptr,
 			  bool sync = true)
-		: Buffer<T, Policy>(capacity,  // Allocate capacity amount of memory
+		: Buffer<T, Policy>(capacity, // Allocate capacity amount of memory
 							resources.empty() ? Resource{} : resources.front(),
 							queue,
 							sync),
@@ -1014,7 +1009,7 @@ constexpr bool is_string_v = is_string<std::decay_t<T>>::value;
 // Helper function to get buffer pointers from tuples for legacy kernel launches
 template<typename... Buffers, std::size_t... Is>
 auto get_buffer_tuples_impl(const std::tuple<Buffers...>& buffer_tuple,
-							  std::index_sequence<Is...>) {
+							std::index_sequence<Is...>) {
 	return std::make_tuple(std::get<Is>(buffer_tuple).device_data()...);
 }
 

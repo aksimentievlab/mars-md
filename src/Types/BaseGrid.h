@@ -65,10 +65,43 @@ class BaseGrid {
 	using Vector3 = Vector3_t<T>;
 	using Matrix3 = Matrix3_t<T>;
 	using IndexType = idx_t;
+	/**
+	 * @brief Grid configuration structure for initialization
+	 */
+	/**
+	 * @brief Interpolation orders supported by the grid
+	 */
+	enum class InterpolationOrder : int {
+		Linear = 1, ///< Linear interpolation
+		Cubic = 3	///< Cubic interpolation
+	};
+
+	struct Config {
+		/**
+		 * @brief Boundary condition types for grid operations
+		 */
+		enum class BoundaryCondition : int {
+			Dirichlet = 0, ///< Fixed value at boundary
+			Neumann = 1,   ///< Fixed derivative at boundary
+			Periodic = 2   ///< Periodic boundary conditions
+		};
+		Vector3_t<T> origin{0, 0, 0};		  ///< Origin point of the grid
+		Matrix3_t<T> basis{T(1)};			  ///< Basis vectors defining grid spacing
+		Vector3_t<idx_t> dimensions{1, 1, 1}; ///< Grid dimensions (nx, ny, nz)
+		BoundaryCondition boundary = BoundaryCondition::Periodic;
+
+		HOST DEVICE constexpr idx_t total_size() const noexcept {
+			return dimensions.x * dimensions.y * dimensions.z;
+		}
+
+		HOST DEVICE constexpr bool is_valid() const noexcept {
+			return dimensions.x > 0 && dimensions.y > 0 && dimensions.z > 0;
+		}
+	};
 
   private:
 	// Core grid data
-	GridConfig<T> config_;
+	Config config_;
 	Matrix3 basis_inv_; ///< Inverse of basis matrix (cached for performance)
 
 // Host-side storage (not accessible from device)
@@ -91,6 +124,14 @@ class BaseGrid {
 
 	/**
 	 * @brief Default constructor - creates unit grid
+	 * @usage BaseGrid grid;
+	 * @usage BaseGrid grid(basis, origin, nx, ny, nz);
+	 * @usage BaseGrid grid(box_size, dx);
+	 * @usage BaseGrid grid(other);
+	 * @usage BaseGrid grid(std::move(other));
+	 * @usage BaseGrid grid(config);
+	 * @usage BaseGrid grid(std::move(config));
+	 * @usage BaseGrid grid(config, values);
 	 */
 	BaseGrid()
 		: config_{}
@@ -238,7 +279,7 @@ class BaseGrid {
 	/**
 	 * @brief Get grid configuration
 	 */
-	HOST DEVICE const GridConfig<T>& config() const noexcept {
+	HOST DEVICE const Config& config() const noexcept {
 		return config_;
 	}
 	HOST DEVICE const Vector3& origin() const noexcept {

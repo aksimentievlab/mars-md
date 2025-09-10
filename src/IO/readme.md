@@ -1,0 +1,1 @@
+- All host I/O locations so device code are not resposible for reading and writing.

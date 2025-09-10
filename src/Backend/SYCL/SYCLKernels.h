@@ -17,7 +17,6 @@ namespace ARBD {
  */
 template<typename Functor, typename... Args>
 Event launch_sycl_kernel(const Resource& resource,
-						 idx_t thread_count,
 						 const KernelConfig& config,
 						 Functor kernel_func,
 						 Args... args) {
@@ -57,12 +56,10 @@ Event launch_sycl_kernel(const Resource& resource,
 			idx_t gy = static_cast<idx_t>(item.get_global_id(1));
 			idx_t gz = static_cast<idx_t>(item.get_global_id(0));
 
-			idx_t nx = static_cast<idx_t>(item.get_global_range(2));
-			idx_t ny = static_cast<idx_t>(item.get_global_range(1));
-
-			idx_t i = (gz * ny + gy) * nx + gx;
-			if (i < thread_count) {
-				// Apply pre-extracted arguments - minimal overhead
+			if (gx < local_config.problem_size.x && gy < local_config.problem_size.y &&
+				gz < local_config.problem_size.z) {
+				idx_t i =
+					(gz * local_config.problem_size.y + gy) * local_config.problem_size.x + gx;
 				std::apply([&](auto... ptrs) { kernel_func(i, ptrs...); }, extracted_ptr_args);
 			}
 		});
