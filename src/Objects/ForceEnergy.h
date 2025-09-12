@@ -6,17 +6,16 @@ namespace ARBD {
 
 /**
  * @brief A simple class to store force and energy values together
- *
  * This class represents a force-energy pair commonly used in molecular
- * dynamics simulations. Migrated from Useful.h to the modern Types system.
+ * dynamics simulations.
  */
 class ForceEnergy {
   public:
-	HOST DEVICE ForceEnergy() : f(0.0f), e(0.0f) {}
+	HOST DEVICE ForceEnergy() : f(0.0f, 0.0f, 0.0f), e(0.0f) {}
 
 	HOST DEVICE explicit ForceEnergy(float energy) : f(energy), e(energy) {}
 
-	HOST DEVICE ForceEnergy(float force, float energy) : f(force), e(energy) {}
+	HOST DEVICE ForceEnergy(float force, float energy) : f(force, 0.0f, 0.0f), e(energy) {}
 
 	HOST DEVICE ForceEnergy(const ForceEnergy& other) : f(other.f), e(other.e) {}
 
@@ -116,8 +115,8 @@ class ForceEnergy {
 	}
 
   public:
-	float f; ///< Force component
-	float e; ///< Energy component
+	Vector3 f; ///< Force component
+	float e;   ///< Energy component
 };
 
 // Free function operators

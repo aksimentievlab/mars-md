@@ -2,6 +2,10 @@
 
 #pragma once
 
-#include "extern/pybind11/include/pybind11/pybind11.h"
+#include <pybind11/pybind11.h>
 
-namespace ARBD {}
+namespace ARBD {
+
+void init_pybind_objects(pybind11::module& m);
+
+} // namespace ARBD

@@ -14,7 +14,7 @@
 #include "ARBDLogger.h"
 #include "IO/FileHandle.h"
 #include "IO/Reader.h"
-#include "System/SimSystem.h"
+#include "SimSystem.h"
 #include "Types/Types.h"
 
 #include <algorithm> // sort

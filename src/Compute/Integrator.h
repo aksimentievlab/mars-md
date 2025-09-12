@@ -15,12 +15,10 @@
 #include <iostream>
 #include <map>
 
-class Integrator : public PatchOp {
+namespace ARBD {
+class Integrator {
   public:
 	virtual void compute(Patch* patch) = 0;
-	int num_patches() const {
-		return 1;
-	};
 
 	// Following relates to lazy initialized factory method
 	struct Conf {
@@ -42,3 +40,4 @@ class Integrator : public PatchOp {
   protected:
 	static std::map<Conf, Integrator*> _integrators;
 };
+} // namespace ARBD

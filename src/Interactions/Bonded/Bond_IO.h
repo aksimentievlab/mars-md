@@ -1,35 +1,34 @@
 #pragma once
 
 #include "Header.h"
-#include "System/SimSystem.h"
+#include "IO/Reader.h"
 #include "Types/Types.h"
 
 namespace ARBD {
 
-const String flags[] = {"DEFAULT", "REPLACE", "ADD"};
+enum class BondFlag { DEFAULT = 1, REPLACE = 1, ADD = 2 };
 
 class Bond {
   public:
-	enum { DEFAULT = 1, REPLACE = 1, ADD = 2 };
+	BondFlag flag;
 
-	Bond() : flag(DEFAULT), ind1(-1), ind2(-1) {}
+	Bond() : flag(BondFlag::DEFAULT), ind1(-1), ind2(-1) {}
 
-	Bond(int flag, int ind1, int ind2, String fileName)
+	Bond(BondFlag flag, int ind1, int ind2, std::string fileName)
 		: flag(flag), ind1(ind1), ind2(ind2), fileName(fileName) {}
 
-	Bond(String strflag, int ind1, int ind2, String fileName);
+	Bond(BondFlag flag, int ind1, int ind2, std::string fileName);
 
-	int flag;
 	int ind1;
 	int ind2;
 	int tabFileIndex;
-	String fileName;
-	Bond(String strflag, int ind1, int ind2, String fileName)
+	std::string fileName;
+	Bond(std::string strflag, int ind1, int ind2, std::string fileName)
 		: ind1(ind1), ind2(ind2), fileName(fileName) {
 		if (strflag == "REPLACE") {
-			flag = REPLACE;
+			flag = BondFlag::REPLACE;
 		} else if (strflag == "ADD") {
-			flag = ADD;
+			flag = BondFlag::ADD;
 		} else {
 			printf("WARNING: Invalid operation flag found:"
 				   "\"BOND %s %d %d\"\n",
@@ -37,7 +36,7 @@ class Bond {
 				   ind1,
 				   ind2);
 			printf("sing default flag\n");
-			flag = DEFAULT;
+			flag = BondFlag::DEFAULT;
 		}
 		tabFileIndex = -1;
 	}
@@ -46,9 +45,9 @@ class Bond {
 		printf("BOND %s %d %d %s\n", flags[flag].c_str(), ind1, ind2, fileName.c_str());
 	}
 
-	String toString() {
-		return "BOND " + flags[flag] + " " + std::to_string(ind1) + " " + std::to_string(ind2) +
-			   " " + fileName;
+	std::string tostd::string() {
+		return "BOND " + flags[flag] + " " + std::to_std::string(ind1) + " " +
+			   std::to_std::string(ind2) + " " + fileName;
 	}
 };
 

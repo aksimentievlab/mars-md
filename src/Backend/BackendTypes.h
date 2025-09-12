@@ -13,9 +13,6 @@ using simd_int2 = simd::int2;
 
 namespace ARBD {
 
-// Backend-specific type optimizations
-namespace BackendTypes {
-
 // SIMD-friendly types for different backends
 #ifdef __CUDACC__
 // CUDA warp-aligned types
@@ -72,6 +69,5 @@ static constexpr size_t OPTIMAL_WARP_SIZE = 32;	  // Metal SIMD group size
 static constexpr size_t OPTIMAL_BLOCK_SIZE = 64; // CPU cache-friendly size
 static constexpr size_t OPTIMAL_WARP_SIZE = 8;	 // CPU SIMD width
 #endif
-} // namespace BackendTypes
 
 } // namespace ARBD

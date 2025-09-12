@@ -2,8 +2,8 @@
 
 #include "ARBDException.h"
 #include "ARBDLogger.h"
-#include "System/SimSystem.h"
-
+#include "IO/Reader.h"
+#include "SimSystem.h"
 #include <array>
 #include <string>
 #include <string_view>
@@ -15,18 +15,8 @@ namespace ARBD {
  *
  * Configuration is responsible for I/O and validation (implemented in Configuration.cpp).
  * It exposes a stable DTO (ActualParameters) and a converter to SimSystem::Conf.
+ * Singleton Constructor.
  */
-struct ActualParameters {
-
-	Temperature temperature{298.15f};
-	SimSystem::Conf::Periodicity periodicity{SimSystem::Conf::Periodicity::AllPeriodic};
-	SimSystem::Conf::DecomposerType decomposer{SimSystem::Conf::DecomposerType::Cell};
-	SimSystem::Conf::Algorithm algorithm{SimSystem::Conf::Algorithm::Langevin};
-	SimSystem::Conf::ReactionScheme reaction_scheme{SimSystem::Conf::ReactionScheme::None};
-
-	std::array<float, 3> box_lengths{5000.0f, 5000.0f, 5000.0f};
-	float cutoff{50.0f};
-};
 
 class Configuration {
   public:
@@ -36,19 +26,7 @@ class Configuration {
 	 * @brief Load and validate a configuration from file (e.g., .brown).
 	 * @throws ARBD::Exception on I/O or validation error
 	 */
-	static Configuration Load(std::string_view file_name);
-
-	/**
-	 * @brief Construct directly from already-validated parameters.
-	 */
-	explicit Configuration(const ActualParameters& params) : params_(params) {}
-
-	/**
-	 * @brief Access validated parameters (DTO).
-	 */
-	[[nodiscard]] const ActualParameters& params() const noexcept {
-		return params_;
-	}
+	Configuration(std::string_view file_name);
 
 	/**
 	 * @brief Convert to SimSystem::Conf for system construction.
@@ -59,14 +37,13 @@ class Configuration {
 		conf.periodicity = params_.periodicity;
 		conf.decomposer = params_.decomposer;
 		conf.algorithm = params_.algorithm;
-		conf.reaction_scheme = params_.reaction_scheme;
+		conf.has_reaction = params_.has_reaction;
 		conf.box_lengths = params_.box_lengths;
 		conf.cutoff = params_.cutoff;
 		return conf;
 	}
 
   private:
-	ActualParameters params_{};
 };
 
 } // namespace ARBD

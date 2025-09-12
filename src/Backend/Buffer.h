@@ -1,20 +1,13 @@
 #pragma once
 
-// Address space qualifiers for different backends
-#ifdef __METAL_VERSION__
-#ifndef DEVICE_PTR
-#define DEVICE_PTR(type) device type*
-#endif
-#ifndef CONSTANT_PTR
-#define CONSTANT_PTR(type) constant type*
-#endif
+#if defined(__METAL_VERSION__)
+// Metal Shading Language uses the standard C99 'restrict'
+#define RESTRICT restrict
+#elif defined(__CUDACC__) || defined(__GNUC__) || defined(__clang__) || defined(_MSC_VER)
+#define RESTRICT __restrict__
 #else
-#ifndef DEVICE_PTR
-#define DEVICE_PTR(type) type*
-#endif
-#ifndef CONSTANT_PTR
-#define CONSTANT_PTR(type) const type*
-#endif
+// Fallback for other compilers: define it as nothing to ensure compilation
+#define RESTRICT
 #endif
 
 #ifndef __METAL_VERSION__
@@ -1018,11 +1011,40 @@ auto get_buffer_tuples(const std::tuple<Buffers...>& buffer_tuple) {
 	return get_buffer_tuples_impl(buffer_tuple, std::make_index_sequence<sizeof...(Buffers)>{});
 }
 
-// Zero-overhead helpers for individual buffer/value extraction
 template<typename T>
 constexpr auto get_buffer_pointer(T&& arg) {
 	if constexpr (is_device_buffer_v<std::decay_t<T>>) {
-		return arg.device_data();
+		auto ptr = arg.device_data();
+		using ValueType = typename std::decay_t<T>::value_type;
+		auto access = arg.get_access();
+
+#if defined(USE_CUDA) || defined(USE_METAL)
+		switch (access) {
+		case BufferAccess::read_only:
+			// Safe to use restrict - only reading from this pointer
+			return static_cast<const ValueType * RESTRICT>(ptr);
+		case BufferAccess::write_only:
+			// Safe to use restrict - only writing through this pointer
+			return static_cast<ValueType * RESTRICT>(ptr);
+		case BufferAccess::read_write:
+		default:
+			return static_cast<ValueType*>(ptr);
+		}
+#elif defined(USE_SYCL)
+		// Same logic for SYCL USM
+		switch (access) {
+		case BufferAccess::read_only:
+			return static_cast<const ValueType * RESTRICT>(ptr);
+		case BufferAccess::write_only:
+			return static_cast<ValueType * RESTRICT>(ptr);
+		case BufferAccess::read_write:
+		default:
+			return static_cast<ValueType*>(ptr);
+		}
+#else
+		// Fallback for other backends
+		return ptr;
+#endif
 	} else {
 		return std::forward<T>(arg);
 	}

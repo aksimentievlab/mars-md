@@ -4,7 +4,7 @@
  * @author Pin-Yi Li <pinyili2@illinois.edu>
  * @brief Simulation system class. Stores the system configuration and objects that won't change
  * during the simulation.
- * @version 0.1
+ * @version 2.0
  * @date 2025-09-09
  *
  * @copyright Copyright (c) 2025
@@ -126,19 +126,31 @@ class SimSystem {
 			RecursiveBisection, // For non-uniform systems (load balancing)
 			Geometric			// For systems with specific shapes (e.g., membranes)
 		};
+		enum class LongRangeMethod {
+			CutoffAMR, ///< Adaptive cutoff with mesh refinement
+			PPPM,	   ///< Particle-Particle Particle-Mesh
+			PME,	   ///< Particle Mesh Ewald
+			FMM,	   ///< Fast Multipole Method
+			Direct,	   ///< Direct O(N²) calculation (for small systems)
+			None	   ///< No long-range interactions
+		};
+		// Particle Mesh Ewald, Fast multipole method
 		enum class Periodicity { AllPeriodic, TwoDimensional, OneDimensional, Open };
-		enum class Algorithm { BD, Langevin, DPD };
-		enum class ReactionScheme { None, Simple };
+		enum class Algorithm { Brownian, Langevin, DPD };
 		enum class OutputFormat { DCD, PDB, HDF5 };
+		// std::unordered_map<partilce1, particle2, reaction_type> reaction;
+
 		Temperature temperature{298.15f};
 		Periodicity periodicity{Periodicity::AllPeriodic};
 		DecomposerType decomposer{DecomposerType::Cell};
+		LongRangeMethod long_range_method{LongRangeMethod::PPPM};
 		Algorithm algorithm{Algorithm::Langevin};
-		ReactionScheme reaction_scheme{ReactionScheme::None};
+		bool has_reaction = false;
 		OutputPeriod OutputPeriod{100, 10};
 		OutputFormat outputFormat{OutputFormat::DCD};
 		Length cutoff{50.0f};
 		std::array<float, 3> box_lengths{5000.0f, 5000.0f, 5000.0f};
+		std::string output_name{"out"};
 	};
 
 	/**
@@ -177,22 +189,6 @@ class SimSystem {
 	}
 
 	/**
-	 * @brief Triggers the domain decomposition process.
-	 *
-	 * Q1: Should this normally only happen at initialization?
-	 * A1: Yes, a full decomposition is typically done once at initialization.
-	 * Subsequent changes (e.g., for dynamic load balancing) would be handled
-	 * by more specific operations, potentially triggered by a 'rebalance()' method.
-	 */
-	void decompose_system() {
-		if (!decomposer_) {
-			throw std::runtime_error("No decomposer has been set.");
-		}
-		LOGINFO("decompose_system() called.");
-		decomposer_->decompose(*this, resources_);
-	}
-
-	/**
 	 * Q2: Should the Decomposer also be the object that converts
 	 * SymbolicPatchOps to concrete PatchOp?
 	 * A2: Yes, absolutely. The Decomposer is the only object with complete
@@ -218,6 +214,21 @@ class SimSystem {
 	}
 	const BoundaryConditions& get_boundary_conditions() const {
 		return boundary_conditions_;
+	}
+	/**
+	 * @brief Triggers the domain decomposition process.
+	 *
+	 * Q1: Should this normally only happen at initialization?
+	 * A1: Yes, a full decomposition is typically done once at initialization.
+	 * Subsequent changes (e.g., for dynamic load balancing) would be handled
+	 * by more specific operations, potentially triggered by a 'rebalance()' method.
+	 */
+	void decompose_system() {
+		if (!decomposer_) {
+			throw std::runtime_error("No decomposer has been set.");
+		}
+		LOGINFO("decompose_system() called.");
+		decomposer_->decompose(*this, resources_);
 	}
 
   private:

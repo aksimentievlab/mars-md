@@ -18,7 +18,7 @@
 #include <metal_stdlib>
 #endif
 
-#ifdef __SYCL_DEVICE_ONLY__
+#ifdef USE_SYCL
 #include <sycl/sycl.hpp>
 #endif
 

@@ -14,6 +14,15 @@
 
 #include "ARBDException.h"
 #include "ARBDLogger.h"
+#include "Backend/Buffer.h"
+#include "Backend/Events.h"
+#include "Backend/Kernels.h"
+#include "Backend/Profiler.h"
+#include "Backend/Resource.h"
+#include "IO/DcdWriter.h"
+#include "IO/TrajectoryWriter.h"
+#include "IO/WKFUtils.h"
+#include "Random/Random.h"
 #include "SimSystem.h"
 #include "System/PatchManager.h"
 
@@ -28,34 +37,32 @@
 
 namespace ARBD {
 
-struct LoadBalancer {
-	void balance(SimSystem& sys, const ResourceCollection& resources);
-};
-
 class SimManager {
-
   public:
 	SimManager(SimSystem& sys, const ResourceCollection& resources);
+	void init();
+	void run(); // Main simulation loop
 
   private:
-	LoadBalancer load_balancer;
-	SimSystem sys; // make it a list for replicas
+	SimSystem& sys_;
+	ResourceCollection resources_;
+	PatchManager patch_manager_;
 	CellDecomposer cell_decomp;
-	ResourceCollection resources;
-	PatchManager patch_manager;
-	// std::vector<SymbolicOp> sym_ops;
-	// std::vector<PatchOp>  ops;
+	// Timing
+	wkfmsgtimer timer0_, timerS_, timerE_;
 
-  public:
-	class CheckPairlist {
-	  public:
-		CheckPairlist(SimSystem& sys, const ResourceCollection& resources);
-		void check_pairlist(SimSystem& sys, const ResourceCollection& resources);
+	// IMD support
+	void* clientsock_{nullptr};
+	bool imd_on_{false};
 
-	  private:
-		SimSystem& sys_;
-		ResourceCollection resources_;
-	};
-	void run();
+	// Output management
+	std::unique_ptr<TrajectoryWriter> traj_writer_;
+	std::unique_ptr<DcdWriter> dcd_writer_;
+	void decompose_system();
+	// Kernel functions (no inheritance)
+	Event clear_forces();
+	Event compute_pair_forces();
+	Event compute_bonded_forces();
 };
+
 } // namespace ARBD

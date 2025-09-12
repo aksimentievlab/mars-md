@@ -61,9 +61,6 @@ class IndexList {
 		return *this;
 	}
 
-#ifdef HOST_GUARD
-
-#endif
 
 	/*===================*\
 	|  CAPACITY           |

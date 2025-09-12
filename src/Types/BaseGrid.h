@@ -48,15 +48,15 @@ void write_average_profile(const BaseGrid<T>&, std::string_view, int);
 } // namespace DXReader
 
 /**
- * @brief Template-based for different data types (float, double)
- * Features:
- * - CUDA/SYCL/CPU compatibility using unified math system
- * - Clean separation of I/O operations at the end of class
- * - RAII memory management
- * - Exception-safe operations
- * - Modern C++20 concepts and ranges support
- *
+ * @brief Template-based for BaseGrid class
  * @tparam T Data type stored in grid (typically float or double)
+ * @param Config Configuration for the grid
+ * @param values Values stored in the grid
+ * @param device_ptr Device pointer for the grid
+ * @param device_dirty Track if the device memory needs to be synced
+ * @param basis_inv Inverse of the basis matrix
+ * @param config Configuration for the grid
+ * @param values Values stored in the grid
  */
 template<typename T = float>
 class BaseGrid {
@@ -75,16 +75,15 @@ class BaseGrid {
 		Linear = 1, ///< Linear interpolation
 		Cubic = 3	///< Cubic interpolation
 	};
-
+	enum class BoundaryCondition : int {
+		Dirichlet = 0, ///< Fixed value at boundary
+		Neumann = 1,   ///< Fixed derivative at boundary
+		Periodic = 2   ///< Periodic boundary conditions
+	};
 	struct Config {
 		/**
 		 * @brief Boundary condition types for grid operations
 		 */
-		enum class BoundaryCondition : int {
-			Dirichlet = 0, ///< Fixed value at boundary
-			Neumann = 1,   ///< Fixed derivative at boundary
-			Periodic = 2   ///< Periodic boundary conditions
-		};
 		Vector3_t<T> origin{0, 0, 0};		  ///< Origin point of the grid
 		Matrix3_t<T> basis{T(1)};			  ///< Basis vectors defining grid spacing
 		Vector3_t<idx_t> dimensions{1, 1, 1}; ///< Grid dimensions (nx, ny, nz)

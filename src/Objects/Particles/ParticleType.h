@@ -12,7 +12,7 @@ class ParticleType {
 
   public:
 	std::string name;
-	struct Properties {
+	struct Properties { // stuff will be copied to GPU.
 		int id;
 		int num; // number of particles of this type
 		float mass;

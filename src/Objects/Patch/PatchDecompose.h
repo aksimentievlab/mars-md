@@ -1,7 +1,7 @@
 #include "Objects/Patch/Patch.h"
+#include "SimSystem.h"
 #include "System/DecomposeKernels.h"
 #include "System/PatchManager.h"
-#include "System/SimSystem.h"
 #include "Types/Types.h"
 
 namespace ARBD {

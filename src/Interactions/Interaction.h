@@ -5,16 +5,23 @@
 
 #pragma once
 
-#include "Objects/Patch/PatchOp.h"
 #include <cassert>
 #include <iostream>
 #include <map>
 
-/**
- * @class LocalInteraction
- * @brief Base class for local interaction
- */
-class LocalInteraction : public PatchOp {
+namespace ARBD {
+
+class NonbondedInteraction {
+  public:
+	virtual void compute(Patch* patch) = 0;
+};
+
+class BondedInteraction {
+  public:
+	virtual void compute(Patch* patch) = 0;
+};
+
+class LocalInteraction {
   public:
 	/**
 	 * @brief Computes interaction for a given patch
@@ -116,3 +123,4 @@ class LocalInteraction : public PatchOp {
 //     size_t bondlist;
 
 // };
+} // namespace ARBD

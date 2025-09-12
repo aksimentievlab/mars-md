@@ -1,30 +1,21 @@
 #pragma once
 
-// #include "../useful.h"
 #include "ARBDLogger.h"
+#include "Header.h"
 #include "Types/Types.h"
 
-#ifdef __CUDACC__
-#define HOST __host__
-#define DEVICE __device__
-#else
-#define HOST
-#define DEVICE
-#endif
-
-namespace IntegratorKernels {
+namespace ARBD {
 HOST DEVICE void __inline__ BDIntegrate() {
 	// std::cout << "Computes::BDIntegrate_inline" << std::endl;
 	LOGINFO("Integrator::BDIntegrate\n");
 };
 
-HOST DEVICE void __inline__ BDIntegrate(Vector3* __restrict__ pos,
-										const Vector3* const __restrict__ force,
+HOST DEVICE void __inline__ BDIntegrate(Vector3* RESTRICT pos,
+										const Vector3* const RESTRICT force,
 										const int& idx,
 										float& root_Dt,
 										Vector3& normal_sample_3D) {
-	printf("Integrator::BDIntegrate\n");
+	LOGINFO("Integrator::BDIntegrate\n");
 	pos[idx] = pos[idx] + force[idx] * root_Dt + normal_sample_3D;
 };
-
-} // namespace IntegratorKernels
+} // namespace ARBD

@@ -6,10 +6,7 @@
  * @details This file contains the declaration of the abstract base
  *          class BasePatchOp, which operates on Patch data. It also
  *          includes headers of derived classes for convenient access
- *          to factory methods. The virtual method
- *          `BasePatchOp::compute(Patch* patch)` is called by
- *          `patch->compute()` by any Patch to which the PatchOp has
- *          been added.'
+ *          to factory methods.
  *********************************************************************/
 
 #pragma once
@@ -72,7 +69,7 @@ class BasePatch {
 	short thread_id;			   // MPI
 	short gpu_id;				   // -1 if GPU unavailable
 	static idx_t global_patch_idx; // Unique ID across ranks
-	idx_t patch_idx;			   // Unique ID across ranks
+	idx_t patch_idx;			   // Unique ID across each node
 	Metadata metadata;
 };
 

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "Header.h"
-#include "System/SimSystem.h"
+#include "SimSystem.h"
 #include "Types/BaseGrid.h"
 #include "Types/Types.h"
 
@@ -10,11 +10,11 @@ namespace ARBD {
 class Angle {
   public:
 	Angle() {}
-	Angle(int ind1, int ind2, int ind3, String fileName)
+	Angle(int ind1, int ind2, int ind3, std::string fileName)
 		: ind1(ind1), ind2(ind2), ind3(ind3), fileName(fileName), tabFileIndex(-1) {}
 
 	int ind1, ind2, ind3;
-	String fileName;
+	std::string fileName;
 	// tabFileIndex will be assigned after ComputeForce loads the
 	// TabulatedAnglePotentials. The tabefileIndex is used by ComputeForce to
 	// discern which TabulatedAnglePotential this Angle uses.
@@ -54,8 +54,8 @@ class Angle {
 		printf("ANGLE (%d %d %d) %s\n", ind1, ind2, ind3, fileName.c_str());
 	}
 
-	String toString() {
-		return String("ANGLE ") + std::to_string(ind1) + " " + std::to_string(ind2) + " " +
+	std::string toString() {
+		return std::string("ANGLE ") + std::to_string(ind1) + " " + std::to_string(ind2) + " " +
 			   std::to_string(ind3) + " " + fileName;
 	}
 };
@@ -68,18 +68,18 @@ class BondAngle {
 			  int ind2,
 			  int ind3,
 			  int ind4,
-			  String angleFileName1,
-			  String bondFileName,
-			  String angleFileName2)
+			  std::string angleFileName1,
+			  std::string bondFileName,
+			  std::string angleFileName2)
 		: ind1(ind1), ind2(ind2), ind3(ind3), ind4(ind4), angleFileName1(angleFileName1),
 		  bondFileName(bondFileName), angleFileName2(angleFileName2), tabFileIndex1(-1),
 		  tabFileIndex2(-1), tabFileIndex3(-1) {}
 
 	int ind1, ind2, ind3, ind4;
 
-	String angleFileName1;
-	String bondFileName;
-	String angleFileName2;
+	std::string angleFileName1;
+	std::string bondFileName;
+	std::string angleFileName2;
 	// tabFileIndex will be assigned after ComputeForce loads the
 	// TabulatedAnglePotentials. The tabefileIndex is used by ComputeForce to
 	// discern which TabulatedAnglePotential this Angle uses.

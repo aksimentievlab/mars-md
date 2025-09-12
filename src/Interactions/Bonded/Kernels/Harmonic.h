@@ -1,11 +1,7 @@
-__global__ void HarmonicBonds_kernel() {
-    if (threadIdx.x == 0) {
-	printf("HarmonicBonds_kernel()\n");
-	InteractionKernels::HarmonicBonds();
-    }
-};
+#pragma once
 
-void LocalBondedCUDA::compute(Patch* p) {
-    printf("HarmonicBondsCUDA::compute()\n");
-    HarmonicBonds_kernel<<<1,32>>>();
-};
+#include "Header.h"
+
+namespace ARBD {
+void HarmonicBonds_kernel() {} // namespace InteractionKernels
+} // namespace ARBD
