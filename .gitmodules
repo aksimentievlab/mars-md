@@ -20,3 +20,6 @@
 [submodule "extern/colvars"]
 	path = extern/colvars
 	url = https://github.com/Colvars/colvars.git
+[submodule "extern/random/OpenRAND"]
+	path = extern/random/OpenRAND
+	url = https://github.com/msu-sparta/OpenRAND.git
