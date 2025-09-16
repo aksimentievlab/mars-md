@@ -8,9 +8,6 @@
 [submodule "extern/fmt"]
 	path = extern/fmt
 	url = https://github.com/fmtlib/fmt.git
-[submodule "extern/neighbor"]
-	path = extern/neighbor
-	url = https://github.com/mphowardlab/neighbor.git
 [submodule "extern/metal-cpp-cmake"]
 	path = extern/metal-cpp-cmake
 	url = https://github.com/pinyili2/metal-cpp-cmake.git
@@ -20,3 +17,6 @@
 [submodule "extern/openvdb"]
 	path = extern/openvdb
 	url = https://github.com/pinyili2/openvdb/
+[submodule "extern/colvars"]
+	path = extern/colvars
+	url = https://github.com/Colvars/colvars.git
