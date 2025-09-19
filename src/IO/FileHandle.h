@@ -1,5 +1,5 @@
 #pragma once
-#ifdef HOST_GUARD
+
 #include "ARBDException.h"
 #include "ARBDLogger.h"
 #include <cstdio>
@@ -111,4 +111,3 @@ class FileHandle {
 };
 // Usage: FileHandle my_file("data.txt", "r"); // Automatically closes
 } // namespace ARBD
-#endif

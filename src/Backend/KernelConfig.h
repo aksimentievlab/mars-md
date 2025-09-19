@@ -93,7 +93,7 @@ struct KernelConfig {
 				if (total_work_items > max_work_group_size) {
 					// Scale down proportionally
 					double scale_factor =
-						std::sqrt(static_cast<double>(max_work_group_size) / total_work_items);
+						sycl::sqrt(static_cast<double>(max_work_group_size) / total_work_items);
 					block_size.x = std::max(1UL, static_cast<idx_t>(block_size.x * scale_factor));
 					block_size.y = std::max(1UL, static_cast<idx_t>(block_size.y * scale_factor));
 					block_size.z = std::max(1UL, static_cast<idx_t>(block_size.z * scale_factor));
@@ -220,6 +220,14 @@ struct KernelConfig {
 		}
 	}
 
+	void* get_queue(const Resource& resource) const {
+		if (explicit_queue) {
+			return explicit_queue;
+		} else {
+			return (queue_id == 0) ? resource.get_stream() : resource.get_stream(queue_id);
+		}
+	}
+
   private:
 	void auto_configure_1d(idx_t thread_count, const Resource& resource) {
 		// Backend-specific 1D auto-configuration
@@ -227,14 +235,14 @@ struct KernelConfig {
 		case ResourceType::CUDA:
 			// Use CUDA-specific configuration
 			block_size.x = 256; // Optimal for most CUDA kernels
-			grid_size.x = (thread_count + block_size.x - 1) / block_size.x;
+			grid_size.x = std::max(1UL, (thread_count + block_size.x - 1) / block_size.x);
 			grid_size.y = 1;
 			grid_size.z = 1;
 			break;
 		case ResourceType::SYCL:
 			// SYCL work-group configuration
 			block_size.x = 64; // Typical SYCL work-group size
-			grid_size.x = (thread_count + block_size.x - 1) / block_size.x;
+			grid_size.x = std::max(1UL, (thread_count + block_size.x - 1) / block_size.x);
 			grid_size.y = 1;
 			grid_size.z = 1;
 			break;
@@ -245,14 +253,14 @@ struct KernelConfig {
 			block_size.z = 1;  // 1D processing
 
 			// Calculate number of threadgroups needed
-			grid_size.x = (thread_count + block_size.x - 1) / block_size.x;
+			grid_size.x = std::max(1UL, (thread_count + block_size.x - 1) / block_size.x);
 			grid_size.y = 1; // 1D processing
 			grid_size.z = 1; // 1D processing
 			break;
 		default:
 			// CPU fallback
 			block_size.x = 64; // CPU SIMD width (optimal for most kernels)
-			grid_size.x = (thread_count + block_size.x - 1) / block_size.x;
+			grid_size.x = std::max(1UL, (thread_count + block_size.x - 1) / block_size.x);
 			grid_size.y = 1;
 			grid_size.z = 1;
 			break;
@@ -349,14 +357,6 @@ struct KernelConfig {
 			grid_size.x = (width + block_size.x - 1) / block_size.x;
 			grid_size.y = (height + block_size.y - 1) / block_size.y;
 			grid_size.z = (depth + block_size.z - 1) / block_size.z;
-		}
-	}
-
-	void* get_queue(const Resource& resource) const {
-		if (explicit_queue) {
-			return explicit_queue;
-		} else {
-			return (queue_id == 0) ? resource.get_stream() : resource.get_stream(queue_id);
 		}
 	}
 };

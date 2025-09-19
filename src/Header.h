@@ -9,6 +9,8 @@
 #ifdef __CUDACC__
 #define HOST __host__
 #define DEVICE __device__
+#define KERNEL_FUNC __device__
+#include <vector_types.h>
 #else
 #define HOST
 #define DEVICE
@@ -16,6 +18,7 @@
 
 #ifdef __METAL_VERSION__
 #include <metal_stdlib>
+#define KERNEL_FUNC [[kernel]]
 #endif
 
 #ifdef USE_SYCL
@@ -32,7 +35,30 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#ifndef __CUDACC__
+#include <experimental/simd>
 #include <type_traits>
+namespace sx = std::experimental;
+#endif
+#endif
+
+#ifndef KERNEL_FUNC
+#define KERNEL_FUNC
+#endif
+
+#if defined(__CUDACC__)
+// For CUDA, atomicAdd is a built-in function for floats
+#define ATOMIC_ADD(ptr, val) atomicAdd((ptr), (val))
+#elif defined(__SYCL_DEVICE_ONLY__)
+// For SYCL, we use sycl::atomic_ref
+#define ATOMIC_ADD(ptr, val) \
+	sycl::atomic_ref<float, sycl::memory_order::relaxed, sycl::memory_scope::device>(*(ptr)) += val
+
+#elif defined(__METAL_VERSION__)
+#define ATOMIC_ADD(ptr, val)
+atomic_fetch_add_explicit(reinterpret_cast<device atomic_float*>(ptr), val, memory_order_relaxed)
+#else
+#define ATOMIC_ADD(ptr, val) (*(ptr) += (val))
 #endif
 
 // Suppress narrowing conversion warnings

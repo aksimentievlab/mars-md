@@ -9,7 +9,15 @@
  *********************************************************************/
 #pragma once
 
+#include "ARBDException.h"
+#include "ARBDLogger.h"
 #include "IO/FileHandle.h"
+#include "Types/BaseGrid.h"
+#include <array>
+#include <cctype>
+#include <cstdio>
+#include <sstream>
+#include <string>
 #include <string_view>
 
 namespace ARBD {
@@ -44,9 +52,7 @@ void write_grid(const BaseGrid<T>& grid, std::string_view filename, std::string_
  * @param comments Optional comments to include in file header
  */
 template<typename T>
-void write_dx_format(const BaseGrid<T>& grid,
-					 const FileHandle& file,
-					 std::string_view comments = "");
+void write_dx_format(const BaseGrid<T>& grid, const FileHandle& file, std::string_view comments);
 
 /**
  * @brief Write BaseGrid in simple data format to an open file handle

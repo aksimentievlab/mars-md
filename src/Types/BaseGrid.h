@@ -68,13 +68,7 @@ class BaseGrid {
 	/**
 	 * @brief Grid configuration structure for initialization
 	 */
-	/**
-	 * @brief Interpolation orders supported by the grid
-	 */
-	enum class InterpolationOrder : int {
-		Linear = 1, ///< Linear interpolation
-		Cubic = 3	///< Cubic interpolation
-	};
+
 	enum class BoundaryCondition : int {
 		Dirichlet = 0, ///< Fixed value at boundary
 		Neumann = 1,   ///< Fixed derivative at boundary

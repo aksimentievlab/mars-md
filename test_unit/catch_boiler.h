@@ -278,7 +278,8 @@ class TestBackendManager {
 		}
 #ifdef USE_CUDA
 #if defined(__CUDACC__)
-		cudaGetKernelFunction<Op_t, R, T...>()(result_device, args...);
+		// Launch the kernel using the defined cuda_op_kernel
+		cuda_op_kernel<Op_t, R, T...><<<1, 1>>>(result_device, args...);
 		ARBD::check_cuda_error(cudaGetLastError(), __FILE__, __LINE__);
 		ARBD::check_cuda_error(cudaDeviceSynchronize(), __FILE__, __LINE__);
 #else

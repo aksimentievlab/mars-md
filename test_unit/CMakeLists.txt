@@ -16,8 +16,8 @@ set(CORE_TEST_SOURCES
 
 # Math folder sources - explicitly list what to include in math tests
 set(MATH_SOURCES
-    #Math/RandomDevice.cpp
-    #Math/RandomProfile.cpp
+    Math/RandomDevice.cpp
+    Math/RandomProfile.cpp
     Math/Kernel_for_test.h
     # Add more math sources here as needed
     ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp
@@ -34,6 +34,23 @@ endif()
 
 # Common test executables list
 set(COMMON_TEST_EXECUTABLES)
+
+# Configuration parsing test - platform independent
+add_executable(arbd_test_config_parse
+    parse_config.cpp
+)
+target_include_directories(arbd_test_config_parse PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(arbd_test_config_parse PRIVATE "lib${PROJECT_NAME}")
+
+# Add test
+add_test(NAME Config_Parse_Tests COMMAND arbd_test_config_parse)
+set_tests_properties(Config_Parse_Tests PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+# Add to common list
+list(APPEND COMMON_TEST_EXECUTABLES arbd_test_config_parse)
+message(STATUS "Added configuration parsing test executable: arbd_test_config_parse")
 
 # Metal Tests
 if(USE_METAL AND APPLE)

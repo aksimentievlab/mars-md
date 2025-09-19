@@ -115,7 +115,7 @@ TEST_CASE_METHOD(SYCLKernelTestFixture,
 		config.sync = true;
 
 		// Use the tuple-based interface that properly handles const-correctness
-		auto event = launch_sycl_kernel(sycl_resource, n, inputs, outputs, config, scale_kernel);
+		auto event = launch_sycl_kernel(sycl_resource, config, scale_kernel, inputs, outputs);
 		event.wait();
 
 		// Verify results
@@ -165,8 +165,7 @@ TEST_CASE_METHOD(SYCLKernelTestFixture, "SYCL Configuration Testing", "[sycl][ke
 			config.block_size = {block_size, 1, 1};
 			config.sync = true;
 
-			auto event =
-				launch_sycl_kernel(sycl_resource, n, inputs, outputs, config, double_kernel);
+			auto event = launch_sycl_kernel(sycl_resource, config, double_kernel, inputs, outputs);
 			event.wait();
 
 			// Verify results are correct regardless of block size
@@ -203,7 +202,7 @@ TEST_CASE_METHOD(SYCLKernelTestFixture, "SYCL Configuration Testing", "[sycl][ke
 			config.sync = true;
 			config.block_size = {64, 1, 1};
 
-			auto event = launch_sycl_kernel(sycl_resource, n, inputs, outputs, config, add_kernel);
+			auto event = launch_sycl_kernel(sycl_resource, config, add_kernel, inputs, outputs);
 			event.wait();
 		}
 
@@ -216,7 +215,7 @@ TEST_CASE_METHOD(SYCLKernelTestFixture, "SYCL Configuration Testing", "[sycl][ke
 			config.sync = false;
 			config.block_size = {64, 1, 1};
 
-			auto event = launch_sycl_kernel(sycl_resource, n, inputs, outputs, config, add_kernel);
+			auto event = launch_sycl_kernel(sycl_resource, config, add_kernel, inputs, outputs);
 			event.wait();
 		}
 
@@ -279,8 +278,7 @@ TEST_CASE_METHOD(SYCLKernelTestFixture, "SYCL Matrix Operations", "[sycl][kernel
 		KernelConfig config;
 		config.block_size = {16, 1, 1};
 
-		auto event =
-			launch_sycl_kernel(sycl_resource, total, inputs, outputs, config, transpose_kernel);
+		auto event = launch_sycl_kernel(sycl_resource, config, transpose_kernel, inputs, outputs);
 		event.wait();
 
 		// Verify results
@@ -336,8 +334,7 @@ TEST_CASE_METHOD(SYCLKernelTestFixture, "SYCL Error Handling", "[sycl][kernels][
 			config.block_size = block_config;
 
 			// None of these should crash
-			auto event =
-				launch_sycl_kernel(sycl_resource, n, inputs, outputs, config, simple_kernel);
+			auto event = launch_sycl_kernel(sycl_resource, config, simple_kernel, inputs, outputs);
 			REQUIRE_NOTHROW(event);
 
 			// Wait for kernel completion
@@ -388,8 +385,7 @@ TEST_CASE_METHOD(SYCLKernelTestFixture,
 			config.sync = true;
 
 			auto start = std::chrono::high_resolution_clock::now();
-			auto event =
-				launch_sycl_kernel(sycl_resource, n, inputs, outputs, config, scale_kernel);
+			auto event = launch_sycl_kernel(sycl_resource, config, scale_kernel, inputs, outputs);
 			event.wait();
 			auto end = std::chrono::high_resolution_clock::now();
 

@@ -13,6 +13,7 @@
 #include "Backend/Resource.h"
 #include "Types/BaseGrid.h"
 
+#include <Interaction.h>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -23,7 +24,7 @@ namespace ARBD {
 /*==========================*\
 |  LONG-RANGE METHOD ENUM    |
 \*==========================*/
-
+enum class LongRangeMethod { CutoffAMR, PPPM, PME, FMM, Direct, None };
 /**
  * @brief Method selection criteria
  */
@@ -86,7 +87,7 @@ class LongRangeElectrostatics {
 	virtual ~LongRangeElectrostatics() = default;
 
 	// Core interface
-	virtual void solve_electrostatics(ParticleBuffer& particles, const ParticleType& type_id) = 0;
+	virtual void solve_electrostatics() = 0;
 
 	virtual float estimate_computational_cost(size_t particle_count) const = 0;
 	virtual float estimate_memory_usage(size_t particle_count) const = 0;
@@ -147,8 +148,7 @@ class CutoffAMRElectrostatics : public LongRangeElectrostatics {
 		initialize_amr_hierarchy();
 	}
 
-	void solve_electrostatics(ParticleBuffer& particles,
-							  const ParticleTypeManager& type_manager) override {
+	void solve_electrostatics(Patch* particles) override {
 		auto start_time = std::chrono::high_resolution_clock::now();
 
 		// 1. Adaptive mesh refinement based on particle density
@@ -159,10 +159,10 @@ class CutoffAMRElectrostatics : public LongRangeElectrostatics {
 		build_amr_neighbor_lists(particles);
 
 		// 3. Calculate cutoff electrostatics with smooth functions
-		calculate_cutoff_forces(particles, type_manager);
+		calculate_cutoff_forces(particles);
 
 		// 4. Apply long-range correction (reaction field or damping)
-		apply_long_range_correction(particles, type_manager);
+		apply_long_range_correction(particles);
 
 		auto end_time = std::chrono::high_resolution_clock::now();
 		last_computation_time_ =

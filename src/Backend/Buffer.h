@@ -2,12 +2,12 @@
 
 #if defined(__METAL_VERSION__)
 // Metal Shading Language uses the standard C99 'restrict'
-#define RESTRICT restrict
+#define __restrict__ restrict
 #elif defined(__CUDACC__) || defined(__GNUC__) || defined(__clang__) || defined(_MSC_VER)
-#define RESTRICT __restrict__
+#define __restrict__ __restrict__
 #else
 // Fallback for other compilers: define it as nothing to ensure compilation
-#define RESTRICT
+#define __restrict__
 #endif
 
 #ifndef __METAL_VERSION__
@@ -95,14 +95,17 @@ struct Policy {
 using BackendPolicy = CUDA::Policy;
 using PinnedPolicy = CUDA::PinnedPolicy;
 using UnifiedPolicy = CUDA::UnifiedPolicy;
+using TexturePolicy = CUDA::TexturePolicy;
 #elif defined(USE_SYCL)
 using BackendPolicy = SYCL::Policy;
 using PinnedPolicy = SYCL::PinnedPolicy;
 using UnifiedPolicy = SYCL::UnifiedPolicy;
+using TexturePolicy = SYCL::TexturePolicy;
 #elif defined(USE_METAL)
 using BackendPolicy = METAL::Policy;
 using PinnedPolicy = METAL::PinnedPolicy;
 using UnifiedPolicy = METAL::UnifiedPolicy;
+using TexturePolicy = METAL::TexturePolicy;
 #else
 #error "No backend selected. Please define USE_CUDA, USE_SYCL, or USE_METAL."
 #endif
@@ -167,6 +170,14 @@ class Buffer {
 	}
 	~Buffer() {
 		deallocate();
+	}
+
+	// Type aliases for template compatibility
+	using value_type = T;
+
+	// Access methods
+	BufferAccess get_access() const {
+		return buffer_access_;
 	}
 	/**
 	 * @brief Copy constructor with explicit resource binding.
@@ -918,7 +929,99 @@ class USMBuffer : public Buffer<T, Policy> {
 // ============================================================================
 // Convenient Aliases
 // ============================================================================
+struct TextureFormat {
+#if defined(USE_CUDA)
+	cudaChannelFormatDesc cuda_format;
+#elif defined(USE_SYCL)
+	sycl::image_channel_order sycl_order;
+	sycl::image_channel_type sycl_type;
+#elif defined(USE_METAL)
+	MTL::PixelFormat metal_format;
+#endif
+};
+template<typename T>
 
+class TextureBuffer {
+  private:
+	void* texture_obj_ptr_{nullptr};
+	Resource resource_{};
+	size_t width_{0}, height_{0}, depth_{0};
+
+  public:
+	TextureBuffer() = default;
+
+	explicit TextureBuffer(const Resource& resource,
+						   size_t width,
+						   size_t height,
+						   size_t depth,
+						   TextureFormat format)
+		: resource_(resource), width_(width), height_(height), depth_(depth) {
+		if (width_ > 0) {
+#if defined(USE_CUDA)
+			texture_obj_ptr_ = TexturePolicy::allocate(resource_,
+													   width_,
+													   height_,
+													   depth_,
+													   format.cuda_format,
+													   nullptr,
+													   false);
+#elif defined(USE_SYCL)
+			texture_obj_ptr_ = TexturePolicy::allocate(resource_,
+													   width_,
+													   height_,
+													   depth_,
+													   format.sycl_order,
+													   format.sycl_type);
+#elif defined(USE_METAL)
+			texture_obj_ptr_ =
+				TexturePolicy::allocate(resource_, width_, height_, depth_, format.metal_format);
+#endif
+		}
+	}
+
+	~TextureBuffer() {
+		if (texture_obj_ptr_) {
+			TexturePolicy::deallocate(texture_obj_ptr_);
+		}
+	}
+
+	// Move constructors/assignment (as before)
+	TextureBuffer(TextureBuffer&& other) noexcept;
+	TextureBuffer& operator=(TextureBuffer&& other) noexcept;
+
+	// Disable copy
+	TextureBuffer(const TextureBuffer&) = delete;
+	TextureBuffer& operator=(const TextureBuffer&) = delete;
+
+	void copy_from_buffer(const Buffer<T, TexturePolicy>& src_buffer) {
+		if (!texture_obj_ptr_ || !src_buffer.data())
+			return;
+#if defined(USE_CUDA)
+		TexturePolicy::copy_from_buffer(texture_obj_ptr_,
+										src_buffer.data(),
+										width_,
+										height_,
+										depth_,
+										sizeof(T));
+#elif defined(USE_SYCL)
+		TexturePolicy::copy_from_buffer(texture_obj_ptr_,
+										src_buffer.data(),
+										src_buffer.bytes(),
+										resource_);
+#elif defined(USE_METAL)
+		TexturePolicy::copy_from_buffer(texture_obj_ptr_,
+										src_buffer.data(),
+										src_buffer.bytes(),
+										resource_);
+#endif
+	}
+
+	void* get_native_handle() const {
+		return texture_obj_ptr_;
+	}
+
+	// ... width(), height(), depth() methods ...
+};
 /**
  * @brief A convenient alias for device buffers using the active backend.
  *
@@ -1019,28 +1122,12 @@ constexpr auto get_buffer_pointer(T&& arg) {
 		auto access = arg.get_access();
 
 #if defined(USE_CUDA) || defined(USE_METAL)
-		switch (access) {
-		case BufferAccess::read_only:
-			// Safe to use restrict - only reading from this pointer
-			return static_cast<const ValueType * RESTRICT>(ptr);
-		case BufferAccess::write_only:
-			// Safe to use restrict - only writing through this pointer
-			return static_cast<ValueType * RESTRICT>(ptr);
-		case BufferAccess::read_write:
-		default:
-			return static_cast<ValueType*>(ptr);
-		}
+		// Always return non-const pointer to avoid template deduction conflicts
+		// The constness is handled at the kernel level
+		return static_cast<ValueType* __restrict__>(ptr);
 #elif defined(USE_SYCL)
 		// Same logic for SYCL USM
-		switch (access) {
-		case BufferAccess::read_only:
-			return static_cast<const ValueType * RESTRICT>(ptr);
-		case BufferAccess::write_only:
-			return static_cast<ValueType * RESTRICT>(ptr);
-		case BufferAccess::read_write:
-		default:
-			return static_cast<ValueType*>(ptr);
-		}
+		return static_cast<ValueType* __restrict__>(ptr);
 #else
 		// Fallback for other backends
 		return ptr;

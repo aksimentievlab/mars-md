@@ -2,6 +2,8 @@
 set(LIB_SOURCES
     SignalManager.cpp
     Backend/Resource.cpp
+    Objects/ParticleProperties.cpp
+    Configuration.cpp
     #Math/BaseGrid.cpp
 )
 
@@ -33,7 +35,7 @@ endif()
 if(USE_METAL)
     message(STATUS "src: Adding Metal specific sources to lib${PROJECT_NAME}")
     list(APPEND LIB_SOURCES
-        Backend/METAL/METALManager.cpp 
+        Backend/METAL/METALManager.cpp
     )
     message(STATUS "src: Metal is enabled for lib${PROJECT_NAME}. Metal framework linking handled by main executable.")
 endif()

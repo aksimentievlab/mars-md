@@ -8,16 +8,6 @@
  * @author V2 Port: Pin-Yi Li with Claude 4.0 Sonnet
  *********************************************************************/
 #include "DxIO.h"
-#include "ARBDException.h"
-#include "ARBDLogger.h"
-#include "IO/FileHandle.h"
-#include "Types/BaseGrid.h"
-#include <array>
-#include <cctype>
-#include <cstdio>
-#include <sstream>
-#include <string>
-#include <string_view>
 
 namespace ARBD {
 

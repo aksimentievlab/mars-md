@@ -11,8 +11,8 @@ HOST DEVICE void __inline__ HarmonicBonds() {
 	printf("Interaction::HarmonicBondsDummy()\n");
 };
 
-HOST DEVICE void __inline__ HarmonicBonds(Vector3* __restrict__ pos,
-										  const Vector3* const __restrict__ force) {
+HOST DEVICE void __inline__ HarmonicBonds(Vector3* RESTRICT pos,
+										  const Vector3* const RESTRICT force) {
 	printf("Interaction::HarmonicBonds\n");
 	// pos[idx] = pos[idx] + force[idx] * root_Dt + normal_sample_3D;
 };

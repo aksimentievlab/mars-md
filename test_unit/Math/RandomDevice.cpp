@@ -180,9 +180,9 @@ TEST_CASE_METHOD(RandomTestFixture,
 
 			// Process with new kernel structure - proper multi-GPU config
 			KernelConfig config;
-			config.block_size.x = 256;
+			config.problem_size.x = TEST_SIZE;
+			config = KernelConfig::for_1d(TEST_SIZE, resource);
 			config.sync = false; // Async for better multi-GPU performance
-			config.auto_configure(TEST_SIZE, resource);
 
 			// Launch kernel based on backend type
 			Event process_event;
@@ -196,12 +196,8 @@ TEST_CASE_METHOD(RandomTestFixture,
 												processed_buffer);
 #else
 			// Use generic kernel launching for other backends
-			process_event = launch_kernel(resource,
-										  TEST_SIZE,
-										  config,
-										  TransformKernel{},
-										  random_buffer,
-										  processed_buffer);
+			process_event =
+				launch_kernel(resource, config, TransformKernel{}, random_buffer, processed_buffer);
 #endif
 
 			process_event.wait();
@@ -289,7 +285,8 @@ TEST_CASE_METHOD(RandomTestFixture,
 			combine_config.dependencies.add(uniform_event);
 			combine_config.dependencies.add(gaussian_event);
 			combine_config.sync = false;
-			combine_config.auto_configure(TEST_SIZE, resource);
+			combine_config.problem_size.x = TEST_SIZE;
+			combine_config = KernelConfig::for_1d(TEST_SIZE, resource);
 
 			// Launch combine kernel based on backend type
 			Event combine_event;
@@ -305,7 +302,6 @@ TEST_CASE_METHOD(RandomTestFixture,
 #else
 			// Use generic kernel launching for other backends
 			combine_event = launch_kernel(resource,
-										  TEST_SIZE,
 										  combine_config,
 										  CombineKernel{},
 										  uniform_buffer,

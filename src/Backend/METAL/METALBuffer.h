@@ -141,7 +141,59 @@ struct UnifiedPolicy : public Policy {
 		(void)queue; // Suppress unused parameter warnings
 	}
 };
+struct TexturePolicy {
+	static void* allocate(const Resource& resource, size_t width, size_t height, size_t depth, MTL::PixelFormat pixelFormat) {
+			auto& device = Manager::get_device(resource.id);
+			auto* mtl_device = device.get_native_device();
 
+			auto* desc = MTL::TextureDescriptor::alloc()->init();
+			if (depth > 0) {
+					desc->setTextureType(MTL::TextureType3D);
+					desc->setDepth(depth);
+			} else if (height > 0) {
+					desc->setTextureType(MTL::TextureType2D);
+					desc->setHeight(height);
+			} else {
+					desc->setTextureType(MTL::TextureType1D);
+			}
+			desc->setWidth(width);
+			desc->setPixelFormat(pixelFormat);
+			desc->setStorageMode(MTL::StorageModeShared); // Or Private for dGPU
+			desc->setUsage(MTL::TextureUsageShaderRead);
+
+			MTL::Texture* texture = mtl_device->newTexture(desc);
+			desc->release();
+			return texture;
+	}
+
+	static void deallocate(void* ptr, void* queue = nullptr, bool sync = true) {
+			if (ptr) {
+					static_cast<MTL::Texture*>(ptr)->release();
+			}
+	}
+
+	static void copy_from_buffer(void* texture_ptr, const void* buffer_ptr, size_t bytes, const Resource& resource) {
+			auto& device = Manager::get_device(resource.id);
+			auto& cmd_queue = device.get_next_queue();
+			auto* cmd_buffer = cmd_queue.commandBuffer();
+			auto* blit_encoder = cmd_buffer->blitCommandEncoder();
+
+			auto* mtl_texture = static_cast<MTL::Texture*>(texture_ptr);
+			// We need the MTL::Buffer*, not just the void* contents
+			auto* mtl_buffer = Manager::get_metal_buffer_from_ptr(buffer_ptr);
+
+			size_t bytes_per_row = mtl_texture->width() * 4 * sizeof(float); // Example for RGBA32Float
+			size_t bytes_per_image = bytes_per_row * mtl_texture->height();
+
+			blit_encoder->copyFromBuffer(mtl_buffer, 0, bytes_per_row, bytes_per_image,
+																	 MTL::Size(mtl_texture->width(), mtl_texture->height(), mtl_texture->depth()),
+																	 mtl_texture, 0, 0, MTL::Origin(0, 0, 0));
+
+			blit_encoder->endEncoding();
+			cmd_buffer->commit();
+			cmd_buffer->waitUntilCompleted();
+	}
+};
 } // namespace METAL
 } // namespace ARBD
 

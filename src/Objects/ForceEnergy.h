@@ -9,13 +9,14 @@ namespace ARBD {
  * This class represents a force-energy pair commonly used in molecular
  * dynamics simulations.
  */
+
 class ForceEnergy {
   public:
 	HOST DEVICE ForceEnergy() : f(0.0f, 0.0f, 0.0f), e(0.0f) {}
 
 	HOST DEVICE explicit ForceEnergy(float energy) : f(energy), e(energy) {}
 
-	HOST DEVICE ForceEnergy(float force, float energy) : f(force, 0.0f, 0.0f), e(energy) {}
+	HOST DEVICE ForceEnergy(Vector3 force, float energy) : f(force), e(energy) {}
 
 	HOST DEVICE ForceEnergy(const ForceEnergy& other) : f(other.f), e(other.e) {}
 
@@ -78,13 +79,13 @@ class ForceEnergy {
 	}
 
 	// Accessors
-	HOST DEVICE float force() const {
+	HOST DEVICE Vector3 force() const {
 		return f;
 	}
 	HOST DEVICE float energy() const {
 		return e;
 	}
-	HOST DEVICE void set_force(float force) {
+	HOST DEVICE void set_force(Vector3 force) {
 		f = force;
 	}
 	HOST DEVICE void set_energy(float energy) {
@@ -95,20 +96,20 @@ class ForceEnergy {
 #ifdef HOST_GUARD
 	std::string to_string() const {
 		std::ostringstream oss;
-		oss << "ForceEnergy(f=" << f << ", e=" << e << ")";
+		oss << "ForceEnergy(f=" << f.x << ", " << f.y << ", " << f.z << ", e=" << e << ")";
 		return oss.str();
 	}
 #endif
 
 	// Reset to zero
 	HOST DEVICE void reset() {
-		f = 0.0f;
+		f = Vector3(0.0f);
 		e = 0.0f;
 	}
 
 	// Magnitude operations
 	HOST DEVICE float force_magnitude() const {
-		return f;
+		return f.rLength();
 	}
 	HOST DEVICE float energy_magnitude() const {
 		return e;

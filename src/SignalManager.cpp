@@ -1,13 +1,14 @@
-#include "Header.h"
-#ifdef HOST_GUARD
-#include "ARBDLogger.h"
 #include "SignalManager.h"
+#include "ARBDLogger.h"
+#include "Header.h"
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <execinfo.h>
 #include <memory>
 #include <unistd.h>
+
+#if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__) && !defined(__METAL_VERSION__)
+#include <execinfo.h>
 
 namespace ARBD::SignalManager {
 volatile sig_atomic_t shutdown_requested = 0;
@@ -101,6 +102,19 @@ void manage_segfault() {
 	sa.sa_flags = SA_RESTART | SA_SIGINFO;
 
 	sigaction(SIGSEGV, &sa, NULL);
+}
+} // namespace ARBD::SignalManager
+#else
+// Stub implementations for device compilation
+namespace ARBD::SignalManager {
+volatile sig_atomic_t shutdown_requested = 0;
+
+void segfault_handler(int sig, siginfo_t* info, void* secret) {
+	// No-op for device compilation
+}
+
+void manage_segfault() {
+	// No-op for device compilation
 }
 } // namespace ARBD::SignalManager
 #endif

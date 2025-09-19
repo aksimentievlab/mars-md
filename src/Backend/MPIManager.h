@@ -12,8 +12,8 @@ namespace ARBD::MPI {
 class Manager {
   private:
 	MPI_Comm comm_;
-	int rank_;
-	int size_;
+	int rank_; //process ID
+	int size_; //total number of devices
 	bool initialized_ = false;
 
   public:
