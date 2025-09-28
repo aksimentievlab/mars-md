@@ -3,6 +3,7 @@
 // Author: Pin-Yi Li <pinyili2@illinois.edu> with Claude 4.0 sonnet
 
 #pragma once
+
 #ifdef HOST_GUARD
 #include "ARBDException.h"
 #include "ARBDLogger.h"
@@ -523,5 +524,8 @@ class TrajectoryWriter {
 	}
 };
 
-} // namespace ARBD
+#else
+// Forward declaration for non-host compilation
+class TrajectoryWriter;
 #endif
+} // namespace ARBD

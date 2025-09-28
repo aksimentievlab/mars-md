@@ -415,9 +415,9 @@ static void load_particles_file(const std::string& path,
 			Particle p{};
 			p.id = std::stoi(toks[1]);
 			p.type_id = std::stoi(toks[2]);
-			p.x = std::stof(toks[2]);
-			p.y = std::stof(toks[3]);
-			p.z = std::stof(toks[4]);
+			p.position.x = std::stof(toks[3]);
+			p.position.y = std::stof(toks[4]);
+			p.position.z = std::stof(toks[5]);
 			out.push_back(p);
 		}
 		if (line)

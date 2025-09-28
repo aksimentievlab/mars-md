@@ -22,6 +22,7 @@
 #include "Matrix3.h"
 #include "Types.h"
 #include "Vector3.h"
+#include <cmath>
 
 namespace ARBD {
 

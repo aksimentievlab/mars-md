@@ -238,3 +238,28 @@ if(USE_METAL)
 
     message(STATUS "src: Metal is enabled for lib${PROJECT_NAME}. Framework linking and ARC configured.")
 endif()
+
+# --- MPI specific linking and configuration for the library ---
+if(USE_MPI)
+    # Link MPI to the library
+    if(CMAKE_CXX_COMPILER MATCHES "mpi")
+        # When using MPI compiler wrapper, linking is automatic
+        message(STATUS "src: MPI linking handled automatically by compiler wrapper for lib${PROJECT_NAME}")
+    else()
+        # Manual MPI linking when not using wrapper
+        target_link_libraries("lib${PROJECT_NAME}"
+            PUBLIC
+            MPI::MPI_CXX
+        )
+        target_include_directories("lib${PROJECT_NAME}"
+            PUBLIC
+            ${MPI_CXX_INCLUDE_DIRS}
+        )
+        message(STATUS "src: Manually linked MPI libraries to lib${PROJECT_NAME}")
+    endif()
+
+    # Add MPI compile definitions to the library
+    target_compile_definitions("lib${PROJECT_NAME}" PUBLIC USE_MPI)
+
+    message(STATUS "src: MPI is enabled for lib${PROJECT_NAME}. MPI linking configured.")
+endif()

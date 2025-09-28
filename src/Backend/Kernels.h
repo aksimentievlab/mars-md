@@ -21,12 +21,10 @@
 
 #ifdef USE_CUDA
 #include "CUDA/CUDAManager.h"
+#include "CUDA/KernelHelper.cuh"
 #include <cuda_runtime.h>
 #include <cuda_runtime_api.h>
 #include <thrust/tuple.h>
-#ifdef __CUDACC__
-#include "CUDA/KernelHelper.cuh"
-#endif
 #endif
 
 #ifdef USE_METAL
@@ -43,6 +41,17 @@ Event launch_kernel(const Resource& resource,
 	// Auto-configure the kernel if grid_size is not set (default 0,0,0)
 	KernelConfig local_config = config;
 	local_config.validate_block_size(resource);
+
+	// Standardize problem size across backends:
+	// If problem_size is not specified, derive it from grid_size * block_size
+	if (local_config.problem_size.x == 0 || local_config.problem_size.y == 0 ||
+		local_config.problem_size.z == 0) {
+		kerneldim3 new_problem{};
+		new_problem.x = std::max<idx_t>(1, local_config.grid_size.x * local_config.block_size.x);
+		new_problem.y = std::max<idx_t>(1, local_config.grid_size.y * local_config.block_size.y);
+		new_problem.z = std::max<idx_t>(1, local_config.grid_size.z * local_config.block_size.z);
+		local_config.problem_size = new_problem;
+	}
 
 #ifdef USE_CUDA
 	if (resource.type == ResourceType::CUDA) {
@@ -216,7 +225,7 @@ class KernelGraph {
 	explicit KernelGraph(const Resource& resource) : resource_(resource) {
 #if defined(USE_SYCL) && defined(USE_SYCL_ICPX)
 		if (resource.type == ResourceType::SYCL) {
-			sycl::queue& q = *static_cast<sycl::queue*>(resource.get_stream());
+			sycl::queue& q = *static_cast<sycl::queue*>(resource.get_stream_type());
 			sycl_graph_ = new command_graph(q.get_context(), q.get_device());
 		}
 #endif
@@ -250,7 +259,7 @@ class KernelGraph {
 		// Zero-overhead launcher - capture by value, no std::forward
 		auto launcher = [=, this]() -> Event {
 			KernelConfig config = base_config;
-			config.async = true;
+			config.sync = false;
 			return launch_kernel(resource_, config, kernel_func, args...);
 		};
 
@@ -272,7 +281,7 @@ class KernelGraph {
 				record_cuda_graph();
 			}
 
-			cudaStream_t stream = static_cast<cudaStream_t>(resource_.get_stream());
+			cudaStream_t stream = static_cast<cudaStream_t>(resource_.get_stream_type());
 			CUDA_CHECK(cudaGraphLaunch(cuda_graph_instance_, stream));
 
 			cudaEvent_t completion_event;
@@ -291,7 +300,7 @@ class KernelGraph {
 				record_sycl_graph();
 			}
 
-			sycl::queue& q = *static_cast<sycl::queue*>(resource_.get_stream());
+			sycl::queue& q = *static_cast<sycl::queue*>(resource_.get_stream_type());
 			auto sycl_event =
 				q.submit([&](sycl::handler& h) { h.ext_oneapi_graph(*sycl_exec_graph_); });
 
@@ -307,7 +316,7 @@ class KernelGraph {
   private:
 #ifdef USE_CUDA
 	void record_cuda_graph() {
-		cudaStream_t stream = static_cast<cudaStream_t>(resource_.get_stream());
+		cudaStream_t stream = static_cast<cudaStream_t>(resource_.get_stream_type());
 
 		CUDA_CHECK(cudaStreamBeginCapture(stream, cudaStreamCaptureModeGlobal));
 		execute_topologically();
@@ -383,7 +392,7 @@ class KernelPipeline {
   public:
 	explicit KernelPipeline(const Resource& resource, int stream_id = 0) : resource_(resource) {
 		dedicated_queue_ =
-			(stream_id == 0) ? resource.get_stream() : resource.get_stream(stream_id);
+			(stream_id == 0) ? resource.get_stream_type() : resource.get_stream_type(stream_id);
 	}
 
 	template<typename Functor, typename... Args>
@@ -393,7 +402,7 @@ class KernelPipeline {
 		KernelConfig config = base_config;
 		config.explicit_queue = dedicated_queue_;
 		config.dependencies = pipeline_events_;
-		config.async = true;
+		config.sync = false;
 
 		Event completion = launch_kernel(resource_, config, kernel_func, args...);
 
@@ -411,95 +420,5 @@ class KernelPipeline {
 		return pipeline_events_;
 	}
 };
-
-/*
-template<typename InputTuple, typename OutputTuple, typename Functor, typename... Args>
-std::enable_if_t<!is_device_buffer_v<InputTuple> && !is_device_buffer_v<OutputTuple>, Event>
-launch_kernel(const Resource& resource,
-			  idx_t thread_count,
-			  const KernelConfig& config,
-			  InputTuple& inputs,
-			  OutputTuple& outputs,
-			  Functor&& kernel_func,
-			  Args&&... args) {
-	try {
-#ifdef USE_CUDA
-		return launch_cuda_kernel(resource,
-								  thread_count,
-								  inputs,
-								  outputs,
-								  config,
-								  std::forward<Functor>(kernel_func),
-								  std::forward<Args>(args)...);
-#elif defined(USE_SYCL)
-		return launch_sycl_kernel(resource,
-								  thread_count,
-								  inputs,
-								  outputs,
-								  config,
-								  std::forward<Functor>(kernel_func),
-								  std::forward<Args>(args)...);
-#elif defined(USE_METAL)
-		throw_value_error("METAL backend requires a kernel name (string), not a functor. "
-						  "Please use launch_metal_kernel.");
-#else
-		return launch_cpu_kernel(resource,
-								 thread_count,
-								 inputs,
-								 outputs,
-								 config,
-								 std::forward<Functor>(kernel_func),
-								 std::forward<Args>(args)...);
-#endif
-	} catch (const std::exception& e) {
-		LOGERROR("Error in launch_kernel: {}", e.what());
-		throw;
-	}
-}
- * @brief CPU kernel launcher - tuple-based interface
-
-template<typename InputTuple, typename OutputTuple, typename Functor, typename... Args>
-Event launch_cpu_kernel(const Resource& resource,
-						idx_t thread_count,
-						const InputTuple& inputs,
-						const OutputTuple& outputs,
-						const KernelConfig& config,
-						Functor&& kernel_func,
-						Args... args) {
-
-	config.dependencies.wait_all();
-
-	auto input_ptrs = get_buffer_tuples(inputs);
-	auto output_ptrs = get_buffer_tuples(outputs);
-
-	unsigned int num_threads = std::thread::hardware_concurrency();
-	if (num_threads == 0) {
-		num_threads = 1;
-	}
-
-	std::vector<std::thread> threads;
-	idx_t chunk_size = (thread_count + num_threads - 1) / num_threads;
-
-	for (unsigned int t = 0; t < num_threads; ++t) {
-		threads.emplace_back([=]() {
-			idx_t start = t * chunk_size;
-			idx_t end = std::min(start + chunk_size, thread_count);
-			for (idx_t i = start; i < end; ++i) {
-				auto all_args = std::tuple_cat(input_ptrs, output_ptrs);
-				std::apply([&](auto&&... unpacked_args) { kernel_func(i, unpacked_args...); },
-						   all_args);
-			}
-		});
-	}
-
-	for (auto& thread : threads) {
-		if (thread.joinable()) {
-			thread.join();
-		}
-	}
-
-	return Event(nullptr, resource);
-}
-*/
 
 } // namespace ARBD

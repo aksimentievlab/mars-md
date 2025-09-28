@@ -13,8 +13,11 @@
 #endif
 
 namespace ARBD {
+void* Resource::get_stream_type(int stream_id) const {
+	return get_stream_type(static_cast<StreamType>(stream_id));
+}
 
-void* Resource::get_stream(StreamType stream_type) const {
+void* Resource::get_stream_type(StreamType stream_type) const {
 	// CPU resources don't have streams
 	if (type == ResourceType::CPU) {
 		return nullptr;
@@ -50,51 +53,6 @@ void* Resource::get_stream(StreamType stream_type) const {
 			auto& device = METAL::Manager::get_device(id);
 			// Return pointer to the Queue object
 			return device.get_next_queue();
-		} catch (...) {
-			return nullptr;
-		}
-	}
-#endif
-
-	return nullptr;
-}
-
-void* Resource::get_stream(size_t stream_id, StreamType stream_type) const {
-	// CPU resources don't have streams
-	if (type == ResourceType::CPU) {
-		return nullptr;
-	}
-
-#ifdef USE_CUDA
-	if (type == ResourceType::CUDA) {
-		try {
-			auto& device = CUDA::Manager::get_device(static_cast<int>(id));
-			// Return the raw cudaStream_t as void*
-			return reinterpret_cast<void*>(device.get_stream(stream_id));
-		} catch (...) {
-			return nullptr;
-		}
-	}
-#endif
-
-#ifdef USE_SYCL
-	if (type == ResourceType::SYCL) {
-		try {
-			auto& device = SYCL::Manager::get_device(id);
-			// Return pointer to the Queue object
-			return &device.get_queue(stream_id);
-		} catch (...) {
-			return nullptr;
-		}
-	}
-#endif
-
-#ifdef USE_METAL
-	if (type == ResourceType::METAL) {
-		try {
-			auto& device = METAL::Manager::get_device(id);
-			// Return pointer to the specific queue as void*
-			return reinterpret_cast<void*>(const_cast<METAL::Queue*>(&device.get_queue(stream_id)));
 		} catch (...) {
 			return nullptr;
 		}

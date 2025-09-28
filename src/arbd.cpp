@@ -1,4 +1,7 @@
 
+#ifndef HOST_GUARD
+#define HOST_GUARD
+#endif
 
 #ifdef USE_MPI
 #include <mpi.h>

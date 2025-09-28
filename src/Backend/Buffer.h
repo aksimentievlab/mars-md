@@ -139,28 +139,38 @@ class Buffer {
   public:
 	/**
 	 * @brief Default constructor creates an empty buffer with no resource.
+	 * @todo Implement "get_best_available_resource" function.
 	 *
 	 * Note: Buffers created this way cannot allocate memory until a resource
 	 * is explicitly assigned via resize() or assignment.
 	 */
 	Buffer() = default;
-
-	// Constructor with size only (uses default queue)
 	explicit Buffer(size_t count) : count_(count), resource_(get_best_available_resource()) {
 		if (count_ > 0) {
-			queue_ = resource_.get_stream(); // Acquire stream from resource
+			queue_ = resource_.get_stream_type(); // Acquire stream from resource
 			allocate_on_resource(resource_, count_, queue_, sync_);
 		}
 	}
-
+	explicit Buffer(size_t count, short device_id)
+		: count_(count), resource_(get_device_resource(device_id)) {
+		if (count_ > 0) {
+			queue_ = resource_.get_stream_type(); // Acquire stream from resource
+			allocate_on_resource(resource_, count_, queue_, sync_);
+		}
+	}
 	// Constructor with resource (uses default queue)
 	explicit Buffer(size_t count, const Resource& resource) : count_(count), resource_(resource) {
 		if (count_ > 0) {
-			queue_ = resource_.get_stream(); // Acquire stream from resource
+			queue_ = resource_.get_stream_type(); // Acquire stream from resource
 			allocate_on_resource(resource_, count_, queue_, sync_);
 		}
 	}
-
+	explicit Buffer(size_t count, short device_id, void* queue, bool sync = false)
+		: count_(count), resource_(get_device_resource(device_id)), queue_(queue), sync_(sync) {
+		if (count_ > 0) {
+			allocate_on_resource(resource_, count_, queue_, sync_);
+		}
+	}
 	// Constructor with resource and queue
 	explicit Buffer(size_t count, const Resource& resource, void* queue, bool sync = false)
 		: count_(count), resource_(resource), queue_(queue), sync_(sync) {
@@ -188,7 +198,7 @@ class Buffer {
 	Buffer(const Buffer& other, const Resource& resource)
 		: count_(other.count_), resource_(resource) {
 		if (count_ > 0) {
-			queue_ = resource_.get_stream(); // Acquire stream from resource
+			queue_ = resource_.get_stream_type(); // Acquire stream from resource
 			allocate_on_resource(resource_, count_, queue_, sync_);
 			copy_device_to_device(other, count_);
 		}
@@ -199,7 +209,7 @@ class Buffer {
 	 */
 	Buffer(const Buffer& other) : resource_(other.resource_), count_(other.count_) {
 		if (count_ > 0) {
-			queue_ = resource_.get_stream(); // Acquire stream from resource
+			queue_ = resource_.get_stream_type(); // Acquire stream from resource
 			allocate_on_resource(resource_, count_, queue_, sync_);
 			copy_device_to_device(other, count_);
 		}
@@ -214,7 +224,7 @@ class Buffer {
 			resource_ = other.resource_;
 			count_ = other.count_;
 			if (count_ > 0) {
-				queue_ = resource_.get_stream(); // Acquire stream from resource
+				queue_ = resource_.get_stream_type(); // Acquire stream from resource
 				allocate_on_resource(resource_, count_, queue_, sync_);
 				copy_device_to_device(other, count_);
 			}
@@ -260,7 +270,7 @@ class Buffer {
 	void create(size_t count, const Resource& resource) {
 		resource_ = resource;
 		count_ = count;
-		queue_ = resource_.get_stream(); // Acquire stream from resource
+		queue_ = resource_.get_stream_type(); // Acquire stream from resource
 		allocate_on_resource(resource_, count_, queue_, sync_);
 	}
 
@@ -277,7 +287,7 @@ class Buffer {
 		}
 
 		// Get the new queue for the target resource
-		void* new_queue = target_resource.get_stream();
+		void* new_queue = target_resource.get_stream_type();
 
 		// First, try to allocate the new buffer.
 		T* new_ptr = nullptr;
@@ -705,6 +715,18 @@ class Buffer {
 		return Resource{ResourceType::CPU, 0};
 	}
 
+	static Resource get_device_resource(short device_id) {
+#ifdef USE_SYCL
+		return Resource{ResourceType::SYCL, static_cast<idx_t>(device_id)};
+#elif defined(USE_CUDA)
+		return Resource{ResourceType::CUDA, static_cast<idx_t>(device_id)};
+#elif defined(USE_METAL)
+		return Resource{ResourceType::METAL, static_cast<idx_t>(device_id)};
+#else
+		return Resource{ResourceType::CPU, 0};
+#endif
+	};
+
 	void allocate_on_resource(const Resource& resource, size_t count, void* queue, bool sync) {
 		count_ = count;
 		if (count_ > 0) {
@@ -879,7 +901,7 @@ class USMBuffer : public Buffer<T, Policy> {
 	void advise_range(size_t offset_elements, size_t num_elements, int device_id, int advice) {
 		size_t byte_offset = offset_elements * sizeof(T);
 		size_t byte_size = num_elements * sizeof(T);
-		Policy::mem_advise(static_cast<char*>(this->data()) + byte_offset,
+		Policy::mem_advise(reinterpret_cast<char*>(this->data()) + byte_offset,
 						   byte_size,
 						   advice,
 						   device_id);
@@ -891,7 +913,7 @@ class USMBuffer : public Buffer<T, Policy> {
 						void* queue = nullptr) {
 		size_t byte_offset = offset_elements * sizeof(T);
 		size_t byte_size = num_elements * sizeof(T);
-		Policy::prefetch(static_cast<char*>(this->data()) + byte_offset,
+		Policy::prefetch(reinterpret_cast<char*>(this->data()) + byte_offset,
 						 byte_size,
 						 device_id,
 						 queue);
@@ -1061,28 +1083,28 @@ template<typename T>
 struct is_device_buffer : std::false_type {};
 
 template<typename T>
-struct is_device_buffer<DeviceBuffer<T>> : std::true_type {};
+struct is_device_buffer<DeviceBuffer<T> > : std::true_type {};
 
 template<typename T>
-constexpr bool is_device_buffer_v = is_device_buffer<std::decay_t<T>>::value;
+constexpr bool is_device_buffer_v = is_device_buffer<std::decay_t<T> >::value;
 
 template<typename T>
 struct is_pinned_buffer : std::false_type {};
 
 template<typename T>
-struct is_pinned_buffer<PinnedBuffer<T>> : std::true_type {};
+struct is_pinned_buffer<PinnedBuffer<T> > : std::true_type {};
 
 template<typename T>
-constexpr bool is_pinned_buffer_v = is_pinned_buffer<std::decay_t<T>>::value;
+constexpr bool is_pinned_buffer_v = is_pinned_buffer<std::decay_t<T> >::value;
 
 template<typename T>
 struct is_unified_buffer : std::false_type {};
 
 template<typename T>
-struct is_unified_buffer<UnifiedBuffer<T>> : std::true_type {};
+struct is_unified_buffer<UnifiedBuffer<T> > : std::true_type {};
 
 template<typename T>
-constexpr bool is_unified_buffer_v = is_unified_buffer<std::decay_t<T>>::value;
+constexpr bool is_unified_buffer_v = is_unified_buffer<std::decay_t<T> >::value;
 
 template<typename T>
 struct is_string : std::false_type {};
@@ -1100,7 +1122,7 @@ template<>
 struct is_string<char*> : std::true_type {};
 
 template<typename T>
-constexpr bool is_string_v = is_string<std::decay_t<T>>::value;
+constexpr bool is_string_v = is_string<std::decay_t<T> >::value;
 
 // Helper function to get buffer pointers from tuples for legacy kernel launches
 template<typename... Buffers, std::size_t... Is>
@@ -1116,7 +1138,7 @@ auto get_buffer_tuples(const std::tuple<Buffers...>& buffer_tuple) {
 
 template<typename T>
 constexpr auto get_buffer_pointer(T&& arg) {
-	if constexpr (is_device_buffer_v<std::decay_t<T>>) {
+	if constexpr (is_device_buffer_v<std::decay_t<T> >) {
 		auto ptr = arg.device_data();
 		using ValueType = typename std::decay_t<T>::value_type;
 		auto access = arg.get_access();

@@ -1,6 +1,7 @@
 #include "SignalManager.h"
 #include "ARBDLogger.h"
 #include "Header.h"
+#include <csignal>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -92,9 +93,6 @@ void segfault_handler(int sig, siginfo_t* info, void* secret) {
  * initialization.
  */
 void manage_segfault() {
-	// Set logger to trace level for debugging
-	ARBD::Logger::set_level(ARBD::LogLevel::TRACE);
-
 	struct sigaction sa;
 
 	sa.sa_sigaction = segfault_handler;
@@ -102,19 +100,6 @@ void manage_segfault() {
 	sa.sa_flags = SA_RESTART | SA_SIGINFO;
 
 	sigaction(SIGSEGV, &sa, NULL);
-}
-} // namespace ARBD::SignalManager
-#else
-// Stub implementations for device compilation
-namespace ARBD::SignalManager {
-volatile sig_atomic_t shutdown_requested = 0;
-
-void segfault_handler(int sig, siginfo_t* info, void* secret) {
-	// No-op for device compilation
-}
-
-void manage_segfault() {
-	// No-op for device compilation
 }
 } // namespace ARBD::SignalManager
 #endif

@@ -11,6 +11,7 @@
  *
  */
 
+#ifdef HOST_GUARD
 #include "ARBDException.h"
 #include "ARBDLogger.h"
 #include "Backend/Buffer.h"
@@ -375,3 +376,5 @@ class SimSystem {
 };
 
 } // namespace ARBD
+
+#endif // HOST_GUARD

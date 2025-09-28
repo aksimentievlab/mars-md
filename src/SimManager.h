@@ -10,6 +10,7 @@
  * @copyright Copyright (c) 2025
  */
 
+#ifdef HOST_GUARD
 #include <iostream>
 
 #include "ARBDException.h"
@@ -211,3 +212,4 @@ class SimManager {
 };
 
 } // namespace ARBD
+#endif // HOST_GUARD

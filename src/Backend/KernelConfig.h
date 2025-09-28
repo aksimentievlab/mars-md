@@ -39,21 +39,24 @@ struct kerneldim3 {
  * @param validate_block_size Whether to validate the block size for the kernel launch.
  * @param auto_configure Whether to auto-configure the kernel launch.
  * @param get_queue The queue for the kernel launch.
+ * @note Using KernelConfig::for_1d, for_2d, for_3d is recommended instead of manually setting the
+ * grid_size, and block_size.
  */
 struct KernelConfig {
   public:
+	int dim{1};
 	kerneldim3 grid_size{0, 0, 0};
 	kerneldim3 block_size{256, 1, 1};
 	kerneldim3 problem_size{0, 0, 0};
 	idx_t shared_memory{0};
-	bool sync{false};  // use this only. async is deprecated.
-	bool async{!sync}; // FOR LEGACY COMPATIBILITY
+	bool sync{false}; // use this only. async is deprecated.
 	EventList dependencies;
 	int queue_id{0};
 	void* explicit_queue{nullptr};
 
 	static KernelConfig for_1d(idx_t size_x, const Resource& resource) {
 		KernelConfig config;
+		config.dim = 1;
 		config.problem_size = {size_x, 1, 1};
 		config.auto_configure_1d(size_x, resource);
 		return config;
@@ -61,6 +64,7 @@ struct KernelConfig {
 
 	static KernelConfig for_2d(idx_t size_x, idx_t size_y, const Resource& resource) {
 		KernelConfig config;
+		config.dim = 2;
 		config.problem_size = {size_x, size_y, 1};
 		config.auto_configure_2d(size_x, size_y, resource);
 		return config;
@@ -68,6 +72,7 @@ struct KernelConfig {
 
 	static KernelConfig for_3d(idx_t size_x, idx_t size_y, idx_t size_z, const Resource& resource) {
 		KernelConfig config;
+		config.dim = 3;
 		config.problem_size = {size_x, size_y, size_z};
 		config.auto_configure_3d(size_x, size_y, size_z, resource);
 		return config;
@@ -224,7 +229,8 @@ struct KernelConfig {
 		if (explicit_queue) {
 			return explicit_queue;
 		} else {
-			return (queue_id == 0) ? resource.get_stream() : resource.get_stream(queue_id);
+			return (queue_id == 0) ? resource.get_stream_type()
+								   : resource.get_stream_type(queue_id);
 		}
 	}
 
