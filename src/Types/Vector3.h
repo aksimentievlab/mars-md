@@ -39,6 +39,19 @@ namespace ARBD {
 template<typename T>
 class alignas(4 * sizeof(T)) Vector3_t {
   public:
+	union {
+
+#if defined(__CUDACC__)
+		typename std::conditional<std::is_same<T, int>::value, ::int4, ::float4>::type native;
+#elif defined(__SYCL_DEVICE_ONLY__)
+		sycl::vec<T, 4> native;
+#elif defined(HOST_GUARD)
+		sx::simd<T, sx::simd_abi::fixed_size<4> > native;
+#endif
+		struct {
+			T x, y, z, w;
+		};
+	};
 	// Constructors
 	HOST DEVICE constexpr Vector3_t() : x(T(0)), y(T(0)), z(T(0)), w(T(0)) {}
 	HOST DEVICE constexpr Vector3_t(T s) : x(s), y(s), z(s), w(s) {}
@@ -169,6 +182,8 @@ class alignas(4 * sizeof(T)) Vector3_t {
 	HOST DEVICE auto length() const {
 #ifdef __CUDA_ARCH__
 		return sqrtf(length2());
+#elif defined(__SYCL_DEVICE_ONLY__)
+		return sycl::sqrt(length2());
 #else
 		return std::sqrt(length2());
 #endif
@@ -188,6 +203,8 @@ class alignas(4 * sizeof(T)) Vector3_t {
 	HOST DEVICE auto element_floor() const {
 #ifdef __CUDA_ARCH__
 		return Vector3_t<T>(floorf(x), floorf(y), floorf(z));
+#elif defined(__SYCL_DEVICE_ONLY__)
+		return Vector3_t<T>(sycl::floor(x), sycl::floor(y), sycl::floor(z));
 #else
 		return Vector3_t<T>(std::floor(x), std::floor(y), std::floor(z));
 #endif
@@ -197,6 +214,8 @@ class alignas(4 * sizeof(T)) Vector3_t {
 	HOST DEVICE constexpr auto element_mult(const U w[]) const {
 #ifdef __CUDA_ARCH__
 		using TU = T;
+#elif defined(__SYCL_DEVICE_ONLY__)
+		using TU = typename std::common_type<T, U>::type;
 #else
 		using TU = typename std::common_type<T, U>::type;
 #endif
@@ -207,6 +226,8 @@ class alignas(4 * sizeof(T)) Vector3_t {
 	HOST DEVICE constexpr auto element_mult(const Vector3_t<U>& w) const {
 #ifdef __CUDA_ARCH__
 		using TU = T;
+#elif defined(__SYCL_DEVICE_ONLY__)
+		using TU = typename std::common_type<T, U>::type;
 #else
 		using TU = typename std::common_type<T, U>::type;
 #endif
@@ -218,6 +239,8 @@ class alignas(4 * sizeof(T)) Vector3_t {
 	HOST DEVICE static constexpr auto element_mult(const Vector3_t<T>& v, const Vector3_t<U>& w) {
 #ifdef __CUDA_ARCH__
 		using TU = T;
+#elif defined(__SYCL_DEVICE_ONLY__)
+		using TU = typename std::common_type<T, U>::type;
 #else
 		using TU = typename std::common_type<T, U>::type;
 #endif
@@ -228,6 +251,8 @@ class alignas(4 * sizeof(T)) Vector3_t {
 	HOST DEVICE static constexpr auto element_mult(const Vector3_t<T>& v, const U w[]) {
 #ifdef __CUDA_ARCH__
 		using TU = T;
+#elif defined(__SYCL_DEVICE_ONLY__)
+		using TU = typename std::common_type<T, U>::type;
 #else
 		using TU = typename std::common_type<T, U>::type;
 #endif
@@ -237,6 +262,8 @@ class alignas(4 * sizeof(T)) Vector3_t {
 	HOST DEVICE static auto element_sqrt(const Vector3_t<T>& w) {
 #ifdef __CUDA_ARCH__
 		return Vector3_t<T>(sqrtf(w.x), sqrtf(w.y), sqrtf(w.z));
+#elif defined(__SYCL_DEVICE_ONLY__)
+		return Vector3_t<T>(sycl::sqrt(w.x), sycl::sqrt(w.y), sycl::sqrt(w.z));
 #else
 		return Vector3_t<T>(std::sqrt(w.x), std::sqrt(w.y), std::sqrt(w.z));
 #endif
@@ -283,7 +310,6 @@ class alignas(4 * sizeof(T)) Vector3_t {
 		return oss.str();
 	}
 #endif
-	T x, y, z, w;
 };
 
 // Free function operators
@@ -291,6 +317,8 @@ template<typename T, typename U>
 HOST DEVICE constexpr auto operator/(U s, const Vector3_t<T>& v) {
 #ifdef __CUDA_ARCH__
 	using TU = T;
+#elif defined(__SYCL_DEVICE_ONLY__)
+	using TU = typename std::common_type<T, U>::type;
 #else
 	using TU = typename std::common_type<T, U>::type;
 #endif

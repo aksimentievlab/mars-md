@@ -3,6 +3,7 @@
 #include "ARBDLogger.h"
 #include "Backend/Buffer.h"
 #include "Backend/Resource.h"
+#include <cassert>
 
 // Backend-specific includes
 #ifdef USE_CUDA

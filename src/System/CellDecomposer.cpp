@@ -7,7 +7,7 @@ namespace ARBD {
 
 void CellDecomposer::decompose(SimSystem& sys, const ResourceCollection& resources) {
 	const BoundaryConditions& bcs = sys.get_boundary_conditions();
-	const Length& cutoff = sys.get_cutoff();
+	const Length cutoff = Length(sys.get_cutoff());
 
 	LOGINFO("Starting cell decomposition with cutoff: {}", cutoff.value);
 

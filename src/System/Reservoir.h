@@ -1,6 +1,8 @@
 #pragma once
 #include "Header.h"
+#include "IO/FileHandle.h"
 #include "Types/Types.h"
+#define STRLEN 512
 /**
  * @brief The Reservoir class manages particle reservoirs for GCMC - defined spatial regions where
  * particles can be added or removed to maintain a target particle density. It:
@@ -22,30 +24,36 @@
  */
 
 namespace ARBD {
+struct Reservoir {
+	HOST DEVICE Vector3 start;
+	HOST DEVICE Vector3 end;
+	HOST DEVICE int target_num;	 // target number of particles in the reservoir
+	HOST DEVICE int current_num; // current number of particles in the reservoir
+	bool isinside(Vector3 r) const {
+		return r.x >= start.x && r.x <= end.x && r.y >= start.y && r.y <= end.y && r.z >= start.z &&
+			   r.z <= end.z;
+	}
+};
 
-class Reservoir {
+class ReservoirManager { // ON host only
   public:
-	Reservoir();
-	~Reservoir();
+	ReservoirManager() = default;
+	ReservoirManager(const char* reservoirFile);
+	~ReservoirManager();
 
-	static int countReservoirs(const char* reservoirFile);
+	void addReservoir(const Reservoir& reservoir) {
+		reservoirs.push_back(reservoir);
+	};
 
-	HOST DEVICE Vector3 getOrigin(int i) const;
-	HOST DEVICE Vector3 getDestination(int i) const;
-	HOST DEVICE Vector3 getDifference(int i) const;
+	HOST int getTargetMeanNum() const;
+	HOST DEVICE int getCurrentMeanNum() const;
 
-	HOST DEVICE float getMeanNumber(int i) const;
-	HOST DEVICE int length() const;
-
-	HOST DEVICE bool inside(int i, Vector3 r) const;
+	HOST DEVICE bool inside(int i, Vector3 r) {
+		return reservoirs[i].isinside(r);
+	};
 
   private:
-	int reservoir_id;
-	Vector3* start;
-	Vector3* end;
-	float* num;
-
-	void readReservoirs(const char* reservoirFile);
+	std::vector<Reservoir> reservoirs;
 	void validateRegions();
 };
 } // namespace ARBD

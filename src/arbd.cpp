@@ -1,4 +1,7 @@
 
+#ifndef HOST_GUARD
+#define HOST_GUARD
+#endif
 
 #ifdef USE_MPI
 #include <mpi.h>
@@ -7,8 +10,8 @@
 #include "ARBDException.h"
 #include "Backend/Resource.h"
 #include "Configuration.h"
-#include "System/SimManager.h"
-#include "System/SimSystem.h"
+#include "SimManager.h"
+#include "SimSystem.h"
 
 #include "SignalManager.h"
 #include <cstdio>	// For printf

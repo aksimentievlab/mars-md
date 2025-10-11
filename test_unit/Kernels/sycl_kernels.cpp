@@ -107,15 +107,12 @@ TEST_CASE_METHOD(SYCLKernelTestFixture,
 			output[i] = input[i] * 3.0f;
 		};
 
-		auto inputs = std::tie(input_buf);
-		auto outputs = std::tie(output_buf);
-
 		KernelConfig config;
 		config.block_size = {64, 1, 1};
 		config.sync = true;
 
-		// Use the tuple-based interface that properly handles const-correctness
-		auto event = launch_sycl_kernel(sycl_resource, n, inputs, outputs, config, scale_kernel);
+		// Use the streamlined interface with individual buffer arguments
+		auto event = launch_sycl_kernel(sycl_resource, config, scale_kernel, input_buf, output_buf);
 		event.wait();
 
 		// Verify results
@@ -158,15 +155,12 @@ TEST_CASE_METHOD(SYCLKernelTestFixture, "SYCL Configuration Testing", "[sycl][ke
 		for (size_t block_size : block_sizes) {
 			DeviceBuffer<int> output_buf(n);
 
-			auto inputs = std::tie(input_buf);
-			auto outputs = std::tie(output_buf);
-
 			KernelConfig config;
 			config.block_size = {block_size, 1, 1};
 			config.sync = true;
 
 			auto event =
-				launch_sycl_kernel(sycl_resource, n, inputs, outputs, config, double_kernel);
+				launch_sycl_kernel(sycl_resource, config, double_kernel, input_buf, output_buf);
 			event.wait();
 
 			// Verify results are correct regardless of block size
@@ -196,27 +190,23 @@ TEST_CASE_METHOD(SYCLKernelTestFixture, "SYCL Configuration Testing", "[sycl][ke
 
 		// Synchronous execution
 		{
-			auto inputs = std::tie(input_buf);
-			auto outputs = std::tie(sync_output);
-
 			KernelConfig config;
 			config.sync = true;
 			config.block_size = {64, 1, 1};
 
-			auto event = launch_sycl_kernel(sycl_resource, n, inputs, outputs, config, add_kernel);
+			auto event =
+				launch_sycl_kernel(sycl_resource, config, add_kernel, input_buf, sync_output);
 			event.wait();
 		}
 
 		// Asynchronous execution
 		{
-			auto inputs = std::tie(input_buf);
-			auto outputs = std::tie(async_output);
-
 			KernelConfig config;
 			config.sync = false;
 			config.block_size = {64, 1, 1};
 
-			auto event = launch_sycl_kernel(sycl_resource, n, inputs, outputs, config, add_kernel);
+			auto event =
+				launch_sycl_kernel(sycl_resource, config, add_kernel, input_buf, async_output);
 			event.wait();
 		}
 
@@ -273,14 +263,11 @@ TEST_CASE_METHOD(SYCLKernelTestFixture, "SYCL Matrix Operations", "[sycl][kernel
 			}
 		};
 
-		auto inputs = std::tie(input_buf);
-		auto outputs = std::tie(output_buf);
-
 		KernelConfig config;
 		config.block_size = {16, 1, 1};
 
 		auto event =
-			launch_sycl_kernel(sycl_resource, total, inputs, outputs, config, transpose_kernel);
+			launch_sycl_kernel(sycl_resource, config, transpose_kernel, input_buf, output_buf);
 		event.wait();
 
 		// Verify results
@@ -320,9 +307,6 @@ TEST_CASE_METHOD(SYCLKernelTestFixture, "SYCL Error Handling", "[sycl][kernels][
 			output[i] = input[i] + 1.0f;
 		};
 
-		auto inputs = std::tie(input_buffer);
-		auto outputs = std::tie(output_buffer); // Separate buffers to avoid in-place issues
-
 		// Test with very large block size (should be handled internally)
 		std::vector<kerneldim3> oversized_blocks = {
 			{65536, 1, 1},	  // Way too large in X
@@ -336,8 +320,11 @@ TEST_CASE_METHOD(SYCLKernelTestFixture, "SYCL Error Handling", "[sycl][kernels][
 			config.block_size = block_config;
 
 			// None of these should crash
-			auto event =
-				launch_sycl_kernel(sycl_resource, n, inputs, outputs, config, simple_kernel);
+			auto event = launch_sycl_kernel(sycl_resource,
+											config,
+											simple_kernel,
+											input_buffer,
+											output_buffer);
 			REQUIRE_NOTHROW(event);
 
 			// Wait for kernel completion
@@ -389,7 +376,7 @@ TEST_CASE_METHOD(SYCLKernelTestFixture,
 
 			auto start = std::chrono::high_resolution_clock::now();
 			auto event =
-				launch_sycl_kernel(sycl_resource, n, inputs, outputs, config, scale_kernel);
+				launch_sycl_kernel(sycl_resource, config, scale_kernel, input_buf, output_buf);
 			event.wait();
 			auto end = std::chrono::high_resolution_clock::now();
 

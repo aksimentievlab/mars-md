@@ -3,7 +3,8 @@
 // Author: Pin-Yi Li <pinyili2@illinois.edu> with Claude 4.0 sonnet
 
 #pragma once
-#ifdef HOST_GUARD
+
+// #ifdef HOST_GUARD
 #include "ARBDException.h"
 #include "ARBDLogger.h"
 #include "FileHandle.h"
@@ -522,6 +523,10 @@ class TrajectoryWriter {
 		std::fprintf(fp, "END\n");
 	}
 };
-
 } // namespace ARBD
-#endif
+// #else
+// Forward declaration for non-host compilation
+// namespace ARBD {
+// class TrajectoryWriter;
+//} // namespace ARBD
+// #endif

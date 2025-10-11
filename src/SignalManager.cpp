@@ -1,13 +1,15 @@
-#include "Header.h"
-#ifdef HOST_GUARD
-#include "ARBDLogger.h"
 #include "SignalManager.h"
+#include "ARBDLogger.h"
+#include "Header.h"
+#include <csignal>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <execinfo.h>
 #include <memory>
 #include <unistd.h>
+
+#if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__) && !defined(__METAL_VERSION__)
+#include <execinfo.h>
 
 namespace ARBD::SignalManager {
 volatile sig_atomic_t shutdown_requested = 0;
@@ -91,9 +93,6 @@ void segfault_handler(int sig, siginfo_t* info, void* secret) {
  * initialization.
  */
 void manage_segfault() {
-	// Set logger to trace level for debugging
-	ARBD::Logger::set_level(ARBD::LogLevel::TRACE);
-
 	struct sigaction sa;
 
 	sa.sa_sigaction = segfault_handler;

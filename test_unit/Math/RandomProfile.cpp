@@ -536,9 +536,8 @@ TEST_CASE_METHOD(ProfiledRandomTestFixture,
 			// Initialize walker positions to origin
 			{
 				PROFILE_RANGE("Kernel::InitializeWalkers", backend_type);
-				KernelConfig config;
+				KernelConfig config = KernelConfig::for_1d(NUM_WALKERS, resource);
 				config.sync = false;
-				config.auto_configure(NUM_WALKERS, resource);
 #ifdef USE_METAL
 				Event init_event = launch_metal_kernel(resource,
 													   NUM_WALKERS,
@@ -547,11 +546,8 @@ TEST_CASE_METHOD(ProfiledRandomTestFixture,
 													   walker_positions);
 #else
 				// New structure: functor first, then output buffer
-				Event init_event = launch_kernel(resource,
-												 NUM_WALKERS,
-												 config,
-												 InitializeWalkersKernel{},
-												 walker_positions);
+				Event init_event =
+					launch_kernel(resource, config, InitializeWalkersKernel{}, walker_positions);
 #endif
 
 				init_event.wait();
@@ -560,9 +556,8 @@ TEST_CASE_METHOD(ProfiledRandomTestFixture,
 			// Simulate random walk
 			{
 				PROFILE_RANGE("Kernel::RandomWalk", backend_type);
-				KernelConfig config;
+				KernelConfig config = KernelConfig::for_1d(NUM_WALKERS, resource);
 				config.sync = false;
-				config.auto_configure(NUM_WALKERS, resource);
 
 // Input-output kernel: functor, input, output
 #ifdef USE_METAL
@@ -574,7 +569,6 @@ TEST_CASE_METHOD(ProfiledRandomTestFixture,
 													   walker_positions);
 #else
 				Event walk_event = launch_kernel(resource,
-												 NUM_WALKERS,
 												 config,
 												 RandomWalkKernel{NUM_STEPS, NUM_WALKERS},
 												 random_steps,
@@ -609,9 +603,8 @@ TEST_CASE_METHOD(ProfiledRandomTestFixture,
 			// Calculate final distances from origin
 			{
 				PROFILE_RANGE("Kernel::CalculateDistances", backend_type);
-				KernelConfig config;
+				KernelConfig config = KernelConfig::for_1d(NUM_WALKERS, resource);
 				config.sync = false;
-				config.auto_configure(NUM_WALKERS, resource);
 
 // Input-output kernel for distance calculation
 #ifdef USE_METAL
@@ -623,7 +616,6 @@ TEST_CASE_METHOD(ProfiledRandomTestFixture,
 														   final_distances);
 #else
 				Event distance_event = launch_kernel(resource,
-													 NUM_WALKERS,
 													 config,
 													 CalculateDistancesKernel{},
 													 walker_positions,
@@ -683,20 +675,17 @@ TEST_CASE_METHOD(ProfiledRandomTestFixture,
 			// Apply smoothing filter
 			{
 				PROFILE_RANGE("Kernel::SmoothingFilter", backend_type);
-				KernelConfig config;
+				KernelConfig config = KernelConfig::for_1d(TOTAL_POINTS, resource);
 				config.sync = false;
-				config.auto_configure(TOTAL_POINTS, resource);
 
 #ifdef USE_METAL
 				Event smooth_event = launch_metal_kernel(resource,
-														 TOTAL_POINTS,
 														 config,
 														 "smoothing_filter_kernel",
 														 noise_values,
 														 smoothed_noise);
 #else
 				Event smooth_event = launch_kernel(resource,
-												   TOTAL_POINTS,
 												   config,
 												   SmoothingFilterKernel{GRID_SIZE},
 												   noise_values,
@@ -709,20 +698,17 @@ TEST_CASE_METHOD(ProfiledRandomTestFixture,
 			// Calculate gradient magnitude
 			{
 				PROFILE_RANGE("Kernel::GradientCalculation", backend_type);
-				KernelConfig config;
+				KernelConfig config = KernelConfig::for_1d(TOTAL_POINTS, resource);
 				config.sync = false;
-				config.auto_configure(TOTAL_POINTS, resource);
 
 #ifdef USE_METAL
 				Event gradient_event = launch_metal_kernel(resource,
-														   TOTAL_POINTS,
 														   config,
 														   "gradient_calculation_kernel",
 														   smoothed_noise,
 														   gradient_magnitude);
 #else
 				Event gradient_event = launch_kernel(resource,
-													 TOTAL_POINTS,
 													 config,
 													 GradientCalculationKernel{GRID_SIZE},
 													 smoothed_noise,
@@ -857,15 +843,11 @@ TEST_CASE_METHOD(ProfiledRandomTestFixture,
 			DeviceBuffer<float> test_buffer(test_size, sycl_resource);
 			KernelConfig config;
 			config.sync = false;
-			config.auto_configure(test_size, sycl_resource);
+			config = KernelConfig::for_1d(test_size, sycl_resource);
 
 			// Simple test kernel call
-			Event event = launch_kernel(sycl_resource,
-										test_size,
-										config,
-										SimpleKernel{},
-										test_buffer,
-										test_buffer);
+			Event event =
+				launch_kernel(sycl_resource, config, SimpleKernel{}, test_buffer, test_buffer);
 
 			LOGINFO("About to call launch_kernel with SYCL resource...");
 

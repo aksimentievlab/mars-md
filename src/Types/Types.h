@@ -4,6 +4,7 @@
 #include "Header.h"
 #include "Matrix3.h"
 #include "TypeName.h"
+#include "Vector2.h"
 #include "Vector3.h"
 
 namespace ARBD {
@@ -30,6 +31,16 @@ inline std::string string_format(const char* format, Args... args) {
 
 using Vector3 = Vector3_t<float>;
 using Matrix3 = Matrix3_t<float>;
-// using VecArray = std::vector<Vector3>;
 
+// For 3-component indices (Angles)
+using int3 = ARBD::Vector3_t<int>;
+// For 4-component indices (Dihedrals)
+using int4 = ARBD::Vector3_t<int>;
+using float4 = ARBD::Vector3_t<float>;
+
+using int2 = Vec2<int>;
+using float2 = Vec2<float>;
+
+using int_t = int;
+using float_t = float;
 } // namespace ARBD

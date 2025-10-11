@@ -1,148 +1,65 @@
 #include "Reservoir.h"
-
 namespace ARBD {
 
-Reservoir::Reservoir(const char* reservoirFile) {
-	reservoirs = countReservoirs(reservoirFile);
-	r0 = new Vector3[reservoirs];
-	r1 = new Vector3[reservoirs];
-	num = new float[reservoirs];
+ReservoirManager::ReservoirManager(const char* reservoirFile) {
+	char line[STRLEN];
+	FileHandle file(reservoirFile, "r");
+	float x0, y0, z0, x1, y1, z1, n;
+	int result = fscanf(file.get(), "%f %f %f %f %f %f %f", &x0, &y0, &z0, &x1, &y1, &z1, &n);
+	if (result == 7) { // Check if all 7 values were successfully read
+		reservoirs.push_back(Reservoir(Vector3(x0, y0, z0), Vector3(x1, y1, z1), n));
+	}
 
-	readReservoirs(reservoirFile);
+	while (fscanf(file.get(), "%f %f %f %f %f %f %f", &x0, &y0, &z0, &x1, &y1, &z1, &n) == 7) {
+		reservoirs.push_back(Reservoir(Vector3(x0, y0, z0), Vector3(x1, y1, z1), n));
+	}
 	validateRegions();
 }
 
-Reservoir::~Reservoir() {
-	delete[] r0;
-	delete[] r1;
-	delete[] num;
-}
+ReservoirManager::~ReservoirManager() {}
 
-int Reservoir::countReservoirs(const char* reservoirFile) {
-	// Open the file.
-	FILE* inp = fopen(reservoirFile, "r");
-	if (inp == NULL) {
-		printf("Reservoir:Reservoir Couldn't open file `%s'.\n", reservoirFile);
-		exit(-1);
-	}
-
-	int count = 0;
-	float x0, y0, z0, x1, y1, z1;
-	float n;
-	char line[STRLEN];
-	int nRead;
-	while (fgets(line, STRLEN, inp) != NULL) {
-		// Ignore comments.
-		int len = strlen(line);
-		if (line[0] == '#')
-			continue;
-		if (len < 2)
-			continue;
-
-		// Read definition lines.
-		nRead = sscanf(line, "%f %f %f %f %f %f %f", &x0, &y0, &z0, &x1, &y1, &z1, &n);
-		if (nRead < 7) {
-			printf("Reservoir:Reservoir Improperly formatted line `%s'\n", line);
-			fclose(inp);
-			exit(-1);
-		}
-		count++;
-	}
-	return count;
-}
-
-void Reservoir::readReservoirs(const char* reservoirFile) {
-	// Open the file.
-	FILE* inp = fopen(reservoirFile, "r");
-	if (inp == NULL) {
-		printf("Reservoir:Reservoir Couldn't open file `%s'.\n", reservoirFile);
-		exit(-1);
-	}
-
-	int count = 0;
-	float x0, y0, z0, x1, y1, z1;
-	float n;
-	char line[STRLEN];
-	int nRead;
-	while (fgets(line, STRLEN, inp) != NULL) {
-		// Ignore comments.
-		int len = strlen(line);
-		if (line[0] == '#')
-			continue;
-		if (len < 2)
-			continue;
-
-		// Read definition lines.
-		nRead = sscanf(line, "%f %f %f %f %f %f %f", &x0, &y0, &z0, &x1, &y1, &z1, &n);
-		if (nRead < 7) {
-			printf("Reservoir:Reservoir Improperly formatted line `%s'\n", line);
-			fclose(inp);
-			exit(-1);
-		}
-
-		r0[count] = Vector3(x0, y0, z0);
-		r1[count] = Vector3(x1, y1, z1);
-		num[count] = n;
-
-		count++;
-	}
-}
-
-void Reservoir::validateRegions() {
-	for (int i = 0; i < reservoirs; i++) {
-		Vector3 a = r0[i];
-		Vector3 b = r1[i];
+void ReservoirManager::validateRegions() {
+	for (auto& reservoir : reservoirs) {
+		Vector3 a = reservoir.start;
+		Vector3 b = reservoir.end;
 
 		if (a.x > b.x) {
-			r0[i].x = b.x;
-			r1[i].x = a.x;
+			reservoir.start.x = b.x;
+			reservoir.end.x = a.x;
 		}
 		if (a.y > b.y) {
-			r0[i].y = b.y;
-			r1[i].y = a.y;
+			reservoir.start.y = b.y;
+			reservoir.end.y = a.y;
 		}
 		if (a.z > b.z) {
-			r0[i].z = b.z;
-			r1[i].z = a.z;
+			reservoir.start.z = b.z;
+			reservoir.end.z = a.z;
 		}
 	}
 }
 
-Vector3 Reservoir::getOrigin(int i) const {
-	if (i < 0 || i >= reservoirs)
-		return Vector3(0.0f);
-	return r0[i];
-}
-Vector3 Reservoir::getDestination(int i) const {
-	if (i < 0 || i >= reservoirs)
-		return Vector3(0.0f);
-	return r1[i];
-}
-Vector3 Reservoir::getDifference(int i) const {
-	if (i < 0 || i >= reservoirs)
-		return Vector3(0.0f);
-	return r1[i] - r0[i];
+int ReservoirManager::getTargetMeanNum() const {
+	std::vector<int> target_nums = std::vector<int>(reservoirs.size());
+	for (int i = 0; i < reservoirs.size(); i++) {
+		target_nums[i] = reservoirs[i].target_num;
+	}
+	int sum = 0;
+	for (int i = 0; i < reservoirs.size(); i++) {
+		sum += target_nums[i];
+	}
+	return sum / reservoirs.size();
 }
 
-// TODO: check getMeanNumber function
-float Reservoir::getMeanNumber(int i) const {
-	if (i < 0 || i >= reservoirs)
-		return 0.0f;
-	return num[i];
-}
-int Reservoir::length() const {
-	return reservoirs;
+int ReservoirManager::getCurrentMeanNum() const {
+	std::vector<int> current_nums = std::vector<int>(reservoirs.size());
+	for (int i = 0; i < reservoirs.size(); i++) {
+		current_nums[i] = reservoirs[i].current_num;
+	}
+	int sum = 0;
+	for (int i = 0; i < reservoirs.size(); i++) {
+		sum += current_nums[i];
+	}
+	return sum / reservoirs.size();
 }
 
-bool Reservoir::inside(int i, Vector3 r) const {
-	if (i < 0 || i >= reservoirs)
-		return false;
-	if (r.x < r0[i].x || r.x >= r1[i].x)
-		return false;
-	if (r.y < r0[i].y || r.y >= r1[i].y)
-		return false;
-	if (r.z < r0[i].z || r.z >= r1[i].z)
-		return false;
-	return true;
-}
 } // namespace ARBD

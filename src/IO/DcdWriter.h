@@ -102,8 +102,7 @@ class DcdWriter {
 	 * @param resource Backend resource for memory operations (optional)
 	 * @throws ARBD::Exception on file open failure
 	 */
-	explicit DcdWriter(std::string_view fileName, const Resource& resource = Resource::Local())
-		: fileName_(fileName), resource_(resource), fd_(-1) {
+	explicit DcdWriter(std::string_view fileName) : fileName_(fileName), fd_(-1) {
 
 		fd_ = openDcd(fileName_);
 
@@ -132,8 +131,7 @@ class DcdWriter {
 	DcdWriter(const DcdWriter&) = delete;
 	DcdWriter& operator=(const DcdWriter&) = delete;
 
-	DcdWriter(DcdWriter&& other) noexcept
-		: fileName_(std::move(other.fileName_)), resource_(other.resource_), fd_(other.fd_) {
+	DcdWriter(DcdWriter&& other) noexcept : fileName_(std::move(other.fileName_)), fd_(other.fd_) {
 		other.fd_ = -1;
 	}
 
@@ -141,7 +139,6 @@ class DcdWriter {
 		if (this != &other) {
 			closeDcd();
 			fileName_ = std::move(other.fileName_);
-			resource_ = other.resource_;
 			fd_ = other.fd_;
 			other.fd_ = -1;
 		}
@@ -248,7 +245,6 @@ class DcdWriter {
 
   private:
 	std::string fileName_;
-	Resource resource_;
 	int fd_;
 
 	/**

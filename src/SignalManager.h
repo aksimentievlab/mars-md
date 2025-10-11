@@ -1,26 +1,9 @@
 #pragma once
 #include "Header.h"
-#ifdef HOST_GUARD
 
+#if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__) && !defined(__METAL_VERSION__)
 #include <csignal>
-
-#ifdef SIGNAL
-// These are POSIX specific, might need guards for other OS if portability is a concern
-extern "C" {
-#include <execinfo.h>
-#ifndef __USE_GNU
-#define __USE_GNU
 #endif
-#include <ucontext.h>
-}
-
-#if __WORDSIZE == 64
-#define MY_REG_RIP REG_RIP
-#else
-#define MY_REG_RIP REG_EIP
-#endif
-
-#endif // SIGNAL
 
 namespace ARBD {
 /**
@@ -31,6 +14,18 @@ namespace ARBD {
  * segmentation faults, and managing program shutdown requests.
  */
 namespace SignalManager {
+
+#if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__) && !defined(__METAL_VERSION__)
+
+#ifdef SIGNAL
+
+#if __WORDSIZE == 64
+#define MY_REG_RIP REG_RIP
+#else
+#define MY_REG_RIP REG_EIP
+#endif
+
+#endif // SIGNAL
 
 /**
  * @brief Handles segmentation fault signals.
@@ -71,7 +66,16 @@ inline bool is_shutdown_requested() {
 	return shutdown_requested != 0;
 }
 
+#else
+// Stub implementations for device compilation
+struct siginfo_t { int dummy; };
+inline void segfault_handler(int sig, siginfo_t* info, void* secret) {}
+inline void manage_segfault() {}
+inline bool is_shutdown_requested() {
+	return false;
+}
+#endif
+
 } // namespace SignalManager
 
 } // namespace ARBD
-#endif

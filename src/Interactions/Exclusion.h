@@ -1,42 +1,19 @@
 #pragma once
 
+#include "Backend/Kernels.h"
 #include "Backend/Resource.h"
-#include "Bonded/Bond_IO.h"
+#include "BondedInteraction.h"
 #include "Header.h"
-#include "System/SimSystem.h"
+#include "SimSystem.h"
 #include "Types/Types.h"
 
 namespace ARBD {
-using int2 = BackendTypes::simd_int2;
+// build exclude tree
 
-class Exclude {
-  public:
-	Exclude() : ind1(-1), ind2(-1) {}
-	Exclude(int ind1, int ind2) : ind1(ind1), ind2(ind2) {}
-	bool operator==(const Exclude& e) const;
-	bool operator!=(const Exclude& e) const;
-	void print();
-	int ind1;
-	int ind2;
-};
-
-class Node {
-  public:
-	Node(int index);
-	void clearTree();
-	int makeTree(Node** particles, Bond* bonds, int2* bondMap, int bondstart, int bondend);
-	void add(Node* n);
-	bool inTree;
-	int index;
-	int cap;
-	int numBonds;
-	Node** bonds;
-};
-
-// makeExcludes(Bond* bonds, int* bondMap, int num, int numBonds, String exList)
+// makeExcludes(Bond* bonds, int* bondMap, int num, int numBonds, std::string exList)
 // @param    list of sorted cell bonds; corresponding bond map; number of particles; number of
 // bonds;
-//           string formated like so "EXCLUDE 1-2 1-3 1-4"; number of excludes
+//           std::string formated like so "EXCLUDE 1-2 1-3 1-4"; number of excludes
 // @return   Array of Excludes
 // This algorithm finds the central particle in every bond tree,
 // then creates a list of exclusions for the particle pairs
@@ -45,164 +22,95 @@ class Node {
 // particle it is directly bonded to. 1-3 means that there should
 // be an exclusion between the central particle and every particle
 // it is two bonds away from
-Exclude*
-makeExcludes(Bond* bonds, int2* bondMap, int num, int numBonds, String exList, int& numExcludes);
-void getExcludes(int root,
-				 Node* curr,
-				 Exclude* result,
-				 int depth,
-				 int& capacity,
-				 int& numExcludes,
-				 bool sentinel,
-				 bool* done);
+std::vector<Exclude>
+make_exclusions_cpu(int num_particles, const std::vector<Bond>& bonds, int exclusion_depth);
 
-Exclude*
-makeExcludes(Bond* bonds, int2* bondMap, int num, int numBonds, String exList, int& numExcludes) {
-	int oldNumExcludes = numExcludes;
-	numExcludes = 0;
-	int resCap = numBonds;
-	Exclude* result = new Exclude[numBonds];
-	Node** particles = new Node*[num]; // an array of linked lists
-	Node** trees;
-	int cap = 16;
-	trees = new Node*[cap];
-	int numTrees = 0;
-	for (int i = 0; i < num; i++)
-		particles[i] = new Node(i);
-	for (int i = 0; i < num; i++) {
-		if (!particles[i]->inTree) {
-			if (numTrees >= cap) {
-				Node** temp = trees;
-				cap *= 2;
-				trees = new Node*[cap];
-				for (int j = 0; j < numTrees; j++)
-					trees[j] = temp[j];
-				delete temp;
-			}
+// Device side exclusion generation kernel, for reaction when bonds can break.
+struct GenerateExclusionsFunctor {
+	// A constant defining the max exclusion depth (e.g., 1-4 bonds)
+	// This allows us to use a static array for the frontier, avoiding dynamic allocation.
+	static constexpr int MAX_DEPTH = 4;
 
-			int bondstart = bondMap[i].x;
-			int bondend = bondMap[i].y;
-			int nextsize;
-			nextsize = particles[i]->makeTree(particles, bonds, bondMap, bondstart, bondend);
-			if (nextsize > 1)
-				trees[numTrees++] = particles[i];
-		}
-	}
-	printf("exList %s\n", exList.val());
-	int depth = atoi(exList.val());
+	KERNEL_FUNC void operator()(idx_t i,
+								// Global thread ID, corresponds to the starting particle 'i'
+								// --- Pointers to GPU Data ---
+								DEVICE_PTR(const int2) adjacency_offsets,
+								DEVICE_PTR(const int) adjacency_list,
+								DEVICE_PTR(Exclude)
+									exclusions_output, // Pre-allocated output buffer
+								DEVICE_PTR(int)
+									exclusion_count,	 // Atomic counter for the output buffer
+								int max_exclusion_depth, // e.g., for "1-4", this would be 3
+								int num_particles) const {
+		// --- Per-thread data for the BFS ---
+		int frontier[MAX_DEPTH * 64];
+		// A simple array to hold nodes at each depth (64 is a safe upper bound for neighbors)
+		bool visited[2048];
+		// A simple hash set for visited nodes (assuming < 2048 particles)
 
-	Node** newTree;
-	int treeCap = 100;
-	int numNodes = 0;
-	for (int i = 0; i < num; i++) {
-		Node* p = particles[i];
-		if (p->numBonds < 1)
-			continue;
-		newTree = new Node*[treeCap];
-		for (int j = 0; j < num; j++)
-			particles[j]->inTree = false;
-		newTree[0] = p;
-		numNodes = 1;
-		int oldNumNodes = 0;
-		for (int j = 0; j < depth; j++) {
-			int tempNum = numNodes;
-			for (int k = oldNumNodes; k < tempNum; k++) {
-				oldNumNodes = numNodes;
-				Node* p2 = particles[newTree[k]->index];
-				p2->inTree = true;
-				for (int m = 0; m < p2->numBonds; m++) {
-					Node* p3 = p2->bonds[m];
-					if (!p3->inTree) {
-						p3->inTree = true;
-						if (numExcludes >= resCap) {
-							printf("Expanding result\n");
-							Exclude* tempResult = result;
-							resCap *= 2;
-							result = new Exclude[resCap];
-							for (int n = 0; n < numExcludes; n++)
-								result[n] = tempResult[n];
-							delete tempResult;
-						}
-						Exclude ex(i, p3->index);
-						result[numExcludes++] = ex;
+		for (int k = 0; k < num_particles; ++k)
+			visited[k] = false;
 
-						if (numNodes >= treeCap) {
-							printf("Expanding newTree\n");
-							Node** tempTree = newTree;
-							treeCap *= 2;
-							newTree = new Node*[treeCap];
-							for (int n = 0; n < numNodes; n++)
-								newTree[n] = tempTree[n];
-							delete tempTree;
-						}
-						newTree[numNodes++] = p3;
+		int frontier_start = 0;
+		int frontier_end = 1;
+		frontier[0] = i; // The frontier starts with our assigned particle
+		visited[i] = true;
+		// --- Main BFS Loop ---
+		for (int depth = 1; depth <= max_exclusion_depth; ++depth) {
+			int current_frontier_size = frontier_end - frontier_start;
+			if (current_frontier_size == 0)
+				break; // No more nodes to explore
+
+			int next_frontier_start = frontier_end;
+
+			// For every node currently in our frontier...
+			for (int j = frontier_start; j < frontier_end; ++j) {
+				int current_particle = frontier[j];
+
+				// ...find all of its neighbors.
+				int neighbor_offset = adjacency_offsets[current_particle].x;
+				int num_neighbors = adjacency_offsets[current_particle].y;
+
+				for (int k = 0; k < num_neighbors; ++k) {
+					int neighbor = adjacency_list[neighbor_offset + k];
+
+					// If we haven't visited this neighbor yet...
+					if (!visited[neighbor]) {
+						visited[neighbor] = true;
+
+						// Add it to the exclusion list
+						int write_idx = ATOMIC_ADD(exclusion_count, 1);
+						exclusions_output[write_idx] = {(int)i, neighbor};
+
+						// And add it to the frontier for the next depth level
+						frontier[frontier_end++] = neighbor;
 					}
 				}
 			}
+			frontier_start = next_frontier_start;
 		}
-		delete[] newTree;
 	}
+};
 
-	delete[] particles;
-	delete[] trees;
-	numExcludes += oldNumExcludes;
-	return result;
-}
+inline Event launch_exclusion_generation(
+	const Resource& resource,
+	int num_particles,
+	int exclusion_depth, // e.g., 3 for a 1-4 exclusion
+	const DeviceBuffer<int2>& adj_offsets,
+	const DeviceBuffer<int>& adj_list,
+	DeviceBuffer<Exclude>& out_exclusions, // Must be pre-sized large enough
+	DeviceBuffer<int>& out_exclusion_count // A buffer with one integer, initialized to 0
+) {
+	KernelConfig config = KernelConfig::for_1d(num_particles, resource);
 
-void Exclude::print() {
-	printf("EXCLUDE %d %d\n", ind1, ind2);
-}
-
-bool Exclude::operator==(const Exclude& e) const {
-	return (ind1 == e.ind1) && (ind2 == e.ind2);
-}
-
-bool Exclude::operator!=(const Exclude& e) const {
-	return !(*this == e);
-}
-
-//////////////////////////
-// Node Implementations //
-//////////////////////////
-
-Node::Node(int index) : index(index) {
-	inTree = false;
-	cap = 4;
-	numBonds = 0;
-	bonds = new Node*[cap];
-}
-
-void Node::clearTree() {
-	printf("index %d cleared\n", index);
-	inTree = false;
-	for (int i = 0; i < numBonds; i++)
-		if (bonds[i]->inTree)
-			bonds[i]->clearTree();
-}
-
-int Node::makeTree(Node** particles, Bond* bonds, int2* bondMap, int bondstart, int bondend) {
-	inTree = true;
-	int sum = 1;
-	for (int i = bondstart; i < bondend; i++)
-		add(particles[bonds[i].ind2]);
-
-	for (int i = bondstart; i < bondend; i++) {
-		Node* p = particles[bonds[i].ind2];
-		if (!p->inTree)
-			sum += p->makeTree(particles, bonds, bondMap, bondMap[p->index].x, bondMap[p->index].y);
-	}
-	return sum;
-}
-
-void Node::add(Node* n) {
-	if (numBonds >= cap) {
-		Node** temp = bonds;
-		cap *= 2;
-		bonds = new Node*[cap];
-		for (int i = 0; i < numBonds; i++)
-			bonds[i] = temp[i];
-		delete temp;
-	}
-	bonds[numBonds++] = n;
+	return launch_kernel(resource,
+						 config,
+						 GenerateExclusionsFunctor{},
+						 adj_offsets,
+						 adj_list,
+						 out_exclusions,
+						 out_exclusion_count,
+						 exclusion_depth,
+						 num_particles);
 }
 } // namespace ARBD

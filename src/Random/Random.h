@@ -63,7 +63,7 @@ class Random {
 		}
 #else
 		UniformFunctor<T> func{min_val, max_val, seed_, current_ctr, global_seed_};
-		return launch_kernel(resource_, output.size(), config, func, output);
+		return launch_kernel(resource_, config, func, output);
 #endif
 	}
 
@@ -86,7 +86,7 @@ class Random {
 								   output);
 #else
 		GaussianFunctor<T> func{mean, stddev, output.size(), seed_, base_ctr_, global_seed_};
-		return launch_kernel(resource_, output.size(), config, func, output);
+		return launch_kernel(resource_, config, func, output);
 #endif
 	}
 
@@ -118,7 +118,7 @@ class Random {
 										   seed_,
 										   base_ctr_,
 										   global_seed_};
-		return launch_kernel(resource_, output.size(), config, func, output);
+		return launch_kernel(resource_, config, func, output);
 #endif
 	}
 };

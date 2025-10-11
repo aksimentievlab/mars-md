@@ -9,19 +9,23 @@
  *********************************************************************/
 #pragma once
 
-#ifdef HOST_GUARD
 #include "ARBDException.h"
 #include "ARBDLogger.h"
 #include "IO/FileHandle.h"
 #include <span>
 #include <string_view>
 #include <vector>
-#endif // HOST_GUARD
+
 #include "Header.h"
 #include "IndexList.h"
 #include "Matrix3.h"
 #include "Types.h"
 #include "Vector3.h"
+#include <cmath>
+
+#ifdef HOST_GUARD
+#include "Backend/Buffer.h"
+#endif
 
 namespace ARBD {
 
@@ -68,13 +72,7 @@ class BaseGrid {
 	/**
 	 * @brief Grid configuration structure for initialization
 	 */
-	/**
-	 * @brief Interpolation orders supported by the grid
-	 */
-	enum class InterpolationOrder : int {
-		Linear = 1, ///< Linear interpolation
-		Cubic = 3	///< Cubic interpolation
-	};
+
 	enum class BoundaryCondition : int {
 		Dirichlet = 0, ///< Fixed value at boundary
 		Neumann = 1,   ///< Fixed derivative at boundary
@@ -103,14 +101,12 @@ class BaseGrid {
 	Config config_;
 	Matrix3 basis_inv_; ///< Inverse of basis matrix (cached for performance)
 
-// Host-side storage (not accessible from device)
+// Host-side storage and device memory management
 #ifdef HOST_GUARD
 	std::vector<T> values_; ///< Grid values in contiguous memory (host-only)
+	mutable std::unique_ptr<DeviceBuffer<T>>
+		device_buffer_; ///< Device memory managed via Buffer.h system (lazy initialization)
 #endif
-
-	// Device-accessible raw pointer (managed by backend systems)
-	mutable T* device_ptr_ = nullptr;	///< Device memory pointer (if applicable)
-	mutable bool device_dirty_ = false; ///< Track if device memory needs sync
 
 	HOST DEVICE void update_derived_quantities() {
 		basis_inv_ = config_.basis.inverse();
@@ -206,11 +202,10 @@ class BaseGrid {
 	 * @brief Move constructor
 	 */
 	HOST BaseGrid(BaseGrid&& other) noexcept
-		: config_(std::move(other.config_)), basis_inv_(std::move(other.basis_inv_)),
-		  device_ptr_(std::exchange(other.device_ptr_, nullptr)),
-		  device_dirty_(std::exchange(other.device_dirty_, false)) {
+		: config_(std::move(other.config_)), basis_inv_(std::move(other.basis_inv_)) {
 #ifdef HOST_GUARD
 		values_ = std::move(other.values_);
+		device_buffer_ = std::move(other.device_buffer_);
 #endif
 	}
 
@@ -223,9 +218,8 @@ class BaseGrid {
 			basis_inv_ = other.basis_inv_;
 #ifdef HOST_GUARD
 			values_ = other.values_;
+			device_buffer_.reset(); // Force reallocation on device
 #endif
-			device_ptr_ = nullptr; // Force reallocation on device
-			device_dirty_ = false;
 		}
 		return *this;
 	}
@@ -239,9 +233,8 @@ class BaseGrid {
 			basis_inv_ = std::move(other.basis_inv_);
 #ifdef HOST_GUARD
 			values_ = std::move(other.values_);
+			device_buffer_ = std::move(other.device_buffer_);
 #endif
-			device_ptr_ = std::exchange(other.device_ptr_, nullptr);
-			device_dirty_ = std::exchange(other.device_dirty_, false);
 		}
 		return *this;
 	}
@@ -254,6 +247,7 @@ class BaseGrid {
 	/*=======================*\
 	|  CORE GRID OPERATIONS   |
 	\*=======================*/
+	// Note: All methods below are device-compatible (HOST DEVICE)
 
 	/**
 	 * @brief Get grid dimensions
@@ -291,12 +285,16 @@ class BaseGrid {
 		return basis_inv_;
 	}
 
+	/*=======================*\
+	|  HOST-ONLY OPERATIONS   |
+	\*=======================*/
+	// Note: All methods below are host-only (require HOST_GUARD)
+
 /**
  * @brief Access grid values (host-only - uses std::vector)
  */
 #ifdef HOST_GUARD
 	HOST T& operator[](idx_t index) {
-		device_dirty_ = true;
 		return values_[index];
 	}
 	HOST const T& operator[](idx_t index) const {
@@ -311,7 +309,6 @@ class BaseGrid {
 							index,
 							values_.size());
 		}
-		device_dirty_ = true;
 		return values_[index];
 	}
 
@@ -330,7 +327,6 @@ class BaseGrid {
 	 * @brief Get raw data pointer for interfacing with backends (host-only)
 	 */
 	HOST T* data() noexcept {
-		device_dirty_ = true;
 		return values_.data();
 	}
 	HOST const T* data() const noexcept {
@@ -340,38 +336,77 @@ class BaseGrid {
 	/**
 	 * @brief Get span view of data (C++20, host-only)
 	 */
-#ifdef HOST_GUARD
 	HOST std::span<T> span() noexcept {
-		device_dirty_ = true;
 		return std::span<T>(values_);
 	}
 	HOST std::span<const T> span() const noexcept {
 		return std::span<const T>(values_);
 	}
 #endif
-#endif
 
 /**
- * @brief Get device pointer for backend operations (if available)
+ * @brief Device memory management methods (host-only)
  */
 #ifdef HOST_GUARD
-	HOST T* get_device_pointer() const noexcept {
-		return device_ptr_;
+	/**
+	 * @brief Get device buffer for backend operations
+	 * @param resource Resource to allocate device memory on
+	 * @return Reference to DeviceBuffer (lazy initialization)
+	 */
+	HOST DeviceBuffer<T>& get_device_buffer(const Resource& resource = Resource{}) const {
+		if (!device_buffer_) {
+			Resource target_resource = (resource == Resource{}) ? get_default_resource() : resource;
+			device_buffer_ =
+				std::make_unique<DeviceBuffer<T>>(config_.total_size(), target_resource);
+			// Copy host data to device
+			device_buffer_->copy_from_host(values_.data(), values_.size());
+		}
+		return *device_buffer_;
 	}
 
-	HOST void set_device_pointer(T* ptr) const noexcept {
-		device_ptr_ = ptr;
-		device_dirty_ = false;
+	/**
+	 * @brief Sync host data to device
+	 * @param resource Resource to sync to (optional)
+	 */
+	HOST void sync_to_device(const Resource& resource = Resource{}) {
+		auto& buffer = get_device_buffer(resource);
+		buffer.copy_from_host(values_.data(), values_.size());
 	}
 
-	HOST bool is_device_dirty() const noexcept {
-		return device_dirty_;
+	/**
+	 * @brief Sync device data to host
+	 * @param resource Resource to sync from (optional)
+	 */
+	HOST void sync_from_device(const Resource& resource = Resource{}) {
+		if (device_buffer_) {
+			device_buffer_->copy_to_host(values_.data(), values_.size());
+		}
 	}
 
-	HOST void mark_device_clean() const noexcept {
-		device_dirty_ = false;
+	/**
+	 * @brief Get device data pointer (for kernel use)
+	 * @param resource Resource to get pointer from (optional)
+	 * @return Raw device pointer
+	 */
+	HOST T* get_device_pointer(const Resource& resource = Resource{}) const {
+		auto& buffer = get_device_buffer(resource);
+		return buffer.data();
+	}
+
+  private:
+	/**
+	 * @brief Get default resource for device allocation
+	 */
+	HOST Resource get_default_resource() const {
+		// Use default device resource (same logic as Buffer.h)
+		return Resource{};
 	}
 #endif
+
+	/*=======================*\
+	|  DEVICE-COMPATIBLE OPS  |
+	\*=======================*/
+	// Note: All methods below are device-compatible (HOST DEVICE)
 
 	/*===================*\
 	|  INDEX OPERATIONS   |
@@ -439,36 +474,33 @@ class BaseGrid {
 /*====================*\
 |  UTILITY OPERATIONS  |
 \*====================*/
-
+public:
 /**
- * @brief Zero all grid values
+ * @brief Zero all grid values (host-only)
  */
 #ifdef HOST_GUARD
 	HOST void zero() {
 		std::fill(values_.begin(), values_.end(), T{0});
-		device_dirty_ = true;
 	}
 #endif
 
 /**
- * @brief Add constant to all grid values
+ * @brief Add constant to all grid values (host-only)
  */
 #ifdef HOST_GUARD
 	HOST void shift(T value) {
 		for (auto& v : values_)
 			v += value;
-		device_dirty_ = true;
 	}
 #endif
 
 /**
- * @brief Scale all grid values by constant
+ * @brief Scale all grid values by constant (host-only)
  */
 #ifdef HOST_GUARD
 	HOST void scale(T factor) {
 		for (auto& v : values_)
 			v *= factor;
-		device_dirty_ = true;
 	}
 #endif
 
@@ -485,7 +517,7 @@ class BaseGrid {
 #endif
 
 /**
- * @brief Element-wise multiplication with another grid
+ * @brief Element-wise multiplication with another grid (host-only)
  */
 #ifdef HOST_GUARD
 	HOST BaseGrid& multiply(const BaseGrid& other) {
@@ -500,7 +532,6 @@ class BaseGrid {
 		for (idx_t i = 0; i < values_.size(); ++i) {
 			values_[i] *= other.values_[i];
 		}
-		device_dirty_ = true;
 		return *this;
 	}
 #endif
@@ -541,9 +572,11 @@ class BaseGrid {
 	\*===========================*/
 
 	/**
-	 * @brief Interpolate value at world position using trilinear interpolation
+	 * @brief Interpolate value at world position using trilinear interpolation (host-only)
+	 * @param world_pos World position to interpolate at
+	 * @return Interpolated value
 	 */
-	HOST DEVICE T interpolate(const Vector3& world_pos) const {
+	HOST T interpolate(const Vector3& world_pos) const {
 #ifdef HOST_GUARD
 		return interpolate_grid_point(values_.data(),
 									  world_pos,
@@ -551,19 +584,30 @@ class BaseGrid {
 									  basis_inv_,
 									  config_.dimensions);
 #else
-		// On device, use device_ptr_ (assumed to be set by backend)
-		return interpolate_grid_point(device_ptr_,
-									  world_pos,
-									  config_.origin,
-									  basis_inv_,
-									  config_.dimensions);
+		return T{0}; // Should not be called on device
 #endif
 	}
 
 	/**
-	 * @brief Get value at nearest grid point
+	 * @brief Interpolate value at world position using explicit data pointer (device-compatible)
+	 * @param data_ptr Pointer to grid data (host or device)
+	 * @param world_pos World position to interpolate at
+	 * @return Interpolated value
 	 */
-	HOST DEVICE T get_value(const Vector3& world_pos) const {
+	HOST DEVICE T interpolate(const T* data_ptr, const Vector3& world_pos) const {
+		return interpolate_grid_point(data_ptr,
+									  world_pos,
+									  config_.origin,
+									  basis_inv_,
+									  config_.dimensions);
+	}
+
+	/**
+	 * @brief Get value at nearest grid point (host-only)
+	 * @param world_pos World position to sample at
+	 * @return Nearest grid point value
+	 */
+	HOST T get_value(const Vector3& world_pos) const {
 #ifdef HOST_GUARD
 		return get_value_nearest(values_.data(),
 								 world_pos,
@@ -571,19 +615,30 @@ class BaseGrid {
 								 basis_inv_,
 								 config_.dimensions);
 #else
-		// On device, use device_ptr_ (assumed to be set by backend)
-		return get_value_nearest(device_ptr_,
-								 world_pos,
-								 config_.origin,
-								 basis_inv_,
-								 config_.dimensions);
+		return T{0}; // Should not be called on device
 #endif
 	}
 
 	/**
-	 * @brief Compute gradient at world position using finite differences
+	 * @brief Get value at nearest grid point using explicit data pointer (device-compatible)
+	 * @param data_ptr Pointer to grid data (host or device)
+	 * @param world_pos World position to sample at
+	 * @return Nearest grid point value
 	 */
-	HOST DEVICE Vector3 compute_gradient(const Vector3& world_pos) const {
+	HOST DEVICE T get_value(const T* data_ptr, const Vector3& world_pos) const {
+		return get_value_nearest(data_ptr,
+								 world_pos,
+								 config_.origin,
+								 basis_inv_,
+								 config_.dimensions);
+	}
+
+	/**
+	 * @brief Compute gradient at world position using finite differences (host-only)
+	 * @param world_pos World position to compute gradient at
+	 * @return Gradient vector
+	 */
+	HOST Vector3 compute_gradient(const Vector3& world_pos) const {
 #ifdef HOST_GUARD
 		return compute_gradient<T>(values_.data(),
 								   world_pos,
@@ -592,14 +647,23 @@ class BaseGrid {
 								   basis_inv_,
 								   config_.dimensions);
 #else
-		// On device, use device_ptr_ (assumed to be set by backend)
-		return compute_gradient<T>(device_ptr_,
+		return Vector3{T{0}, T{0}, T{0}}; // Should not be called on device
+#endif
+	}
+
+	/**
+	 * @brief Compute gradient at world position using explicit data pointer (device-compatible)
+	 * @param data_ptr Pointer to grid data (host or device)
+	 * @param world_pos World position to compute gradient at
+	 * @return Gradient vector
+	 */
+	HOST DEVICE Vector3 compute_gradient(const T* data_ptr, const Vector3& world_pos) const {
+		return compute_gradient<T>(data_ptr,
 								   world_pos,
 								   config_.origin,
 								   config_.basis,
 								   basis_inv_,
 								   config_.dimensions);
-#endif
 	}
 
 	/*====================*\
@@ -641,21 +705,29 @@ class BaseGrid {
 	};
 
 	/**
-	 * @brief Get 3x3x3 neighborhood around a grid point (device-safe)
+	 * @brief Get 3x3x3 neighborhood around a grid point (host-only)
 	 */
-	HOST DEVICE NeighborList<T> get_neighbor_list(idx_t ix, idx_t iy, idx_t iz) const {
+	HOST NeighborList<T> get_neighbor_list(idx_t ix, idx_t iy, idx_t iz) const {
 #ifdef HOST_GUARD
 		LOGINFO("get_neighbor_list: calling get_neighbor_list_from_grid");
 		return get_neighbor_list_from_grid(values_.data(), ix, iy, iz, config_.dimensions);
 #else
-		return NeighborList<T>{}; // Return empty - device code should use free functions
+		return NeighborList<T>{}; // Should not be called on device
 #endif
 	}
 
 	/**
-	 * @brief Get neighbor value at relative offset (device-safe)
+	 * @brief Get 3x3x3 neighborhood using explicit data pointer (device-compatible)
 	 */
-	HOST DEVICE T get_neighbor(idx_t ix, idx_t iy, idx_t iz, int di, int dj, int dk) const {
+	HOST DEVICE NeighborList<T>
+	get_neighbor_list(const T* data_ptr, idx_t ix, idx_t iy, idx_t iz) const {
+		return get_neighbor_list_from_grid(data_ptr, ix, iy, iz, config_.dimensions);
+	}
+
+	/**
+	 * @brief Get neighbor value at relative offset (host-only)
+	 */
+	HOST T get_neighbor(idx_t ix, idx_t iy, idx_t iz, int di, int dj, int dk) const {
 #ifdef HOST_GUARD
 		LOGINFO("get_neighbor on HOST: ix={}, iy={}, iz={}, di={}, dj={}, dk={}",
 				ix,
@@ -666,15 +738,22 @@ class BaseGrid {
 				dk);
 		return get_neighbor_from_grid(values_.data(), ix, iy, iz, di, dj, dk, config_.dimensions);
 #else
-		// On device, this would need to be called with explicit grid pointer
-		return T{0}; // Return zero - device code should use free functions
+		return T{0}; // Should not be called on device
 #endif
 	}
 
 	/**
-	 * @brief Get neighbor at world position with offset (device-safe)
+	 * @brief Get neighbor value using explicit data pointer (device-compatible)
 	 */
-	HOST DEVICE T get_neighbor_at_position(const Vector3& world_pos, int di, int dj, int dk) const {
+	HOST DEVICE T
+	get_neighbor(const T* data_ptr, idx_t ix, idx_t iy, idx_t iz, int di, int dj, int dk) const {
+		return get_neighbor_from_grid(data_ptr, ix, iy, iz, di, dj, dk, config_.dimensions);
+	}
+
+	/**
+	 * @brief Get neighbor at world position with offset (host-only)
+	 */
+	HOST T get_neighbor_at_position(const Vector3& world_pos, int di, int dj, int dk) const {
 		const Vector3 grid_pos = transform_to_grid(world_pos);
 
 		const idx_t ix = static_cast<idx_t>(grid_pos.x);
@@ -682,6 +761,23 @@ class BaseGrid {
 		const idx_t iz = static_cast<idx_t>(grid_pos.z);
 
 		return get_neighbor(ix, iy, iz, di, dj, dk);
+	}
+
+	/**
+	 * @brief Get neighbor at world position using explicit data pointer (device-compatible)
+	 */
+	HOST DEVICE T get_neighbor_at_position(const T* data_ptr,
+										   const Vector3& world_pos,
+										   int di,
+										   int dj,
+										   int dk) const {
+		const Vector3 grid_pos = transform_to_grid(world_pos);
+
+		const idx_t ix = static_cast<idx_t>(grid_pos.x);
+		const idx_t iy = static_cast<idx_t>(grid_pos.y);
+		const idx_t iz = static_cast<idx_t>(grid_pos.z);
+
+		return get_neighbor(data_ptr, ix, iy, iz, di, dj, dk);
 	}
 
 	/*================================*\
