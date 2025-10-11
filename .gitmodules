@@ -23,6 +23,3 @@
 [submodule "extern/random/OpenRAND"]
 	path = extern/random/OpenRAND
 	url = https://github.com/msu-sparta/OpenRAND.git
-[submodule "NEXUS"]
-	path = NEXUS
-	url = https://github.com/pinyili2/NEXUS.git
