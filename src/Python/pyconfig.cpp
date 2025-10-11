@@ -16,7 +16,7 @@ void init_pyconfig(py::module_& m) {
 		.value("Open", Periodicity::Open);
 
 	py::enum_<DecomposerType>(m, "DecomposerType")
-		.value("Cell", DecomposerType::Cell)
+		.value("Spatial", DecomposerType::Spatial)
 		.value("RecursiveBisection", DecomposerType::RecursiveBisection)
 		.value("Geometric", DecomposerType::Geometric);
 

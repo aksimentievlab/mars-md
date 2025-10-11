@@ -7,7 +7,7 @@
 #include <iostream>
 
 #include "../catch_boiler.h"
-#include "Math/Types.h"
+#include "Types/Types.h"
 #include <cuda.h>
 #include <nvfunctional>
 

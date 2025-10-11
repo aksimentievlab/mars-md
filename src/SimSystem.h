@@ -2,8 +2,8 @@
 /**
  * @file SimSystem.h
  * @author Pin-Yi Li <pinyili2@illinois.edu>
- * @brief Simulation system class. Stores the system configuration and objects that won't change
- * during the simulation.
+ * @brief Simulation system state manager. Manages system state, configuration, and domain
+ * decomposition. Note: SimManager handles simulation execution, SimSystem handles state management.
  * @version 2.0
  * @date 2025-09-09
  *
@@ -11,12 +11,13 @@
  *
  */
 
-#ifdef HOST_GUARD
 #include "ARBDException.h"
 #include "ARBDLogger.h"
 #include "Backend/Buffer.h"
 #include "Backend/Resource.h"
 #include "Configuration.h"
+#include "System/Decompose2Patch.h"
+#include "System/PatchManager.h"
 #include "Types/IndexList.h"
 #include "Types/Types.h"
 #include <array>
@@ -27,48 +28,18 @@
 #include <vector>
 
 namespace ARBD {
-class SimSystem;
-class Decomposer {
-  public:
-	virtual ~Decomposer() = default;
-	DecomposerType get_type() const {
-		return type_;
-	}
-	/**
-	 * @brief The core function that performs the decomposition.
-	 * @param sys The global system containing particle data and configuration.
-	 * @param resources The collection of hardware resources (e.g., GPUs) to distribute to.
-	 */
-	virtual void decompose(SimSystem& sys, const ResourceCollection& resources) = 0;
 
-	virtual const std::string get_name() {
-		switch (type_) {
-		case DecomposerType::Cell:
-			return "CellDecomposer";
-		case DecomposerType::RecursiveBisection:
-			return "RecursiveBisectionDecomposer";
-		case DecomposerType::Geometric:
-			return "GeometricDecomposer";
-		default:
-			throw ARBD::Exception(ARBD::ExceptionType::ValueError, "Unsupported decomposer type.");
-		}
-	};
+// Forward declarations
+class PatchDecomposer;
+class SpatialPatchDecomposer;
 
-  private:
-	DecomposerType type_;
-};
-
-class CellDecomposer : public Decomposer {
-  public:
-	void decompose(SimSystem& sys, const ResourceCollection& resources) override;
-
-  private:
-	DecomposerType type_ = DecomposerType::Cell;
-};
 //================================================================================
-// Simulation System - Global State and Configuration Management
+// Simulation System - System State Management and Coordination
 //================================================================================
 class SimSystem {
+	friend class PatchDecomposer;
+	friend class SpatialPatchDecomposer;
+
   public:
 	/**
 	 * @brief Construct simulation system from configuration
@@ -79,17 +50,11 @@ class SimSystem {
 		: config_(conf.get_config()), resources_(resources) {
 		LOGINFO("SimSystem: Initializing from configuration");
 
-		// Copy configuration to GPU-compatible members
-		copy_config_to_gpu_members();
-
 		// Create boundary conditions from configuration
 		boundary_conditions_ = conf.create_boundary_conditions();
 
 		// Create the chosen decomposer instance (Factory Pattern)
-		// create_decomposer();
-		decomposer_ = std::make_unique<CellDecomposer>();
-		// Initialize global system objects
-		initialize_system_objects();
+		decomposer_ = create_patch_decomposer(config_.decomposer);
 
 		LOGINFO("SimSystem: Using decomposer '{}'", decomposer_->get_name());
 	}
@@ -122,9 +87,9 @@ class SimSystem {
 	}
 
 	/**
-	 * @brief
-	 *
-	 *@param particle_data Host particle data loaded by Configuration / SimManager
+	 * @brief Initialize particles with positions and types
+	 * @param positions Initial particle positions
+	 * @param types Initial particle types
 	 */
 	void initialize_particles(const std::vector<Vector3>& positions, const std::vector<int>& types);
 
@@ -133,6 +98,10 @@ class SimSystem {
 	 * @param positions New particle positions
 	 */
 	void set_particle_positions(const std::vector<Vector3>& positions);
+
+	/**
+	 * @brief Build neighbor list for force calculations
+	 */
 	void build_neighbor_list();
 
 	/**
@@ -151,19 +120,20 @@ class SimSystem {
 	 * @return Temperature value at the given position
 	 */
 	float get_temperature(Vector3 position = {0, 0, 0}) const {
-		if (temperature_format_ == 0) { // Value format
-			return temperature_value_;
-		} else if (temperature_grid_) {
-			return temperature_grid_->get_value(position);
+		Temperature temperature = config_.temperature;
+		if (temperature.format == Temperature::Format::Value) {
+			return temperature.value;
+		} else if (temperature.format == Temperature::Format::Grid) {
+			return temperature.grid->get_value(position);
 		}
-		return temperature_value_; // Fallback
+		return temperature.value;
 	}
 
 	/**
 	 * @brief Get cutoff distance for interactions (GPU-compatible)
 	 */
 	float get_cutoff() const {
-		return cutoff_;
+		return config_.cutoff.value;
 	}
 
 	/**
@@ -174,24 +144,24 @@ class SimSystem {
 	}
 
 	/**
-	 * @brief Get timestep (GPU-compatible)
+	 * @brief Get timestep (from configuration)
 	 */
 	float get_timestep() const {
-		return timestep_;
+		return config_.steps.timestep;
 	}
 
 	/**
-	 * @brief Get number of simulation steps
+	 * @brief Get number of simulation steps (from configuration)
 	 */
 	int get_num_steps() const {
-		return num_steps_;
+		return config_.steps.steps;
 	}
 
 	/**
-	 * @brief Get box dimensions (GPU-compatible)
+	 * @brief Get box dimensions (from configuration)
 	 */
 	Vector3 get_box_size() const {
-		return box_size_;
+		return Vector3(config_.box_lengths[0], config_.box_lengths[1], config_.box_lengths[2]);
 	}
 
 	/**
@@ -216,28 +186,28 @@ class SimSystem {
 	 * @brief Check if system has bonded interactions (GPU-compatible)
 	 */
 	bool has_bonds() const {
-		return has_bonds_;
+		return config_.objects.bonds.size() > 0;
 	}
 
 	/**
 	 * @brief Check if system has external forces (GPU-compatible)
 	 */
 	bool has_external_forces() const {
-		return has_external_forces_;
+		return config_.objects.interactions.size() > 0;
 	}
 
 	/**
 	 * @brief Check if system has reactions (GPU-compatible)
 	 */
 	bool has_reactions() const {
-		return has_reactions_;
+		return config_.has_reaction;
 	}
 
 	/**
 	 * @brief Get number of particles in the system (GPU-compatible)
 	 */
 	size_t get_num_particles() const {
-		return num_particles_;
+		return config_.objects.particles.size();
 	}
 
 	//================================================================================
@@ -248,28 +218,30 @@ class SimSystem {
 	 * @brief Get electric field vector (if any)
 	 */
 	Vector3 get_electric_field() const {
-		return electric_field_;
+		// TODO: Add electric field to ARBDObjects or return default
+		return Vector3{0, 0, 0};
 	}
 
 	/**
 	 * @brief Get force grid (if any)
 	 */
 	const BaseGrid<Vector3>* get_force_grid() const {
-		return force_grid_;
+		// TODO: Add force grid to ARBDObjects or return nullptr
+		return nullptr;
 	}
 
 	/**
 	 * @brief Get bond list for bonded force calculations
 	 */
 	const int* get_bond_list() const {
-		return bond_list_;
+		return nullptr;
 	}
 
 	/**
 	 * @brief Get bond list size
 	 */
 	size_t get_bond_list_size() const {
-		return bond_list_size_;
+		return config_.objects.bonds.size();
 	}
 
 	/**
@@ -277,6 +249,45 @@ class SimSystem {
 	 */
 	const std::vector<Reservoir>& get_reservoirs() const {
 		return config_.reservoirs;
+	}
+
+	/**
+	 * @brief Get output period (from configuration)
+	 */
+	float get_output_period() const {
+		return config_.output_period;
+	}
+
+	/**
+	 * @brief Get energy output period (from configuration)
+	 */
+	float get_energy_output_period() const {
+		return config_.energy_output_period;
+	}
+
+	/**
+	 * @brief Get algorithm type (from configuration)
+	 */
+	DynamicType get_algorithm() const {
+		return config_.ParticleDynamicType;
+	}
+
+	//================================================================================
+	// Patch Management Accessors
+	//================================================================================
+
+	/**
+	 * @brief Get patch manager for particle decomposition
+	 */
+	PatchManager* get_patch_manager() const {
+		return patch_manager_.get();
+	}
+
+	/**
+	 * @brief Check if patch manager is initialized
+	 */
+	bool has_patch_manager() const {
+		return patch_manager_ != nullptr;
 	}
 
   private:
@@ -287,94 +298,12 @@ class SimSystem {
 	// Configuration management (host-only)
 	Configuration config_;
 	BoundaryConditions boundary_conditions_;
+	size_t seed_;
 
 	// Resources and decomposition (host-only)
 	ResourceCollection resources_;
-	std::unique_ptr<Decomposer> decomposer_;
-
-	// GPU-compatible system parameters (can be copied to device)
-	float temperature_value_{298.15f};
-	int temperature_format_{0}; // 0 = value, 1 = grid
-	float cutoff_{50.0f};
-	float timestep_{1e-5f};
-	int num_steps_{1000};
-	Vector3 box_size_{5000.0f, 5000.0f, 5000.0f};
-	// System state (GPU-compatible)
-	size_t num_particles_{0};
-	bool has_bonds_{false};
-	bool has_external_forces_{false};
-	bool has_reactions_{false};
-
-	// Global system objects (GPU-compatible pointers when needed)
-	Vector3 electric_field_{0, 0, 0};
-	BaseGrid<float>* temperature_grid_{nullptr}; // Device pointer
-	BaseGrid<Vector3>* force_grid_{nullptr};	 // Device pointer
-	int* bond_list_{nullptr};					 // Device pointer
-	size_t bond_list_size_{0};
-
-	//================================================================================
-	// Private Methods
-	//================================================================================
-
-	/**
-	 * @brief Create appropriate decomposer based on configuration
-
-	void create_decomposer() {
-		switch (config_.decomposer) {
-		case DecomposerType::Cell:
-			decomposer_ = std::make_unique<CellDecomposer>();
-			break;
-		case DecomposerType::RecursiveBisection:
-			throw Exception(ExceptionType::NotImplementedError,
-							SourceLocation(),
-							"RecursiveBisectionDecomposer not implemented");
-			break;
-		case DecomposerType::Geometric:
-			throw Exception(ExceptionType::NotImplementedError,
-							SourceLocation(),
-							"GeometricDecomposer not implemented");
-			break;
-		default:
-			throw Exception(ExceptionType::ValueError,
-							SourceLocation(),
-							"Unsupported decomposer type");
-		}
-	}
-		*/
-
-	/**
-	 * @brief Copy configuration parameters to GPU-compatible members
-	 */
-	void copy_config_to_gpu_members() {
-		temperature_value_ = config_.temperature.value;
-		temperature_format_ = static_cast<int>(config_.temperature.format);
-		cutoff_ = config_.cutoff.value;
-		timestep_ = config_.steps.timestep;
-		num_steps_ = config_.steps.steps;
-		box_size_ = Vector3(config_.box_lengths[0], config_.box_lengths[1], config_.box_lengths[2]);
-		has_reactions_ = config_.has_reaction;
-	}
-
-	/**
-	 * @brief Initialize system objects based on configuration
-	 */
-	void initialize_system_objects() {
-		// Initialize force grids, electric fields, bonds, etc. based on config
-		// This would be implemented based on your specific system requirements
-		LOGINFO("SimSystem: Initializing system objects");
-
-		// Placeholder implementations
-		has_bonds_ = false;			  // Set based on actual bond data
-		has_external_forces_ = false; // Set based on grid/field configuration
-
-		// Initialize GPU grids if needed
-		if (config_.temperature.format == Temperature::Format::Grid && config_.temperature.grid) {
-			// Copy temperature grid to device
-			// temperature_grid_ = copy_grid_to_device(config_.temperature.grid.get());
-		}
-	}
+	std::unique_ptr<PatchDecomposer> decomposer_;
+	std::unique_ptr<PatchManager> patch_manager_;
 };
 
 } // namespace ARBD
-
-#endif // HOST_GUARD

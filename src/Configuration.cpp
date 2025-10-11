@@ -55,7 +55,7 @@ void SimConf::parse_parameters(const Reader& reader) {
 		{"open", Periodicity::Open}};
 
 	static const std::unordered_map<std::string, DecomposerType> decomposer_map = {
-		{"cell", DecomposerType::Cell},
+		{"spatial", DecomposerType::Spatial},
 		{"recursivebisection", DecomposerType::RecursiveBisection},
 		{"geometric", DecomposerType::Geometric}};
 

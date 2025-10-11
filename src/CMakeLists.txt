@@ -1,44 +1,15 @@
 
 set(LIB_SOURCES
     SignalManager.cpp
-    Backend/Resource.cpp
     Objects/ParticleProperties.cpp
     Configuration.cpp
     #Math/BaseGrid.cpp
 )
 
-# Conditionally add SYCL specific source files to the library
-# We check if either SYCL ACPP or ICPX option is enabled from the top-level CMake.
-if(USE_SYCL_ACPP OR USE_SYCL_ICPX)
-    message(STATUS "src: Adding SYCL specific sources to lib${PROJECT_NAME}")
-    list(APPEND LIB_SOURCES
-        Backend/SYCL/SYCLManager.cpp
-    )
-    # If your SYCL implementation uses a different file extension for device code
-    # (though typically it's .cpp for SYCL), list them here too.
-endif()
+# Add Backend subdirectory
+add_subdirectory(Backend)
 
-# Conditionally add CUDA specific source files (.cpp or .cu) to the library
-if(USE_CUDA)
-    message(STATUS "src: Adding CUDA specific sources to lib${PROJECT_NAME}")
-    list(APPEND LIB_SOURCES
-        Backend/CUDA/CUDAManager.cpp
-        #Random/Random.cu
-
-    )
-    # Ensure the CUDA language is enabled in your top-level project() call
-    # when USE_CUDA is ON, so CMake knows how to compile .cu files.
-    message(STATUS "src: CUDA is enabled for lib${PROJECT_NAME}. CUDA runtime linking may be handled by compiler or main executable.")
-endif()
-
-# Conditionally add Metal specific source files to the library
-if(USE_METAL)
-    message(STATUS "src: Adding Metal specific sources to lib${PROJECT_NAME}")
-    list(APPEND LIB_SOURCES
-        Backend/METAL/METALManager.cpp
-    )
-    message(STATUS "src: Metal is enabled for lib${PROJECT_NAME}. Metal framework linking handled by main executable.")
-endif()
+# Backend-specific sources are now handled by Backend/CMakeLists.txt
 
 # Define the library with all collected sources.
 add_library("lib${PROJECT_NAME}" ${LIB_SOURCES})
@@ -171,7 +142,7 @@ endif()
 if(USE_CUDA)
     # Set CUDA properties for .cu files
     set_source_files_properties(
-        #Random/Random.cu
+        Backend/CUDA/KernelHelper.cu
         PROPERTIES
         LANGUAGE CUDA
         CUDA_SEPARABLE_COMPILATION ON
@@ -188,7 +159,7 @@ if(USE_CUDA)
     # Set CUDA architectures (adjust for your target GPUs)
     set_target_properties("lib${PROJECT_NAME}" PROPERTIES
         CUDA_SEPARABLE_COMPILATION ON
-        CUDA_ARCHITECTURES "60;70;75;80;86"
+        CUDA_ARCHITECTURES "75;80;86"
     )
 
     # Explicitly link C++ standard library for CUDA targets

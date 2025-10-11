@@ -4,7 +4,7 @@
 #include "Backend/Buffer.h"
 #include "Backend/Kernels.h"
 #include "Backend/Resource.h"
-#include "Configuration.h"
+#include "Objects/ParticleProperties.h"
 #include "Types/BaseGrid.h"
 #include "Types/Matrix3.h"
 #include "Types/Vector3.h"

@@ -5,17 +5,21 @@
 #include "Header.h"
 
 #ifdef USE_CUDA
-#include "CUDA/CUDAStreamPool.h"
+#include "CUDA/CUDAManager.h"
+#include "CUDA/CUDAStreams.h"
+
 #endif
 
 #ifdef USE_SYCL
 #include "SYCL/SYCLManager.h"
-#include "SYCL/SYCLQueuePool.h"
+#include "SYCL/SYCLQueues.h"
 #include <sycl/sycl.hpp>
+
 #endif
 
 #ifdef USE_METAL
 #include "Backend/METAL/METALManager.h"
+
 #endif
 
 #ifdef HOST_GUARD
@@ -34,27 +38,37 @@ enum class ResourceType : uint8_t {
 	SYCL = 2, ///< SYCL-compatible device
 	METAL = 3 ///< Apple Metal GPU
 };
-
-/**
- * @brief Stream type enumeration for different use cases
- */
-enum class StreamType {
-	Compute = 0, ///< General compute operations
-	Memory = 1,	 ///< Memory transfer operations
-	Default = 2	 ///< Default stream
-};
-
 // Compile-time default backend selection
 #ifdef USE_SYCL
 constexpr ResourceType DEFAULT_RESOURCE_TYPE = ResourceType::SYCL;
+#define DEVICE_CHECK(call) SYCL_CHECK(call)
 #elif defined(USE_CUDA)
 constexpr ResourceType DEFAULT_RESOURCE_TYPE = ResourceType::CUDA;
+#define DEVICE_CHECK(call) CUDA_CHECK(call)
 #elif defined(USE_METAL)
 constexpr ResourceType DEFAULT_RESOURCE_TYPE = ResourceType::METAL;
+#define DEVICE_CHECK(call) METAL_CHECK(call)
 #else
 constexpr ResourceType DEFAULT_RESOURCE_TYPE = ResourceType::CPU;
+#define DEVICE_CHECK(call)
 #endif
+/**
+ * @brief Stream type enumeration for different use cases
+ *
+ * Each StreamType maps to a dedicated stream ID for predictable performance:
+ * - Compute operations always use stream 0
+ * - Memory transfers always use stream 1
+ * - Default operations use stream 2
+ * - Optional async work uses stream 3
+ */
+enum class StreamType {
+	Compute = 0, ///< Dedicated compute stream (stream 0)
+	Memory = 1,	 ///< Dedicated memory transfer stream (stream 1)
+	Default = 2, ///< Default/synchronous stream (stream 2)
+	Optional = 3 ///< Additional async stream (stream 3)
+};
 
+// namespace ARBD
 /**
  * @brief A production-ready resource identifier that owns its streams/queues.
  *
@@ -69,42 +83,64 @@ class Resource {
 
 // Stream pools owned by Resource (lazy initialization)
 #ifdef USE_CUDA
-	mutable std::unique_ptr<CUDA::StreamPool> cuda_streams_;
-#endif
-
-#ifdef USE_SYCL
-	mutable std::unique_ptr<SYCL::QueuePool> sycl_queues_;
+	mutable std::shared_ptr<CUDA::InitStreams> streams_;
+#elif defined(USE_SYCL)
+	mutable std::shared_ptr<SYCL::InitQueues> streams_;
 #endif
 
 	// Device validation state
 	mutable bool device_verified_{false};
 	mutable bool device_available_{false};
+	// OpenMP+Rank extension
+	static thread_local int worker_id_;				// OpenMP thread ID (NOT GPU thread!)
+	static thread_local int assigned_gpu_;			// GPU assigned to this OpenMP worker
+	static thread_local Resource* worker_resource_; // This worker's resource
+
+	// Global rank configuration
+	static bool rank_initialized_;
+	static int rank_id_;				// Process rank (0 if no MPI)
+	static int ranks_per_node_;			// Number of ranks on this node
+	static std::vector<int> rank_gpus_; // GPUs assigned to this rank
+	static std::vector<Resource*> worker_resources_;
+	// Resource per OpenMP worker
 
   public:
 	/**
-	 * @brief Default constructor creates a resource using the compile-time selected backend.
+	 * @brief Default constructor creates a resource using the compile-time
+	 * selected backend.
 	 */
-	HOST DEVICE constexpr Resource() = default;
+	constexpr Resource() = default;
 
-	HOST DEVICE constexpr Resource(short device_id) : id_(device_id) {}
+	constexpr Resource(short device_id) : id_(device_id) {}
 
 	/**
 	 * @brief Construct a resource with specified type and optional ID.
 	 */
-	HOST DEVICE constexpr Resource(ResourceType resource_type, short device_id = 0)
+	constexpr Resource(ResourceType resource_type, short device_id = 0)
 		: type_(resource_type), id_(device_id) {}
 
 	// Destructor, copy, move operations
 	~Resource() = default;
-	Resource(const Resource& other) = default;
-	Resource& operator=(const Resource& other) = default;
+	Resource(const Resource& other)
+		: type_(other.type_), id_(other.id_), device_verified_(other.device_verified_),
+		  device_available_(other.device_available_), streams_(other.streams_) // Share stream pools
+		  {};
+	Resource& operator=(const Resource& other) {
+		if (this != &other) {
+			type_ = other.type_;
+			id_ = other.id_;
+			device_verified_ = other.device_verified_;
+			device_available_ = other.device_available_;
+			streams_ = other.streams_; // Share stream pools
+		}
+		return *this;
+	}
 	Resource(Resource&& other) noexcept = default;
 	Resource& operator=(Resource&& other) noexcept = default;
 
 	// Factory methods with validation
 	static Resource create_cuda_device(short device_id);
 	static Resource create_sycl_device(short device_id);
-	static Resource create_best_available();
 
 	// Device context management
 	void activate() const;
@@ -112,9 +148,42 @@ class Resource {
 	bool verify_device() const;
 
 	// Stream management (Resource owns streams)
-	void* get_stream(StreamType stream_type = StreamType::Compute) const;
-	void* get_stream(size_t stream_id, StreamType stream_type = StreamType::Compute) const;
+	void* get_stream(StreamType stream_type = StreamType::Compute) const {
+		return get_stream_impl(stream_type);
+	}
+
+	void* get_stream(size_t stream_id, StreamType stream_type = StreamType::Compute) const {
+		return get_stream_impl(stream_id, stream_type);
+	}
 	void synchronize_streams() const;
+
+	// Provide aliases for stream/queue terminology
+	void* get_queue(StreamType stream_type = StreamType::Compute) const {
+		return get_stream(stream_type);
+	}
+	void* get_queue(size_t stream_id, StreamType stream_type = StreamType::Compute) const {
+		return get_stream(stream_id, stream_type);
+	}
+	void synchronize_queues() const {
+		synchronize_streams();
+	}
+
+// Backend-specific resource access (for advanced users)
+#ifdef USE_CUDA
+	cudaStream_t get_cuda_stream(size_t id = 0) const {
+		if (type_ != ResourceType::CUDA)
+			throw std::runtime_error("Not a CUDA resource");
+		return static_cast<cudaStream_t>(get_stream_impl(id));
+	}
+#endif
+
+#ifdef USE_SYCL
+	sycl::queue& get_sycl_queue(size_t id = 0) const {
+		if (type_ != ResourceType::SYCL)
+			throw std::runtime_error("Not a SYCL resource");
+		return *static_cast<sycl::queue*>(get_stream_impl(id));
+	}
+#endif
 
 	// Properties
 	ResourceType type() const {
@@ -200,7 +269,19 @@ class Resource {
 	void validate() const;
 
   private:
-	void ensure_streams_initialized() const;
+	void ensure_queues_initialized() const;
+
+  private:
+	void* get_stream_impl(StreamType stream_type) const;
+	void* get_stream_impl(size_t stream_id, StreamType stream_type = StreamType::Compute) const;
+};
+
+/**
+ * @brief A collection of resources. Stored on CPU only.
+ */
+
+struct ResourceCollection {
+	std::vector<Resource> resources;
 };
 
 } // namespace ARBD

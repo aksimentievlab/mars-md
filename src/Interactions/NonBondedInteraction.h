@@ -8,6 +8,7 @@
 #include "Header.h"
 #include "IO/Reader.h"
 #include "Objects/ParticleProperties.h"
+#include "SimParam.h"
 
 namespace ARBD {
 

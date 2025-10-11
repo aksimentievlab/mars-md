@@ -8,6 +8,13 @@
 #include "Types/Vector3.h"
 
 namespace ARBD {
+struct BAOABIntegrateParams {
+	Vector3* positions;
+	Vector3* momenta;
+	const Vector3* forces;
+	const int* types;
+	const ParticleType* particle_types;
+};
 template<typename T>
 DEVICE void baoab_integrate_device(idx_t idx,
 								   Vector3* positions,

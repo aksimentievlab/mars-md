@@ -11,7 +11,8 @@ class Patch {
   public:
 	Patch() = default;
 	Patch(const Patch& other) = default;
-	Patch(idx_t patch_idx = 0, idx_t capacity = 2048) : capacity(capacity), patch_idx(patch_idx){};
+	Patch(patch_t patch_idx = 0, idx_t capacity = 2048)
+		: capacity(capacity), patch_idx(patch_idx){};
 
 	// Move assignment operator
 	Patch& operator=(Patch&& other) {
@@ -46,6 +47,7 @@ class Patch {
   private:
 	Vector3 minimum; // minimum position of the patch
 	Vector3 maximum;
+	patch_t patch_id = 0;
 
 	std::vector<ParticleType> types; // types of particles in this patch
 

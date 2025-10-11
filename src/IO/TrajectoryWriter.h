@@ -4,7 +4,7 @@
 
 #pragma once
 
-#ifdef HOST_GUARD
+// #ifdef HOST_GUARD
 #include "ARBDException.h"
 #include "ARBDLogger.h"
 #include "FileHandle.h"
@@ -523,9 +523,10 @@ class TrajectoryWriter {
 		std::fprintf(fp, "END\n");
 	}
 };
-
-#else
-// Forward declaration for non-host compilation
-class TrajectoryWriter;
-#endif
 } // namespace ARBD
+// #else
+// Forward declaration for non-host compilation
+// namespace ARBD {
+// class TrajectoryWriter;
+//} // namespace ARBD
+// #endif

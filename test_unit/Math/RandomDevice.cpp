@@ -273,7 +273,7 @@ TEST_CASE_METHOD(RandomTestFixture,
 					gaussian_full[9]);
 
 			// Combine using kernel
-			KernelConfig config{.async = false};
+			KernelConfig config{.sync = true};
 
 			// Create EventList to combine events
 			EventList combine_events;

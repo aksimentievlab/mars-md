@@ -1,542 +1,386 @@
 #ifdef USE_SYCL
 #include "SYCLManager.h"
 #include "ARBDLogger.h"
-#include <algorithm>
-#include <span>
-#include <string>
-#include <sycl/sycl.hpp>
-#include <vector>
-#include <cstdlib>
-#include <chrono>
-#include <thread>
+#include <sstream>
+#include <mutex>
 
 namespace ARBD {
 namespace SYCL {
+
 // Static member initialization
-std::vector<Manager::Device> Manager::all_devices_;
-std::vector<Manager::Device> Manager::devices_;
-int Manager::current_device_{0};
-sycl::info::device_type Manager::preferred_type_{sycl::info::device_type::cpu};
+std::vector<sycl::device> Manager::all_devices_;
+bool Manager::initialized_ = false;
+std::vector<int> Manager::rank_devices_;
+bool Manager::multi_rank_mode_ = false;
+int Manager::rank_id_ = 0;
+int Manager::omp_threads_ = 1;
+std::vector<int> Manager::thread_device_map_;
+std::string Manager::device_affinity_strategy_ = "block";
+std::mutex Manager::mtx_;
 
-// Device class implementation
-Manager::Device::Device(const sycl::device& dev, unsigned int id)
-	: id_(id), device_(dev), queues_(create_queues(dev, id)) {
-
-	// Query device properties after construction
-	query_device_properties();
-
-	LOGDEBUG("Device {} initialized: {} ({})", id_, name_.c_str(), vendor_.c_str());
-	LOGDEBUG("  Compute units: {}, Global memory: {:.1f}GB, Max work group: {}",
-			max_compute_units_,
-			static_cast<float>(global_mem_size_) / (1024.0f * 1024.0f * 1024.0f),
-			max_work_group_size_);
-}
-
-// Helper function to create all queues for a device with proper RAII
-std::array<ARBD::SYCL::Queue, Manager::NUM_QUEUES>
-Manager::Device::create_queues(const sycl::device& dev, unsigned int id) {
-	try {
-		// Test if device can create a basic queue first with explicit single-device context
-		sycl::queue test_queue(sycl::context({dev}), dev);
-
-		// If successful, create all our wrapped queues
-		// Note: We need to construct each queue individually since Queue() is deleted
-		return std::array<Queue, Manager::NUM_QUEUES>{{Queue(dev),
-											  Queue(dev),
-											  Queue(dev),
-											  Queue(dev),
-											  Queue(dev),
-											  Queue(dev),
-											  Queue(dev),
-											  Queue(dev)}};
-
-	} catch (const sycl::exception& e) {
-		LOGERROR("SYCL exception creating queues for device {}: {}", id, e.what());
-
-		// Try fallback with empty properties
-		try {
-			sycl::property_list empty_props;
-			return std::array<Queue, Manager::NUM_QUEUES>{{Queue(dev, empty_props),
-												  Queue(dev, empty_props),
-												  Queue(dev, empty_props),
-												  Queue(dev, empty_props),
-												  Queue(dev, empty_props),
-												  Queue(dev, empty_props),
-												  Queue(dev, empty_props),
-												  Queue(dev, empty_props)}};
-		} catch (const sycl::exception& e2) {
-			LOGERROR("Failed to create fallback queues for device {}: {}", id, e2.what());
-			throw; // Re-throw if we can't create any queues
-		}
-	}
-}
-
-void Manager::Device::query_device_properties() {
-	try {
-		// Set default values first
-		name_ = "Unknown Device";
-		vendor_ = "Unknown Vendor";
-		version_ = "Unknown Version";
-		max_work_group_size_ = 1;
-		max_compute_units_ = 1;
-		global_mem_size_ = 0;
-		local_mem_size_ = 0;
-		is_cpu_ = false;
-		is_gpu_ = false;
-		is_accelerator_ = false;
-
-		// Try to get device type first (most critical)
-		try {
-			auto device_type = device_.get_info<sycl::info::device::device_type>();
-			is_cpu_ = (device_type == sycl::info::device_type::cpu);
-			is_gpu_ = (device_type == sycl::info::device_type::gpu);
-			is_accelerator_ = (device_type == sycl::info::device_type::accelerator);
-		} catch (const sycl::exception& e) {
-			LOGWARN("Failed to query device type for device {}: {}", id_, e.what());
-		}
-
-		// Try to get basic device info
-		try {
-			name_ = device_.get_info<sycl::info::device::name>();
-		} catch (const sycl::exception& e) {
-			LOGWARN("Failed to query device name for device {}: {}", id_, e.what());
-		}
-
-		try {
-			vendor_ = device_.get_info<sycl::info::device::vendor>();
-		} catch (const sycl::exception& e) {
-			LOGWARN("Failed to query device vendor for device {}: {}", id_, e.what());
-		}
-
-		try {
-			version_ = device_.get_info<sycl::info::device::version>();
-		} catch (const sycl::exception& e) {
-			LOGWARN("Failed to query device version for device {}: {}", id_, e.what());
-		}
-
-		// Try to get performance characteristics
-		try {
-			max_work_group_size_ = device_.get_info<sycl::info::device::max_work_group_size>();
-		} catch (const sycl::exception& e) {
-			LOGWARN("Failed to query max work group size for device {}: {}", id_, e.what());
-		}
-
-		try {
-			max_compute_units_ = device_.get_info<sycl::info::device::max_compute_units>();
-		} catch (const sycl::exception& e) {
-			LOGWARN("Failed to query max compute units for device {}: {}", id_, e.what());
-		}
-
-		try {
-			global_mem_size_ = device_.get_info<sycl::info::device::global_mem_size>();
-		} catch (const sycl::exception& e) {
-			LOGWARN("Failed to query global memory size for device {}: {}", id_, e.what());
-		}
-
-		try {
-			local_mem_size_ = device_.get_info<sycl::info::device::local_mem_size>();
-		} catch (const sycl::exception& e) {
-			LOGWARN("Failed to query local memory size for device {}: {}", id_, e.what());
-		}
-
-	} catch (const sycl::exception& e) {
-		std::cerr << "!!! query_device_properties caught sycl::exception: " << e.what()
-				  << " for device (name might be uninit): " << name_ << std::endl;
-		LOGERROR("Critical error querying device properties for device {}: {}", id_, e.what());
-		// Keep default values set above
-	}
-}
-
-void Manager::Device::synchronize_all_queues() {
-	for (auto& queue : queues_) {
-		try {
-			queue.synchronize();
-		} catch (const sycl::exception& e) {
-			// Log SYCL errors but continue with other queues
-			std::cerr << "Warning: SYCL error during queue synchronization: " << e.what()
-					  << std::endl;
-		} catch (const std::exception& e) {
-			// Log other errors but continue with other queues
-			std::cerr << "Warning: Error during queue synchronization: " << e.what() << std::endl;
-		}
-	}
-}
-
-// Manager static methods implementation
 void Manager::init() {
-	LOGDEBUG("Initializing SYCL Manager...");
+  if (initialized_) {
+    LOGWARN("SYCL Manager already initialized");
+    return;
+  }
 
-	all_devices_.clear();
-	devices_.clear();
-	current_device_ = 0;
+  LOGDEBUG("Initializing SYCL Manager...");
+  discover_devices();
 
-	discover_devices();
+  if (all_devices_.empty()) {
+    ARBD_Exception(ExceptionType::ValueError, "No SYCL devices found");
+  }
 
-	if (all_devices_.empty()) {
-		ARBD_Exception(ExceptionType::ValueError, "No SYCL devices found");
-	}
-
-	LOGINFO("Found {} SYCL device(s)", all_devices_.size());
-}
-
-// Helper function to check if OpenMP backend should be preferred via environment variables
-static bool should_prefer_openmp_backend() {
-	// Check ONEAPI_DEVICE_SELECTOR for OpenMP preference
-	const char* oneapi_selector = std::getenv("ONEAPI_DEVICE_SELECTOR");
-	if (oneapi_selector) {
-		std::string selector_str(oneapi_selector);
-		if (selector_str.find("omp:") != std::string::npos || 
-			selector_str.find("openmp:") != std::string::npos) {
-			return true;
-		}
-	}
-	
-	// Check SYCL_DEVICE_FILTER for OpenMP backend
-	const char* sycl_filter = std::getenv("SYCL_DEVICE_FILTER");
-	if (sycl_filter) {
-		std::string filter_str(sycl_filter);
-		if (filter_str.find("omp") != std::string::npos || 
-			filter_str.find("openmp") != std::string::npos) {
-			return true;
-		}
-	}
-	
-	return false;
+  initialized_ = true;
+  LOGINFO("SYCL Manager initialized with {} device(s)", all_devices_.size());
 }
 
 void Manager::discover_devices() {
-	try {
-		// Check if OpenMP backend is explicitly requested via environment variables
-		bool env_prefers_openmp = should_prefer_openmp_backend();
-		if (env_prefers_openmp) {
-			LOGINFO("Environment variables indicate OpenMP backend preference");
-		}
-		
-		// Get all platforms
-		auto platforms = sycl::platform::get_platforms();
+  all_devices_.clear();
 
-		// First pass: collect valid devices information without constructing Device objects
-		struct DeviceInfo {
-			sycl::device device;
-			unsigned int id;
-			sycl::info::device_type type;
-			std::string platform_name;
-			bool is_openmp_backend;
-		};
+  try {
+    // Get all available devices
+    auto platforms = sycl::platform::get_platforms();
 
-		std::vector<DeviceInfo> potential_device_infos;
-		unsigned int device_id = 0;
+    for (const auto &platform : platforms) {
+      auto devices = platform.get_devices();
 
-		for (const auto& platform : platforms) {
-			std::string platform_name = platform.get_info<sycl::info::platform::name>();
-			std::string platform_vendor = platform.get_info<sycl::info::platform::vendor>();
-			
-			LOGDEBUG("Platform: {} ({})", platform_name.c_str(), platform_vendor.c_str());
+      for (const auto &device : devices) {
+        // Log device info
+        try {
+          std::string name = device.get_info<sycl::info::device::name>();
+          std::string vendor = device.get_info<sycl::info::device::vendor>();
+          auto type = device.get_info<sycl::info::device::device_type>();
 
-			// Check if this platform supports OpenMP backend
-			// Look for OpenMP indicators in platform name or vendor
-			bool is_openmp_platform = (platform_name.find("OpenMP") != std::string::npos) ||
-									  (platform_name.find("omp") != std::string::npos) ||
-									  (platform_name.find("OMP") != std::string::npos) ||
-									  (platform_vendor.find("OpenMP") != std::string::npos) ||
-									  (platform_vendor.find("omp") != std::string::npos) ||
-									  // Check for common OpenMP backend implementations
-									  (platform_name.find("hipSYCL") != std::string::npos && env_prefers_openmp) ||
-									  (platform_name.find("AdaptiveCpp") != std::string::npos && env_prefers_openmp);
+          std::string type_str;
+          switch (type) {
+          case sycl::info::device_type::cpu:
+            type_str = "CPU";
+            break;
+          case sycl::info::device_type::gpu:
+            type_str = "GPU";
+            break;
+          case sycl::info::device_type::accelerator:
+            type_str = "Accelerator";
+            break;
+          default:
+            type_str = "Unknown";
+            break;
+          }
 
-			// Get all devices for this platform
-			auto platform_devices = platform.get_devices();
+          LOGINFO("Found SYCL device [{}]: {} {} ({})", all_devices_.size(),
+                  vendor, name, type_str);
 
-			for (const auto& device : platform_devices) {
-				try {
-					// Test sycl::device copy construction explicitly
-					sycl::device temp_device_copy(device);
-					auto dev_type = temp_device_copy.get_info<sycl::info::device::device_type>();
-					LOGDEBUG("Successfully test-copied sycl::device: {}",
-							 temp_device_copy.get_info<sycl::info::device::name>().c_str());
+          all_devices_.push_back(device);
 
-					// Store device info for later construction
-					potential_device_infos.push_back(
-						{std::move(temp_device_copy), device_id, dev_type, platform_name, is_openmp_platform});
-					device_id++;
+        } catch (const sycl::exception &e) {
+          LOGWARN("Could not query device info: {}", e.what());
+          // Still add the device even if we can't query info
+          all_devices_.push_back(device);
+        }
+      }
+    }
 
-				} catch (const sycl::exception& e) {
-					LOGWARN("SYCL exception during device discovery for device id {}: {}",
-							device_id,
-							e.what());
-				} catch (const ARBD::Exception& e) {
-					LOGWARN("ARBD::Exception during device discovery for device id {}: {}",
-							device_id,
-							e.what());
-				} catch (const std::exception& e) {
-					LOGWARN("Std::exception during device discovery for device id {}: {}",
-							device_id,
-							e.what());
-				}
-			}
-		}
-
-		// Filter devices with smart preference: GPU > OpenMP CPU > regular CPU
-		std::vector<DeviceInfo> selected_device_infos;
-
-		// First, look for GPU devices (highest priority)
-		for (const auto& device_info : potential_device_infos) {
-			if (device_info.type == sycl::info::device_type::gpu) {
-				selected_device_infos.push_back(device_info);
-			}
-		}
-
-		// If no GPU devices found, look for CPU devices with OpenMP preference
-		if (selected_device_infos.empty()) {
-			// Look for OpenMP CPU devices first
-			for (const auto& device_info : potential_device_infos) {
-				if (device_info.type == sycl::info::device_type::cpu && device_info.is_openmp_backend) {
-					selected_device_infos.push_back(device_info);
-				}
-			}
-			
-			// If no OpenMP CPU devices, fall back to regular CPU devices
-			if (selected_device_infos.empty()) {
-				LOGWARN("No OpenMP CPU devices found, using regular CPU devices");
-				for (const auto& device_info : potential_device_infos) {
-					if (device_info.type == sycl::info::device_type::cpu) {
-						selected_device_infos.push_back(device_info);
-					}
-				}
-			} else {
-				LOGINFO("Found {} OpenMP CPU device(s)", selected_device_infos.size());
-			}
-		} else {
-			LOGINFO("Found {} GPU device(s)", selected_device_infos.size());
-		}
-
-		// If still no devices, use whatever is available
-		if (selected_device_infos.empty()) {
-			LOGWARN("No GPU or CPU devices found, using all available devices");
-			selected_device_infos = std::move(potential_device_infos);
-		}
-
-		// Sort device infos by preference: GPU > OpenMP CPU > regular CPU
-		std::stable_sort(selected_device_infos.begin(),
-						 selected_device_infos.end(),
-						 [](const DeviceInfo& a, const DeviceInfo& b) {
-							 // GPU devices have highest priority
-							 if (a.type == sycl::info::device_type::gpu && b.type != sycl::info::device_type::gpu) {
-								 return true;
-							 }
-							 if (b.type == sycl::info::device_type::gpu && a.type != sycl::info::device_type::gpu) {
-								 return false;
-							 }
-							 
-							 // Among CPU devices, prefer OpenMP
-							 if (a.type == sycl::info::device_type::cpu && b.type == sycl::info::device_type::cpu) {
-								 if (a.is_openmp_backend && !b.is_openmp_backend) {
-									 return true;
-								 }
-								 if (b.is_openmp_backend && !a.is_openmp_backend) {
-									 return false;
-								 }
-							 }
-							 
-							 // Default to device ID ordering
-							 return a.id < b.id;
-						 });
-
-		// Now construct Device objects in place
-		all_devices_.clear();
-		all_devices_.reserve(selected_device_infos.size());
-
-		for (size_t i = 0; i < selected_device_infos.size(); ++i) {
-			const auto& device_info = selected_device_infos[i];
-			all_devices_.emplace_back(device_info.device, static_cast<unsigned int>(i));
-		}
-
-	} catch (const sycl::exception& e) {
-		check_sycl_error(e, __FILE__, __LINE__);
-	}
+  } catch (const sycl::exception &e) {
+    LOGERROR("SYCL device discovery failed: {}", e.what());
+    throw;
+  }
 }
 
 void Manager::load_info() {
-	init();
+  init();
 
-	// For single device case (Mac), explicitly select only the first device
-	// to avoid multi-device context issues
-	if (all_devices_.size() == 1) {
-		LOGINFO("Single device detected, selecting device 0 for single-device operation");
-		// Use array index 0, not the device's internal ID
-		unsigned int device_index = 0;
-		select_devices(std::span<const unsigned int>{&device_index, 1});
-	} else {
-		// Multi-device case - use all discovered devices
-		// Copy all_devices_ to devices_ instead of moving to preserve all_devices_ for
-		// select_devices()
-		devices_.clear();
-		devices_.reserve(all_devices_.size());
-		for (size_t i = 0; i < all_devices_.size(); ++i) {
-			devices_.emplace_back(all_devices_[i].get_device(), static_cast<unsigned int>(i));
-		}
-		init_devices();
-	}
-}
+  // Additional device information logging
+  for (size_t i = 0; i < all_devices_.size(); ++i) {
+    try {
+      const auto &device = all_devices_[i];
 
-void Manager::init_devices() {
-	LOGINFO("Initializing SYCL devices...");
-	std::string msg;
+      auto max_compute_units =
+          device.get_info<sycl::info::device::max_compute_units>();
+      auto max_work_group =
+          device.get_info<sycl::info::device::max_work_group_size>();
+      auto global_mem = device.get_info<sycl::info::device::global_mem_size>();
+      auto local_mem = device.get_info<sycl::info::device::local_mem_size>();
 
-	for (size_t i = 0; i < devices_.size(); i++) {
-		if (i > 0) {
-			if (i == devices_.size() - 1) {
-				msg += " and ";
-			} else {
-				msg += ", ";
-			}
-		}
-		msg += std::to_string(devices_[i].id());
+      LOGDEBUG("Device [{}] specs:", i);
+      LOGDEBUG("  Max compute units: {}", max_compute_units);
+      LOGDEBUG("  Max work group size: {}", max_work_group);
+      LOGDEBUG("  Global memory: {:.2f} GB",
+               global_mem / (1024.0 * 1024.0 * 1024.0));
+      LOGDEBUG("  Local memory: {:.2f} KB", local_mem / 1024.0);
 
-		// Devices are already initialized in constructor
-		// Just log that they're ready
-		LOGDEBUG("Device {} ready: {}", devices_[i].id(), devices_[i].name().c_str());
-	}
-
-	LOGINFO("Initialized SYCL devices: {}", msg.c_str());
-	current_device_ = 0;
-}
-
-void Manager::select_devices(std::span<const unsigned int> device_ids) {
-	devices_.clear();
-	devices_.reserve(device_ids.size()); // Reserve space to avoid reallocations
-
-	for (unsigned int id : device_ids) {
-		if (id >= all_devices_.size()) {
-			ARBD_Exception(ExceptionType::ValueError, "Invalid device ID: {}", id);
-		}
-		// Create a new Device by copying the sycl::device and id
-		devices_.emplace_back(all_devices_[id].get_device(), id);
-	}
-	init_devices();
-}
-
-void Manager::use(int device_id) {
-	if (devices_.empty()) {
-		ARBD_Exception(ExceptionType::ValueError, "No devices selected");
-	}
-	current_device_ = device_id % static_cast<int>(devices_.size());
-}
-
-void Manager::sync(int device_id) {
-	if (device_id >= static_cast<int>(devices_.size())) {
-		ARBD_Exception(ExceptionType::ValueError, "Invalid device ID: {}", device_id);
-	}
-	devices_[device_id].synchronize_all_queues();
-}
-
-void Manager::sync() {
-	for (auto& device : devices_) {
-		try {
-			device.synchronize_all_queues();
-		} catch (const std::exception& e) {
-			// Log but continue with other devices
-			std::cerr << "Warning: Error synchronizing device " << device.id() << ": " << e.what()
-					  << std::endl;
-		}
-	}
+    } catch (const sycl::exception &e) {
+      LOGWARN("Could not query detailed device info for device {}: {}", i,
+              e.what());
+    }
+  }
 }
 
 void Manager::finalize() {
-	try {
-		// First, synchronize all devices to ensure all operations complete
-		if (!devices_.empty()) {
-			sync();
-		}
+  if (!initialized_) {
+    return;
+  }
 
-		// Minimal delay to let HipSYCL runtime stabilize
-		// This prevents worker thread crashes without performance degradation
-		try {
-			std::this_thread::sleep_for(std::chrono::milliseconds(10));
-		} catch (...) {
-			// Ignore any errors during the wait
-		}
+  LOGDEBUG("Finalizing SYCL Manager...");
 
-		// Clear current device reference first to prevent access during cleanup
-		current_device_ = 0;
+  // Clear device list
+  all_devices_.clear();
+  initialized_ = false;
 
-		// Clear devices explicitly which will call Device destructors
-		// in a controlled manner
-		devices_.clear();
-
-		// Now clear all_devices_
-		all_devices_.clear();
-
-		// Reset to default state
-		preferred_type_ = sycl::info::device_type::cpu;
-
-	} catch (const std::exception& e) {
-		// Log but don't throw during finalization to prevent cascading errors
-		std::cerr << "Warning: Error during SYCL finalization: " << e.what() << std::endl;
-	} catch (...) {
-		// Catch any other exceptions during cleanup
-		std::cerr << "Warning: Unknown error during SYCL finalization" << std::endl;
-	}
+  LOGINFO("SYCL Manager finalized");
 }
 
-int Manager::current() {
-	return current_device_;
+sycl::device Manager::get_device_by_id(size_t device_id) {
+  if (!initialized_) {
+    ARBD_Exception(ExceptionType::ValueError,
+                   "SYCL Manager not initialized. Call Manager::init() first");
+  }
+
+  if (device_id >= all_devices_.size()) {
+    ARBD_Exception(ExceptionType::ValueError,
+                   "SYCL device {} not found (available: 0-{})", device_id,
+                   all_devices_.size() - 1);
+  }
+
+  return all_devices_[device_id];
 }
 
-void Manager::prefer_device_type(sycl::info::device_type type) {
-	preferred_type_ = type;
+std::vector<sycl::device> Manager::get_all_devices() {
+  if (!initialized_) {
+    ARBD_Exception(ExceptionType::ValueError,
+                   "SYCL Manager not initialized. Call Manager::init() first");
+  }
 
-	if (!all_devices_.empty()) {
-		std::sort(all_devices_.begin(),
-				  all_devices_.end(),
-				  [type](const Device& a, const Device& b) {
-					  auto a_type = a.get_device().get_info<sycl::info::device::device_type>();
-					  auto b_type = b.get_device().get_info<sycl::info::device::device_type>();
-
-					  if ((a_type == type) != (b_type == type)) {
-						  return a_type == type;
-					  }
-					  return a.id() < b.id();
-				  });
-
-		// Reassign IDs after sorting
-		for (size_t i = 0; i < all_devices_.size(); ++i) {
-			const_cast<unsigned int&>(all_devices_[i].id_) = static_cast<unsigned int>(i);
-		}
-	}
+  return all_devices_;
 }
 
-std::vector<unsigned int> Manager::get_gpu_device_ids() {
-	std::vector<unsigned int> gpu_ids;
-	for (const auto& device : all_devices_) {
-		if (device.is_gpu()) {
-			gpu_ids.push_back(device.id());
-		}
-	}
-	return gpu_ids;
+size_t Manager::device_count() {
+  if (!initialized_) {
+    return 0;
+  }
+
+  return all_devices_.size();
 }
 
-std::vector<unsigned int> Manager::get_cpu_device_ids() {
-	std::vector<unsigned int> cpu_ids;
-	for (const auto& device : all_devices_) {
-		if (device.is_cpu()) {
-			cpu_ids.push_back(device.id());
-		}
-	}
-	return cpu_ids;
+void Manager::init_for_rank(int local_rank, int ranks_per_node,
+                            int threads_per_rank, bool verbose) {
+  std::lock_guard<std::mutex> lock(mtx_);
+
+  // First, do standard initialization if not already done
+  if (!initialized_) {
+    init();
+  }
+
+  // Store rank information
+  rank_id_ = local_rank;
+  multi_rank_mode_ = (ranks_per_node > 1);
+
+  // Determine number of OpenMP threads
+  if (threads_per_rank <= 0) {
+// Use OMP_NUM_THREADS if set, otherwise use max available
+#ifdef _OPENMP
+#pragma omp parallel
+    {
+#pragma omp single
+      omp_threads_ = omp_get_num_threads();
+    }
+#else
+    omp_threads_ = 1;
+#endif
+  } else {
+    omp_threads_ = threads_per_rank;
+#ifdef _OPENMP
+    omp_set_num_threads(omp_threads_);
+#endif
+  }
+
+  // Get total number of devices
+  int num_devices = static_cast<int>(all_devices_.size());
+  if (num_devices == 0) {
+    ARBD_Exception(ExceptionType::ValueError,
+                   "No SYCL devices available for rank {}", local_rank);
+  }
+
+  // Determine device assignment for this rank
+  rank_devices_.clear();
+
+  if (ranks_per_node <= 0) {
+    ranks_per_node = 1; // Default to single rank
+  }
+
+  if (ranks_per_node == 1) {
+    // Single rank gets all devices
+    for (int i = 0; i < num_devices; ++i) {
+      rank_devices_.push_back(i);
+    }
+    LOGINFO("Single rank mode: assigned all {} SYCL device(s)", num_devices);
+
+  } else if (ranks_per_node <= num_devices) {
+    // One or more devices per rank
+    int devices_per_rank = num_devices / ranks_per_node;
+    int remainder = num_devices % ranks_per_node;
+
+    int start_device = local_rank * devices_per_rank;
+    if (local_rank < remainder) {
+      start_device += local_rank;
+      devices_per_rank += 1;
+    } else {
+      start_device += remainder;
+    }
+
+    for (int i = 0; i < devices_per_rank; ++i) {
+      rank_devices_.push_back(start_device + i);
+    }
+
+    LOGINFO("Rank {} assigned to {} SYCL device(s): [{}]", local_rank,
+            rank_devices_.size(), [&]() {
+              std::stringstream ss;
+              for (size_t i = 0; i < rank_devices_.size(); ++i) {
+                if (i > 0)
+                  ss << ", ";
+                ss << rank_devices_[i];
+              }
+              return ss.str();
+            }());
+
+  } else {
+    // More ranks than devices: round-robin assignment
+    int device_id = local_rank % num_devices;
+    rank_devices_.push_back(device_id);
+    LOGWARN("Rank {} sharing SYCL device {} (oversubscription: {} ranks, {} "
+            "devices)",
+            local_rank, device_id, ranks_per_node, num_devices);
+  }
+
+  // Setup OpenMP thread to device mapping
+  setup_omp_device_mapping();
+
+  if (verbose) {
+    LOGINFO("Rank {} configuration:", local_rank);
+    LOGINFO("  OpenMP threads: {}", omp_threads_);
+    LOGINFO("  SYCL devices: {}", rank_devices_.size());
+    for (size_t i = 0; i < rank_devices_.size(); ++i) {
+      try {
+        const auto &device = all_devices_[rank_devices_[i]];
+        std::string name = device.get_info<sycl::info::device::name>();
+        LOGINFO("    Device [{}]: {}", rank_devices_[i], name);
+      } catch (const sycl::exception &e) {
+        LOGINFO("    Device [{}]: <info unavailable>", rank_devices_[i]);
+      }
+    }
+
+    LOGINFO("  Thread-device mapping:");
+    for (int t = 0; t < omp_threads_; ++t) {
+      LOGINFO("    Thread {} -> Device {}", t, thread_device_map_[t]);
+    }
+  }
+
+  // Configure for OpenMP usage
+  if (omp_threads_ > 1) {
+#ifdef _OPENMP
+// Set thread affinity for NUMA awareness
+#pragma omp parallel
+    {
+      int thread_id = omp_get_thread_num();
+      if (thread_id < static_cast<int>(thread_device_map_.size())) {
+        int assigned_device = thread_device_map_[thread_id];
+        // Note: SYCL doesn't have explicit device setting like CUDA
+        // Each thread will need to create contexts with their assigned device
+        LOGTRACE("OpenMP thread {} assigned to SYCL device {}", thread_id,
+                 assigned_device);
+      }
+    }
+#endif
+
+    LOGINFO(
+        "OpenMP configuration complete: {} threads across {} SYCL device(s)",
+        omp_threads_, rank_devices_.size());
+  }
+
+  LOGINFO(
+      "SYCL Manager initialized for rank {} with {} device(s) and {} OpenMP "
+      "thread(s)",
+      local_rank, rank_devices_.size(), omp_threads_);
 }
 
-std::vector<unsigned int> Manager::get_accelerator_device_ids() {
-	std::vector<unsigned int> accel_ids;
-	for (const auto& device : all_devices_) {
-		if (device.is_accelerator()) {
-			accel_ids.push_back(device.id());
-		}
-	}
-	return accel_ids;
+void Manager::setup_omp_device_mapping() {
+  thread_device_map_.resize(omp_threads_);
+
+  int num_rank_devices = static_cast<int>(rank_devices_.size());
+
+  if (device_affinity_strategy_ == "block") {
+    // Block distribution: consecutive threads use same device
+    int threads_per_device =
+        (omp_threads_ + num_rank_devices - 1) / num_rank_devices;
+
+    for (int t = 0; t < omp_threads_; ++t) {
+      int device_idx = t / threads_per_device;
+      if (device_idx >= num_rank_devices)
+        device_idx = num_rank_devices - 1;
+      thread_device_map_[t] = rank_devices_[device_idx];
+    }
+
+  } else if (device_affinity_strategy_ == "cyclic") {
+    // Cyclic distribution: round-robin threads across devices
+    for (int t = 0; t < omp_threads_; ++t) {
+      int device_idx = t % num_rank_devices;
+      thread_device_map_[t] = rank_devices_[device_idx];
+    }
+
+  } else {
+    // Default to block
+    LOGWARN("Unknown device affinity strategy '{}', using 'block'",
+            device_affinity_strategy_);
+    device_affinity_strategy_ = "block";
+    setup_omp_device_mapping();
+    return;
+  }
+}
+
+void Manager::set_omp_device_affinity(const std::string &strategy) {
+  std::lock_guard<std::mutex> lock(mtx_);
+
+  if (strategy != "block" && strategy != "cyclic") {
+    LOGWARN("Invalid device affinity strategy '{}'. Use 'block' or 'cyclic'",
+            strategy);
+    return;
+  }
+
+  device_affinity_strategy_ = strategy;
+  setup_omp_device_mapping();
+
+  LOGINFO("SYCL device affinity strategy set to '{}'", strategy);
+}
+
+void Manager::init_for_omp_thread() {
+#ifdef _OPENMP
+  int thread_id = omp_get_thread_num();
+
+  if (thread_id >= static_cast<int>(thread_device_map_.size())) {
+    LOGWARN("Thread {} has no device mapping. Using device 0", thread_id);
+    return;
+  }
+
+  int assigned_device = thread_device_map_[thread_id];
+  LOGTRACE("OpenMP thread {} using SYCL device {}", thread_id, assigned_device);
+#endif
+}
+
+int Manager::get_thread_device() {
+#ifdef _OPENMP
+  int thread_id = omp_get_thread_num();
+
+  if (thread_id >= static_cast<int>(thread_device_map_.size())) {
+    LOGWARN("Thread {} has no device mapping. Returning device 0", thread_id);
+    return 0;
+  }
+
+  return thread_device_map_[thread_id];
+#else
+  return 0;
+#endif
 }
 
 } // namespace SYCL
 } // namespace ARBD
-
 #endif

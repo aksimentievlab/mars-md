@@ -9,11 +9,17 @@
 
 #pragma once
 
+#include "Backend/Resource.h"
+#include "SimParam.h"
+#include "Types/BaseGrid.h"
+#include "Objects/ARBDObjects.h"
+#include "Objects/Patch.h"
+#include "Objects/ParticleProperties.h"
+#include "Objects/RigidBodyProperties.h"
 #include "Backend/Buffer.h"
 #include "Backend/Resource.h"
-#include "Types/BaseGrid.h"
 
-#include <Interaction.h>
+#include <Interactions.h>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -24,7 +30,6 @@ namespace ARBD {
 /*==========================*\
 |  LONG-RANGE METHOD ENUM    |
 \*==========================*/
-enum class LongRangeMethod { CutoffAMR, PPPM, PME, FMM, Direct, None };
 /**
  * @brief Method selection criteria
  */
@@ -148,7 +153,7 @@ class CutoffAMRElectrostatics : public LongRangeElectrostatics {
 		initialize_amr_hierarchy();
 	}
 
-	void solve_electrostatics(Patch* particles) override {
+	void solve_electrostatics(Patch* particles) {
 		auto start_time = std::chrono::high_resolution_clock::now();
 
 		// 1. Adaptive mesh refinement based on particle density
@@ -202,9 +207,9 @@ class CutoffAMRElectrostatics : public LongRangeElectrostatics {
   private:
 	void initialize_amr_hierarchy() {
 		// Create initial coarse grid
-		Matrix3 basis = Matrix3::diagonal(config_.cutoff_distance,
-										  config_.cutoff_distance,
-										  config_.cutoff_distance);
+		Matrix3_t<float> basis = Matrix3_t<float>::diagonal(config_.cutoff_distance,
+															config_.cutoff_distance,
+															config_.cutoff_distance);
 		Vector3 origin(-50.0f, -50.0f, -50.0f); // System-dependent
 
 		auto coarse_grid = std::make_unique<BaseGrid<float>>(basis, origin, 32, 32, 32);
@@ -214,7 +219,7 @@ class CutoffAMRElectrostatics : public LongRangeElectrostatics {
 		particle_count_grids_.push_back(std::move(count_grid));
 	}
 
-	void update_particle_density(const ParticleBuffer& particles) {
+	void update_particle_density(const ParticleBuffer_t<float>& particles) {
 		// Reset particle counts
 		for (auto& grid : particle_count_grids_) {
 			grid->zero();

@@ -23,8 +23,8 @@ struct ColvarsGroup {
 	}
 };
 struct ParticleSoA { // Stored on GPU only
-	Array<Vector3> id;
-	Array<Vector3> type_id;
+	Array<int> id;
+	Array<int> type_id;
 	Array<Vector3> position;
 	Array<Vector3> momentum;
 	Array<Vector3> force;
@@ -83,6 +83,7 @@ class ParticleType {
 	int numPartGridFiles;
 	float* meanPmf;
 	float* pmf_scale;
+	std::vector<grid_t> grid_ids;
 
 	// BaseGrid<float>** pmfGrid;
 	// BaseGrid<float>* diffusionGrid; // uncommon

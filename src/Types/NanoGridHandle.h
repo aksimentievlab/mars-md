@@ -63,8 +63,8 @@ class NanoGridAdapter {
 	 * @brief Load grid from file using NanoVDB I/O
 	 */
 	static NanoGridAdapter from_file(const std::string& filename,
-									 const std::string& grid_name = "",
-									 const Resource& resource = get_best_available_resource()) {
+									 const Resource& resource,
+									 const std::string& grid_name = "") {
 		auto handle = grid_name.empty() ? nanovdb::io::readGrid(filename)
 										: nanovdb::io::readGrid(filename, grid_name);
 
@@ -118,34 +118,6 @@ class NanoGridAdapter {
 
 	size_t size() const {
 		return arbd_buffer_.size();
-	}
-
-  private:
-	static Resource get_best_available_resource() {
-#ifdef USE_CUDA
-		try {
-			int device;
-			if (cudaGetDevice(&device) == cudaSuccess) {
-				return Resource{ResourceType::CUDA, static_cast<size_t>(device)};
-			}
-		} catch (...) {
-		}
-#endif
-#ifdef USE_SYCL
-		try {
-			auto& current_device = SYCL::Manager::get_current_device();
-			return Resource{ResourceType::SYCL, static_cast<size_t>(current_device.id())};
-		} catch (...) {
-		}
-#endif
-#ifdef USE_METAL
-		try {
-			auto& current_device = METAL::Manager::get_current_device();
-			return Resource{ResourceType::METAL, static_cast<size_t>(current_device.id())};
-		} catch (...) {
-		}
-#endif
-		return Resource{ResourceType::CPU, 0};
 	}
 };
 

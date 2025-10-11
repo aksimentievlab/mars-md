@@ -6,6 +6,9 @@
  * @date 2025-08-22
  */
 
+#define _GLIBCXX_USE_CXX11_ABI 1
+#include "Constants.h"
+
 #ifdef __CUDACC__
 #define HOST __host__
 #define DEVICE __device__
@@ -23,6 +26,7 @@
 
 #ifdef USE_SYCL
 #include <sycl/sycl.hpp>
+#include <type_traits>
 #endif
 
 #ifdef __CUDA_ARCH__
@@ -35,6 +39,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #ifndef __CUDACC__
 #include <experimental/simd>
 #include <type_traits>
@@ -50,13 +55,35 @@ namespace sx = std::experimental;
 // For CUDA, atomicAdd is a built-in function for floats
 #define ATOMIC_ADD(ptr, val) atomicAdd((ptr), (val))
 #elif defined(__SYCL_DEVICE_ONLY__)
-// For SYCL, we use sycl::atomic_ref
+// For SYCL: fetch_add available for integral types, CAS for floating-point
 #define ATOMIC_ADD(ptr, val) \
-	sycl::atomic_ref<float, sycl::memory_order::relaxed, sycl::memory_scope::device>(*(ptr)) += val
+([&]() -> std::remove_reference_t<decltype(*(ptr))> {                        \
+	using value_type = std::remove_reference_t<decltype(*(ptr))>;              \
+	if constexpr (std::is_same_v<value_type, float>) {                         \
+		auto atomic_ref = sycl::atomic_ref<float, sycl::memory_order::relaxed,   \
+																			 sycl::memory_scope::device>(*(ptr));  \
+		return atomic_ref.fetch_add(val);                                        \
+	} else if constexpr (std::is_integral_v<value_type>) {                     \
+		auto atomic_ref =                                                        \
+				sycl::atomic_ref<value_type, sycl::memory_order::relaxed,            \
+												 sycl::memory_scope::device>(*(ptr));                \
+		return atomic_ref.fetch_add(val);                                        \
+	} else {
 
+auto atomic_ref =
+	sycl::atomic_ref<value_type, sycl::memory_order::relaxed, sycl::memory_scope::device>(*(ptr));
+auto old_val = atomic_ref.load();
+while (!atomic_ref.compare_exchange_weak(old_val, old_val + (val))) {
+}
+return old_val;
+}
+}())
 #elif defined(__METAL_VERSION__)
-#define ATOMIC_ADD(ptr, val)
-atomic_fetch_add_explicit(reinterpret_cast<device atomic_float*>(ptr), val, memory_order_relaxed)
+#define ATOMIC_ADD(ptr, val)                                                              \
+	atomic_fetch_add_explicit(                                                            \
+		reinterpret_cast<device atomic<std::remove_reference_t<decltype(*(ptr))>>*>(ptr), \
+		val,                                                                              \
+		memory_order_relaxed)
 #else
 #define ATOMIC_ADD(ptr, val) (*(ptr) += (val))
 #endif
@@ -105,5 +132,58 @@ using threadgroup_ptr = threadgroup T*;
 #define THREADGROUP_PTR(T) T*
 #endif
 #endif
+
+constexpr inline short NUM_QUEUES = 4;
+
+/**
+ * @brief Backend-agnostic atomic add operation
+ * @tparam T Arithmetic type (int, float, double, etc.)
+ * @param ptr Pointer to the value to add to
+ * @param value Value to add
+ * @return The old value at ptr (before addition)
+ *
+ * @warning High contention scenarios will cause performance degradation.
+ * Consider using optimized reduction patterns for better performance.
+ */
+template<typename T>
+inline auto atomic_add(T* ptr, T value) {
+#ifdef USE_CUDA
+	return atomicAdd(ptr, value);
+#elif defined(USE_SYCL)
+	return sycl::atomic_ref<T, sycl::memory_order::relaxed, sycl::memory_scope::device>(*(ptr)) +=
+		   value;
+#elif defined(USE_METAL)
+	return atomic_fetch_add_explicit(reinterpret_cast<device atomic<T>*>(ptr),
+									 value,
+									 memory_order_relaxed);
+#else
+	return (*(ptr) += (value));
+#endif
+}
+
+/**
+ * @brief Optimized reduction helper for scenarios with many threads
+ *
+ * This function provides a pattern for reducing atomic contention by using
+ * local accumulation and reduced frequency of atomic operations.
+ *
+ * @tparam T Arithmetic type
+ * @param local_values Array of local values to reduce
+ * @param count Number of local values
+ * @param global_sum Pointer to global accumulator
+ * @return Local thread's contribution to the sum
+ */
+template<typename T>
+inline T atomic_reduce_batch(const T* local_values, size_t count, T* global_sum) {
+	T local_total = T{0};
+	for (size_t i = 0; i < count; ++i) {
+		local_total += local_values[i];
+	}
+	atomic_add(global_sum, local_total);
+	return local_total;
+}
 using idx_t = size_t;
-using device_id_t = size_t;
+using patch_t = size_t;
+using particle_t = size_t;
+using device_id_t = unsigned short;
+using grid_t = size_t; // grid ids

@@ -7,24 +7,11 @@
 #include "Header.h"
 #include "IO/Reader.h"
 #include "Objects/ParticleProperties.h"
+#include "SimParam.h"
 
 namespace ARBD {
 class Patch;
-enum class InteractionForm { Tabulated, Analytical };
 enum class BondFlag { DEFAULT = 1, REPLACE = 1, ADD = 2 };
-
-class Tables {
-  public:
-	std::vector<float> distance; // or angles
-	std::vector<float> value;
-	int table_id; // global id of the table
-	std::string fileName;
-
-	void load_table() {
-		Reader reader(fileName);
-		std::string line;
-	};
-};
 
 class Exclude {
   public:

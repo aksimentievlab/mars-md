@@ -25,13 +25,14 @@
 #include "Backend/MPIManager.h"
 #include "Backend/Resource.h"
 #include "Objects/Patch.h"
-#include "SimSystem.h"
 #include "Types/Types.h"
 #include <array>
 #include <unordered_set>
 
 namespace ARBD {
 
+// Forward declarations
+class SimSystem;
 class Decomposer;
 class CellDecomposer;
 
