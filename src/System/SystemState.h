@@ -101,30 +101,6 @@ class SystemState {
 		force_grid_ = grid;
 	}
 
-	/**
-	 * @brief Get bond list for bonded force calculations
-	 */
-	const int* get_bond_list() const {
-		return bond_list_;
-	}
-
-	/**
-	 * @brief Get bond list size
-	 */
-	size_t get_bond_list_size() const {
-		return bond_list_size_;
-	}
-
-	/**
-	 * @brief Set bond list
-	 * @param bonds Bond list data
-	 * @param size Number of bonds
-	 */
-	void set_bond_list(const int* bonds, size_t size) {
-		bond_list_ = bonds;
-		bond_list_size_ = size;
-	}
-
 	//================================================================================
 	// System State Queries
 	//================================================================================
@@ -165,17 +141,6 @@ class SystemState {
 		temperature_grid_ = grid;
 	}
 
-	//================================================================================
-	// Runtime State Queries
-	//================================================================================
-
-	/**
-	 * @brief Get current number of particles
-	 */
-	size_t get_num_particles() const {
-		return num_particles_;
-	}
-
   private:
 	//================================================================================
 	// Member Variables - ONLY Runtime State
@@ -183,9 +148,11 @@ class SystemState {
 
 	// Particle data (changes every timestep)
 	size_t num_particles_{0};
-	std::vector<Vector3> particle_positions_;
-	std::vector<Vector3> particle_velocities_;
-	std::vector<int> particle_types_;
+	ARBDObjects objects_;
+	// Function index mapping
+	std::unordered_map<int, int> angle_function_to_potential_;
+	std::unordered_map<int, int> dihedral_function_to_potential_;
+	std::unordered_map<int, int> bond_function_to_potential_;
 
 	// System objects that can change during simulation
 	bool has_bonds_{false};
@@ -194,8 +161,6 @@ class SystemState {
 	Vector3 electric_field_{0, 0, 0};
 	BaseGrid<float>* temperature_grid_{nullptr}; // Device pointer
 	BaseGrid<Vector3>* force_grid_{nullptr};	 // Device pointer
-	int* bond_list_{nullptr};					 // Device pointer
-	size_t bond_list_size_{0};
 
 	//================================================================================
 	// Private Methods

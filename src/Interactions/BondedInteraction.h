@@ -1,9 +1,10 @@
 /**
- * @file LocalInteraction.h
- * @brief Defines the LocalInteraction class and its related structures. Host side AoS.
+ * @file BondedInteraction.h
+ * @brief Host-side data structures for bonded interactions and device data preparation
  */
 
 #pragma once
+#include "Bonded/TabulatedPotential.h"
 #include "Header.h"
 #include "IO/Reader.h"
 #include "Objects/ParticleProperties.h"
@@ -11,7 +12,12 @@
 
 namespace ARBD {
 class Patch;
+
 enum class BondFlag { DEFAULT = 1, REPLACE = 1, ADD = 2 };
+
+// ============================================================================
+// HOST-SIDE DATA STRUCTURES
+// ============================================================================
 
 class Exclude {
   public:
@@ -32,19 +38,23 @@ class Exclude {
 	}
 };
 
+// Host-side bond definition
 class Bond {
   public:
-	Bond() : ind1(-1), ind2(-1) {}
+	Bond() : ind1(-1), ind2(-1), functionIndex(-1), flag(BondFlag::DEFAULT) {}
+
 	int ind1, ind2;
 	std::string name; // file name or function name
 	InteractionForm form;
 	int functionIndex;
 	BondFlag flag;
+
 	void add_exclusion(std::vector<Exclude>& excludes) {
 		excludes.push_back(Exclude(ind1, ind2));
 	}
 };
 
+// Host-side angle definition
 struct Angle {
 	int ind1, ind2, ind3;
 	std::string name;
@@ -52,20 +62,88 @@ struct Angle {
 	int functionIndex;
 };
 
+// Host-side dihedral definition
 struct Dihedral {
 	int ind1, ind2, ind3, ind4;
 	std::string name;
 	InteractionForm form;
-	int functionIndex; // can be user-defined function index or tabulated file id.
+	int functionIndex;
 };
 
+// Host-side restraint definition
 struct Restraint {
   public:
-	Restraint() : id(-1) {}
-	Restraint(int id, Vector3 r0, float k) : id(id), r0(r0), k(k) {}
-	int id;
+	Restraint() : ind(-1) {}
+	Restraint(int id, Vector3 r0, float k) : ind(id), r0(r0), k(k) {}
+	int ind;
 	Vector3 r0;
 	float k;
 };
 
+// ============================================================================
+// BONDED INTERACTION MANAGER
+// ============================================================================
+
+class BondedInteraction {
+  public:
+	BondedInteraction(std::vector<Bond> sys_bonds,
+					  std::vector<Angle> sys_angles,
+					  std::vector<Dihedral> sys_dihedrals)
+		: bonds_(sys_bonds), angles_(sys_angles), dihedrals_(sys_dihedrals) {}
+	~BondedInteraction() = default;
+
+	// Host-side data management
+	void addBond(const Bond& bond) {
+		bonds_.push_back(bond);
+	}
+	void addAngle(const Angle& angle) {
+		angles_.push_back(angle);
+	}
+	void addDihedral(const Dihedral& dihedral) {
+		dihedrals_.push_back(dihedral);
+	}
+
+	// Device data preparation
+	void prepareDeviceData();
+	void cleanupDeviceData();
+
+	size_t getNumBonds() const {
+		return bonds_.size();
+	}
+	size_t getNumAngles() const {
+		return angles_.size();
+	}
+	size_t getNumDihedrals() const {
+		return dihedrals_.size();
+	}
+
+  private:
+	// Host-side data
+	std::vector<Bond> bonds_;
+	std::vector<Angle> angles_;
+	std::vector<Dihedral> dihedrals_;
+};
+
+// ============================================================================
+// POTENTIAL REGISTRATION
+// ============================================================================
+
+/** Future pybind class for new analytical potential registration */
+class Register_Potential {
+  public:
+	int register_potential(const std::string& name) {
+		if (m_name_to_id.find(name) == m_name_to_id.end()) {
+			int new_id = m_name_to_id.size();
+			m_name_to_id[name] = new_id;
+		}
+		return m_name_to_id[name];
+	}
+
+	int get_id(const std::string& name) const {
+		return m_name_to_id.at(name);
+	}
+
+  private:
+	std::unordered_map<std::string, int> m_name_to_id;
+};
 } // namespace ARBD

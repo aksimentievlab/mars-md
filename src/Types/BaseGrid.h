@@ -471,10 +471,10 @@ class BaseGrid {
 			   grid_pos.y < ny() - 1 && grid_pos.z >= 1 && grid_pos.z < nz() - 1;
 	}
 
-/*====================*\
-|  UTILITY OPERATIONS  |
-\*====================*/
-public:
+	/*====================*\
+	|  UTILITY OPERATIONS  |
+	\*====================*/
+  public:
 /**
  * @brief Zero all grid values (host-only)
  */
@@ -565,6 +565,53 @@ public:
 	 */
 	HOST DEVICE T get_total_volume() const {
 		return get_cell_volume() * static_cast<T>(size());
+	}
+
+	/*===============================*\
+	|  PERIODIC BOUNDARY CONDITIONS   |
+	\*===============================*/
+
+	/**
+	 * @brief Wrap scalar distance for minimum image convention
+	 * @param x Distance component
+	 * @param l Box length in that dimension
+	 * @return Wrapped distance: -0.5*l <= x < 0.5*l
+	 */
+	HOST DEVICE static inline T wrapDiff(T x, T l) {
+#ifdef USE_CUDA
+		int image = int(floorf(x / l));
+#else
+		int image = int(floor(x / l));
+#endif
+		x -= image * l;
+		if (x >= T(0.5) * l)
+			x -= l;
+		return x;
+	}
+
+	/**
+	 * @brief Apply minimum image convention to vector difference
+	 * @param dr Vector difference between two points
+	 * @return Minimum image vector difference
+	 */
+	HOST DEVICE Vector3 wrapDiff(const Vector3& dr) const {
+		// Only apply wrapping if we have periodic boundaries
+		if (config_.boundary != BoundaryCondition::Periodic) {
+			return dr;
+		}
+
+		// Get box lengths from basis vectors
+		Vector3 box_lengths = Vector3(config_.basis.ex().length(),
+									  config_.basis.ey().length(),
+									  config_.basis.ez().length());
+
+		// Apply minimum image convention to each component
+		Vector3 wrapped_dr = dr;
+		wrapped_dr.x = wrapDiff(dr.x, box_lengths.x);
+		wrapped_dr.y = wrapDiff(dr.y, box_lengths.y);
+		wrapped_dr.z = wrapDiff(dr.z, box_lengths.z);
+
+		return wrapped_dr;
 	}
 
 	/*===========================*\
@@ -1107,3 +1154,9 @@ HOST DEVICE T get_neighbor_from_grid(const T* grid_values,
 }
 
 } // namespace ARBD
+// SYCL specialization
+#ifdef USE_SYCL
+#include <sycl/sycl.hpp>
+template<typename T>
+struct sycl::is_device_copyable<ARBD::BaseGrid<T>> : std::true_type {};
+#endif

@@ -1,27 +1,41 @@
-#include "Configuration.h"
-#include "IO/FileHandle.h"
+#include "ConfigParser.h"
+#include "ARBDException.h"
+#include "ARBDLogger.h"
+#include "IO/Reader.h"
+#include "SimParam.h"
+#include "Types/Types.h"
+
+// Standard library includes
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
 #include <sstream>
-#include <string>
 #include <unordered_map>
+#include <vector>
+
+// pybind11 includes (implementation only)
+#include <pybind11/cast.h>
+#include <pybind11/pybind11.h>
+#include <pybind11/stl.h>
 
 namespace ARBD {
 
-//================================================================================
-// SimConf Implementation
-//================================================================================
-
-SimConf::SimConf(std::string_view file_name) : file_name_(file_name) {
+ConfigParser::ConfigParser(std::string_view file_name) : file_name_(file_name) {
 	parse_file(file_name);
 }
 
-SimConf::SimConf(Configuration config) : config_(std::move(config)) {
+ConfigParser::ConfigParser(Configuration config) : config_(std::move(config)) {
 	validate();
 }
 
-void SimConf::parse_file(std::string_view file_name) {
+#ifdef USE_PYTHON
+ConfigParser::ConfigParser(const std::map<std::string, pybind11::object>& config_dict) {
+	apply_defaults();
+	parse_dictionary(config_dict);
+	validate();
+}
+#endif
+void ConfigParser::parse_file(std::string_view file_name) {
 	file_name_ = file_name;
 
 	try {
@@ -31,7 +45,7 @@ void SimConf::parse_file(std::string_view file_name) {
 		get_elements(reader);
 		validate();
 
-		LOGINFO("SimConf: Successfully loaded configuration from '{}'", file_name);
+		LOGINFO("ConfigParser: Successfully loaded configuration from '{}'", file_name);
 	} catch (const std::exception& e) {
 		throw Exception(ExceptionType::FileIoError,
 						SourceLocation(),
@@ -41,12 +55,12 @@ void SimConf::parse_file(std::string_view file_name) {
 	}
 }
 
-void SimConf::apply_defaults() {
+void ConfigParser::apply_defaults() {
 	// Configuration struct already has sensible defaults
 	config_ = Configuration{};
 }
 
-void SimConf::parse_parameters(const Reader& reader) {
+void ConfigParser::parse_parameters(const Reader& reader) {
 	// String to enum mapping helpers
 	static const std::unordered_map<std::string, Periodicity> periodicity_map = {
 		{"allperiodic", Periodicity::AllPeriodic},
@@ -121,17 +135,6 @@ void SimConf::parse_parameters(const Reader& reader) {
 	if (reader.hasParameter("systemSize")) {
 		Vector3 size = reader.parseVector3("systemSize");
 		config_.set_box_size(size.x, size.y, size.z);
-	}
-
-	// Parse enum parameters
-	if (reader.hasParameter("periodicity")) {
-		std::string val = to_lower(reader.findValue("periodicity"));
-		auto it = periodicity_map.find(val);
-		if (it != periodicity_map.end()) {
-			config_.periodicity = it->second;
-		} else {
-			LOGWARN("Unknown periodicity '{}', using default", val);
-		}
 	}
 
 	if (reader.hasParameter("decomposer")) {
@@ -428,7 +431,7 @@ static void load_particles_file(const std::string& path,
 }
 } // namespace
 
-void SimConf::get_elements(const Reader& reader) {
+void ConfigParser::get_elements(const Reader& reader) {
 	const auto params = reader.getParameters();
 	auto& objects = config_.objects;
 
@@ -502,7 +505,7 @@ void SimConf::get_elements(const Reader& reader) {
 	}
 }
 
-void SimConf::validate() const {
+void ConfigParser::validate() const {
 	validate_physical_parameters();
 	validate_method_parameters();
 	validate_output_parameters();
@@ -514,7 +517,7 @@ void SimConf::validate() const {
 	}
 }
 
-void SimConf::validate_physical_parameters() const {
+void ConfigParser::validate_physical_parameters() const {
 	if (config_.temperature.value <= 0.0f) {
 		throw Exception(ExceptionType::ValueError,
 						SourceLocation(),
@@ -528,19 +531,9 @@ void SimConf::validate_physical_parameters() const {
 						"Cutoff distance must be positive (got {})",
 						config_.cutoff.value);
 	}
-
-	for (int i = 0; i < 3; ++i) {
-		if (config_.box_lengths[i] <= 0.0f) {
-			throw Exception(ExceptionType::ValueError,
-							SourceLocation(),
-							"Box length {} must be positive (got {})",
-							i,
-							config_.box_lengths[i]);
-		}
-	}
 }
 
-void SimConf::validate_method_parameters() const {
+void ConfigParser::validate_method_parameters() const {
 	if (config_.steps.timestep <= 0.0f) {
 		throw Exception(ExceptionType::ValueError,
 						SourceLocation(),
@@ -563,7 +556,7 @@ void SimConf::validate_method_parameters() const {
 	}
 }
 
-void SimConf::validate_output_parameters() const {
+void ConfigParser::validate_output_parameters() const {
 	if (config_.output_period <= 0.0f) {
 		throw Exception(ExceptionType::ValueError,
 						SourceLocation(),
@@ -582,48 +575,130 @@ void SimConf::validate_output_parameters() const {
 		throw Exception(ExceptionType::ValueError, SourceLocation(), "Output name cannot be empty");
 	}
 }
+#ifdef USE_PYTHON
+void ConfigParser::parse_dictionary(const std::map<std::string, pybind11::object>& config_dict) {
 
-BoundaryConditions SimConf::create_boundary_conditions() const {
-	Vector3 origin{0, 0, 0};
-
-	switch (config_.periodicity) {
-	case Periodicity::AllPeriodic:
-		return BoundaryConditions(Vector3(config_.box_lengths[0], 0, 0),
-								  Vector3(0, config_.box_lengths[1], 0),
-								  Vector3(0, 0, config_.box_lengths[2]),
-								  origin,
-								  true,
-								  true,
-								  true);
-	case Periodicity::TwoDimensional:
-		return BoundaryConditions(Vector3(config_.box_lengths[0], 0, 0),
-								  Vector3(0, config_.box_lengths[1], 0),
-								  Vector3(0, 0, 0),
-								  origin,
-								  true,
-								  true,
-								  false);
-	case Periodicity::OneDimensional:
-		return BoundaryConditions(Vector3(config_.box_lengths[0], 0, 0),
-								  Vector3(0, 0, 0),
-								  Vector3(0, 0, 0),
-								  origin,
-								  true,
-								  false,
-								  false);
-	case Periodicity::Open:
-		return BoundaryConditions(Vector3(config_.box_lengths[0], 0, 0),
-								  Vector3(0, config_.box_lengths[1], 0),
-								  Vector3(0, 0, config_.box_lengths[2]),
-								  origin,
-								  false,
-								  false,
-								  false);
-	default:
-		throw Exception(ExceptionType::ValueError,
-						SourceLocation(),
-						"Unsupported periodicity type");
+	for (const auto& [key, value] : config_dict) {
+		try {
+			if (key == "temperature") {
+				config_.set_temperature(pybind11::cast<float>(value));
+			} else if (key == "cutoff") {
+				config_.cutoff.value = pybind11::cast<float>(value);
+			} else if (key == "timestep") {
+				config_.set_timestep(pybind11::cast<float>(value));
+			} else if (key == "num_steps" || key == "steps") {
+				config_.set_num_steps(pybind11::cast<int>(value));
+			} else if (key == "output_period") {
+				config_.output_period = pybind11::cast<float>(value);
+			} else if (key == "energy_output_period") {
+				config_.energy_output_period = pybind11::cast<float>(value);
+			} else if (key == "decomp_period") {
+				config_.decomp_period = pybind11::cast<float>(value);
+			} else if (key == "output_name") {
+				config_.output_name = pybind11::cast<std::string>(value);
+			} else if (key == "pressure") {
+				config_.pressure.value = pybind11::cast<float>(value);
+			} else if (key == "replicas") {
+				config_.replicas = pybind11::cast<int>(value);
+			} else if (key == "box_size") {
+				// Handle box size as tuple/list of 3 floats
+				auto box_list = pybind11::cast<std::vector<float>>(value);
+				if (box_list.size() == 3) {
+					config_.set_box_size(box_list[0], box_list[1], box_list[2]);
+				} else {
+					throw Exception(ExceptionType::ValueError,
+									SourceLocation(),
+									"Box size must be a list/tuple of 3 floats");
+				}
+			} else if (key == "decomposer") {
+				std::string decomposer_str = pybind11::cast<std::string>(value);
+				if (decomposer_str == "Spatial") {
+					config_.decomposer = DecomposerType::Spatial;
+				} else if (decomposer_str == "RecursiveBisection") {
+					config_.decomposer = DecomposerType::RecursiveBisection;
+				} else if (decomposer_str == "Geometric") {
+					config_.decomposer = DecomposerType::Geometric;
+				} else {
+					throw Exception(ExceptionType::ValueError,
+									SourceLocation(),
+									"Unknown decomposer type: {}",
+									decomposer_str);
+				}
+			} else if (key == "long_range_method") {
+				std::string method_str = pybind11::cast<std::string>(value);
+				if (method_str == "CutoffAMR") {
+					config_.long_range_method = LongRangeMethod::CutoffAMR;
+				} else if (method_str == "PPPM") {
+					config_.long_range_method = LongRangeMethod::PPPM;
+				} else if (method_str == "PME") {
+					config_.long_range_method = LongRangeMethod::PME;
+				} else if (method_str == "FMM") {
+					config_.long_range_method = LongRangeMethod::FMM;
+				} else if (method_str == "Direct") {
+					config_.long_range_method = LongRangeMethod::Direct;
+				} else if (method_str == "None") {
+					config_.long_range_method = LongRangeMethod::None;
+				} else {
+					throw Exception(ExceptionType::ValueError,
+									SourceLocation(),
+									"Unknown long range method: {}",
+									method_str);
+				}
+			} else if (key == "particle_dynamic_type") {
+				std::string dynamic_str = pybind11::cast<std::string>(value);
+				if (dynamic_str == "Brownian") {
+					config_.ParticleDynamicType = DynamicType::Brownian;
+				} else if (dynamic_str == "Langevin") {
+					config_.ParticleDynamicType = DynamicType::Langevin;
+				} else if (dynamic_str == "DPD") {
+					config_.ParticleDynamicType = DynamicType::DPD;
+				} else {
+					throw Exception(ExceptionType::ValueError,
+									SourceLocation(),
+									"Unknown particle dynamic type: {}",
+									dynamic_str);
+				}
+			} else if (key == "rigid_body_dynamic_type") {
+				std::string dynamic_str = pybind11::cast<std::string>(value);
+				if (dynamic_str == "Brownian") {
+					config_.RigidBodyDynamicType = DynamicType::Brownian;
+				} else if (dynamic_str == "Langevin") {
+					config_.RigidBodyDynamicType = DynamicType::Langevin;
+				} else if (dynamic_str == "DPD") {
+					config_.RigidBodyDynamicType = DynamicType::DPD;
+				} else {
+					throw Exception(ExceptionType::ValueError,
+									SourceLocation(),
+									"Unknown rigid body dynamic type: {}",
+									dynamic_str);
+				}
+			} else if (key == "output_format") {
+				std::string format_str = pybind11::cast<std::string>(value);
+				if (format_str == "DCD") {
+					config_.output_format = OutputFormat::DCD;
+				} else if (format_str == "PDB") {
+					config_.output_format = OutputFormat::PDB;
+				} else if (format_str == "HDF5") {
+					config_.output_format = OutputFormat::HDF5;
+				} else {
+					throw Exception(ExceptionType::ValueError,
+									SourceLocation(),
+									"Unknown output format: {}",
+									format_str);
+				}
+			} else {
+				LOGINFO("ConfigParser: Ignoring unknown configuration parameter '{}'", key);
+			}
+		} catch (const pybind11::cast_error& e) {
+			throw Exception(ExceptionType::ValueError,
+							SourceLocation(),
+							"Failed to cast parameter '{}' to expected type: {}",
+							key,
+							e.what());
+		}
 	}
-}
 
+	LOGINFO("ConfigParser: Successfully parsed configuration from Python dictionary");
+}
+#endif
 } // namespace ARBD

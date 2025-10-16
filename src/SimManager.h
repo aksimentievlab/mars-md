@@ -203,7 +203,7 @@ class SimManager {
 	 * @param types Output vector for particle types
 	 */
 	void generate_initial_particles(std::vector<Vector3>& positions, std::vector<int>& types);
-
+	void initialize_rngs();
 	/**
 	 * @brief Write final restart file
 	 */

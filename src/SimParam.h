@@ -17,6 +17,7 @@
 #include <memory>
 
 namespace ARBD {
+
 /**
  * @brief Temperature configuration - supports both constant values and spatial grids
  */
@@ -42,6 +43,12 @@ struct Temperature {
 		} else {
 			this->grid = nullptr;
 		}
+	}
+	float get_kT(Vector3 position) {
+		if (format == Format::Grid) {
+			return grid->get_value(position);
+		}
+		return value;
 	}
 };
 
@@ -96,51 +103,6 @@ struct SimSteps {
 	}
 };
 
-/**
- * @brief Boundary conditions with periodic/non-periodic support
- */
-class BoundaryConditions {
-  public:
-	BoundaryConditions() = default;
-
-	BoundaryConditions(Vector3 basis1,
-					   Vector3 basis2,
-					   Vector3 basis3,
-					   Vector3 origin = {0.0f, 0.0f, 0.0f},
-					   bool periodic1 = true,
-					   bool periodic2 = true,
-					   bool periodic3 = true)
-		: origin_{origin}, basis_{basis1, basis2, basis3},
-		  periodic_{periodic1, periodic2, periodic3} {}
-
-	// Accessors
-	const Vector3& get_origin() const {
-		return origin_;
-	}
-	const std::array<Vector3, 3>& get_basis() const {
-		return basis_;
-	}
-	const std::array<bool, 3>& get_periodicity() const {
-		return periodic_;
-	}
-
-	// Python-friendly setters
-	void set_origin(const Vector3& origin) {
-		origin_ = origin;
-	}
-	void set_basis(const Vector3& b1, const Vector3& b2, const Vector3& b3) {
-		basis_ = {b1, b2, b3};
-	}
-	void set_periodicity(bool p1, bool p2, bool p3) {
-		periodic_ = {p1, p2, p3};
-	}
-
-  private:
-	Vector3 origin_{0, 0, 0};
-	std::array<Vector3, 3> basis_{Vector3{5000, 0, 0}, Vector3{0, 5000, 0}, Vector3{0, 0, 5000}};
-	std::array<bool, 3> periodic_{true, true, true};
-};
-
 //================================================================================
 // Simulation Method Enumerations
 //================================================================================
@@ -150,6 +112,7 @@ enum class DecomposerType {
 	RecursiveBisection, // For non-uniform systems (load balancing)
 	Geometric			// For systems with specific shapes (e.g., membranes)
 };
+enum class DecomposeDirection { X, Y, Z };
 
 enum class LongRangeMethod {
 	CutoffAMR, ///< Adaptive cutoff with mesh refinement
@@ -160,14 +123,11 @@ enum class LongRangeMethod {
 	None	   ///< No long-range interactions
 };
 
-enum class Periodicity { AllPeriodic, TwoDimensional, OneDimensional, Open };
-
 enum class DynamicType { Brownian, Langevin, DPD };
 
 enum class OutputFormat { DCD, PDB, HDF5 };
 
 enum class ThermostatType { Langevin, NVE, NoseHooverLangevin };
 enum class BarostatType { Isobaric, Isochoric };
-enum class InteractionForm { Tabulated, Analytical };
-
+enum class InteractionForm { Grid, Tabulated, Analytical };
 } // namespace ARBD

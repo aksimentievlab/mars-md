@@ -9,15 +9,14 @@
 
 #pragma once
 
-#include "Backend/Resource.h"
-#include "SimParam.h"
-#include "Types/BaseGrid.h"
-#include "Objects/ARBDObjects.h"
-#include "Objects/Patch.h"
-#include "Objects/ParticleProperties.h"
-#include "Objects/RigidBodyProperties.h"
 #include "Backend/Buffer.h"
 #include "Backend/Resource.h"
+#include "Objects/ARBDObjects.h"
+#include "Objects/ParticleProperties.h"
+#include "Objects/Patch.h"
+#include "Objects/RigidBodyProperties.h"
+#include "SimParam.h"
+#include "Types/BaseGrid.h"
 
 #include <Interactions.h>
 #include <memory>
@@ -207,9 +206,9 @@ class CutoffAMRElectrostatics : public LongRangeElectrostatics {
   private:
 	void initialize_amr_hierarchy() {
 		// Create initial coarse grid
-		Matrix3_t<float> basis = Matrix3_t<float>::diagonal(config_.cutoff_distance,
-															config_.cutoff_distance,
-															config_.cutoff_distance);
+		Matrix3_t<float> basis = Matrix3_t<float>(config_.cutoff_distance,
+												  config_.cutoff_distance,
+												  config_.cutoff_distance);
 		Vector3 origin(-50.0f, -50.0f, -50.0f); // System-dependent
 
 		auto coarse_grid = std::make_unique<BaseGrid<float>>(basis, origin, 32, 32, 32);
@@ -219,14 +218,14 @@ class CutoffAMRElectrostatics : public LongRangeElectrostatics {
 		particle_count_grids_.push_back(std::move(count_grid));
 	}
 
-	void update_particle_density(const ParticleBuffer_t<float>& particles) {
+	void update_particle_density(const ParticleBuffer<float>& particles) {
 		// Reset particle counts
 		for (auto& grid : particle_count_grids_) {
 			grid->zero();
 		}
 
 		// Deposit particles onto grids
-		if (particles.layout() == ParticleBuffer::Layout::SoA) {
+		if (particles.layout() == ParticleBuffer<float>::Layout::SoA) {
 			const Vector3* positions = particles.get_position_array();
 			for (size_t i = 0; i < particles.size(); ++i) {
 				deposit_particle_to_amr(positions[i], 1.0f);

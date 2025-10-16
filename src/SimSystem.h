@@ -16,8 +16,10 @@
 #include "Backend/Buffer.h"
 #include "Backend/Resource.h"
 #include "Configuration.h"
-#include "System/Decompose2Patch.h"
+#include "IO/ConfigParser.h"
+#include "System/Decomposer.h"
 #include "System/PatchManager.h"
+#include "System/PeriodicBox.h"
 #include "Types/IndexList.h"
 #include "Types/Types.h"
 #include <array>
@@ -34,7 +36,7 @@ class PatchDecomposer;
 class SpatialPatchDecomposer;
 
 //================================================================================
-// Simulation System - System State Management and Coordination
+// Simulation System - Global System State Management and Coordination
 //================================================================================
 class SimSystem {
 	friend class PatchDecomposer;
@@ -46,12 +48,8 @@ class SimSystem {
 	 * @param conf Configuration manager with validated parameters
 	 * @param resources Available computational resources
 	 */
-	SimSystem(const SimConf& conf, const ResourceCollection& resources)
-		: config_(conf.get_config()), resources_(resources) {
+	SimSystem(const ConfigParser& conf) : config_(conf.get_config()) {
 		LOGINFO("SimSystem: Initializing from configuration");
-
-		// Create boundary conditions from configuration
-		boundary_conditions_ = conf.create_boundary_conditions();
 
 		// Create the chosen decomposer instance (Factory Pattern)
 		decomposer_ = create_patch_decomposer(config_.decomposer);
@@ -59,23 +57,15 @@ class SimSystem {
 		LOGINFO("SimSystem: Using decomposer '{}'", decomposer_->get_name());
 	}
 
-	//================================================================================
-	// System Management Methods
-	//================================================================================
-
-	/**
-	 * @brief Triggers the domain decomposition process
-	 * Typically called once at initialization, but can be used for rebalancing
-	 */
 	void decompose_system() {
 		if (!decomposer_) {
 			throw Exception(ExceptionType::ValueError,
 							SourceLocation(),
 							"No decomposer has been set");
 		}
-		LOGINFO("SimSystem: Starting domain decomposition");
+		LOGINFO("SimSystem: Starting patch decomposition");
 		decomposer_->decompose(*this, resources_);
-		LOGINFO("SimSystem: Domain decomposition completed");
+		LOGINFO("SimSystem: patch decomposition completed");
 	}
 
 	/**
@@ -92,12 +82,6 @@ class SimSystem {
 	 * @param types Initial particle types
 	 */
 	void initialize_particles(const std::vector<Vector3>& positions, const std::vector<int>& types);
-
-	/**
-	 * @brief Set particle positions (GPU-compatible)
-	 * @param positions New particle positions
-	 */
-	void set_particle_positions(const std::vector<Vector3>& positions);
 
 	/**
 	 * @brief Build neighbor list for force calculations
@@ -139,8 +123,8 @@ class SimSystem {
 	/**
 	 * @brief Get boundary conditions
 	 */
-	const BoundaryConditions& get_boundary_conditions() const {
-		return boundary_conditions_;
+	const PeriodicBox& get_boundary_conditions() const {
+		return config_.sim_box;
 	}
 
 	/**
@@ -161,7 +145,9 @@ class SimSystem {
 	 * @brief Get box dimensions (from configuration)
 	 */
 	Vector3 get_box_size() const {
-		return Vector3(config_.box_lengths[0], config_.box_lengths[1], config_.box_lengths[2]);
+		return Vector3(config_.sim_box.get_box_size().x,
+					   config_.sim_box.get_box_size().y,
+					   config_.sim_box.get_box_size().z);
 	}
 
 	/**
@@ -187,13 +173,6 @@ class SimSystem {
 	 */
 	bool has_bonds() const {
 		return config_.objects.bonds.size() > 0;
-	}
-
-	/**
-	 * @brief Check if system has external forces (GPU-compatible)
-	 */
-	bool has_external_forces() const {
-		return config_.objects.interactions.size() > 0;
 	}
 
 	/**
@@ -297,7 +276,6 @@ class SimSystem {
 
 	// Configuration management (host-only)
 	Configuration config_;
-	BoundaryConditions boundary_conditions_;
 	size_t seed_;
 
 	// Resources and decomposition (host-only)

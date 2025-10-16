@@ -140,6 +140,9 @@ struct alignas(16) Matrix3_t {
 		return cols[2];
 	}
 
+	Vector3& diagonal() {
+		return Vector3(cols[0].x, cols[1].y, cols[2].z);
+	}
 #ifdef HOST_GUARD
 
 	auto to_string() const {

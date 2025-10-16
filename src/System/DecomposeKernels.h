@@ -1,9 +1,15 @@
 #pragma once
 
 /*********************************************************************
- * @file  CellDecompositionKernels.h
+ * @file  DecomposeKernels.h
  *
- * @brief Kernel functors for CellDecomposition operations
+ * @brief GPU kernel functors for patch decomposition operations
+ *
+ * This file contains device-only kernel functors for:
+ * - Particle assignment to patches
+ * - Cell decomposition operations
+ * - Range creation and binding
+ * - Validation kernels
  *********************************************************************/
 
 #include "Types/BaseGrid.h"

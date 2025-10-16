@@ -2,6 +2,7 @@
 #include "../BondedInteraction.h"
 #include "Header.h"
 #include "IO/Reader.h"
+#include "TablesRegistry.h"
 
 namespace ARBD {
 
@@ -55,7 +56,8 @@ class BondedReader {
 
 		if (iss >> angle.ind1 >> angle.ind2 >> angle.ind3 >> angle.name) {
 			angle.form = InteractionForm::Tabulated;
-			angle.functionIndex = -1; // Will be set when loading the table
+			// Resolve via registry: assumes name is a filename or key and path == name
+			angle.functionIndex = TablesRegistry::instance().getOrLoadAngle(angle.name, angle.name);
 			angles_.push_back(angle);
 		} else {
 			LOGWARN("BondedReader.h: Failed to parse ANGLE line: {}", line);
@@ -69,7 +71,7 @@ class BondedReader {
 		if (iss >> dihedral.ind1 >> dihedral.ind2 >> dihedral.ind3 >> dihedral.ind4 >>
 			dihedral.name) {
 			dihedral.form = InteractionForm::Tabulated;
-			dihedral.functionIndex = -1; // Will be set when loading the table
+			dihedral.functionIndex = TablesRegistry::instance().getOrLoadDihedral(dihedral.name, dihedral.name);
 			dihedrals_.push_back(dihedral);
 		} else {
 			LOGWARN("BondedReader.h: Failed to parse DIHEDRAL line: {}", line);
@@ -82,7 +84,7 @@ class BondedReader {
 
 		if (iss >> bond.ind1 >> bond.ind2 >> bond.name) {
 			bond.form = InteractionForm::Tabulated;
-			bond.functionIndex = -1; // Will be set when loading the table
+			bond.functionIndex = TablesRegistry::instance().getOrLoadBond(bond.name, bond.name);
 			bond.flag = BondFlag::DEFAULT;
 			bonds_.push_back(bond);
 		} else {

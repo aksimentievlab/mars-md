@@ -80,6 +80,18 @@ class alignas(4 * sizeof(T)) Vector3_t {
 	}
 
 	// Assignment operators
+	HOST DEVICE constexpr Vector3_t<T>& operator[](int i) {
+		if (i == 0)
+			return x;
+		if (i == 1)
+			return y;
+		if (i == 2)
+			return z;
+		if (i == 3)
+			return w;
+		return nanf("Invalid index for Vector3_t");
+	}
+
 	HOST DEVICE constexpr Vector3_t<T>& operator=(const Vector3_t<T>& v) {
 		x = v.x;
 		y = v.y;

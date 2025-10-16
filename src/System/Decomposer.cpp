@@ -1,4 +1,4 @@
-#include "System/Decompose2Patch.h"
+#include "System/Decomposer.h"
 #include "SimSystem.h"
 #include "System/PatchManager.h"
 #include "Types/Types.h"
@@ -12,7 +12,7 @@ namespace ARBD {
 //================================================================================
 
 void SpatialPatchDecomposer::decompose(SimSystem& sys, const ResourceCollection& resources) {
-	const BoundaryConditions& bcs = sys.get_boundary_conditions();
+	const PeriodicBox& bcs = sys.get_boundary_conditions();
 	const Length cutoff = Length(sys.get_cutoff());
 
 	LOGINFO("Starting spatial patch decomposition with cutoff: {}", cutoff.value);
@@ -70,13 +70,13 @@ void SpatialPatchDecomposer::decompose(SimSystem& sys, const ResourceCollection&
 		patch_resources[idx] = resources.resources[resource_idx];
 	}
 
-	// Create PatchManager and assign particles to patches
-	LOGINFO("Creating PatchManager and assigning particles to patches");
+	// Create PatchManager for multi-GPU/MPI coordination
+	LOGINFO("Creating PatchManager for patch coordination and communication");
 
-	// Create PatchManager
+	// Create PatchManager (handles multi-patch coordination, not individual patches)
 	sys.patch_manager_ = std::make_unique<PatchManager>(sys);
 
-	// Initialize PatchManager with grid dimensions
+	// Initialize PatchManager with spatial grid dimensions
 	const auto& periodicity = bcs.get_periodicity();
 	sys.patch_manager_->initialize(static_cast<int>(n_patches.x),
 								   static_cast<int>(n_patches.y),
@@ -86,6 +86,12 @@ void SpatialPatchDecomposer::decompose(SimSystem& sys, const ResourceCollection&
 								   periodicity[2]  // periodic_z
 	);
 
+	// Note: Individual Patch objects are created by PatchManager during initialization
+	// The decomposer's job is to:
+	// 1. Calculate patch boundaries (done above)
+	// 2. Create PatchManager for coordination (done above)
+	// 3. Assign particles to patches (TODO: implement with ParticleAssignmentFunctor)
+
 	// Get particle data from system
 	const auto& particles = sys.get_particle_positions();
 	if (!particles.empty()) {
@@ -94,6 +100,7 @@ void SpatialPatchDecomposer::decompose(SimSystem& sys, const ResourceCollection&
 		// TODO: Implement actual particle assignment to patches
 		// This would use the ParticleAssignmentFunctor from DecomposeKernels.h
 		// to assign particles to patches based on their positions
+		// Individual Patch objects will be created by PatchManager
 
 		// For now, just log that we have particles to assign
 		LOGINFO("Particle assignment to patches not yet implemented");

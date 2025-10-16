@@ -24,7 +24,8 @@
 
 #include "Backend/MPIManager.h"
 #include "Backend/Resource.h"
-#include "Objects/Patch.h"
+#include "System/Patch.h"
+#include "System/PeriodicBox.h"
 #include "Types/Types.h"
 #include <array>
 #include <unordered_set>

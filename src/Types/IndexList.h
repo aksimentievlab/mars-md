@@ -61,7 +61,6 @@ class IndexList {
 		return *this;
 	}
 
-
 	/*===================*\
 	|  CAPACITY           |
 	\*===================*/
@@ -451,3 +450,9 @@ HOST DEVICE constexpr IndexList<T, 3> index_to_ijk(T linear_index, const T dims[
 }
 
 } // namespace ARBD
+// SYCL specialization
+#ifdef USE_SYCL
+#include <sycl/sycl.hpp>
+template<typename T>
+struct sycl::is_device_copyable<ARBD::IndexList<T> > : std::true_type {};
+#endif

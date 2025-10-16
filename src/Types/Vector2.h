@@ -29,3 +29,10 @@ class alignas(2 * sizeof(T)) Vec2 {
 };
 
 } // namespace ARBD
+
+// SYCL specialization
+#ifdef USE_SYCL
+#include <sycl/sycl.hpp>
+template<typename T>
+struct sycl::is_device_copyable<ARBD::Vec2<T> > : std::true_type {};
+#endif

@@ -125,4 +125,9 @@ HOST DEVICE inline ForceEnergy operator*(float scalar, const ForceEnergy& fe) {
 	return fe * scalar;
 }
 
+struct ComputeForce {
+	Vector3 operator()(const Vector3& r) const {
+		return r;
+	}
+};
 } // namespace ARBD

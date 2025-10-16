@@ -26,42 +26,16 @@ SystemState::~SystemState() {
 // Particle State Management
 //================================================================================
 
-void SystemState::initialize_particles(const std::vector<Vector3>& positions, const std::vector<int>& types) {
-	LOGINFO("SystemState: Initializing {} particles", positions.size());
-
-	if (positions.size() != types.size()) {
-		throw Exception(ExceptionType::ValueError,
-						SourceLocation(),
-						"Position and type vectors must have the same size");
-	}
-
-	num_particles_ = positions.size();
-	particle_positions_ = positions;
-	particle_types_ = types;
-
-	// Initialize velocities to zero
-	particle_velocities_.resize(num_particles_, Vector3{0, 0, 0});
-
-	// TODO: In real implementation, this would create GPU buffers
-	// DeviceBuffer<Vector3> positions_buffer(num_particles_, resource);
-	// DeviceBuffer<Vector3> velocities_buffer(num_particles_, resource);
-	// DeviceBuffer<int> types_buffer(num_particles_, resource);
-
-	LOGINFO("SystemState: Particles initialized successfully");
-}
-
 void SystemState::set_particle_positions(const std::vector<Vector3>& positions) {
 	if (positions.size() != num_particles_) {
 		throw Exception(ExceptionType::ValueError,
 						SourceLocation(),
 						"Position vector size ({}) does not match number of particles ({})",
-						positions.size(), num_particles_);
+						positions.size(),
+						num_particles_);
 	}
 
-	particle_positions_ = positions;
-
-	// TODO: In real implementation, this would update GPU buffers
-	// positions_buffer.copy_from_host(positions.data(), num_particles_);
+	objects_.particles = positions;
 
 	LOGINFO("SystemState: Updated particle positions");
 }
@@ -96,11 +70,9 @@ void SystemState::initialize_system_objects() {
 	LOGINFO("SystemState: System objects initialized");
 }
 
-
 //================================================================================
 // Private Methods
 //================================================================================
-
 
 void SystemState::cleanup_gpu_resources() {
 	// TODO: In real implementation, this would clean up GPU resources

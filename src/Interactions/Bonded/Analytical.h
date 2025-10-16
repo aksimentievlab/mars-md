@@ -1,92 +1,162 @@
 #pragma once
 #include "Header.h"
+#include "SimParam.h"
 #include "Types/Types.h"
 
 namespace ARBD {
-class Register_Potential {
-  public:
-	// Returns a unique integer ID for the potential name
-	int register_potential(const std::string& name) {
-		if (m_name_to_id.find(name) == m_name_to_id.end()) {
-			int new_id = m_name_to_id.size();
-			m_name_to_id[name] = new_id;
-		}
-		return m_name_to_id[name];
-	}
 
-	int get_id(const std::string& name) const {
-		return m_name_to_id.at(name);
-	}
+enum class AnalyticalBondType { Harmonic = 0, Morse = 1, WLCSK = 2, FENE = 3 };
+enum class AnalyticalAngleType { Harmonic = 0, Morse = 1, WLCSK = 2, FENE = 3 };
+enum class AnalyticalDihedralType { Harmonic = 0, Morse = 1, WLCSK = 2, FENE = 3 };
 
-  private:
-	std::unordered_map<std::string, int> m_name_to_id;
+// ============================================================================
+// Force Computation Templates - One per bond type
+// Using uniform float* parameter arrays for flexibility
+// ============================================================================
+
+template<int TypeId>
+struct AnalyticalBondComputer;
+
+template<>
+struct AnalyticalBondComputer<0> {
+	static constexpr int NUM_PARAMS = 2;
+
+	DEVICE static inline float compute(float distance, const float* params) {
+		const float k = params[0];	// Spring constant
+		const float r0 = params[1]; // Equilibrium distance
+		return -k * (distance - r0);
+	}
 };
 
-enum class BondType { Harmonic = 0, Morse = 1 }; // for precompiled type_id reference.
+// Morse Bond: F = 2*D0*a*exp(-a(r-r0))*[1-exp(-a(r-r0))]
+// Parameters: [D0, a, r0]
+template<>
+struct AnalyticalBondComputer<1> {
+	static constexpr int NUM_PARAMS = 3;
 
+	DEVICE static inline float compute(float distance, const float* params) {
+		const float D0 = params[0]; // Dissociation energy
+		const float a = params[1];	// Width parameter
+		const float r0 = params[2]; // Equilibrium distance
+		const float exp_term = expf(-a * (distance - r0));
+		return 2.0f * D0 * a * exp_term * (1.0f - exp_term);
+	}
+};
+
+// WLCSK Bond (Worm-Like Chain with Shear and Kink)
+// Parameters: [d, lp, kT]
+template<>
+struct AnalyticalBondComputer<2> {
+	static constexpr int NUM_PARAMS = 3;
+
+	DEVICE static inline float compute(float distance, const float* params) {
+		const float d = params[0];	// Contour length
+		const float lp = params[1]; // Persistence length
+		const float kT = params[2]; // Thermal energy
+
+		const float nk = distance / (2.0f * lp);
+		const float q2 = (distance / d) * (distance / d);
+		const float a1 = 1.0f;
+		const float a2 = -7.0f / (2.0f * nk);
+		const float a3 = 3.0f / 32.0f - 3.0f / (8.0f * nk) - 6.0f / (4.0f * nk * nk);
+		const float p0 = 13.0f / 32.0f;
+		const float p1 = 3.4719f;
+		const float p2 = 2.5064f;
+		const float p3 = -1.2906f;
+		const float p4 = 0.6482f;
+		const float a4 = (p0 + p1 / (2.0f * nk) + p2 / (4.0f * nk * nk)) /
+						 (1.0f + p3 / (2.0f * nk) + p4 / (4.0f * nk * nk));
+		const float u =
+			kT * nk *
+			(a1 / (1.0f - q2) - a2 * logf(1.0f - q2) + a3 * q2 - 0.5f * a4 * q2 * (q2 - 2.0f));
+		return u;
+	}
+};
+
+// FENE Bond: F = -k*r*(1-r/r0)
+template<>
+struct AnalyticalBondComputer<3> {
+	static constexpr int NUM_PARAMS = 2;
+
+	DEVICE static inline float compute(float distance, const float* params) {
+		const float k = params[0];	// Spring constant
+		const float r0 = params[1]; // Equilibrium distance
+		return -k * distance * (1.0f - distance / r0);
+	}
+};
+
+template<int TypeId>
 struct AnalyticalBondFunctor {
-	HOST DEVICE void
-	operator()(idx_t i,		// Thread ID, corresponds to the i-th bond IN THE CURRENT BATCH
-			   int type_id, // The integer ID for this batch of bonds (e.g., 0 for Harmonic)
-			   int offset,
-			   // --- Pointers to DEVICE SoA Data ---
-			   DEVICE_PTR(Vector3) positions,
-			   DEVICE_PTR(Vector3) forces,
-			   DEVICE_PTR(int2) particle_indices, // Bond connectivity for ALL bond
-			   // --- Pointers to Parameter Arrays for Each Potential Type ---
-			   DEVICE_PTR(const float2) harmonic_params, // { k, r0 }
-			   DEVICE_PTR(const Vector3) morse_params	 // { D0, a, r0 }
-			   // Add more parameter array pointers here for new C++ potentials
-	) const {
-		// 1. Get Particle Indices for this specific bond
-		// Note: We use the thread ID 'i' directly as the index into the
-		// parameter arrays, but we must use an offset for the DEVICE particle_indices array.
-		// This offset is handled by the caller when launching the kernel.
+	HOST DEVICE void operator()(idx_t i,
+								DEVICE_PTR(Vector3) positions,
+								DEVICE_PTR(Vector3) forces,
+								DEVICE_PTR(const int2) particle_indices,
+								DEVICE_PTR(const float) params, // Flat parameter array
+								int offset = 0) const {
+		// Get particle indices
+		const int p1 = particle_indices[i + offset].x;
+		const int p2 = particle_indices[i + offset].y;
 
-		const int p1_idx = particle_indices[i + offset].x;
-		const int p2_idx = particle_indices[i + offset].y;
-
-		// 2. Fetch Particle Positions
-		const Vector3 pos1 = positions[p1_idx];
-		const Vector3 pos2 = positions[p2_idx];
-
-		// 3. Calculate distance and direction
-		const Vector3 r_ij = pos2 - pos1;
+		// Compute bond vector and distance
+		const Vector3 r_ij = positions[p2] - positions[p1];
 		const float distance = r_ij.length();
-		if (distance < 1e-6f) { // Avoid division by zero
-			return;
-		}
-		const Vector3 direction = r_ij / distance;
 
-		float force_magnitude = 0.0f;
+		if (distance < 1e-6f)
+			return; // Avoid division by zero
 
-		switch (type_id) {
-		case 0: {								   // harmonic
-			const float k = harmonic_params[i].x;  // Spring constant
-			const float r0 = harmonic_params[i].y; // Equilibrium distance
+		// Get parameters for this bond
+		constexpr int num_params = AnalyticalBondComputer<TypeId>::NUM_PARAMS;
+		const float* bond_params = params + (i * num_params);
 
-			force_magnitude = -k * (distance - r0);
-			break;
-		}
+		// Compute force magnitude using specialized template
+		const float force_magnitude =
+			AnalyticalBondComputer<TypeId>::compute(distance, bond_params);
 
-		case 1: {								// morse
-			const float D0 = morse_params[i].x; // Dissociation energy
-			const float a = morse_params[i].y;	// Controls the width of the potential
-			const float r0 = morse_params[i].z; // Equilibrium distance
-
-			// Force Law: F = 2 * D0 * a * exp(-a * (r - r0)) * [1 - exp(-a * (r - r0))]
-			const float exp_term = expf(-a * (distance - r0));
-			force_magnitude = 2.0f * D0 * a * exp_term * (1.0f - exp_term);
-			break;
-		}
-		}
-
-		// 5. Calculate the final force vector
-		const Vector3 force_vec = direction * force_magnitude;
-
-		// 6. Atomically Add Forces to the DEVICE Force Array
-		ATOMIC_ADD(&forces[p1_idx], -force_vec);
-		ATOMIC_ADD(&forces[p2_idx], force_vec);
+		// Apply force atomically
+		const Vector3 force = (r_ij / distance) * force_magnitude;
+		atomic_add(&forces[p1].x, -force.x);
+		atomic_add(&forces[p1].y, -force.y);
+		atomic_add(&forces[p1].z, -force.z);
+		atomic_add(&forces[p2].x, force.x);
+		atomic_add(&forces[p2].y, force.y);
+		atomic_add(&forces[p2].z, force.z);
 	}
 };
+
+struct AnalyticalAngleFunctor {
+	HOST DEVICE void operator()(idx_t i,
+								DEVICE_PTR(Vector3) positions,
+								DEVICE_PTR(Vector3) forces,
+								DEVICE_PTR(Vector3) particle_indices,
+								DEVICE_PTR(const float) params, // Flat parameter array
+								int offset = 0) const {
+		const int p1 = particle_indices[i + offset].x;
+		const int p2 = particle_indices[i + offset].y;
+		const int p3 = particle_indices[i + offset].z;
+
+		const Vector3 r_ij = positions[p2] - positions[p1];
+		const Vector3 r_ik = positions[p3] - positions[p1];
+		const float distance_ij = r_ij.length();
+		const float distance_ik = r_ik.length();
+	};
+}; // namespace ARBD;
+
+struct AnalyticalDihedralFunctor {
+	HOST DEVICE void operator()(idx_t i,
+								DEVICE_PTR(Vector3) positions,
+								DEVICE_PTR(Vector3) forces,
+								DEVICE_PTR(Vector3) particle_indices,
+								DEVICE_PTR(const float) params, // Flat parameter array
+								int offset = 0) const {
+		const int p1 = particle_indices[i + offset].x;
+		const int p2 = particle_indices[i + offset].y;
+		const int p3 = particle_indices[i + offset].z;
+		const int p4 = particle_indices[i + offset].w;
+
+		const Vector3 r_ij = positions[p2] - positions[p1];
+		const Vector3 r_ik = positions[p3] - positions[p1];
+		const float distance_ij = r_ij.length();
+		const float distance_ik = r_ik.length();
+	};
+}; // namespace ARBD;
 } // namespace ARBD

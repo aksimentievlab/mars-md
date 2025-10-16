@@ -48,7 +48,7 @@ bool parse_basic_args(int argc, char* argv[], ProgramOptions& opts) {
 		printf("  -i, --imd=         IMD port (defaults to %u)\n", kDefaultIMDPort);
 		printf("  -g, --gpus=        Number of GPUs to use (defaults to %u)\n", kDefaultGpus);
 		printf("  -gid, --gpu_ids=   List of GPU IDs to use (e.g., --gid 0 1 2 3)\n");
-		printf("  -n, --nodes=       Number of nodes to use (defaults to %u)\n", kDefaultNodes);
+		// printf("  -n, --nodes=       Number of nodes to use (defaults to %u)\n", kDefaultNodes);
 		return false; // Indicates help was shown, program should exit
 	} else if (argc == 2 && (strcmp(argv[1], "--version") == 0)) {
 		printf("%s %s\n", argv[0], VERSION);
@@ -175,24 +175,23 @@ int main(int argc, char* argv[]) {
 
 	if (!options.gpuIds.empty()) {
 		for (int gpuId : options.gpuIds) {
-			resource_collection.resources.push_back(ARBD::Resource::SYCL(gpuId));
+			resource_collection.resources.push_back(ARBD::Resource(gpuId));
 		}
 	}
 	// If user specified number of GPUs, try first N devices
 	else if (options.numGpus > 0) {
 		for (int i = 0; i < options.numGpus; ++i) {
-			resource_collection.resources.push_back(ARBD::Resource::SYCL(i));
+			resource_collection.resources.push_back(ARBD::Resource(i));
 		}
 	}
 	// Default: try device 0
 	else {
-		resource_collection.resources.push_back(ARBD::Resource::SYCL(0));
+		resource_collection.resources.push_back(ARBD::Resource(0));
 	}
 
 	// Fallback to CPU if no SYCL devices available
 	if (resource_collection.resources.empty()) {
 		std::cout << "No SYCL devices available. Falling back to CPU." << std::endl;
-		resource_collection.resources.push_back(ARBD::Resource::CPU());
 	}
 
 #elif defined(USE_METAL)
@@ -202,7 +201,7 @@ int main(int argc, char* argv[]) {
 	options.gpuIds.push_back(0);
 	options.numGpus = 1;
 
-	resource_collection.resources.push_back(ARBD::Resource::METAL(0));
+	resource_collection.resources.push_back(ARBD::Resource(0));
 
 #else
 	std::cout << "ARBD compiled with CPU-only support." << std::endl;

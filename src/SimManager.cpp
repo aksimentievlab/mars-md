@@ -14,9 +14,6 @@ void SimManager::init() {
 	// Initialize domain decomposition
 	sys_.decompose_system();
 
-	// Initialize random number generators
-	initialize_rngs();
-
 	// Initialize output writers
 	initialize_output_writers();
 
@@ -48,7 +45,7 @@ void SimManager::run() {
 		execute_integration(step);
 
 		// ===== MULTI-RESOURCE SYNCHRONIZATION =====
-		if (resources_.get_count() > 1) { // Assume ResourceCollection has get_count() method
+		if (resources_.resources.size() > 1) {
 			synchronize_multi_resource();
 		}
 
@@ -113,7 +110,9 @@ void SimManager::initialize_imd(int port) {
 
 void SimManager::initialize_rngs() {
 	// Initialize random number generators for each resource
-	for (const auto& resource : resources_) {
+	for (const auto& resource : resources_.resources) {
+		Random<Resource> rng(resource, 128);
+		rng.init(42);
 		// rngs_[&resource] = std::make_unique<RandomState>(/* seed based on resource ID */);
 		LOGINFO("SimManager: Initialized RNG for resource");
 	}
@@ -139,7 +138,7 @@ void SimManager::execute_force_calculation(size_t step) {
 		}
 
 		// 5. Apply external forces (electric field, grids)
-		if (sys_.has_external_forces()) {
+		if (sys_.has_electric_field()) {
 			// Compute external forces
 		}
 
@@ -149,8 +148,8 @@ void SimManager::execute_force_calculation(size_t step) {
 }
 
 void SimManager::execute_integration(size_t step) {
-	const Algorithm algorithm = sys_.get_algorithm();
-	const float timestep = sys_.get_timestep();
+	const DynamicType algorithm = sys_.config_.ParticleDynamicType;
+	const float timestep = sys_.config_.steps.timestep;
 	const float temperature = sys_.get_temperature();
 
 	for (auto& [resource, rng] : rngs_) {

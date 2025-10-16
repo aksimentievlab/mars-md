@@ -13,6 +13,7 @@
 #include "ARBDLogger.h"
 #include "Backend/Resource.h"
 #include "Configuration.h"
+#include "SimParam.h"
 #include "Types/Types.h"
 #include <memory>
 #include <string>
@@ -48,11 +49,11 @@ class PatchDecomposer {
 	virtual const std::string get_name() {
 		switch (type_) {
 		case DecomposerType::Spatial:
-			return "SpatialPatchDecomposer";
+			return "Spatial Decomposer";
 		case DecomposerType::RecursiveBisection:
-			return "RecursiveBisectionPatchDecomposer";
+			return "Recursive Bisection Decomposer";
 		case DecomposerType::Geometric:
-			return "GeometricPatchDecomposer";
+			return "Geometric Decomposer";
 		default:
 			throw ARBD::Exception(ARBD::ExceptionType::ValueError, "Unsupported decomposer type.");
 		}
@@ -75,7 +76,7 @@ class SpatialPatchDecomposer : public PatchDecomposer {
 	void decompose(SimSystem& sys, const ResourceCollection& resources) override;
 
   private:
-	DecomposerType type_ = DecomposerType::Spatial;
+	DecomposerType type_;
 };
 
 /**
@@ -91,7 +92,7 @@ class RecursiveBisectionPatchDecomposer : public PatchDecomposer {
 	void decompose(SimSystem& sys, const ResourceCollection& resources) override;
 
   private:
-	DecomposerType type_ = DecomposerType::RecursiveBisection;
+	DecomposerType type_;
 };
 
 /**
@@ -107,7 +108,7 @@ class GeometricPatchDecomposer : public PatchDecomposer {
 	void decompose(SimSystem& sys, const ResourceCollection& resources) override;
 
   private:
-	DecomposerType type_ = DecomposerType::Geometric;
+	DecomposerType type_;
 };
 
 /**
