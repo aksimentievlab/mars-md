@@ -110,7 +110,8 @@ struct SimSteps {
 enum class DecomposerType {
 	Spatial,			// For uniform systems - divides space into equal patches
 	RecursiveBisection, // For non-uniform systems (load balancing)
-	Geometric			// For systems with specific shapes (e.g., membranes)
+	Geometric,			// For systems with specific shapes (e.g., membranes)
+	ZOrder				// For cache-friendly spatial sorting and multi-device scaling
 };
 enum class DecomposeDirection { X, Y, Z };
 
@@ -123,7 +124,7 @@ enum class LongRangeMethod {
 	None	   ///< No long-range interactions
 };
 
-enum class DynamicType { Brownian, Langevin, DPD };
+enum class DynamicType { Brownian, Langevin,NoseHooverLangevin, DPD };
 
 enum class OutputFormat { DCD, PDB, HDF5 };
 

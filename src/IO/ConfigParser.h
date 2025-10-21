@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Configuration.h"
+#include "BondConfigReader.h"
 #include "Reader.h"
 #include <map>
 #include <string>	   // For std::string member

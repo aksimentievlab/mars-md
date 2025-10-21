@@ -9,19 +9,19 @@
 
 namespace ARBD {
 // build exclude tree
-
-// makeExcludes(Bond* bonds, int* bondMap, int num, int numBonds, std::string exList)
-// @param    list of sorted cell bonds; corresponding bond map; number of particles; number of
-// bonds;
-//           std::string formated like so "EXCLUDE 1-2 1-3 1-4"; number of excludes
-// @return   Array of Excludes
-// This algorithm finds the central particle in every bond tree,
-// then creates a list of exclusions for the particle pairs
-// defined in exList. For example, 1-2 means that there should
-// be an exclusion between the central particle and every
-// particle it is directly bonded to. 1-3 means that there should
-// be an exclusion between the central particle and every particle
-// it is two bonds away from
+/**
+ *@param num_particles Number of particles
+ *@param bonds List of sorted cell bonds
+ *@param exclusion_depth Depth of exclusion
+ *@return Array of Excludes
+ *This algorithm finds the central particle in every bond tree,
+ *then creates a list of exclusions for the particle pairs
+ *defined in exList. For example, 1-2 means that there should
+ *be an exclusion between the central particle and every
+ *particle it is directly bonded to. 1-3 means that there should
+ *be an exclusion between the central particle and every particle
+ *it is two bonds away from
+ */
 std::vector<Exclude>
 make_exclusions_cpu(int num_particles, const std::vector<Bond>& bonds, int exclusion_depth);
 

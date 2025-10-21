@@ -1,7 +1,7 @@
 #pragma once
 #include "Header.h"
 
-#if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__) && !defined(__METAL_VERSION__)
+#ifdef HOST_GUARD
 #include <csignal>
 #endif
 
@@ -15,7 +15,7 @@ namespace ARBD {
  */
 namespace SignalManager {
 
-#if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__) && !defined(__METAL_VERSION__)
+#ifdef HOST_GUARD
 
 #ifdef SIGNAL
 
@@ -68,7 +68,9 @@ inline bool is_shutdown_requested() {
 
 #else
 // Stub implementations for device compilation
-struct siginfo_t { int dummy; };
+struct siginfo_t {
+	int dummy;
+};
 inline void segfault_handler(int sig, siginfo_t* info, void* secret) {}
 inline void manage_segfault() {}
 inline bool is_shutdown_requested() {

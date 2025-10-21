@@ -1,4 +1,5 @@
 #include "System/Decomposer.h"
+#include "System/ZOrderDecomposer.h"
 #include "SimSystem.h"
 #include "System/PatchManager.h"
 #include "Types/Types.h"
@@ -160,6 +161,9 @@ std::unique_ptr<PatchDecomposer> create_patch_decomposer(DecomposerType type) {
 
 	case DecomposerType::Geometric:
 		return std::make_unique<GeometricPatchDecomposer>();
+
+	case DecomposerType::ZOrder:
+		return std::make_unique<ZOrderDecomposer>();
 
 	default:
 		throw Exception(ExceptionType::ValueError, SourceLocation(), "Unsupported decomposer type");

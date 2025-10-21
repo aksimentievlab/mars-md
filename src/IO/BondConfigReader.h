@@ -1,14 +1,37 @@
 #pragma once
-#include "../BondedInteraction.h"
 #include "Header.h"
 #include "IO/Reader.h"
-#include "TablesRegistry.h"
+#include "Interactions/BondedInteraction.h"
+#include <string>
+#include <string_view>
+#include <vector>
 
 namespace ARBD {
-
-class BondedReader {
+/**
+ * @brief Reader for bond configuration files
+ * @param fileName Name of the configuration file to read.
+ * @return Returns angles, dihedrals, and bonds from the configuration file.
+ */
+// Registry to load and cache tabulated potentials by name
+class TablesRegistry {
   public:
-	explicit BondedReader(std::string_view fileName) {
+	static TablesRegistry& instance();
+
+	int getOrLoadAngle(const std::string& name, const std::string& path);
+	int getOrLoadDihedral(const std::string& name, const std::string& path);
+	int getOrLoadBond(const std::string& name, const std::string& path);
+
+  private:
+	TablesRegistry() = default;
+
+	std::unordered_map<std::string, int> angleNameToIdx_;
+	std::unordered_map<std::string, int> dihedralNameToIdx_;
+	std::unordered_map<std::string, int> bondNameToIdx_;
+};
+
+class BondConfigReader {
+  public:
+	explicit BondConfigReader(std::string_view fileName) {
 		readFile(fileName);
 	}
 
@@ -43,7 +66,7 @@ class BondedReader {
 			}
 		}
 
-		LOGINFO("BondedReader.h: Loaded {} angles, {} dihedrals, {} bonds from '{}'",
+		LOGINFO("BondConfigReader.h: Loaded {} angles, {} dihedrals, {} bonds from '{}'",
 				angles_.size(),
 				dihedrals_.size(),
 				bonds_.size(),
@@ -60,7 +83,7 @@ class BondedReader {
 			angle.functionIndex = TablesRegistry::instance().getOrLoadAngle(angle.name, angle.name);
 			angles_.push_back(angle);
 		} else {
-			LOGWARN("BondedReader.h: Failed to parse ANGLE line: {}", line);
+			LOGWARN("BondConfigReader.h: Failed to parse ANGLE line: {}", line);
 		}
 	}
 
@@ -71,10 +94,11 @@ class BondedReader {
 		if (iss >> dihedral.ind1 >> dihedral.ind2 >> dihedral.ind3 >> dihedral.ind4 >>
 			dihedral.name) {
 			dihedral.form = InteractionForm::Tabulated;
-			dihedral.functionIndex = TablesRegistry::instance().getOrLoadDihedral(dihedral.name, dihedral.name);
+			dihedral.functionIndex =
+				TablesRegistry::instance().getOrLoadDihedral(dihedral.name, dihedral.name);
 			dihedrals_.push_back(dihedral);
 		} else {
-			LOGWARN("BondedReader.h: Failed to parse DIHEDRAL line: {}", line);
+			LOGWARN("BondConfigReader.h: Failed to parse DIHEDRAL line: {}", line);
 		}
 	}
 
@@ -88,7 +112,7 @@ class BondedReader {
 			bond.flag = BondFlag::DEFAULT;
 			bonds_.push_back(bond);
 		} else {
-			LOGWARN("BondedReader.h: Failed to parse BOND line: {}", line);
+			LOGWARN("BondConfigReader.h: Failed to parse BOND line: {}", line);
 		}
 	}
 };

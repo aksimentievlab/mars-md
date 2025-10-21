@@ -110,7 +110,7 @@ class PatchManager {
 
 	// Communication structures
 	std::array<NeighborComm, 6> neighbors_; ///< 6 face neighbors in 3D grid
-	idx_t max_halo_particles_;
+	idx_t max_ghost_particles_;
 
 	// Communication tags for different data types
 	enum CommTags {

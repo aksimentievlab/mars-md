@@ -3,19 +3,15 @@
 namespace ARBD {
 
 SimManager::SimManager(SimSystem& sys, const ResourceCollection& resources)
-	: sys_(sys), resources_(resources) { // Remove patch_manager initialization for now
-	LOGINFO("SimManager: Constructing simulation manager");
-}
+	: sys_(sys), resources_(resources) {}
 
 void SimManager::init() {
 	wkf_timer_start(&timer0_);
 	LOGINFO("SimManager: Initializing simulation");
-
+	initialize_output_writers();
+	load_initial_conditions();
 	// Initialize domain decomposition
 	sys_.decompose_system();
-
-	// Initialize output writers
-	initialize_output_writers();
 
 	// Initialize IMD if requested (placeholder for now)
 	// if (sys_.get_config().imd_enabled) {
@@ -24,7 +20,6 @@ void SimManager::init() {
 
 	// Load restart or initialize particles
 	// Configuration handles I/O, SimManager handles the data transfer
-	load_initial_conditions();
 
 	LOGINFO("SimManager: Initialization completed");
 }
@@ -108,11 +103,11 @@ void SimManager::initialize_imd(int port) {
 	LOGINFO("SimManager: IMD initialization (port {}) not yet implemented", port);
 }
 
-void SimManager::initialize_rngs() {
+void SimManager::initialize_rngs(size_t seed) {
 	// Initialize random number generators for each resource
 	for (const auto& resource : resources_.resources) {
-		Random<Resource> rng(resource, 128);
-		rng.init(42);
+		Random<Resource> rng(resource, seed);
+		rng.init(seed);
 		// rngs_[&resource] = std::make_unique<RandomState>(/* seed based on resource ID */);
 		LOGINFO("SimManager: Initialized RNG for resource");
 	}
@@ -138,9 +133,9 @@ void SimManager::execute_force_calculation(size_t step) {
 		}
 
 		// 5. Apply external forces (electric field, grids)
-		if (sys_.has_electric_field()) {
-			// Compute external forces
-		}
+		// if (sys_.has_electric_field()) {
+		// Compute external forces
+		//}
 
 		// Synchronize this resource's pipeline
 		// pipeline.synchronize();
@@ -148,8 +143,8 @@ void SimManager::execute_force_calculation(size_t step) {
 }
 
 void SimManager::execute_integration(size_t step) {
-	const DynamicType algorithm = sys_.config_.ParticleDynamicType;
-	const float timestep = sys_.config_.steps.timestep;
+	const DynamicType algorithm = sys_.get_algorithm();
+	const float timestep = sys_.get_timestep();
 	const float temperature = sys_.get_temperature();
 
 	for (auto& [resource, rng] : rngs_) {
@@ -172,13 +167,52 @@ void SimManager::execute_integration(size_t step) {
 			// DPD integrator
 			// launch_dpd_kernel(buffers, timestep, temperature, rng);
 			break;
+		case Algorithm::NoseHooverLangevin:
+			// Nose-Hoover Langevin integrator
+			// launch_nose_hoover_langevin_kernel(buffers, timestep, temperature, rng);
+			break;
+		default:
+			return;
 		}
 	}
 }
+void SimManager::execute_rb_integration(size_t step) {
+	const DynamicType algorithm = sys_.get_algorithm();
+	const float timestep = sys_.get_timestep();
+	const float temperature = sys_.get_temperature();
+
+	/*for (auto& [resource, rng] : rngs_) {
+		// Get buffers for this resource's patch
+		// auto& buffers = patch_manager_.get_patch(resource)->get_buffers();
+
+		// Select integrator based on algorithm
+		switch (algorithm) {
+		case Algorithm::Langevin:
+			// BAOAB integrator
+			// launch_baoab_kernel(buffers, timestep, temperature, rng, step == 1);
+			break;
+
+		case Algorithm::Brownian:
+			// Brownian dynamics integrator
+			// launch_brownian_kernel(buffers, timestep, temperature, rng);
+			break;
+
+		case Algorithm::DPD:
+			// DPD integrator
+			// launch_dpd_kernel(buffers, timestep, temperature, rng);
+			break;
+		case Algorithm::NoseHooverLangevin:
+			// Nose-Hoover Langevin integrator
+			// launch_nose_hoover_langevin_kernel(buffers, timestep, temperature, rng);
+			break;
+		default:
+			return;
+		}
+	}*/
+}
 
 void SimManager::synchronize_multi_resource() {
-	// Exchange halos between patches
-	// patch_manager_.exchange_halos();
+	patch_manager_.exchange_halos();
 }
 
 void SimManager::handle_output(size_t step) {
@@ -257,15 +291,11 @@ void SimManager::load_initial_conditions() {
 	std::vector<int> types;
 
 	// TODO: Load from restart file if specified
-	// if (!config.restart_file.empty()) {
-	//     load_restart_data(config.restart_file, positions, types);
-	// } else {
-	// Generate initial positions and types based on configuration
-	generate_initial_particles(positions, types);
-	// }
-
-	// Pass to SimSystem for GPU-compatible initialization
-	sys_.initialize_particles(positions, types);
+	if (!config.restart_file.empty()) {
+		load_restart_data(config.restart_file, positions, types);
+	} else {
+		generate_initial_particles(positions, types);
+	}
 
 	LOGINFO("SimManager: Loaded {} particles", positions.size());
 }

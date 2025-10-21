@@ -1,5 +1,5 @@
 #pragma once
-#include "Interactions/Interactions.h"
+#include "Objects/DeviceParticle.h"
 #include "Objects/ParticleProperties.h"
 #include "SimParam.h"
 #include "System/PeriodicBox.h"
@@ -16,7 +16,7 @@ class Patch {
 	 * @param capacity Initial capacity for particle storage
 	 */
 	Patch(patch_t patch_idx = 0, idx_t capacity = 1024)
-		: patch_idx_(patch_idx), capacity_(capacity), num_(0), particle_array_{capacity} {};
+		: patch_idx_(patch_idx), capacity_(capacity), num_(0){};
 
 	/**
 	 * @brief Move constructor
@@ -108,10 +108,10 @@ class Patch {
 	 * @brief Get particle array
 	 */
 	const ParticleSoA& get_particle_array() const {
-		return particle_array_;
+		return device_particle_array_;
 	}
 	ParticleSoA& get_particle_array() {
-		return particle_array_;
+		return device_particle_array_;
 	}
 
 	/**
@@ -172,18 +172,7 @@ class Patch {
 	 */
 	bool remove_particle(idx_t index) {
 		if (index < num_) {
-			// Move last particle to this position
-			if (index < num_ - 1) {
-				// Copy data from last particle to this position
-				particle_array_.id[index] = particle_array_.id[num_ - 1];
-				particle_array_.type_id[index] = particle_array_.type_id[num_ - 1];
-				particle_array_.position[index] = particle_array_.position[num_ - 1];
-				particle_array_.momentum[index] = particle_array_.momentum[num_ - 1];
-				particle_array_.force[index] = particle_array_.force[num_ - 1];
-				particle_array_.orientation[index] = particle_array_.orientation[num_ - 1];
-				particle_array_.is_dummy[index] = particle_array_.is_dummy[num_ - 1];
-				particle_array_.has_orientation[index] = particle_array_.has_orientation[num_ - 1];
-			}
+
 			num_--;
 			return true;
 		}
@@ -199,7 +188,7 @@ class Patch {
 
 	void push_particle(const ParticleAoS& particle) {
 		if (has_space()) {
-			particle_array_aos_.push_back(particle);
+			particle_array_.push_back(particle);
 			num_++;
 		}
 	}
@@ -252,18 +241,22 @@ class Patch {
 	 * @return True if position is within ghost region
 	 */
 	bool is_in_ghost_region(const Vector3& pos) const {
-		if (system_sim_box_) {
+		Vector3 r = pos - bounds_min_;
+		if (pos.x > bounds_max_.x || pos.y > bounds_max_.y || pos.z > bounds_max_.z) {
+			return true;
+		} else if (r.x < 0.0f | r.y < 0.0f || r.z < 0.0f) {
+			return true;
 		}
 		return false;
 	}
 
   private:
 	// Core patch properties
-	patch_t patch_idx_;		 ///< Unique identifier for this patch
-	idx_t capacity_;		 ///< Maximum number of particles this patch can hold
-	idx_t num_;				 ///< Current number of particles in this patch
-	idx_t num_replicas_{1};	 ///< Number of replicas of this patch
-	short gpu_id_{0};		 ///< GPU ID for this patch
+	short gpu_id_{0};		///< GPU ID for this patch
+	patch_t patch_idx_;		///< Unique identifier for this patch
+	idx_t capacity_;		///< Maximum number of particles this patch can hold
+	idx_t num_replicas_{1}; ///< Number of replicas of this patch
+	idx_t num_; ///< Current number of particles in this patch, num_*num_replicas_<=capacity_
 	int num_group_sites_{0}; ///< Number of group sites in this patch
 	float ghost_thickness_{0.0f};
 
@@ -272,15 +265,16 @@ class Patch {
 	Vector3 bounds_max_{0.0f, 0.0f, 0.0f}; ///< Maximum corner of patch
 
 	// Particle data
-	ParticleSoA particle_array_;				  ///< Array of particles in this patch
-	std::vector<ParticleAoS> particle_array_aos_; ///< Array of particles in this patch
-	std::vector<ParticleType> types_;			  ///< Types of particles in this patch
+	ParticleSoA device_particle_array_;		  ///< Array of particles in this patch
+	std::vector<ParticleAoS> particle_array_; ///< Array of particles in this patch
+	std::vector<ParticleType> types_;		  ///< Types of particles in this patch
 
 	// Interactions
 	std::vector<NonbondedInteraction*> nonbonded_interactions_;
 	std::vector<BondedInteraction*> bonded_interactions_;
 
 	// System-wide simulation box
-	const PeriodicBox* system_sim_box_{nullptr}; ///< Reference to system-wide simulation box (not owned)
+	const PeriodicBox* system_sim_box_{
+		nullptr}; ///< Reference to system-wide simulation box (not owned)
 };
 }; // namespace ARBD

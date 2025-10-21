@@ -4,20 +4,16 @@
  */
 
 #pragma once
-#include "Bonded/TabulatedPotential.h"
 #include "Header.h"
 #include "IO/Reader.h"
 #include "Objects/ParticleProperties.h"
 #include "SimParam.h"
 
 namespace ARBD {
-class Patch;
 
 enum class BondFlag { DEFAULT = 1, REPLACE = 1, ADD = 2 };
-
-// ============================================================================
-// HOST-SIDE DATA STRUCTURES
-// ============================================================================
+enum BondedPotentialType { UNSET, BOND, ANGLE, DIHEDRAL, VECANGLE };
+constexpr auto BD_PI = constants::PI;
 
 class Exclude {
   public:
@@ -41,7 +37,13 @@ class Exclude {
 // Host-side bond definition
 class Bond {
   public:
-	Bond() : ind1(-1), ind2(-1), functionIndex(-1), flag(BondFlag::DEFAULT) {}
+	Bond() : ind1(-1), ind2(-1), functionIndex(-1), flag(BondFlag::REPLACE) {}
+	Bond(int ind1, int ind2, std::vector<Exclude>& exclusions)
+		: ind1(ind1), ind2(ind2), functionIndex(-1), flag(BondFlag::DEFAULT) {
+		if (!(flag == BondFlag::REPLACE)) {
+			add_exclusion(exclusions);
+		}
+	}
 
 	int ind1, ind2;
 	std::string name; // file name or function name
@@ -70,7 +72,7 @@ struct Dihedral {
 	int functionIndex;
 };
 
-// Host-side restraint definition
+// Host-side restraint definition, harmonic restraint
 struct Restraint {
   public:
 	Restraint() : ind(-1) {}

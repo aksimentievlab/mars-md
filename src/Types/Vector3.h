@@ -5,6 +5,7 @@
  *********************************************************************/
 #pragma once
 #include "Header.h"
+#include "Math.h"
 
 // Metal-specific implementation
 #ifdef __METAL_VERSION__
@@ -80,7 +81,7 @@ class alignas(4 * sizeof(T)) Vector3_t {
 	}
 
 	// Assignment operators
-	HOST DEVICE constexpr Vector3_t<T>& operator[](int i) {
+	HOST DEVICE constexpr T& operator[](int i) {
 		if (i == 0)
 			return x;
 		if (i == 1)
@@ -89,7 +90,10 @@ class alignas(4 * sizeof(T)) Vector3_t {
 			return z;
 		if (i == 3)
 			return w;
-		return nanf("Invalid index for Vector3_t");
+#ifdef HOST_GUARD
+		throw_value_error("Invalid index for Vector3_t");
+#endif
+		return w;
 	}
 
 	HOST DEVICE constexpr Vector3_t<T>& operator=(const Vector3_t<T>& v) {
@@ -190,15 +194,23 @@ class alignas(4 * sizeof(T)) Vector3_t {
 		return x * x + y * y + z * z;
 	}
 
-	// Only enable for floating point types - simplified for GPU compatibility
+	HOST DEVICE T angle_between(const Vector3_t<T>& other) const {
+		T dot_prod = dot(other);
+		T len_product = length() * other.length();
+		T cos_angle = dot_prod / len_product;
+		return math::safe_acos(cos_angle);
+	}
+
 	HOST DEVICE auto length() const {
-#ifdef __CUDA_ARCH__
-		return sqrtf(length2());
-#elif defined(__SYCL_DEVICE_ONLY__)
-		return sycl::sqrt(length2());
-#else
-		return std::sqrt(length2());
-#endif
+		return math::sqrt(length2());
+	}
+
+	HOST DEVICE static auto element_sqrt(const Vector3_t<T>& w) {
+		return Vector3_t<T>(math::sqrt(w.x), math::sqrt(w.y), math::sqrt(w.z));
+	}
+
+	HOST DEVICE auto element_floor() const {
+		return Vector3_t<T>(math::floor(x), math::floor(y), math::floor(z));
 	}
 
 	HOST DEVICE auto rLength() const {
@@ -209,17 +221,6 @@ class alignas(4 * sizeof(T)) Vector3_t {
 	HOST DEVICE constexpr auto rLength2() const {
 		auto l2 = length2();
 		return (l2 != T(0)) ? T(1) / l2 : T(0);
-	}
-
-	// Element-wise operations
-	HOST DEVICE auto element_floor() const {
-#ifdef __CUDA_ARCH__
-		return Vector3_t<T>(floorf(x), floorf(y), floorf(z));
-#elif defined(__SYCL_DEVICE_ONLY__)
-		return Vector3_t<T>(sycl::floor(x), sycl::floor(y), sycl::floor(z));
-#else
-		return Vector3_t<T>(std::floor(x), std::floor(y), std::floor(z));
-#endif
 	}
 
 	template<typename U>
@@ -269,16 +270,6 @@ class alignas(4 * sizeof(T)) Vector3_t {
 		using TU = typename std::common_type<T, U>::type;
 #endif
 		return Vector3_t<TU>(v.x * w[0], v.y * w[1], v.z * w[2]);
-	}
-
-	HOST DEVICE static auto element_sqrt(const Vector3_t<T>& w) {
-#ifdef __CUDA_ARCH__
-		return Vector3_t<T>(sqrtf(w.x), sqrtf(w.y), sqrtf(w.z));
-#elif defined(__SYCL_DEVICE_ONLY__)
-		return Vector3_t<T>(sycl::sqrt(w.x), sycl::sqrt(w.y), sycl::sqrt(w.z));
-#else
-		return Vector3_t<T>(std::sqrt(w.x), std::sqrt(w.y), std::sqrt(w.z));
-#endif
 	}
 
 	// Numeric limits

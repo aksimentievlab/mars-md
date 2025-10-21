@@ -13,12 +13,9 @@
 #include "Backend/Resource.h"
 #include "Objects/ARBDObjects.h"
 #include "Objects/ParticleProperties.h"
-#include "Objects/Patch.h"
 #include "Objects/RigidBodyProperties.h"
 #include "SimParam.h"
 #include "Types/BaseGrid.h"
-
-#include <Interactions.h>
 #include <memory>
 #include <string>
 #include <unordered_map>

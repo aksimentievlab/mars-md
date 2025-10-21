@@ -62,9 +62,4 @@ ParticleType::~ParticleType() {
 	clear();
 }
 
-void ParticleType::parse_type() {
-	// Implementation for parsing particle type from configuration
-	// This can be expanded based on specific requirements
-}
-
 } // namespace ARBD

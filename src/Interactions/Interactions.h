@@ -1,8 +1,12 @@
 #pragma once
-#include "BondedInteraction.h"
-#include "NonBondedInteraction.h"
+#include "Header.h"
+#include "Types/Types.h"
 
 namespace ARBD {
-class Patch;
+
+struct ForceEnergy {
+	float force_magnitude;
+	float energy;
+};
 
 } // namespace ARBD

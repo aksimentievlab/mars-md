@@ -54,6 +54,8 @@ class PatchDecomposer {
 			return "Recursive Bisection Decomposer";
 		case DecomposerType::Geometric:
 			return "Geometric Decomposer";
+		case DecomposerType::ZOrder:
+			return "Z-Order Decomposer";
 		default:
 			throw ARBD::Exception(ARBD::ExceptionType::ValueError, "Unsupported decomposer type.");
 		}

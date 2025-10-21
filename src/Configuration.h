@@ -34,9 +34,9 @@ struct Configuration {
 
 	ThermostatType thermostat{ThermostatType::Langevin};
 	BarostatType barostat{BarostatType::Isobaric};
-	float output_period{100.0f};
+	float output_period{10.0f};
 	float energy_output_period{100.0f};
-	float decomp_period{10.0f};
+	float neighbor_list_rebuild_period{100.0f};
 
 	std::string output_name{"out"};
 	OutputFormat output_format{OutputFormat::DCD};
@@ -45,7 +45,7 @@ struct Configuration {
 	std::vector<Reservoir> reservoirs;
 	bool has_reaction = false;
 	int replicas{1};
-	ARBDObjects objects;
+	ARBDObjects objects; // initialized only. Stored in SimState.
 
 	// Python-friendly accessors
 	void set_temperature(float temp) {
@@ -71,8 +71,10 @@ struct Configuration {
 
 	// Validation
 	bool is_valid() const {
-		return temperature.value > 0.0f && cutoff.value > 0.0f && steps.timestep > 0.0f &&
-			   steps.steps > 0;
+		validate_physical_parameters();
+		validate_method_parameters();
+		validate_output_parameters();
+		return true;
 	}
 	// Validation helpers
 	void validate_physical_parameters() const;

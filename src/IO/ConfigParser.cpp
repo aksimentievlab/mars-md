@@ -14,10 +14,11 @@
 #include <vector>
 
 // pybind11 includes (implementation only)
+#ifdef USE_PYTHON
 #include <pybind11/cast.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
-
+#endif
 namespace ARBD {
 
 ConfigParser::ConfigParser(std::string_view file_name) : file_name_(file_name) {
@@ -115,8 +116,8 @@ void ConfigParser::parse_parameters(const Reader& reader) {
 		config_.steps.steps = reader.parseValue<int>("steps");
 	}
 
-	if (reader.hasParameter("decompPeriod")) {
-		config_.decomp_period = reader.parseValue<int>("decompPeriod");
+	if (reader.hasParameter("neighborListRebuildPeriod")) {
+		config_.neighbor_list_rebuild_period = reader.parseValue<int>("neighborListRebuildPeriod");
 	}
 
 	if (reader.hasParameter("outputPeriod")) {
@@ -548,11 +549,11 @@ void ConfigParser::validate_method_parameters() const {
 						config_.steps.steps);
 	}
 
-	if (config_.decomp_period <= 0) {
+	if (config_.neighbor_list_rebuild_period <= 0) {
 		throw Exception(ExceptionType::ValueError,
 						SourceLocation(),
-						"Decomposition period must be positive (got {})",
-						config_.decomp_period);
+						"Neighbor list rebuild period must be positive (got {})",
+						config_.neighbor_list_rebuild_period);
 	}
 }
 
@@ -592,8 +593,8 @@ void ConfigParser::parse_dictionary(const std::map<std::string, pybind11::object
 				config_.output_period = pybind11::cast<float>(value);
 			} else if (key == "energy_output_period") {
 				config_.energy_output_period = pybind11::cast<float>(value);
-			} else if (key == "decomp_period") {
-				config_.decomp_period = pybind11::cast<float>(value);
+			} else if (key == "neighbor_list_rebuild_period") {
+				config_.neighbor_list_rebuild_period = pybind11::cast<float>(value);
 			} else if (key == "output_name") {
 				config_.output_name = pybind11::cast<std::string>(value);
 			} else if (key == "pressure") {

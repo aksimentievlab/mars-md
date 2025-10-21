@@ -248,4 +248,86 @@ struct ParticleAssignmentFunctor {
 	}
 };
 
+/**
+ * @brief Kernel for cell-based neighbor finding
+ * Uses cell decomposition to efficiently find particle pairs within cutoff distance
+ */
+struct CellNeighborKernel {
+	const Vector3* positions;
+	const DecomposeKernel::cell_t* cells;
+	const BindRangesKernel::range_t* cell_ranges;
+	int2* neighbor_pairs;
+	uint32_t* pair_count;
+	float cutoff_squared;
+	Vector3 origin;
+	float cell_size;
+	Vector3_t<int> nCells;
+	size_t num_particles;
+	size_t max_pairs;
+	int numReplicas;
+
+	DEVICE void operator()(idx_t idx) const {
+		if (idx >= num_particles * numReplicas) return;
+
+		size_t particle_i = idx / numReplicas;
+		int rep_i = idx % numReplicas;
+
+		if (particle_i >= num_particles) return;
+
+		const DecomposeKernel::cell_t& cell_i = cells[idx];
+		if (cell_i.particle != particle_i) return; // Safety check
+
+		Vector3 pos_i = positions[particle_i];
+		Vector3_t<int> cell_coord = cell_i.pos;
+
+		// Search neighboring cells (3x3x3 = 27 cells including self)
+		for (int dx = -1; dx <= 1; dx++) {
+			for (int dy = -1; dy <= 1; dy++) {
+				for (int dz = -1; dz <= 1; dz++) {
+					// Calculate neighbor cell coordinates with periodic wrapping
+					int nx = ((cell_coord.x + dx) % nCells.x + nCells.x) % nCells.x;
+					int ny = ((cell_coord.y + dy) % nCells.y + nCells.y) % nCells.y;
+					int nz = ((cell_coord.z + dz) % nCells.z + nCells.z) % nCells.z;
+
+					int neighbor_cell_id = nz + nCells.z * (ny + nCells.y * nx);
+
+					// Check all replicas in the neighbor cell
+					for (int rep_j = 0; rep_j < numReplicas; rep_j++) {
+						int cell_range_idx = neighbor_cell_id + rep_j * (nCells.x * nCells.y * nCells.z);
+
+						const BindRangesKernel::range_t& range = cell_ranges[cell_range_idx];
+						if (range.first < 0 || range.last < 0) continue;
+
+						// Check all particles in this cell range
+						for (int j_idx = range.first; j_idx < range.last; j_idx++) {
+							const DecomposeKernel::cell_t& cell_j = cells[j_idx];
+							size_t particle_j = cell_j.particle;
+							int rep_j_actual = cell_j.repID;
+
+							// Avoid double counting and self-interaction
+							if (particle_i >= particle_j && rep_i >= rep_j_actual) continue;
+
+							Vector3 pos_j = positions[particle_j];
+							Vector3 dr = pos_j - pos_i;
+							float dist_squared = dr.length2();
+
+							if (dist_squared <= cutoff_squared) {
+								// Found a neighbor pair
+#ifdef __CUDA_ARCH__
+								uint32_t pair_idx = atomicAdd(pair_count, 1);
+#else
+								uint32_t pair_idx = (*pair_count)++;
+#endif
+								if (pair_idx < max_pairs) {
+									neighbor_pairs[pair_idx] = int2(particle_i, particle_j);
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+};
+
 } // namespace ARBD

@@ -1,13 +1,20 @@
 #pragma once
+#include "../Interactions.h"
 #include "Header.h"
 #include "SimParam.h"
 #include "Types/Types.h"
 
 namespace ARBD {
 
-enum class AnalyticalBondType { Harmonic = 0, Morse = 1, WLCSK = 2, FENE = 3 };
-enum class AnalyticalAngleType { Harmonic = 0, Morse = 1, WLCSK = 2, FENE = 3 };
-enum class AnalyticalDihedralType { Harmonic = 0, Morse = 1, WLCSK = 2, FENE = 3 };
+enum class AnalyticalBondType { Harmonic = 0, Morse = 1, WLCSK = 2, FENE = 3, Half_Harmonic = 4 };
+enum class AnalyticalAngleType { Harmonic = 0, Morse = 1, WLCSK = 2, FENE = 3, Half_Harmonic = 4 };
+enum class AnalyticalDihedralType {
+	Harmonic = 0,
+	Morse = 1,
+	WLCSK = 2,
+	FENE = 3,
+	Half_Harmonic = 4
+};
 
 // ============================================================================
 // Force Computation Templates - One per bond type
@@ -21,10 +28,12 @@ template<>
 struct AnalyticalBondComputer<0> {
 	static constexpr int NUM_PARAMS = 2;
 
-	DEVICE static inline float compute(float distance, const float* params) {
+	DEVICE static inline ForceEnergy compute(float distance, const float* params) {
 		const float k = params[0];	// Spring constant
 		const float r0 = params[1]; // Equilibrium distance
-		return -k * (distance - r0);
+		float energy = 0.5f * k * (distance - r0) * (distance - r0);
+		float force = -k * (distance - r0);
+		return {force, energy};
 	}
 };
 
@@ -34,12 +43,14 @@ template<>
 struct AnalyticalBondComputer<1> {
 	static constexpr int NUM_PARAMS = 3;
 
-	DEVICE static inline float compute(float distance, const float* params) {
+	DEVICE static inline ForceEnergy compute(float distance, const float* params) {
 		const float D0 = params[0]; // Dissociation energy
 		const float a = params[1];	// Width parameter
 		const float r0 = params[2]; // Equilibrium distance
 		const float exp_term = expf(-a * (distance - r0));
-		return 2.0f * D0 * a * exp_term * (1.0f - exp_term);
+		float force = 2.0f * D0 * a * exp_term * (1.0f - exp_term);
+		float energy = D0 * (1.0f - exp_term);
+		return {force, energy};
 	}
 };
 
@@ -49,7 +60,7 @@ template<>
 struct AnalyticalBondComputer<2> {
 	static constexpr int NUM_PARAMS = 3;
 
-	DEVICE static inline float compute(float distance, const float* params) {
+	DEVICE static inline ForceEnergy compute(float distance, const float* params) {
 		const float d = params[0];	// Contour length
 		const float lp = params[1]; // Persistence length
 		const float kT = params[2]; // Thermal energy
@@ -66,10 +77,11 @@ struct AnalyticalBondComputer<2> {
 		const float p4 = 0.6482f;
 		const float a4 = (p0 + p1 / (2.0f * nk) + p2 / (4.0f * nk * nk)) /
 						 (1.0f + p3 / (2.0f * nk) + p4 / (4.0f * nk * nk));
-		const float u =
+		const float force_magnitude =
 			kT * nk *
 			(a1 / (1.0f - q2) - a2 * logf(1.0f - q2) + a3 * q2 - 0.5f * a4 * q2 * (q2 - 2.0f));
-		return u;
+		const float energy = kT * nk * (1.0f - q2); // TODO: check if this is correct
+		return {force_magnitude, energy};
 	}
 };
 
@@ -78,20 +90,39 @@ template<>
 struct AnalyticalBondComputer<3> {
 	static constexpr int NUM_PARAMS = 2;
 
-	DEVICE static inline float compute(float distance, const float* params) {
+	DEVICE static inline ForceEnergy compute(float distance, const float* params) {
 		const float k = params[0];	// Spring constant
 		const float r0 = params[1]; // Equilibrium distance
-		return -k * distance * (1.0f - distance / r0);
+		float force = -k * distance * (1.0f - distance / r0);
+		float energy =
+			0.5f * k * (distance - r0) * (distance - r0); // TODO: check if this is correct
+		return {force, energy};
+	}
+};
+
+// Half Harmonic Bond: F = -k*(r-r0) for r > r0, 0 for r <= r0
+template<>
+struct AnalyticalBondComputer<4> {
+	static constexpr int NUM_PARAMS = 2;
+
+	DEVICE static inline ForceEnergy compute(float distance, const float* params) {
+		const float k = params[0];	// Spring constant
+		const float r0 = params[1]; // Equilibrium distance
+		float force = distance > r0 ? -k * (distance - r0) : 0.0f;
+		float energy = distance > r0 ? 0.5f * k * (distance - r0) * (distance - r0) : 0.0f;
+		return {force, energy};
 	}
 };
 
 template<int TypeId>
 struct AnalyticalBondFunctor {
 	HOST DEVICE void operator()(idx_t i,
+								DEVICE_PTR(const int2) particle_indices,
 								DEVICE_PTR(Vector3) positions,
 								DEVICE_PTR(Vector3) forces,
-								DEVICE_PTR(const int2) particle_indices,
+								DEVICE_PTR(float) energys,
 								DEVICE_PTR(const float) params, // Flat parameter array
+								bool get_energy,
 								int offset = 0) const {
 		// Get particle indices
 		const int p1 = particle_indices[i + offset].x;
@@ -109,17 +140,20 @@ struct AnalyticalBondFunctor {
 		const float* bond_params = params + (i * num_params);
 
 		// Compute force magnitude using specialized template
-		const float force_magnitude =
-			AnalyticalBondComputer<TypeId>::compute(distance, bond_params);
+		const ForceEnergy fe = AnalyticalBondComputer<TypeId>::compute(distance, bond_params);
 
 		// Apply force atomically
-		const Vector3 force = (r_ij / distance) * force_magnitude;
+		const Vector3 force = (r_ij / distance) * fe.force_magnitude;
 		atomic_add(&forces[p1].x, -force.x);
 		atomic_add(&forces[p1].y, -force.y);
 		atomic_add(&forces[p1].z, -force.z);
 		atomic_add(&forces[p2].x, force.x);
 		atomic_add(&forces[p2].y, force.y);
 		atomic_add(&forces[p2].z, force.z);
+		if (get_energy) {
+			atomic_add(&energys[p1], fe.energy);
+			atomic_add(&energys[p2], fe.energy);
+		}
 	}
 };
 
@@ -129,6 +163,7 @@ struct AnalyticalAngleFunctor {
 								DEVICE_PTR(Vector3) forces,
 								DEVICE_PTR(Vector3) particle_indices,
 								DEVICE_PTR(const float) params, // Flat parameter array
+								bool get_energy,
 								int offset = 0) const {
 		const int p1 = particle_indices[i + offset].x;
 		const int p2 = particle_indices[i + offset].y;
@@ -147,6 +182,7 @@ struct AnalyticalDihedralFunctor {
 								DEVICE_PTR(Vector3) forces,
 								DEVICE_PTR(Vector3) particle_indices,
 								DEVICE_PTR(const float) params, // Flat parameter array
+								bool get_energy,
 								int offset = 0) const {
 		const int p1 = particle_indices[i + offset].x;
 		const int p2 = particle_indices[i + offset].y;

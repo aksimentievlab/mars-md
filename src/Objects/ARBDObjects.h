@@ -8,10 +8,10 @@
 #include <vector>
 
 namespace ARBD {
-/** 
-* @brief ARBDObjects is a struct that contains all the objects in the simulation.
-* HOST side only.
-*/
+/**
+ * @brief ARBDObjects is a struct that contains all the objects in the simulation.
+ * HOST side only.
+ */
 struct ARBDObjects {
 	std::vector<RigidBodyType> rigid_body_types{};
 	std::vector<ParticleType> particle_types{};
@@ -23,7 +23,6 @@ struct ARBDObjects {
 	std::vector<Exclude> exclusions{};
 	std::vector<Restraint> restraints{};
 	std::vector<NonbondedInteraction> nb_interactions{};
-	std::vector<BondedInteraction> bonded_interactions{};
 	std::vector<std::string> tabulated_file_names{};
 	std::vector<std::string> grid_file_names{};
 	std::vector<BaseGrid<float>> part_grid_dictionary{};

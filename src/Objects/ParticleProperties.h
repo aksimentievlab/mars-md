@@ -22,25 +22,6 @@ struct ColvarsGroup {
 		return particle_ids.empty();
 	}
 };
-struct ParticleSoA { // Stored on GPU only
-	ParticleSoA(size_t capacity = 2048)
-		: id(capacity), type_id(capacity), position(capacity), momentum(capacity), force(capacity),
-		  energy(capacity), orientation(capacity), is_dummy(capacity), has_orientation(capacity),
-		  is_ghost(capacity) {}
-	Array<int> id;
-	Array<int> type_id;
-	Array<Vector3> position;
-	Array<Vector3> momentum;
-	Array<Vector3> force;
-	Array<float> energy;
-	Array<Vector3> orientation;
-	Array<bool> is_dummy;
-	Array<bool> has_orientation;
-	Array<bool> is_ghost;
-	size_t num_local_particles = 0;
-	size_t num_ghost_particles = 0;
-	size_t capacity; // All buffers share the same capacity
-};
 
 struct ParticleAoS {
 	int id;
@@ -75,7 +56,6 @@ class ParticleType {
 	void copy(const ParticleType& src);
 
   public:
-	void parse_type();
 	std::string name;
 	int id;
 	int num; // number of particles of this type

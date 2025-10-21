@@ -86,9 +86,8 @@ class SimManager {
 	//================================================================================
 	SimSystem& sys_;
 	ResourceCollection resources_;
-	// PatchManager patch_manager_; // Commented out until PatchManager is implemented
-
-	// Random number generators per resource (placeholder)
+	PatchManager patch_manager_{sys_};
+	// Random number generators per resource
 	std::unordered_map<const Resource*, int> rngs_; // Placeholder - replace with actual RNG type
 
 	//================================================================================
@@ -203,11 +202,12 @@ class SimManager {
 	 * @param types Output vector for particle types
 	 */
 	void generate_initial_particles(std::vector<Vector3>& positions, std::vector<int>& types);
-	void initialize_rngs();
+	void initialize_rngs(size_t seed);
 	/**
 	 * @brief Write final restart file
 	 */
 	void write_final_restart();
+	void load_restart_data(const std::string& filename);
 };
 
 } // namespace ARBD

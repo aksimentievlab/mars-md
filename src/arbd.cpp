@@ -202,13 +202,6 @@ int main(int argc, char* argv[]) {
 	options.numGpus = 1;
 
 	resource_collection.resources.push_back(ARBD::Resource(0));
-
-#else
-	std::cout << "ARBD compiled with CPU-only support." << std::endl;
-	// For CPU-only builds, ignore GPU specifications
-	options.gpuIds.clear();
-	options.numGpus = 0;
-	resource_collection.resources.push_back(ARBD::Resource::CPU());
 #endif
 
 	// Validate all selected resources and remove invalid ones
@@ -234,7 +227,6 @@ int main(int argc, char* argv[]) {
 	// If no valid resources, fallback to CPU
 	if (resource_collection.resources.empty()) {
 		std::cout << "No valid compute resources found. Falling back to CPU." << std::endl;
-		resource_collection.resources.push_back(ARBD::Resource::CPU());
 	}
 
 	std::cout << "Selected " << resource_collection.resources.size() << " compute resource(s): ";

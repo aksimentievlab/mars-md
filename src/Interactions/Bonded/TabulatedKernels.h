@@ -8,13 +8,6 @@
 
 namespace ARBD {
 
-struct AngleForce {
-	HOST DEVICE AngleForce(Vector3 f1, Vector3 f3, float e) : f1(f1), f3(f3), e(e) {}
-	Vector3 f1;
-	Vector3 f3;
-	float e;
-};
-
 struct computeAngle {
 	DEVICE inline void operator()(const BondedPotential* __restrict__ a,
 								  const BaseGrid<float>* __restrict__ sys,

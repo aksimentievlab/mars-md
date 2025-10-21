@@ -69,7 +69,6 @@ void declare_particle_type(py::module& m) {
 		.def_readwrite("mu", &ParticleType::mu)
 		.def_readwrite("numPartGridFiles", &ParticleType::numPartGridFiles)
 		.def_readwrite("grid_ids", &ParticleType::grid_ids)
-		.def("parse_type", &ParticleType::parse_type)
 		.def("__repr__", [](const ParticleType& pt) {
 			return "ParticleType(name='" + pt.name + "', id=" + std::to_string(pt.id) +
 				   ", num=" + std::to_string(pt.num) + ")";

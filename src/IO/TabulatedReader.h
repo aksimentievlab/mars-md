@@ -7,25 +7,33 @@
 
 namespace ARBD {
 
+template<typename T = float>
 class TabulatedReader {
   public:
-	explicit TabulatedReader(std::string_view fileName) {
+	explicit TabulatedReader(std::string_view fileName) : fileName(fileName) {
 		readFile(fileName);
 	}
 
-	const std::vector<float>& getX() const {
+	const std::string& getName() const {
+		return fileName;
+	}
+
+	const std::vector<T>& getX() const {
 		return X;
 	}
-	const std::vector<float>& getY() const {
+
+	const std::vector<T>& getY() const {
 		return Y;
 	}
+
 	size_t size() const {
 		return X.size();
 	}
 
   private:
-	std::vector<float> X;
-	std::vector<float> Y;
+	std::string fileName;
+	std::vector<T> X;
+	std::vector<T> Y;
 
 	void readFile(std::string_view fileName) {
 		FileHandle file(fileName.data(), "r");
@@ -46,7 +54,7 @@ class TabulatedReader {
 			}
 
 			std::istringstream iss(lineStr);
-			float x, y;
+			T x, y;
 
 			if (iss >> x >> y) {
 				X.push_back(x);

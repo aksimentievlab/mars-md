@@ -13,7 +13,6 @@ make_exclusions_cpu(int num_particles, const std::vector<Bond>& bonds, int exclu
 		return {}; // Return empty list if there's nothing to do
 	}
 
-	// This is the modern replacement for the pointer-based Node graph.
 	std::vector<std::vector<int>> adjacency_list(num_particles);
 	for (const auto& bond : bonds) {
 		adjacency_list[bond.ind1].push_back(bond.ind2);

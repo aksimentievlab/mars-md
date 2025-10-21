@@ -1,9 +1,19 @@
 #pragma once
 /**
- * @file SimSystem.h
+ * @file SimSystem (class) - Immutable System Manager
  * @author Pin-Yi Li <pinyili2@illinois.edu>
  * @brief Simulation system state manager. Manages system state, configuration, and domain
- * decomposition. Note: SimManager handles simulation execution, SimSystem handles state management.
+ * decomposition.
+ * @note: SimManager handles simulation execution, Owns and manages time-invariant simulation data
+ * and coordinates decomposition
+ * @param const Configuration (or owned immutable copy after init)
+ * @param BoundaryConditions (derived from config, immutable)
+ * @param PatchDecomposer and PatchManager (structure can rebalance but concept is static)
+ * @param ResourceCollection
+ * @param Accessor methods for configuration data (get_temperature, get_cutoff, get_box_size)
+ * @param Decomposition coordination (decompose_system, rebalance_system)
+ * @note Should NOT contain: Mutable particle positions/velocities, Runtime state that changes every
+ * timestep
  * @version 2.0
  * @date 2025-09-09
  *
@@ -22,11 +32,7 @@
 #include "System/PeriodicBox.h"
 #include "Types/IndexList.h"
 #include "Types/Types.h"
-#include <array>
-#include <iostream> // For logging placeholders
 #include <memory>
-#include <stdexcept>
-#include <string>
 #include <vector>
 
 namespace ARBD {
@@ -35,9 +41,6 @@ namespace ARBD {
 class PatchDecomposer;
 class SpatialPatchDecomposer;
 
-//================================================================================
-// Simulation System - Global System State Management and Coordination
-//================================================================================
 class SimSystem {
 	friend class PatchDecomposer;
 	friend class SpatialPatchDecomposer;
@@ -270,10 +273,6 @@ class SimSystem {
 	}
 
   private:
-	//================================================================================
-	// Member Variables
-	//================================================================================
-
 	// Configuration management (host-only)
 	Configuration config_;
 	size_t seed_;
