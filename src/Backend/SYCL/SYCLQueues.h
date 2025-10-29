@@ -9,6 +9,9 @@
 
 namespace ARBD::SYCL {
 
+// Ensure NUM_QUEUES is available
+constexpr size_t NUM_QUEUES = 4;
+
 class InitQueues {
 private:
   std::array<sycl::queue, NUM_QUEUES> queues_;

@@ -30,6 +30,7 @@
 #include "System/Decomposer.h"
 #include "System/PatchManager.h"
 #include "System/PeriodicBox.h"
+#include "System/SystemState.h"
 #include "Types/IndexList.h"
 #include "Types/Types.h"
 #include <memory>
@@ -37,13 +38,7 @@
 
 namespace ARBD {
 
-// Forward declarations
-class PatchDecomposer;
-class SpatialPatchDecomposer;
-
 class SimSystem {
-	friend class PatchDecomposer;
-	friend class SpatialPatchDecomposer;
 
   public:
 	/**
@@ -78,13 +73,6 @@ class SimSystem {
 		LOGINFO("SimSystem: Rebalancing system");
 		decompose_system(); // For now, just re-decompose
 	}
-
-	/**
-	 * @brief Initialize particles with positions and types
-	 * @param positions Initial particle positions
-	 * @param types Initial particle types
-	 */
-	void initialize_particles(const std::vector<Vector3>& positions, const std::vector<int>& types);
 
 	/**
 	 * @brief Build neighbor list for force calculations
@@ -172,24 +160,10 @@ class SimSystem {
 	//================================================================================
 
 	/**
-	 * @brief Check if system has bonded interactions (GPU-compatible)
-	 */
-	bool has_bonds() const {
-		return config_.objects.bonds.size() > 0;
-	}
-
-	/**
 	 * @brief Check if system has reactions (GPU-compatible)
 	 */
 	bool has_reactions() const {
 		return config_.has_reaction;
-	}
-
-	/**
-	 * @brief Get number of particles in the system (GPU-compatible)
-	 */
-	size_t get_num_particles() const {
-		return config_.objects.particles.size();
 	}
 
 	//================================================================================
@@ -223,7 +197,7 @@ class SimSystem {
 	 * @brief Get bond list size
 	 */
 	size_t get_bond_list_size() const {
-		return config_.objects.bonds.size();
+		return config_.init_bonds.size();
 	}
 
 	/**
@@ -250,8 +224,15 @@ class SimSystem {
 	/**
 	 * @brief Get algorithm type (from configuration)
 	 */
-	DynamicType get_algorithm() const {
+	DynamicType get_particle_algorithm() const {
 		return config_.ParticleDynamicType;
+	}
+
+	/**
+	 * @brief Get rigid body algorithm type (from configuration)
+	 */
+	DynamicType get_rigid_body_algorithm() const {
+		return config_.RigidBodyDynamicType;
 	}
 
 	//================================================================================
@@ -272,15 +253,34 @@ class SimSystem {
 		return patch_manager_ != nullptr;
 	}
 
+	/**
+	 * @brief Get system state for runtime operations
+	 * @return Reference to the system state
+	 */
+	SystemState& get_current_system_state() {
+		return current_system_state_;
+	}
+
+	/**
+	 * @brief Get system state for runtime operations (const version)
+	 * @return Const reference to the system state
+	 */
+	const SystemState& get_current_system_state() const {
+		return current_system_state_;
+	}
+
   private:
 	// Configuration management (host-only)
 	Configuration config_;
-	size_t seed_;
+	BaseGrid<Vector3>* force_grid_;
 
 	// Resources and decomposition (host-only)
 	ResourceCollection resources_;
 	std::unique_ptr<PatchDecomposer> decomposer_;
 	std::unique_ptr<PatchManager> patch_manager_;
+
+	// Runtime system state
+	SystemState current_system_state_;
 };
 
 } // namespace ARBD

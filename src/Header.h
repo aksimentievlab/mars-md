@@ -68,15 +68,14 @@ namespace sx = std::experimental;
 				sycl::atomic_ref<value_type, sycl::memory_order::relaxed,            \
 												 sycl::memory_scope::device>(*(ptr));                \
 		return atomic_ref.fetch_add(val);                                        \
-	} else {
-
-auto atomic_ref =
-	sycl::atomic_ref<value_type, sycl::memory_order::relaxed, sycl::memory_scope::device>(*(ptr));
-auto old_val = atomic_ref.load();
-while (!atomic_ref.compare_exchange_weak(old_val, old_val + (val))) {
-}
-return old_val;
-}
+	} else {                                                                   \
+		auto atomic_ref =                                                        \
+			sycl::atomic_ref<value_type, sycl::memory_order::relaxed, sycl::memory_scope::device>(*(ptr)); \
+		auto old_val = atomic_ref.load();                                       \
+		while (!atomic_ref.compare_exchange_weak(old_val, old_val + (val))) {   \
+		}                                                                        \
+		return old_val;                                                          \
+	}                                                                          \
 }())
 #elif defined(__METAL_VERSION__)
 #define ATOMIC_ADD(ptr, val)                                                              \
@@ -187,3 +186,5 @@ using patch_t = size_t;
 using particle_t = size_t;
 using device_id_t = unsigned short;
 using grid_t = size_t; // grid ids
+using morton_t = uint64_t;
+using coord_t = uint32_t;

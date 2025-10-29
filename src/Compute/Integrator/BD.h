@@ -3,8 +3,7 @@
 #include "ARBDLogger.h"
 #include "Header.h"
 #include "Objects/ParticleProperties.h"
-#include "Random/RandomKernels.h"
-#include "Random/philox.h"
+#include "../Random/philox.h"
 #include "System/PeriodicBox.h"
 #include "Types/Types.h"
 
@@ -12,6 +11,7 @@ namespace ARBD {
 struct BDIntegrate {
 	DEVICE void operator()(idx_t idx,
 						   Vector3* positions,
+							 Vector3* momenta,
 						   const Vector3* forces,
 						   const int* types,
 						   const ParticleType* particle_types,

@@ -73,8 +73,8 @@ class ZOrderPairlist : public Pairlist {
 	/**
 	 * @brief Get pairlist type
 	 */
-	PairlistType get_type() const override {
-		return PairlistType::ZOrder;
+	PairlistBuilderType get_type() const override {
+		return PairlistBuilderType::ZOrder;
 	}
 
 	/**

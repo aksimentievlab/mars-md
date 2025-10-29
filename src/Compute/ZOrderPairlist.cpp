@@ -2,6 +2,7 @@
 #include "ARBDException.h"
 #include "ARBDLogger.h"
 #include "Backend/Kernels.h"
+#include "Compute/PairListKernels/ZOrderNeighbor.h"
 #include <chrono>
 
 namespace ARBD {

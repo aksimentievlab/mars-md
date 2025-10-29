@@ -434,7 +434,6 @@ static void load_particles_file(const std::string& path,
 
 void ConfigParser::get_elements(const Reader& reader) {
 	const auto params = reader.getParameters();
-	auto& objects = config_.objects;
 
 	auto is_block_header = [](std::string_view key) {
 		return key == "particle"; // Extend with other block headers as needed
@@ -446,7 +445,7 @@ void ConfigParser::get_elements(const Reader& reader) {
 		if (key == "particle") {
 			std::string name = value;
 			int num = 0;
-			int type_index = static_cast<int>(objects.particle_types.size());
+			int type_index = static_cast<int>(config_.particle_types.size());
 			ParticleType ptype(name);
 
 			// Consume following field lines until next header
@@ -476,30 +475,30 @@ void ConfigParser::get_elements(const Reader& reader) {
 				}
 			}
 
-			objects.particle_types.push_back(std::move(ptype));
+			config_.particle_types.push_back(std::move(ptype));
 			// Create particles for this type
 			for (int n = 0; n < num; ++n) {
 				Particle p{};
-				p.id = static_cast<int>(objects.particles.size());
+				p.id = static_cast<int>(config_.init_particles.size());
 				p.type_id = type_index;
-				objects.particles.push_back(p);
+				config_.init_particles.push_back(p);
 			}
 			continue; // i already at next header or end
 		}
 
 		// External lists
 		if (key == "inputBonds") {
-			load_bonds_file(value, objects.bonds, file_name_);
+			load_bonds_file(value, config_.init_bonds, file_name_);
 		} else if (key == "inputAngles") {
-			load_angles_file(value, objects.angles, file_name_);
+			load_angles_file(value, config_.init_angles, file_name_);
 		} else if (key == "inputDihedrals") {
-			load_dihedrals_file(value, objects.dihedrals, file_name_);
+			load_dihedrals_file(value, config_.init_dihedrals, file_name_);
 		} else if (key == "inputExcludes") {
-			load_excludes_file(value, objects.exclusions, file_name_);
+			load_excludes_file(value, config_.init_exclusions, file_name_);
 		} else if (key == "inputRestraints") {
-			load_restraints_file(value, objects.restraints, file_name_);
+			load_restraints_file(value, config_.restraints, file_name_);
 		} else if (key == "inputParticles") {
-			load_particles_file(value, objects.particles, file_name_);
+			load_particles_file(value, config_.init_particles, file_name_);
 		}
 
 		++i;

@@ -3,11 +3,37 @@ set(LIB_SOURCES
     SignalManager.cpp
     Objects/ParticleProperties.cpp
     Configuration.cpp
+    IO/ConfigParser.cpp
+    Backend/Resource.cpp
     #Math/BaseGrid.cpp
 )
 
 # Add Backend subdirectory
 add_subdirectory(Backend)
+
+# Add conditional Backend sources
+if(USE_MPI)
+    list(APPEND LIB_SOURCES Backend/MPIManager.cpp)
+    message(STATUS "Backend: Adding MPI specific sources to lib${PROJECT_NAME}")
+endif()
+
+if(USE_CUDA)
+    list(APPEND LIB_SOURCES
+        Backend/CUDA/CUDAManager.cpp
+        Backend/CUDA/KernelHelper.cu
+    )
+    message(STATUS "Backend: Adding CUDA specific sources to lib${PROJECT_NAME}")
+endif()
+
+if(USE_SYCL_ACPP OR USE_SYCL_ICPX)
+    list(APPEND LIB_SOURCES Backend/SYCL/SYCLManager.cpp)
+    message(STATUS "Backend: Adding SYCL specific sources to lib${PROJECT_NAME}")
+endif()
+
+if(USE_METAL)
+    list(APPEND LIB_SOURCES Backend/METAL/METALManager.cpp)
+    message(STATUS "Backend: Adding Metal specific sources to lib${PROJECT_NAME}")
+endif()
 
 # Backend-specific sources are now handled by Backend/CMakeLists.txt
 

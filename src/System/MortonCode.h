@@ -11,6 +11,7 @@
 
 #include "Types/Types.h"
 #include "Types/Vector3.h"
+#include "Header.h"
 #include <cstdint>
 
 namespace ARBD {
@@ -23,8 +24,6 @@ namespace ARBD {
  */
 class MortonCode {
   public:
-	using morton_t = uint64_t;
-	using coord_t = uint32_t;
 
 	static constexpr int MAX_COORD_BITS = 21; // 21 bits per dimension = 63 bits total
 	static constexpr coord_t MAX_COORD = (1u << MAX_COORD_BITS) - 1;

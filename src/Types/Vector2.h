@@ -26,6 +26,20 @@ class alignas(2 * sizeof(T)) Vec2 {
 	// --- Constructors ---
 	HOST DEVICE constexpr Vec2() : x(T(0)), y(T(0)) {}
 	HOST DEVICE constexpr Vec2(T x_val, T y_val) : x(x_val), y(y_val) {}
+
+	// Explicit copy/move for union compatibility
+	HOST DEVICE constexpr Vec2(const Vec2& other) : x(other.x), y(other.y) {}
+	HOST DEVICE constexpr Vec2(Vec2&& other) : x(other.x), y(other.y) {}
+	HOST DEVICE constexpr Vec2& operator=(const Vec2& other) {
+		x = other.x;
+		y = other.y;
+		return *this;
+	}
+	HOST DEVICE constexpr Vec2& operator=(Vec2&& other) {
+		x = other.x;
+		y = other.y;
+		return *this;
+	}
 };
 
 } // namespace ARBD

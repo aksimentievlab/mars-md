@@ -6,14 +6,14 @@
 
 namespace ARBD {
 
-enum class AnalyticalBondType { Harmonic = 0, Morse = 1, WLCSK = 2, FENE = 3, Half_Harmonic = 4 };
-enum class AnalyticalAngleType { Harmonic = 0, Morse = 1, WLCSK = 2, FENE = 3, Half_Harmonic = 4 };
+enum class AnalyticalBondType { Harmonic = 0, Morse = 1, FENE = 2, Half_Harmonic = 3, WLCSK = 4 };
+enum class AnalyticalAngleType { Harmonic = 0, Morse = 1, FENE = 2, Half_Harmonic = 3, WLCSK = 4 };
 enum class AnalyticalDihedralType {
 	Harmonic = 0,
 	Morse = 1,
-	WLCSK = 2,
-	FENE = 3,
-	Half_Harmonic = 4
+	FENE = 2,
+	Half_Harmonic = 3,
+	WLCSK = 4
 };
 
 // ============================================================================
@@ -54,10 +54,38 @@ struct AnalyticalBondComputer<1> {
 	}
 };
 
+// FENE Bond: F = -k*r*(1-r/r0)
+template<>
+struct AnalyticalBondComputer<2> {
+	static constexpr int NUM_PARAMS = 2;
+
+	DEVICE static inline ForceEnergy compute(float distance, const float* params) {
+		const float k = params[0];	// Spring constant
+		const float r0 = params[1]; // Equilibrium distance
+		float force = -k * distance * (1.0f - distance / r0);
+		float energy =
+			0.5f * k * (distance - r0) * (distance - r0); // TODO: check if this is correct
+		return {force, energy};
+	}
+};
+
+// Half Harmonic Bond: F = -k*(r-r0) for r > r0, 0 for r <= r0
+template<>
+struct AnalyticalBondComputer<3> {
+	static constexpr int NUM_PARAMS = 2;
+
+	DEVICE static inline ForceEnergy compute(float distance, const float* params) {
+		const float k = params[0];	// Spring constant
+		const float r0 = params[1]; // Equilibrium distance
+		float force = distance > r0 ? -k * (distance - r0) : 0.0f;
+		float energy = distance > r0 ? 0.5f * k * (distance - r0) * (distance - r0) : 0.0f;
+		return {force, energy};
+	}
+};
 // WLCSK Bond (Worm-Like Chain with Shear and Kink)
 // Parameters: [d, lp, kT]
 template<>
-struct AnalyticalBondComputer<2> {
+struct AnalyticalBondComputer<4> {
 	static constexpr int NUM_PARAMS = 3;
 
 	DEVICE static inline ForceEnergy compute(float distance, const float* params) {
@@ -84,115 +112,4 @@ struct AnalyticalBondComputer<2> {
 		return {force_magnitude, energy};
 	}
 };
-
-// FENE Bond: F = -k*r*(1-r/r0)
-template<>
-struct AnalyticalBondComputer<3> {
-	static constexpr int NUM_PARAMS = 2;
-
-	DEVICE static inline ForceEnergy compute(float distance, const float* params) {
-		const float k = params[0];	// Spring constant
-		const float r0 = params[1]; // Equilibrium distance
-		float force = -k * distance * (1.0f - distance / r0);
-		float energy =
-			0.5f * k * (distance - r0) * (distance - r0); // TODO: check if this is correct
-		return {force, energy};
-	}
-};
-
-// Half Harmonic Bond: F = -k*(r-r0) for r > r0, 0 for r <= r0
-template<>
-struct AnalyticalBondComputer<4> {
-	static constexpr int NUM_PARAMS = 2;
-
-	DEVICE static inline ForceEnergy compute(float distance, const float* params) {
-		const float k = params[0];	// Spring constant
-		const float r0 = params[1]; // Equilibrium distance
-		float force = distance > r0 ? -k * (distance - r0) : 0.0f;
-		float energy = distance > r0 ? 0.5f * k * (distance - r0) * (distance - r0) : 0.0f;
-		return {force, energy};
-	}
-};
-
-template<int TypeId>
-struct AnalyticalBondFunctor {
-	HOST DEVICE void operator()(idx_t i,
-								DEVICE_PTR(const int2) particle_indices,
-								DEVICE_PTR(Vector3) positions,
-								DEVICE_PTR(Vector3) forces,
-								DEVICE_PTR(float) energys,
-								DEVICE_PTR(const float) params, // Flat parameter array
-								bool get_energy,
-								int offset = 0) const {
-		// Get particle indices
-		const int p1 = particle_indices[i + offset].x;
-		const int p2 = particle_indices[i + offset].y;
-
-		// Compute bond vector and distance
-		const Vector3 r_ij = positions[p2] - positions[p1];
-		const float distance = r_ij.length();
-
-		if (distance < 1e-6f)
-			return; // Avoid division by zero
-
-		// Get parameters for this bond
-		constexpr int num_params = AnalyticalBondComputer<TypeId>::NUM_PARAMS;
-		const float* bond_params = params + (i * num_params);
-
-		// Compute force magnitude using specialized template
-		const ForceEnergy fe = AnalyticalBondComputer<TypeId>::compute(distance, bond_params);
-
-		// Apply force atomically
-		const Vector3 force = (r_ij / distance) * fe.force_magnitude;
-		atomic_add(&forces[p1].x, -force.x);
-		atomic_add(&forces[p1].y, -force.y);
-		atomic_add(&forces[p1].z, -force.z);
-		atomic_add(&forces[p2].x, force.x);
-		atomic_add(&forces[p2].y, force.y);
-		atomic_add(&forces[p2].z, force.z);
-		if (get_energy) {
-			atomic_add(&energys[p1], fe.energy);
-			atomic_add(&energys[p2], fe.energy);
-		}
-	}
-};
-
-struct AnalyticalAngleFunctor {
-	HOST DEVICE void operator()(idx_t i,
-								DEVICE_PTR(Vector3) positions,
-								DEVICE_PTR(Vector3) forces,
-								DEVICE_PTR(Vector3) particle_indices,
-								DEVICE_PTR(const float) params, // Flat parameter array
-								bool get_energy,
-								int offset = 0) const {
-		const int p1 = particle_indices[i + offset].x;
-		const int p2 = particle_indices[i + offset].y;
-		const int p3 = particle_indices[i + offset].z;
-
-		const Vector3 r_ij = positions[p2] - positions[p1];
-		const Vector3 r_ik = positions[p3] - positions[p1];
-		const float distance_ij = r_ij.length();
-		const float distance_ik = r_ik.length();
-	};
-}; // namespace ARBD;
-
-struct AnalyticalDihedralFunctor {
-	HOST DEVICE void operator()(idx_t i,
-								DEVICE_PTR(Vector3) positions,
-								DEVICE_PTR(Vector3) forces,
-								DEVICE_PTR(Vector3) particle_indices,
-								DEVICE_PTR(const float) params, // Flat parameter array
-								bool get_energy,
-								int offset = 0) const {
-		const int p1 = particle_indices[i + offset].x;
-		const int p2 = particle_indices[i + offset].y;
-		const int p3 = particle_indices[i + offset].z;
-		const int p4 = particle_indices[i + offset].w;
-
-		const Vector3 r_ij = positions[p2] - positions[p1];
-		const Vector3 r_ik = positions[p3] - positions[p1];
-		const float distance_ij = r_ij.length();
-		const float distance_ik = r_ik.length();
-	};
-}; // namespace ARBD;
 } // namespace ARBD

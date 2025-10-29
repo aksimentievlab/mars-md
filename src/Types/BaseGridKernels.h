@@ -6,6 +6,13 @@
 
 namespace ARBD {
 
+template<typename T>
+struct ScaleGrid {
+	HOST DEVICE void operator()(T scale, T* grid_values) const {
+		grid_values = grid_values * scale;
+	}
+};
+
 /**
  * @brief Device-safe interpolation function (CUDA/SYCL compatible)
  */
@@ -73,6 +80,72 @@ struct InterpolateGridPoint {
 		return v0 * (T{1} - fz) + v1 * fz;
 	}
 };
+
+/**
+ * @brief Device-safe interpolation function (CUDA/SYCL compatible)
+ */
+template<typename T>
+HOST DEVICE T interpolate_grid_point(const T* grid_values,
+									 const Vector3_t<T>& world_pos,
+									 const Vector3_t<T>& origin,
+									 const Matrix3_t<T>& basis_inv,
+									 const Vector3_t<idx_t>& dimensions) {
+	// Transform world position to grid coordinates
+	const Vector3_t<T> grid_pos = basis_inv.transform(world_pos - origin);
+
+	const idx_t nx = dimensions.x;
+	const idx_t ny = dimensions.y;
+	const idx_t nz = dimensions.z;
+
+	// Check bounds
+	if (grid_pos.x < 0 || grid_pos.x >= nx || grid_pos.y < 0 || grid_pos.y >= ny ||
+		grid_pos.z < 0 || grid_pos.z >= nz) {
+		return T{0};
+	}
+
+	// Linear interpolation
+	const idx_t i0 = static_cast<idx_t>(grid_pos.x);
+	const idx_t j0 = static_cast<idx_t>(grid_pos.y);
+	const idx_t k0 = static_cast<idx_t>(grid_pos.z);
+
+	const idx_t i1 = i0 + 1;
+	const idx_t j1 = j0 + 1;
+	const idx_t k1 = k0 + 1;
+
+	const T fx = grid_pos.x - static_cast<T>(i0);
+	const T fy = grid_pos.y - static_cast<T>(j0);
+	const T fz = grid_pos.z - static_cast<T>(k0);
+
+	// Get grid indices using consistent indexing
+	const idx_t idx000 = k0 + j0 * nz + i0 * ny * nz;
+	const idx_t idx001 = k1 + j0 * nz + i0 * ny * nz;
+	const idx_t idx010 = k0 + j1 * nz + i0 * ny * nz;
+	const idx_t idx011 = k1 + j1 * nz + i0 * ny * nz;
+	const idx_t idx100 = k0 + j0 * nz + i1 * ny * nz;
+	const idx_t idx101 = k1 + j0 * nz + i1 * ny * nz;
+	const idx_t idx110 = k0 + j1 * nz + i1 * ny * nz;
+	const idx_t idx111 = k1 + j1 * nz + i1 * ny * nz;
+
+	// Trilinear interpolation
+	const T v000 = grid_values[idx000];
+	const T v001 = grid_values[idx001];
+	const T v010 = grid_values[idx010];
+	const T v011 = grid_values[idx011];
+	const T v100 = grid_values[idx100];
+	const T v101 = grid_values[idx101];
+	const T v110 = grid_values[idx110];
+	const T v111 = grid_values[idx111];
+
+	const T v00 = v000 * (T{1} - fx) + v100 * fx;
+	const T v01 = v001 * (T{1} - fx) + v101 * fx;
+	const T v10 = v010 * (T{1} - fx) + v110 * fx;
+	const T v11 = v011 * (T{1} - fx) + v111 * fx;
+
+	const T v0 = v00 * (T{1} - fy) + v10 * fy;
+	const T v1 = v01 * (T{1} - fy) + v11 * fy;
+
+	return v0 * (T{1} - fz) + v1 * fz;
+}
 
 /**
  * @brief Get value at nearest grid point (device-safe)
@@ -158,12 +231,12 @@ HOST DEVICE inline idx_t wrap_index(int index, idx_t size) {
  * @brief Device-safe neighbor list extraction (works with raw pointers)
  */
 template<typename T>
-HOST DEVICE auto get_neighbor_list_from_grid(const T* grid_values,
+HOST DEVICE void get_neighbor_list_from_grid(const T* grid_values,
 											 idx_t ix,
 											 idx_t iy,
 											 idx_t iz,
-											 const Vector3_t<idx_t>& dimensions) {
-	NeighborList<T> neighbors;
+											 const Vector3_t<idx_t>& dimensions,
+											 IndexList<idx_t, MAX_NEIGHBORS>& neighbors) {
 
 	const idx_t nx_val = dimensions.x;
 	const idx_t ny_val = dimensions.y;
@@ -190,27 +263,27 @@ HOST DEVICE auto get_neighbor_list_from_grid(const T* grid_values,
 
 				const idx_t neighbor_idx = nk + nj * nz_val + ni * ny_val * nz_val;
 				const T value = grid_values[neighbor_idx];
-				neighbors.v[di + 1][dj + 1][dk + 1] = value;
+				neighbors.add(neighbor_idx);
 
 #if (!defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__))
 				if (di == -1 && dj == 0 && dk == 0) {
-					LOGINFO(
-						"left_neighbor: di={}, dj={}, dk={}, ni={}, nj={}, nk={}, idx={}, value={}",
-						di,
-						dj,
-						dk,
-						ni,
-						nj,
-						nk,
-						neighbor_idx,
-						value);
+					LOGINFO("left_neighbor: di={}, dj={}, dk={}, ni={}, nj={}, nk={}, "
+							"idx={}, value={}",
+							di,
+							dj,
+							dk,
+							ni,
+							nj,
+							nk,
+							neighbor_idx,
+							value);
 				}
 #endif
 			}
 		}
 	}
 
-	return neighbors;
+	return;
 }
 
 /**

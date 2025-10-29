@@ -1,10 +1,10 @@
 #pragma once
 
-#include "../ARBDException.h"
-#include "../Buffer.h"
-#include "../Events.h"
-#include "../KernelConfig.h"
-#include "../Resource.h"
+#include "ARBDException.h"
+#include "Backend/Buffer.h"
+#include "Backend/Events.h"
+#include "Backend/KernelConfig.h"
+#include "Backend/Resource.h"
 
 #ifdef __CUDACC__
 // Only include CUDA headers when compiling with nvcc

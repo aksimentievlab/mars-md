@@ -22,7 +22,7 @@ class SimSystem;
 /**
  * @brief Enumeration of available pairlist strategies
  */
-enum class PairlistType {
+enum class PairlistBuilderType {
 	CellList,	 ///< Traditional cell-based neighbor lists
 	ZOrder,		 ///< Z-order (Morton) based spatial sorting
 	VerletList,	 ///< Verlet neighbor lists
@@ -87,7 +87,7 @@ class Pairlist {
 	virtual bool needs_update(const DeviceBuffer<Vector3>& positions,
 							  const DeviceBuffer<Vector3>& old_positions,
 							  size_t num_particles,
-							  float skin_distance) const {
+							  float pairlist_distance) const {
 		// Default implementation: always update
 		// Derived classes can implement smarter update criteria
 		return true;
@@ -124,7 +124,7 @@ class Pairlist {
 	/**
 	 * @brief Get pairlist type identifier
 	 */
-	virtual PairlistType get_type() const = 0;
+	virtual PairlistBuilderType get_type() const = 0;
 
 	/**
 	 * @brief Get implementation name
@@ -215,7 +215,7 @@ class Pairlist {
  * @param max_pairs Maximum number of pairs
  * @return Unique pointer to the created pairlist
  */
-std::unique_ptr<Pairlist> create_pairlist(PairlistType type,
+std::unique_ptr<Pairlist> create_pairlist(PairlistBuilderType type,
 										  const Resource& resource,
 										  size_t max_particles,
 										  size_t max_pairs);

@@ -9,9 +9,6 @@
 
 #include "ARBDException.h"
 #include "Backend/Resource.h"
-#include "Configuration.h"
-#include "SimManager.h"
-#include "SimSystem.h"
 
 #include "SignalManager.h"
 #include <cstdio>	// For printf
@@ -36,6 +33,7 @@ struct ProgramOptions {
 	std::vector<int> gpuIds;
 	int numGpus = 0;
 	int numNodes = 1;
+	int stride = 1;
 };
 
 bool parse_basic_args(int argc, char* argv[], ProgramOptions& opts) {
@@ -48,6 +46,7 @@ bool parse_basic_args(int argc, char* argv[], ProgramOptions& opts) {
 		printf("  -i, --imd=         IMD port (defaults to %u)\n", kDefaultIMDPort);
 		printf("  -g, --gpus=        Number of GPUs to use (defaults to %u)\n", kDefaultGpus);
 		printf("  -gid, --gpu_ids=   List of GPU IDs to use (e.g., --gid 0 1 2 3)\n");
+		printf("  -s, --stride=      Stride for DCD processing (defaults to 1)\n");
 		// printf("  -n, --nodes=       Number of nodes to use (defaults to %u)\n", kDefaultNodes);
 		return false; // Indicates help was shown, program should exit
 	} else if (argc == 2 && (strcmp(argv[1], "--version") == 0)) {
@@ -81,6 +80,15 @@ bool parse_basic_args(int argc, char* argv[], ProgramOptions& opts) {
 		} else if (strcmp(argv[i], "-n") == 0 || strcmp(argv[i], "--nodes") == 0) {
 			if (i + 1 < argc) {
 				opts.numNodes = atoi(argv[i + 1]);
+				++i; // Skip next argument
+			}
+		} else if (strcmp(argv[i], "-s") == 0 || strcmp(argv[i], "--stride") == 0) {
+			if (i + 1 < argc) {
+				opts.stride = atoi(argv[i + 1]);
+				if (opts.stride <= 0) {
+					printf("ERROR: Invalid stride value: %d (must be > 0)\n", opts.stride);
+					return false;
+				}
 				++i; // Skip next argument
 			}
 		}

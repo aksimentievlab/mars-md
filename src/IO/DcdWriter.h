@@ -477,7 +477,7 @@ class DcdWriter {
 		// Write coordinates efficiently using Vector3 memory layout
 		int coord_size = N * sizeof(float);
 
-		// Since your Vector3 has x,y,z,w layout with proper alignment,
+		// Since Vector3 has x,y,z,w layout with proper alignment,
 		// we can efficiently extract components without temporary arrays
 		const Vector3* pos_data = positions.data();
 

@@ -4,6 +4,7 @@
 #include "Constants.h"
 #include "Header.h"
 #include "IO/TabulatedReader.h"
+#include "Objects/ParticleProperties.h"
 #include "Types/Types.h"
 namespace ARBD {
 

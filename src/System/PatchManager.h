@@ -28,6 +28,7 @@
 #include "System/PeriodicBox.h"
 #include "Types/Types.h"
 #include <array>
+#include <numeric>
 #include <unordered_set>
 
 namespace ARBD {
@@ -94,6 +95,8 @@ class PatchManager {
   private:
 	SimSystem& sys_;
 	MPI::Manager& mpi_manager_;
+	size_t global_seed_;
+	std::unordered_map<const Resource*, size_t> rng_seeds_;
 
 	// Patch management
 	std::vector<Patch> patches_;

@@ -79,6 +79,21 @@ Array<Vector3_t<T>> array_to_vector_arr(py::array_t<T> a) {
  * >>> print(a)
  * array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]])
  */
+template<typename T>
+py::array_t<T> vector_arr_to_numpy_array(const Array<Vector3_t<T>>& arr) {
+	auto result = py::array_t<T>({static_cast<py::ssize_t>(arr.size()), 3});
+	py::buffer_info info = result.request();
+	T* ptr = static_cast<T*>(info.ptr);
+
+	for (size_t i = 0; i < arr.size(); ++i) {
+		size_t j = i * 3;
+		ptr[j] = arr[i].x;
+		ptr[j + 1] = arr[i].y;
+		ptr[j + 2] = arr[i].z;
+	}
+
+	return result;
+}
 
 // ============================================================================
 // VECTOR3 BINDINGS
@@ -95,7 +110,6 @@ void declare_vector(py::module& m, const std::string& typestr) {
 		.def(py::init([](py::array_t<T> a) { return array_to_vector<T>(a); }))
 		// Operators
 		.def(py::self + py::self)
-		.def(py::self * py::self)
 		.def(py::self *= float())
 		.def(float() * py::self)
 		.def(py::self * float())
@@ -136,9 +150,9 @@ void declare_array(py::module& m, const std::string& typestr) {
 	using Class = Array<Vector3_t<T>>;
 	std::string pyclass_name = std::string("Vector3_Array_t_") + typestr;
 	py::class_<Class>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
-		.def(py::init<>())
+		.def(py::init<size_t>(), py::arg("size"))
 		.def(py::init([](py::array_t<T> a) { return array_to_vector_arr<T>(a); }))
-		.def("as_array", [](Array<Vector3_t<T>>& a) { return vector_arr_to_numpy_array<T>(a); })
+		// .def("as_array", [](Array<Vector3_t<T>>& a) { return vector_arr_to_numpy_array<T>(a); })
 		.def("size", &Class::size)
 		.def("__len__", &Class::size)
 		.def("__getitem__",

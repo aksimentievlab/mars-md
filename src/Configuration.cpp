@@ -49,11 +49,11 @@ void Configuration::validate_method_parameters() const {
 						"Number of steps must be positive (got {})",
 						steps.steps);
 	}
-	if (decomp_period <= 0) {
+	if (neighbor_list_rebuild_period <= 0) {
 		throw Exception(ExceptionType::ValueError,
 						SourceLocation(),
-						"Decomposition period must be positive (got {})",
-						decomp_period);
+						"Neighbor list rebuild period must be positive (got {})",
+						neighbor_list_rebuild_period);
 	}
 };
 

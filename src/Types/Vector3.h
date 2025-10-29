@@ -59,6 +59,7 @@ class alignas(4 * sizeof(T)) Vector3_t {
 	HOST DEVICE constexpr Vector3_t(const Vector3_t<T>& v) : x(v.x), y(v.y), z(v.z), w(v.w) {}
 	HOST DEVICE constexpr Vector3_t(T x, T y, T z) : x(x), y(y), z(z), w(0) {}
 	HOST DEVICE constexpr Vector3_t(T x, T y, T z, T w) : x(x), y(y), z(z), w(w) {}
+	HOST DEVICE constexpr Vector3_t(Vector3_t<T>&&) = default; // move
 
 	// Backend vector conversion constructor
 	template<typename BackendVec>
@@ -300,24 +301,15 @@ class alignas(4 * sizeof(T)) Vector3_t {
 		return !(*this == b);
 	}
 #ifdef HOST_GUARD
-	HOST void print() const {
-		LOGINFO("%0.3f %0.3f %0.3f",
-				static_cast<double>(x),
-				static_cast<double>(y),
-				static_cast<double>(z));
-	}
+	HOST void print() const;
 
-	auto to_string() const {
-		std::ostringstream oss;
-		oss << x << " " << y << " " << z << " (" << w << ")";
-		return oss.str();
-	}
+	std::string to_string() const;
 #endif
 };
 
 // Free function operators
 template<typename T, typename U>
-HOST DEVICE constexpr auto operator/(U s, const Vector3_t<T>& v) {
+HOST DEVICE constexpr T operator/(U s, const Vector3_t<T>& v) {
 #ifdef __CUDA_ARCH__
 	using TU = T;
 #elif defined(__SYCL_DEVICE_ONLY__)

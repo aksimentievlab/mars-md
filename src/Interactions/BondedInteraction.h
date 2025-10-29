@@ -4,6 +4,7 @@
  */
 
 #pragma once
+#include "Bonded/SMDBond.h"
 #include "Header.h"
 #include "IO/Reader.h"
 #include "Objects/ParticleProperties.h"
@@ -50,7 +51,6 @@ class Bond {
 	InteractionForm form;
 	int functionIndex;
 	BondFlag flag;
-
 	void add_exclusion(std::vector<Exclude>& excludes) {
 		excludes.push_back(Exclude(ind1, ind2));
 	}
@@ -80,6 +80,84 @@ struct Restraint {
 	int ind;
 	Vector3 r0;
 	float k;
+};
+
+struct VecAngle {
+	int ind1, ind2, ind3, ind4;
+	std::string name;
+	InteractionForm form;
+	int functionIndex;
+};
+
+/**
+ * @brief Product potential types for coupled bonded interactions
+ */
+enum class ProductPotentialType {
+	BondAngle,	// 2 angles + 1 bond (4 particles: i-j-k-l)
+	AngleAngle, // 2 angles sharing a bond (4 particles: i-j-k-l)
+	BondBond,	// 2 bonds sharing an atom (3 particles: i-j-k)
+	Custom		// User-defined combination
+};
+
+/**
+ * @brief Product potential coupling multiple bonded terms
+ *
+ * Supports various combinations of bonded interactions:
+ * - BondAngle: 2 angles + 1 bond (4 particles: i-j-k-l)
+ * - AngleAngle: 2 angles sharing a bond (4 particles: i-j-k-l)
+ * - BondBond: 2 bonds sharing an atom (3 particles: i-j-k)
+ * - Custom: User-defined combination
+ */
+struct ProductPotential {
+	int4 particle_indices; // Up to 4 particles
+	ProductPotentialType type;
+
+	// Indices into tabulated potential arrays
+	int potential_index_1; // First component (e.g., angle 1)
+	int potential_index_2; // Second component (e.g., bond)
+	int potential_index_3; // Third component (e.g., angle 2)
+
+	std::string name;
+	InteractionForm form;
+	int functionIndex;
+
+	ProductPotential()
+		: particle_indices{-1, -1, -1, -1}, type(ProductPotentialType::BondAngle),
+		  potential_index_1(-1), potential_index_2(-1), potential_index_3(-1),
+		  form(InteractionForm::Tabulated), functionIndex(-1) {}
+
+	ProductPotential(int i,
+					 int j,
+					 int k,
+					 int l,
+					 ProductPotentialType type,
+					 int pot1,
+					 int pot2,
+					 int pot3,
+					 const std::string& name = "ProductPotential")
+		: particle_indices{i, j, k, l}, type(type), potential_index_1(pot1),
+		  potential_index_2(pot2), potential_index_3(pot3), name(name),
+		  form(InteractionForm::Tabulated), functionIndex(-1) {}
+
+	// Helper to create BondAngle product potential
+	static ProductPotential from_bond_angle(int i,
+											int j,
+											int k,
+											int l,
+											int angle1_idx,
+											int bond_idx,
+											int angle2_idx,
+											const std::string& name = "BondAngle") {
+		return ProductPotential(i,
+								j,
+								k,
+								l,
+								ProductPotentialType::BondAngle,
+								angle1_idx,
+								bond_idx,
+								angle2_idx,
+								name);
+	}
 };
 
 // ============================================================================
@@ -120,32 +198,9 @@ class BondedInteraction {
 	}
 
   private:
-	// Host-side data
 	std::vector<Bond> bonds_;
 	std::vector<Angle> angles_;
 	std::vector<Dihedral> dihedrals_;
 };
 
-// ============================================================================
-// POTENTIAL REGISTRATION
-// ============================================================================
-
-/** Future pybind class for new analytical potential registration */
-class Register_Potential {
-  public:
-	int register_potential(const std::string& name) {
-		if (m_name_to_id.find(name) == m_name_to_id.end()) {
-			int new_id = m_name_to_id.size();
-			m_name_to_id[name] = new_id;
-		}
-		return m_name_to_id[name];
-	}
-
-	int get_id(const std::string& name) const {
-		return m_name_to_id.at(name);
-	}
-
-  private:
-	std::unordered_map<std::string, int> m_name_to_id;
-};
 } // namespace ARBD

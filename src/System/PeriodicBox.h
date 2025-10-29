@@ -13,7 +13,7 @@
 #include "Types/Types.h"
 
 namespace ARBD {
-enum class Periodicity { AllPeriodic, TwoDimensional, OneDimensional, Open };
+enum class Periodicity { AllPeriodic=3, TwoDimensional=2, OneDimensional=1, Open=0 };
 
 /**
  * @brief Lightweight device-safe periodic box for boundary calculations
@@ -176,6 +176,9 @@ class PeriodicBox {
 		return periodicity_;
 	}
 
+	HOST DEVICE int get_periodic_num() const {
+		return static_cast<int>(periodicity_);
+	}
   private:
 	/**
 	 * @brief Wrap scalar distance for minimum image convention

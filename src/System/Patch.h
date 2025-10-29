@@ -269,6 +269,7 @@ class Patch {
 	std::vector<ParticleAoS> particle_array_; ///< Array of particles in this patch
 	std::vector<ParticleType> types_;		  ///< Types of particles in this patch
 
+	std::vector<BaseGrid<float>> grids_;
 	// Interactions
 	std::vector<NonbondedInteraction*> nonbonded_interactions_;
 	std::vector<BondedInteraction*> bonded_interactions_;

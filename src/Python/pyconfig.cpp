@@ -82,7 +82,8 @@ void init_pyconfig(py::module_& m) {
 		});
 
 	py::class_<SimSteps>(m, "SimSteps")
-		.def(py::init<>())
+		.def(py::init<float, float>(), py::arg("timestep"), py::arg("total_simulation_time"))
+		.def(py::init<float, int>(), py::arg("timestep"), py::arg("steps"))
 		.def_readwrite("timestep", &SimSteps::timestep)
 		.def_readwrite("steps", &SimSteps::steps)
 		.def_readwrite("total_simulation_time", &SimSteps::total_simulation_time)
@@ -150,9 +151,6 @@ void init_pyconfig(py::module_& m) {
 		.def_readwrite("energy_output_period",
 					   &Configuration::energy_output_period,
 					   "Energy output period")
-		.def_readwrite("decomp_period",
-					   &Configuration::decomp_period,
-					   "Domain decomposition period")
 		.def_readwrite("output_name", &Configuration::output_name, "Output file base name")
 		.def_readwrite("output_format", &Configuration::output_format, "Output file format")
 		// System components
@@ -174,9 +172,6 @@ void init_pyconfig(py::module_& m) {
 		.def(py::init<Configuration>(),
 			 py::arg("config"),
 			 "Construct ConfigParser from Configuration object")
-		.def(py::init<const std::map<std::string, py::object>&>(),
-			 py::arg("config_dict"),
-			 "Construct ConfigParser from Python dictionary")
 		.def("parse_file",
 			 &ConfigParser::parse_file,
 			 py::arg("file_name"),

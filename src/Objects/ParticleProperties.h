@@ -69,7 +69,7 @@ class ParticleType {
 	int numPartGridFiles;
 	float* meanPmf;
 	float* pmf_scale;
-	std::vector<grid_t> grid_ids;
+	std::vector<grid_t> grids;
 
 	// BaseGrid<float>** pmfGrid;
 	// BaseGrid<float>* diffusionGrid; // uncommon

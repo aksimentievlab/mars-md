@@ -26,27 +26,8 @@ SystemState::~SystemState() {
 // Particle State Management
 //================================================================================
 
-void SystemState::set_particle_positions(const std::vector<Vector3>& positions) {
-	if (positions.size() != num_particles_) {
-		throw Exception(ExceptionType::ValueError,
-						SourceLocation(),
-						"Position vector size ({}) does not match number of particles ({})",
-						positions.size(),
-						num_particles_);
-	}
-
-	objects_.particles = positions;
-
-	LOGINFO("SystemState: Updated particle positions");
-}
-
 std::vector<Vector3> SystemState::get_particle_positions() const {
-	// TODO: In real implementation, this would copy from GPU buffers
-	// std::vector<Vector3> positions(num_particles_);
-	// positions_buffer.copy_to_host(positions.data(), num_particles_);
-	// return positions;
 
-	return particle_positions_;
 }
 
 //================================================================================

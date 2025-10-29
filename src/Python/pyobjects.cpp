@@ -1,4 +1,4 @@
-#include "Objects/ARBDObjects.h"
+#include "Configuration.h"
 #include "Objects/ParticleProperties.h"
 #include "Objects/RigidBodyProperties.h"
 #include <pybind11/pybind11.h>
@@ -151,60 +151,57 @@ void declare_rigid_body_type(py::module& m) {
 /**
  * @note Example usage (in Python):
  * ```python
- * >>> from arbd2v import ARBDObjects
- * >>> obj = ARBDObjects()
+ * >>> from arbd2v import Configuration
+ * >>> obj = Configuration()
  * >>> print(obj)
- * ARBDObjects(particles=0, rigid_bodies=0, bonds=0, angles=0, dihedrals=0)
+ * Configuration(particles=0, rigid_bodies=0, bonds=0, angles=0, dihedrals=0)
  * ```
  */
 void declare_arbd_objects(py::module& m) {
-	py::class_<ARBDObjects>(m, "ARBDObjects")
+	py::class_<Configuration>(m, "Configuration")
 		.def(py::init<>())
-		.def_readwrite("rigid_body_types", &ARBDObjects::rigid_body_types)
-		.def_readwrite("particle_types", &ARBDObjects::particle_types)
-		.def_readwrite("rigid_bodies", &ARBDObjects::rigid_bodies)
-		.def_readwrite("particles", &ARBDObjects::particles)
-		.def_readwrite("bonds", &ARBDObjects::bonds)
-		.def_readwrite("angles", &ARBDObjects::angles)
-		.def_readwrite("dihedrals", &ARBDObjects::dihedrals)
-		.def_readwrite("exclusions", &ARBDObjects::exclusions)
-		.def_readwrite("restraints", &ARBDObjects::restraints)
-		.def_readwrite("nb_interactions", &ARBDObjects::nb_interactions)
-		.def_readwrite("bonded_interactions", &ARBDObjects::bonded_interactions)
-		.def_readwrite("tabulated_file_names", &ARBDObjects::tabulated_file_names)
-		.def_readwrite("grid_file_names", &ARBDObjects::grid_file_names)
+		.def_readwrite("rigid_body_types", &Configuration::rigid_body_types)
+		.def_readwrite("particle_types", &Configuration::particle_types)
+		.def_readwrite("init_rigid_bodies", &Configuration::init_rigid_bodies)
+		.def_readwrite("init_particles", &Configuration::init_particles)
+		.def_readwrite("init_bonds", &Configuration::init_bonds)
+		.def_readwrite("init_angles", &Configuration::init_angles)
+		.def_readwrite("init_dihedrals", &Configuration::init_dihedrals)
+		.def_readwrite("init_exclusions", &Configuration::init_exclusions)
+		.def_readwrite("restraints", &Configuration::restraints)
+		.def_readwrite("tabulated_file_names", &Configuration::tabulated_file_names)
+		.def_readwrite("grid_file_names", &Configuration::grid_file_names)
 		// Helper methods
 		.def("add_particle_type",
-			 [](ARBDObjects& obj, const ParticleType& pt) { obj.particle_types.push_back(pt); })
+			 [](Configuration& obj, const ParticleType& pt) { obj.particle_types.push_back(pt); })
 		.def("add_particle",
-			 [](ARBDObjects& obj, const Particle& p) { obj.particles.push_back(p); })
-		.def(
-			"add_rigid_body_type",
-			[](ARBDObjects& obj, const RigidBodyType& rbt) { obj.rigid_body_types.push_back(rbt); })
+			 [](Configuration& obj, const Particle& p) { obj.init_particles.push_back(p); })
+		.def("add_rigid_body_type",
+			 [](Configuration& obj, const RigidBodyType& rbt) {
+				 obj.rigid_body_types.push_back(rbt);
+			 })
 		.def("add_rigid_body",
-			 [](ARBDObjects& obj, const RigidBody& rb) { obj.rigid_bodies.push_back(rb); })
+			 [](Configuration& obj, const RigidBody& rb) { obj.init_rigid_bodies.push_back(rb); })
 		.def("clear",
-			 [](ARBDObjects& obj) {
+			 [](Configuration& obj) {
 				 obj.rigid_body_types.clear();
 				 obj.particle_types.clear();
-				 obj.rigid_bodies.clear();
-				 obj.particles.clear();
-				 obj.bonds.clear();
-				 obj.angles.clear();
-				 obj.dihedrals.clear();
-				 obj.exclusions.clear();
+				 obj.init_rigid_bodies.clear();
+				 obj.init_particles.clear();
+				 obj.init_bonds.clear();
+				 obj.init_angles.clear();
+				 obj.init_dihedrals.clear();
+				 obj.init_exclusions.clear();
 				 obj.restraints.clear();
-				 obj.nb_interactions.clear();
-				 obj.bonded_interactions.clear();
 				 obj.tabulated_file_names.clear();
 				 obj.grid_file_names.clear();
 			 })
-		.def("__repr__", [](const ARBDObjects& obj) {
-			return "ARBDObjects(particles=" + std::to_string(obj.particles.size()) +
-				   ", rigid_bodies=" + std::to_string(obj.rigid_bodies.size()) +
-				   ", bonds=" + std::to_string(obj.bonds.size()) +
-				   ", angles=" + std::to_string(obj.angles.size()) +
-				   ", dihedrals=" + std::to_string(obj.dihedrals.size()) + ")";
+		.def("__repr__", [](const Configuration& obj) {
+			return "Configuration(particles=" + std::to_string(obj.init_particles.size()) +
+				   ", rigid_bodies=" + std::to_string(obj.init_rigid_bodies.size()) +
+				   ", bonds=" + std::to_string(obj.init_bonds.size()) +
+				   ", angles=" + std::to_string(obj.init_angles.size()) +
+				   ", dihedrals=" + std::to_string(obj.init_dihedrals.size()) + ")";
 		});
 }
 
@@ -222,5 +219,4 @@ void init_pyobjects(py::module_& m) {
 	declare_rigid_body_type(m);
 
 	// ARBD objects container
-	declare_arbd_objects(m);
 }

@@ -1,4 +1,5 @@
 #include "Interactions/BondedInteraction.h"
+#include "Interactions/Interactions.h"
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
@@ -104,12 +105,13 @@ void declare_restraint(py::module& m) {
  */
 void declare_bonded_interaction(py::module& m) {
 	py::class_<BondedInteraction>(m, "BondedInteraction")
-		.def(py::init<>())
+		.def(py::init<std::vector<Bond>, std::vector<Angle>, std::vector<Dihedral>>(),
+			 py::arg("bonds"),
+			 py::arg("angles"),
+			 py::arg("dihedrals"))
 		.def("addBond", &BondedInteraction::addBond)
 		.def("addAngle", &BondedInteraction::addAngle)
 		.def("addDihedral", &BondedInteraction::addDihedral)
-		.def("prepareDeviceData", &BondedInteraction::prepareDeviceData)
-		.def("cleanupDeviceData", &BondedInteraction::cleanupDeviceData)
 		.def("getNumBonds", &BondedInteraction::getNumBonds)
 		.def("getNumAngles", &BondedInteraction::getNumAngles)
 		.def("getNumDihedrals", &BondedInteraction::getNumDihedrals)

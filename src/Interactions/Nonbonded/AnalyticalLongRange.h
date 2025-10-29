@@ -11,10 +11,10 @@
 
 #include "Backend/Buffer.h"
 #include "Backend/Resource.h"
-#include "Objects/ARBDObjects.h"
 #include "Objects/ParticleProperties.h"
 #include "Objects/RigidBodyProperties.h"
 #include "SimParam.h"
+#include "System/Patch.h"
 #include "Types/BaseGrid.h"
 #include <memory>
 #include <string>
@@ -123,6 +123,7 @@ class LongRangeElectrostatics {
 /**
  * @brief Cutoff-AMR: Your novel adaptive approach
  */
+template<typename ParticleBuffer>
 class CutoffAMRElectrostatics : public LongRangeElectrostatics {
   private:
 	// AMR hierarchy using your BaseGrid system
@@ -215,14 +216,14 @@ class CutoffAMRElectrostatics : public LongRangeElectrostatics {
 		particle_count_grids_.push_back(std::move(count_grid));
 	}
 
-	void update_particle_density(const ParticleBuffer<float>& particles) {
+	void update_particle_density(const ParticleBuffer& particles) {
 		// Reset particle counts
 		for (auto& grid : particle_count_grids_) {
 			grid->zero();
 		}
 
 		// Deposit particles onto grids
-		if (particles.layout() == ParticleBuffer<float>::Layout::SoA) {
+		if (particles.get_layout() == ParticleBuffer) {
 			const Vector3* positions = particles.get_position_array();
 			for (size_t i = 0; i < particles.size(); ++i) {
 				deposit_particle_to_amr(positions[i], 1.0f);
@@ -293,6 +294,7 @@ class CutoffAMRElectrostatics : public LongRangeElectrostatics {
 /**
  * @brief PPPM/PME: Traditional mesh-based methods
  */
+template<typename ParticleBuffer>
 class PPPMElectrostatics : public LongRangeElectrostatics {
   private:
 	std::unique_ptr<BaseGrid<float>> charge_grid_;
@@ -314,7 +316,7 @@ class PPPMElectrostatics : public LongRangeElectrostatics {
 		calculate_optimal_parameters();
 	}
 
-	void solve_electrostatics(ParticleBuffer& particles,
+	void solve_electrostatics(const ParticleBuffer& particles,
 							  const ParticleTypeManager& type_manager) override {
 		auto start_time = std::chrono::high_resolution_clock::now();
 
@@ -437,6 +439,7 @@ class PPPMElectrostatics : public LongRangeElectrostatics {
 /**
  * @brief FMM: Fast Multipole Method
  */
+template<typename ParticleBuffer>
 class FMMElectrostatics : public LongRangeElectrostatics {
   private:
 	struct FMMNode {
@@ -466,8 +469,8 @@ class FMMElectrostatics : public LongRangeElectrostatics {
 		theta_ = config.parameters.at("theta");
 	}
 
-	void solve_electrostatics(ParticleBuffer& particles,
-							  const ParticleTypeManager& type_manager) override {
+	void solve_electrostatics(const ParticleBuffer& particles,
+							  const ParticleManager& type_manager) override {
 		auto start_time = std::chrono::high_resolution_clock::now();
 
 		// 1. Build adaptive octree

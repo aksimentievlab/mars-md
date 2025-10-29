@@ -60,9 +60,9 @@ struct AngleGeometry {
 };
 
 struct DihedralGeometry {
-	Vector3 ab, bc, cd;			// Vectors
-	float dihedral_angle;		// Computed dihedral angle
-	Vector3 crossABC, crossBCD; // Cross products
+	Vector3 ab, bc, cd;	  // Vectors
+	float dihedral_angle; // Computed dihedral angle
+	Vector3 f1, f2, f3;	  // force directions
 
 	DEVICE static DihedralGeometry
 	compute(const Vector3* positions, const int4& particle_indices, const PeriodicBox* pbox) {
@@ -71,15 +71,129 @@ struct DihedralGeometry {
 		geom.bc = pbox->wrapDiff(positions[particle_indices.z] - positions[particle_indices.y]);
 		geom.cd = pbox->wrapDiff(positions[particle_indices.w] - positions[particle_indices.z]);
 
-		geom.crossABC = geom.ab.cross(geom.bc);
-		geom.crossBCD = geom.bc.cross(geom.cd);
-		Vector3 crossX = geom.bc.cross(geom.crossABC);
+		Vector3 crossABC = geom.ab.cross(geom.bc);
+		Vector3 crossBCD = geom.bc.cross(geom.cd);
+		Vector3 crossX = geom.bc.cross(crossABC);
 
-		float cos_phi =
-			geom.crossABC.dot(geom.crossBCD) / (geom.crossABC.length() * geom.crossBCD.length());
-		float sin_phi = crossX.dot(geom.crossBCD) / (crossX.length() * geom.crossBCD.length());
+		float cos_phi = crossABC.dot(crossBCD) / (crossABC.length() * crossBCD.length());
+		float sin_phi = crossX.dot(crossBCD) / (crossX.length() * crossBCD.length());
 
 		geom.dihedral_angle = -atan2(sin_phi, cos_phi);
+
+		geom.f1 = -geom.bc.length() * crossABC.rLength2() * crossABC;
+		geom.f3 = -geom.bc.length() * crossBCD.rLength2() * crossBCD;
+		geom.f2 = -(geom.ab.dot(geom.bc) * geom.bc.rLength2()) * geom.f1 -
+				  (geom.bc.dot(geom.cd) * geom.bc.rLength2()) * geom.f3;
+
+		return geom;
+	}
+};
+
+/**
+ * @brief Geometry for product potentials (coupled bonded interactions)
+ *
+ * This structure contains the geometry for complex bonded interactions
+ * that couple multiple terms (e.g., BondAngle: 2 angles + 1 bond)
+ */
+struct ProductPotentialGeometry {
+	// For BondAngle type: angle1 (i-j-k), bond (j-k), angle2 (j-k-l)
+	AngleGeometry angle1;
+	BondGeometry bond;
+	AngleGeometry angle2;
+
+	// For AngleAngle type: two angles sharing a bond
+	AngleGeometry angle_a;
+	AngleGeometry angle_b;
+
+	// For BondBond type: two bonds sharing an atom
+	BondGeometry bond_a;
+	BondGeometry bond_b;
+
+	// Combined metrics (for coupled potentials)
+	float combined_metric;
+	bool is_singular;
+
+	ProductPotentialGeometry() : combined_metric(0.0f), is_singular(false) {}
+
+	/**
+	 * @brief Compute geometry for BondAngle product potential
+	 * @param positions Particle positions
+	 * @param indices 4 particle indices (i, j, k, l)
+	 * @param pbox Periodic boundary conditions
+	 * @return BondAngle geometry
+	 */
+	DEVICE static ProductPotentialGeometry compute_bond_angle(DEVICE_PTR(Vector3) positions,
+															  int4 indices, // i, j, k, l
+															  const PeriodicBox* pbox) {
+		ProductPotentialGeometry geom;
+
+		// Compute angle 1 (i-j-k)
+		geom.angle1 =
+			AngleGeometry::compute(positions, int3(indices.x, indices.y, indices.z), pbox);
+
+		// Compute bond (j-k)
+		geom.bond = BondGeometry::compute(positions, int2(indices.y, indices.z), pbox);
+
+		// Compute angle 2 (j-k-l)
+		geom.angle2 =
+			AngleGeometry::compute(positions, int3(indices.y, indices.z, indices.w), pbox);
+
+		// Check for singularities
+		geom.is_singular =
+			(geom.angle1.angle < 1e-6f || geom.bond.distance < 1e-6f || geom.angle2.angle < 1e-6f);
+
+		// Optional: compute combined metric for coupled potentials
+		// geom.combined_metric = f(geom.angle1.angle, geom.bond.distance, geom.angle2.angle);
+
+		return geom;
+	}
+
+	/**
+	 * @brief Compute geometry for AngleAngle product potential
+	 * @param positions Particle positions
+	 * @param indices 4 particle indices (i, j, k, l)
+	 * @param pbox Periodic boundary conditions
+	 * @return AngleAngle geometry
+	 */
+	DEVICE static ProductPotentialGeometry compute_angle_angle(DEVICE_PTR(Vector3) positions,
+															   int4 indices, // i, j, k, l
+															   const PeriodicBox* pbox) {
+		ProductPotentialGeometry geom;
+
+		// Compute angle 1 (i-j-k)
+		geom.angle_a =
+			AngleGeometry::compute(positions, int3(indices.x, indices.y, indices.z), pbox);
+
+		// Compute angle 2 (j-k-l)
+		geom.angle_b =
+			AngleGeometry::compute(positions, int3(indices.y, indices.z, indices.w), pbox);
+
+		// Check for singularities
+		geom.is_singular = (geom.angle_a.angle < 1e-6f || geom.angle_b.angle < 1e-6f);
+
+		return geom;
+	}
+
+	/**
+	 * @brief Compute geometry for BondBond product potential
+	 * @param positions Particle positions
+	 * @param indices 3 particle indices (i, j, k)
+	 * @param pbox Periodic boundary conditions
+	 * @return BondBond geometry
+	 */
+	DEVICE static ProductPotentialGeometry compute_bond_bond(DEVICE_PTR(Vector3) positions,
+															 int3 indices, // i, j, k
+															 const PeriodicBox* pbox) {
+		ProductPotentialGeometry geom;
+
+		// Compute bond 1 (i-j)
+		geom.bond_a = BondGeometry::compute(positions, int2(indices.x, indices.y), pbox);
+
+		// Compute bond 2 (j-k)
+		geom.bond_b = BondGeometry::compute(positions, int2(indices.y, indices.z), pbox);
+
+		// Check for singularities
+		geom.is_singular = (geom.bond_a.distance < 1e-6f || geom.bond_b.distance < 1e-6f);
 
 		return geom;
 	}

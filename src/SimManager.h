@@ -22,7 +22,6 @@
 #include "IO/DcdWriter.h"
 #include "IO/TrajectoryWriter.h"
 #include "IO/WKFUtils.h"
-#include "Random/Random.h"
 #include "SimSystem.h"
 
 // Q: what is our parallel heirarchy?
@@ -157,13 +156,6 @@ class SimManager {
 	 * @param step Current simulation step
 	 */
 	void write_dcd_frame(size_t step);
-
-	/**
-	 * @brief Calculate and output energy information
-	 * @param step Current simulation step
-	 */
-	void output_energy(size_t step);
-
 	/**
 	 * @brief Report simulation progress
 	 * @param current_step Current step
@@ -202,7 +194,7 @@ class SimManager {
 	 * @param types Output vector for particle types
 	 */
 	void generate_initial_particles(std::vector<Vector3>& positions, std::vector<int>& types);
-	void initialize_rngs(size_t seed);
+
 	/**
 	 * @brief Write final restart file
 	 */

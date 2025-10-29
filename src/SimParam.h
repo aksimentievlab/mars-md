@@ -10,8 +10,7 @@
  *
  */
 #include "ARBDException.h"
-#include "Objects/ParticleProperties.h"
-#include "Objects/RigidBodyProperties.h"
+#include "Constants.h"
 #include "Types/BaseGrid.h"
 #include "Types/Types.h"
 #include <memory>
@@ -30,7 +29,7 @@ struct Temperature {
 
 	Temperature(float value = 298.15f) : value(value) {
 		format = Format::Value;
-		kT = value * 0.0019872065f;
+		kT = value * constants::BOLTZMANN;
 	}
 	Temperature(BaseGrid<float>* grid) : grid(grid) {
 		format = Format::Grid;
@@ -38,7 +37,9 @@ struct Temperature {
 		kT = 0.0f;	  // No global kT, but for compatibility we set it to zero.
 		if (grid) {
 			std::shared_ptr<BaseGrid<float>> kT_grid = std::make_shared<BaseGrid<float>>(*grid);
-			kT_grid->scale(0.0019872065f);
+#ifdef HOST_GUARD
+			kT_grid->scale(constants::BOLTZMANN);
+#endif
 			this->grid = kT_grid;
 		} else {
 			this->grid = nullptr;
@@ -59,6 +60,9 @@ struct Pressure {
  * @brief Length/distance configuration
  */
 struct Length {
+	/**
+	 * @brief Length in angstroms
+	 */
 	float value = 0.0f;
 
 	// Python-friendly constructor
@@ -76,7 +80,7 @@ struct Length {
  */
 struct SimSteps {
 	float timestep;
-	int steps;
+	size_t steps;
 	float total_simulation_time;
 
 	inline void set_total_steps() {
@@ -92,7 +96,18 @@ struct SimSteps {
 							"Total simulation time must be positive (got {})",
 							total_simulation_time);
 		}
-		steps = total_simulation_time / timestep;
+		if (static_cast<size_t>(total_simulation_time / timestep) >
+			std::numeric_limits<size_t>::max()) {
+			throw Exception(ExceptionType::ValueError,
+							SourceLocation(),
+							"Total simulation time is too large for the number of steps");
+		}
+		if (total_simulation_time < timestep) {
+			throw Exception(ExceptionType::ValueError,
+							SourceLocation(),
+							"Total simulation time is too small for the number of steps");
+		}
+		steps = static_cast<size_t>(total_simulation_time / timestep);
 	}
 	SimSteps(float timestep, float total_simulation_time)
 		: timestep(timestep), total_simulation_time(total_simulation_time) {
@@ -109,11 +124,11 @@ struct SimSteps {
 
 enum class DecomposerType {
 	Spatial,			// For uniform systems - divides space into equal patches
+	ZOrder,				// For cache-friendly spatial sorting and multi-device scaling
 	RecursiveBisection, // For non-uniform systems (load balancing)
-	Geometric,			// For systems with specific shapes (e.g., membranes)
-	ZOrder				// For cache-friendly spatial sorting and multi-device scaling
+	Geometric			// For systems with specific shapes (e.g., membranes)
 };
-enum class DecomposeDirection { X, Y, Z };
+enum class DecomposeDirection { X, Y, Z }; // default is Z
 
 enum class LongRangeMethod {
 	CutoffAMR, ///< Adaptive cutoff with mesh refinement
@@ -124,11 +139,11 @@ enum class LongRangeMethod {
 	None	   ///< No long-range interactions
 };
 
-enum class DynamicType { Brownian, Langevin,NoseHooverLangevin, DPD };
-
+enum class DynamicType { Brownian, Langevin, NoseHooverLangevin, DPD };
 enum class OutputFormat { DCD, PDB, HDF5 };
-
-enum class ThermostatType { Langevin, NVE, NoseHooverLangevin };
+enum class ThermostatType { NVE, NoseHooverLangevin };
 enum class BarostatType { Isobaric, Isochoric };
 enum class InteractionForm { Grid, Tabulated, Analytical };
+enum class TabulatedType { NBPair, Bond, Angle, Dihedral, Custom };
+
 } // namespace ARBD

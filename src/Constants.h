@@ -15,6 +15,7 @@
 
 namespace ARBD {
 // Main namespace for Atomic Resolution Brownian Dynamics
+
 namespace constants {
 constexpr float PI = 3.141592653589793f;
 constexpr float TWOPI = 2.0f * PI;
@@ -23,7 +24,6 @@ constexpr float HALFPI = 0.5f * PI;
 // Physical constants
 constexpr float COULOMB = 332.0636f;
 constexpr float BOLTZMANN = 0.001987191f;
-constexpr float TIMEFACTOR = 48.88821f;
 constexpr float PRESSUREFACTOR = 6.95E4f;
 
 // Simulation constants

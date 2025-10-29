@@ -1,7 +1,7 @@
 #pragma once
 
-#include "Configuration.h"
 #include "BondConfigReader.h"
+#include "Configuration.h"
 #include "Reader.h"
 #include <map>
 #include <string>	   // For std::string member
@@ -84,7 +84,9 @@ class ConfigParser {
 	void parse_parameters(const Reader& reader);
 	void apply_defaults();
 	void get_elements(const Reader& reader);
+#ifdef USE_PYTHON
 	void parse_dictionary(const std::map<std::string, pybind11::object>& config_dict);
+#endif
 
 	// Validation helpers
 	void validate_physical_parameters() const;
