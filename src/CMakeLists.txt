@@ -1,4 +1,39 @@
 
+# Define HOST-ONLY headers (cannot be included in device code)
+set(HOST_ONLY_HEADERS
+    SignalManager.h
+    Configuration.h
+    IO/ConfigParser.h
+    Backend/Resource.h
+    Backend/MPIManager.h
+    Backend/CUDA/CUDAManager.h
+    Backend/SYCL/SYCLManager.h
+    Backend/METAL/METALManager.h
+    Backend/SYCL/SYCLBuffer.h
+    Backend/SYCL/SYCLQueues.h
+    Backend/SYCL/SYCLKernels.h
+    Types/Array.h
+    Types/BaseGrid.h
+)
+
+# Define DEVICE-SAFE headers (can be included in both host and device code)
+set(DEVICE_SAFE_HEADERS
+    Types/Matrix3.h
+    Types/Vector3.h
+    Types/Vector2.h
+    Types/TypeName.h
+    Types/IndexList.h
+    Types/BaseGridDevice.h
+    Types/Bitmask.h
+    Types/Grid.h
+    Types/NanoGridHandle.h
+    Types/NanoGridKernels.h
+    Types/Types.h
+    Types/Math.h
+    Objects/DeviceParticle.h
+    System/ZOrderKernels/SYCLSort.h
+)
+
 set(LIB_SOURCES
     SignalManager.cpp
     Objects/ParticleProperties.cpp
@@ -55,10 +90,32 @@ target_include_directories("lib${PROJECT_NAME}" PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
-# --- SYCL specific linking or include directories for the library ---
+# --- SYCL specific configuration for the library ---
 if(USE_SYCL_ACPP OR USE_SYCL_ICPX)
     # For Intel DPC++ (icpx), linking is usually handled by -fsycl.
     message(STATUS "src: SYCL is enabled for lib${PROJECT_NAME}.")
+
+    # Mark host-only headers to prevent device compilation
+    foreach(header ${HOST_ONLY_HEADERS})
+        if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${header}")
+            set_source_files_properties("${CMAKE_CURRENT_SOURCE_DIR}/${header}"
+                PROPERTIES
+                HEADER_FILE_ONLY TRUE
+                COMPILE_FLAGS "-DHOST_ONLY_HEADER"
+            )
+        endif()
+    endforeach()
+
+    # Ensure device-safe headers are available for device compilation
+    foreach(header ${DEVICE_SAFE_HEADERS})
+        if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${header}")
+            set_source_files_properties("${CMAKE_CURRENT_SOURCE_DIR}/${header}"
+                PROPERTIES
+                HEADER_FILE_ONLY TRUE
+                COMPILE_FLAGS "-DDEVICE_SAFE_HEADER"
+            )
+        endif()
+    endforeach()
 
     # Explicit linking for AdaptiveCpp runtime libraries
     if(USE_SYCL_ACPP AND CMAKE_CXX_COMPILER MATCHES "acpp")

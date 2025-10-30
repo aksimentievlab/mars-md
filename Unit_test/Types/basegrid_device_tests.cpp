@@ -3,7 +3,7 @@
 #include "Backend/Buffer.h"
 #include "Backend/KernelConfig.h"
 #include "Backend/Kernels.h"
-#include "Types/BaseGridKernels.h"
+#include "Types/BaseGrid.h"
 
 #include <vector>
 using Catch::Approx;
@@ -62,8 +62,8 @@ TEST_CASE("BaseGrid device interpolate and nearest", "[basegrid][device]") {
 					 const Params* params) {
 		const Params p = params[0];
 		const Vector3_t<T> pt = pos[i];
-		const T vi = interpolate_grid_point<T>(values, pt, p.origin, p.basis_inv, p.dims);
-		const T vn = get_value_nearest<T>(values, pt, p.origin, p.basis_inv, p.dims);
+		const T vi = ARBD::interpolate_grid_point<T>(values, pt, p.origin, p.basis_inv, p.dims);
+		const T vn = ARBD::get_value_nearest<T>(values, pt, p.origin, p.basis_inv, p.dims);
 		out_interp[i] = vi;
 		out_nearest[i] = vn;
 	};

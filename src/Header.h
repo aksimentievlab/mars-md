@@ -56,27 +56,29 @@ namespace sx = std::experimental;
 #define ATOMIC_ADD(ptr, val) atomicAdd((ptr), (val))
 #elif defined(__SYCL_DEVICE_ONLY__)
 // For SYCL: fetch_add available for integral types, CAS for floating-point
-#define ATOMIC_ADD(ptr, val) \
-([&]() -> std::remove_reference_t<decltype(*(ptr))> {                        \
-	using value_type = std::remove_reference_t<decltype(*(ptr))>;              \
-	if constexpr (std::is_same_v<value_type, float>) {                         \
-		auto atomic_ref = sycl::atomic_ref<float, sycl::memory_order::relaxed,   \
-																			 sycl::memory_scope::device>(*(ptr));  \
-		return atomic_ref.fetch_add(val);                                        \
-	} else if constexpr (std::is_integral_v<value_type>) {                     \
-		auto atomic_ref =                                                        \
-				sycl::atomic_ref<value_type, sycl::memory_order::relaxed,            \
-												 sycl::memory_scope::device>(*(ptr));                \
-		return atomic_ref.fetch_add(val);                                        \
-	} else {                                                                   \
-		auto atomic_ref =                                                        \
-			sycl::atomic_ref<value_type, sycl::memory_order::relaxed, sycl::memory_scope::device>(*(ptr)); \
-		auto old_val = atomic_ref.load();                                       \
-		while (!atomic_ref.compare_exchange_weak(old_val, old_val + (val))) {   \
-		}                                                                        \
-		return old_val;                                                          \
-	}                                                                          \
-}())
+#define ATOMIC_ADD(ptr, val)                                                                      \
+	([&]() -> std::remove_reference_t<decltype(*(ptr))> {                                         \
+		using value_type = std::remove_reference_t<decltype(*(ptr))>;                             \
+		if constexpr (std::is_same_v<value_type, float>) {                                        \
+			auto atomic_ref =                                                                     \
+				sycl::atomic_ref<float, sycl::memory_order::relaxed, sycl::memory_scope::device>( \
+					*(ptr));                                                                      \
+			return atomic_ref.fetch_add(val);                                                     \
+		} else if constexpr (std::is_integral_v<value_type>) {                                    \
+			auto atomic_ref = sycl::atomic_ref<value_type,                                        \
+											   sycl::memory_order::relaxed,                       \
+											   sycl::memory_scope::device>(*(ptr));               \
+			return atomic_ref.fetch_add(val);                                                     \
+		} else {                                                                                  \
+			auto atomic_ref = sycl::atomic_ref<value_type,                                        \
+											   sycl::memory_order::relaxed,                       \
+											   sycl::memory_scope::device>(*(ptr));               \
+			auto old_val = atomic_ref.load();                                                     \
+			while (!atomic_ref.compare_exchange_weak(old_val, old_val + (val))) {                 \
+			}                                                                                     \
+			return old_val;                                                                       \
+		}                                                                                         \
+	}())
 #elif defined(__METAL_VERSION__)
 #define ATOMIC_ADD(ptr, val)                                                              \
 	atomic_fetch_add_explicit(                                                            \

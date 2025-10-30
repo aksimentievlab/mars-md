@@ -12,9 +12,9 @@
 
 namespace ARBD {
 
-void sort_morton_codes_cuda(const DeviceBuffer<morton_t>& morton_codes_,
-							const DeviceBuffer<uint32_t>& sorted_indices_,
-							size_t num_particles_) {
+DEVICE void sort_morton_codes_cuda(const DeviceBuffer<morton_t>& morton_codes_,
+								   const DeviceBuffer<uint32_t>& sorted_indices_,
+								   size_t num_particles_) {
 
 	// Use Thrust for sorting Morton codes along with indices
 	thrust::device_ptr<morton_t> morton_ptr(morton_codes_.data());

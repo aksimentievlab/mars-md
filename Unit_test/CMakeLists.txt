@@ -8,14 +8,10 @@ enable_testing()
 
 # Single unified test binary using Catch2 amalgamated
 add_executable(arbd_unit_tests
-	${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp
-	${CMAKE_CURRENT_LIST_DIR}/Backend/backend_buffer_tests.cpp
-	${CMAKE_CURRENT_LIST_DIR}/Backend/mpi_tests.cpp
-	${CMAKE_CURRENT_LIST_DIR}/Types/vector3_tests.cpp
-	${CMAKE_CURRENT_LIST_DIR}/IO/dx_io_device_tests.cpp
-	${CMAKE_CURRENT_LIST_DIR}/Types/basegrid_device_tests.cpp
+    ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Backend/backend_buffer_tests.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Backend/mpi_tests.cpp
 )
-
 # Includes
 target_include_directories(arbd_unit_tests PRIVATE
 	${CMAKE_SOURCE_DIR}

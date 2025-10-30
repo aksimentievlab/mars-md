@@ -2,6 +2,7 @@
  * @file  BaseGrid.h
  *
  * @brief Modern C++20 BaseGrid class for arbd2/cpp20 branch
+ *        Host-side BaseGrid Manager.
  *        Multi-backend support (CUDA, SYCL, CPU) with clean separation
  *
  * @author Original: Jeff Comer <jcomer2@illinois.edu>
@@ -16,18 +17,14 @@
 #include <string_view>
 #include <vector>
 
+#include "Backend/Buffer.h"
+#include "BaseGridDevice.h"
 #include "Header.h"
 #include "IndexList.h"
 #include "Matrix3.h"
 #include "Types.h"
 #include "Vector3.h"
 #include <cmath>
-
-#ifdef HOST_GUARD
-#include "Backend/Buffer.h"
-#endif
-
-#include "BaseGridKernels.h"
 
 namespace ARBD {
 

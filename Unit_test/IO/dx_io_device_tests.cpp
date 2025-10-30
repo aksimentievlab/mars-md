@@ -1,13 +1,15 @@
 #include "../catch_boiler.h"
 
 #include "Backend/Buffer.h"
-#include "Header.h"
+#include "Backend/KernelConfig.h"
+#include "Backend/Kernels.h"
 #include "IO/DxIO.h"
+#include "Types/BaseGrid.h"
 
+#include <cstdlib>
 #include <cstring>
-#include <filesystem>
+#include <sys/stat.h>
 using Catch::Approx;
-using namespace ARBD;
 
 namespace {
 // Default external path; can be overridden with ARBD_DX_PATH env var
@@ -23,13 +25,17 @@ std::string get_dx_path() {
 TEST_CASE("DX IO: read and roundtrip to device", "[io][device][dx]") {
 	// Locate DX file
 	const std::string dx_path = get_dx_path();
-	if (!std::filesystem::exists(dx_path)) {
+	auto file_exists = [](const std::string& p) -> bool {
+		struct stat sb {};
+		return ::stat(p.c_str(), &sb) == 0 && S_ISREG(sb.st_mode);
+	};
+	if (!file_exists(dx_path)) {
 		WARN("DX file not found: " << dx_path << "; set ARBD_DX_PATH to override. Skipping.");
 		return;
 	}
 
 	// Read BaseGrid from DX
-	BaseGrid<float> grid = DXReader::read_from_file<float>(dx_path);
+	ARBD::BaseGrid<float> grid = ARBD::DXReader::read_from_file<float>(dx_path);
 	REQUIRE(grid.size() > 0);
 
 	// Initialize backend
@@ -41,27 +47,31 @@ TEST_CASE("DX IO: read and roundtrip to device", "[io][device][dx]") {
 
 	auto& res = manager.get_resource();
 
-#ifdef HOST_GUARD
 	// Copy grid values to host buffer using host-only accessors
 	std::vector<float> host_values(grid.size());
 	std::memcpy(host_values.data(), grid.data(), grid.size() * sizeof(float));
 
-	// Upload to device and perform device-to-device copy
-	DeviceBuffer<float> d_src(grid.size(), res);
-	DeviceBuffer<float> d_dst(grid.size(), res);
+	// Upload to device
+	ARBD::DeviceBuffer<float> d_src(grid.size(), res);
+	ARBD::DeviceBuffer<float> d_scaled(grid.size(), res);
+	d_src.copy_from_host(host_values.data(), static_cast<idx_t>(host_values.size()), true);
 
-	d_src.copy_from_host(host_values.data(), host_values.size(), true);
-	d_dst.copy_device_to_device(d_src, d_src.size(), true);
+	// Scale values on device using a simple kernel
+	constexpr float scale_factor = 0.5f;
+	auto scale_kernel = [](idx_t idx, const float* src, float* dst, float scale) {
+		dst[idx] = src[idx] * scale;
+	};
 
-	// Download back and compare a few samples (avoid O(n) checks on huge grids)
+	ARBD::KernelConfig kernel_cfg =
+		ARBD::KernelConfig::for_1d(static_cast<idx_t>(host_values.size()), res);
+	kernel_cfg.sync = true;
+	ARBD::launch_kernel(res, kernel_cfg, scale_kernel, d_src, d_scaled, scale_factor);
+
+	// Copy back to host and validate a few samples
 	std::vector<float> back(grid.size());
-	d_dst.copy_to_host(back.data(), back.size(), true);
+	d_scaled.copy_to_host(back.data(), static_cast<idx_t>(back.size()), true);
 
-	// Validate endpoints and a mid element
-	CHECK(back.front() == Approx(host_values.front()));
-	CHECK(back.back() == Approx(host_values.back()));
-	CHECK(back[back.size() / 2] == Approx(host_values[host_values.size() / 2]));
-#else
-	WARN("HOST_GUARD not enabled; skipping host extraction for DX grid");
-#endif
+	CHECK(back.front() == Approx(host_values.front() * scale_factor));
+	CHECK(back.back() == Approx(host_values.back() * scale_factor));
+	CHECK(back[back.size() / 2] == Approx(host_values[host_values.size() / 2] * scale_factor));
 }

@@ -11,6 +11,7 @@
 #endif
 
 #ifndef __METAL_VERSION__
+#include <algorithm>
 #include <cstring>
 #include <memory>
 #include <type_traits>
@@ -19,7 +20,6 @@
 #ifdef USE_CUDA
 #include "CUDA/CUDABuffer.h"
 #include "CUDA/CUDAManager.h"
-#include <thrust/tuple.h>
 #endif
 
 #ifdef USE_SYCL
@@ -86,6 +86,13 @@ struct Policy {
 		(void)queue;
 		(void)sync;
 		std::memcpy(dst, src, bytes);
+	}
+
+	template<typename T>
+	static void fill(void* dst, T value, size_t count, void* queue = nullptr, bool sync = false) {
+		(void)queue;
+		(void)sync;
+		std::fill_n(static_cast<T*>(dst), count, value);
 	}
 };
 } // namespace CPU

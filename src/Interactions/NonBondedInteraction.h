@@ -1,9 +1,9 @@
+#pragma once
 /**
  * @file LocalInteraction.h
  * @brief Defines the LocalInteraction class and its related structures
  */
 
-#pragma once
 #include "BondedInteraction.h"
 #include "Header.h"
 #include "IO/Reader.h"

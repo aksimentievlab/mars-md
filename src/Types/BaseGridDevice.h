@@ -6,6 +6,175 @@
 
 namespace ARBD {
 
+/**
+ * @brief Immutable device-side view of grid data
+ * @details Lightweight POD struct safe for passing to CUDA/SYCL kernels by value.
+ *          Contains only raw pointers and trivially copyable types.
+ *          All operations are const and device-safe.
+ *
+ * @tparam T Grid value type (float/double)
+ */
+template<typename T>
+struct BaseGridView {
+	// POD members only - safe for kernel parameters
+	const T* data;				 ///< Raw pointer to device grid data
+	Vector3_t<T> origin;		 ///< Grid origin in world space
+	Matrix3_t<T> basis;			 ///< Basis vectors (grid spacing)
+	Matrix3_t<T> basis_inv;		 ///< Cached inverse basis
+	Vector3_t<idx_t> dimensions; ///< Grid dimensions (nx, ny, nz)
+
+	/*===================*\
+	|  INDEX OPERATIONS   |
+	\*===================*/
+
+	/**
+	 * @brief Convert 3D indices to linear index
+	 */
+	HOST DEVICE constexpr idx_t index(idx_t ix, idx_t iy, idx_t iz) const noexcept {
+		return iz + iy * dimensions.z + ix * dimensions.y * dimensions.z;
+	}
+
+	/**
+	 * @brief Get grid dimensions
+	 */
+	HOST DEVICE constexpr idx_t nx() const noexcept {
+		return dimensions.x;
+	}
+	HOST DEVICE constexpr idx_t ny() const noexcept {
+		return dimensions.y;
+	}
+	HOST DEVICE constexpr idx_t nz() const noexcept {
+		return dimensions.z;
+	}
+	HOST DEVICE constexpr idx_t size() const noexcept {
+		return dimensions.x * dimensions.y * dimensions.z;
+	}
+
+	/*===================*\
+	|  VALUE ACCESS       |
+	\*===================*/
+
+	/**
+	 * @brief Direct indexed access (no bounds checking)
+	 */
+	HOST DEVICE constexpr T operator[](idx_t linear_idx) const noexcept {
+		return data[linear_idx];
+	}
+
+	HOST DEVICE constexpr T operator()(idx_t ix, idx_t iy, idx_t iz) const noexcept {
+		return data[index(ix, iy, iz)];
+	}
+
+	/*===================*\
+	|  SPATIAL QUERIES    |
+	\*===================*/
+
+	/**
+	 * @brief Transform world position to grid coordinates
+	 */
+	HOST DEVICE Vector3_t<T> world_to_grid(const Vector3_t<T>& world_pos) const noexcept {
+		return basis_inv.transform(world_pos - origin);
+	}
+
+	/**
+	 * @brief Transform grid coordinates to world position
+	 */
+	HOST DEVICE Vector3_t<T> grid_to_world(const Vector3_t<T>& grid_pos) const noexcept {
+		return basis.transform(grid_pos) + origin;
+	}
+
+	/**
+	 * @brief Trilinear interpolation at world position
+	 */
+	HOST DEVICE T interpolate(const Vector3_t<T>& world_pos) const noexcept {
+		const Vector3_t<T> grid_pos = world_to_grid(world_pos);
+
+		// Clamp to grid bounds
+		const T gx = clamp(grid_pos.x, T{0}, static_cast<T>(nx() - 1) - T{0.001});
+		const T gy = clamp(grid_pos.y, T{0}, static_cast<T>(ny() - 1) - T{0.001});
+		const T gz = clamp(grid_pos.z, T{0}, static_cast<T>(nz() - 1) - T{0.001});
+
+		const idx_t i0 = static_cast<idx_t>(gx);
+		const idx_t j0 = static_cast<idx_t>(gy);
+		const idx_t k0 = static_cast<idx_t>(gz);
+		const idx_t i1 = i0 + 1;
+		const idx_t j1 = j0 + 1;
+		const idx_t k1 = k0 + 1;
+
+		const T fx = gx - static_cast<T>(i0);
+		const T fy = gy - static_cast<T>(j0);
+		const T fz = gz - static_cast<T>(k0);
+
+		// Trilinear interpolation
+		const T c000 = (*this)(i0, j0, k0);
+		const T c100 = (*this)(i1, j0, k0);
+		const T c010 = (*this)(i0, j1, k0);
+		const T c110 = (*this)(i1, j1, k0);
+		const T c001 = (*this)(i0, j0, k1);
+		const T c101 = (*this)(i1, j0, k1);
+		const T c011 = (*this)(i0, j1, k1);
+		const T c111 = (*this)(i1, j1, k1);
+
+		const T c00 = c000 * (T{1} - fx) + c100 * fx;
+		const T c10 = c010 * (T{1} - fx) + c110 * fx;
+		const T c01 = c001 * (T{1} - fx) + c101 * fx;
+		const T c11 = c011 * (T{1} - fx) + c111 * fx;
+
+		const T c0 = c00 * (T{1} - fy) + c10 * fy;
+		const T c1 = c01 * (T{1} - fy) + c11 * fy;
+
+		return c0 * (T{1} - fz) + c1 * fz;
+	}
+
+	/**
+	 * @brief Nearest neighbor lookup
+	 */
+	HOST DEVICE T nearest(const Vector3_t<T>& world_pos) const noexcept {
+		const Vector3_t<T> grid_pos = world_to_grid(world_pos);
+		const idx_t ix = static_cast<idx_t>(grid_pos.x + T{0.5});
+		const idx_t iy = static_cast<idx_t>(grid_pos.y + T{0.5});
+		const idx_t iz = static_cast<idx_t>(grid_pos.z + T{0.5});
+
+		if (ix >= nx() || iy >= ny() || iz >= nz()) {
+			return T{0}; // Out of bounds
+		}
+
+		return (*this)(ix, iy, iz);
+	}
+
+	/**
+	 * @brief Compute gradient at world position (central differences)
+	 */
+	HOST DEVICE Vector3_t<T> gradient(const Vector3_t<T>& world_pos) const noexcept {
+		const Vector3_t<T> grid_pos = world_to_grid(world_pos);
+
+		// Check bounds for gradient calculation (need neighbors)
+		if (grid_pos.x < T{1} || grid_pos.x >= static_cast<T>(nx() - 1) || grid_pos.y < T{1} ||
+			grid_pos.y >= static_cast<T>(ny() - 1) || grid_pos.z < T{1} ||
+			grid_pos.z >= static_cast<T>(nz() - 1)) {
+			return Vector3_t<T>{T{0}, T{0}, T{0}};
+		}
+
+		const idx_t i = static_cast<idx_t>(grid_pos.x);
+		const idx_t j = static_cast<idx_t>(grid_pos.y);
+		const idx_t k = static_cast<idx_t>(grid_pos.z);
+
+		// Central differences in grid space
+		const T dx_grid = ((*this)(i + 1, j, k) - (*this)(i - 1, j, k)) / T{2};
+		const T dy_grid = ((*this)(i, j + 1, k) - (*this)(i, j - 1, k)) / T{2};
+		const T dz_grid = ((*this)(i, j, k + 1) - (*this)(i, j, k - 1)) / T{2};
+
+		// Transform gradient from grid space to world space
+		const Vector3_t<T> grad_grid(dx_grid, dy_grid, dz_grid);
+		return basis_inv.transpose().transform(grad_grid);
+	}
+
+  private:
+	HOST DEVICE static constexpr T clamp(T val, T min_val, T max_val) noexcept {
+		return val < min_val ? min_val : (val > max_val ? max_val : val);
+	}
+};
+
 template<typename T>
 struct ScaleGrid {
 	HOST DEVICE void operator()(T scale, T* grid_values) const {
