@@ -2,17 +2,28 @@
 #include "ARBDException.h"
 #include "ARBDLogger.h"
 #include "Backend/Kernels.h"
+#include "Backend/Buffer.h"
+#include "Compute/PairListKernels/DisplacementTracker.h"
 #include "Compute/PairListKernels/ZOrderNeighbor.h"
 #include <chrono>
+#include <cmath>
 
 namespace ARBD {
 
 ZOrderPairlist::ZOrderPairlist(const Resource& resource, size_t max_particles, size_t max_pairs)
-	: Pairlist(resource, max_particles, max_pairs), sorter_(resource, max_particles),
-	  sorted_positions_(max_particles, resource), old_positions_(max_particles, resource),
+	: Pairlist(resource, max_particles, max_pairs),
+	  sorter_(resource, max_particles, ZOrderOptimizationMode::Pairlist), // Use Pairlist mode
+	  sorted_positions_(max_particles, resource),
+	  persistent_bbox_min_(1, resource), persistent_bbox_max_(1, resource),
+	  adaptive_search_ranges_(max_particles, resource),
+	  use_adaptive_ranges_(true), use_hierarchical_search_(false),
 	  search_range_(64), // Default search range
-	  auto_bbox_(true), manual_box_min_(0.0f), manual_box_max_(1.0f), last_build_time_ms_(0.0),
-	  last_max_neighbors_(0) {
+	  auto_bbox_(true), manual_box_min_(0.0f), manual_box_max_(1.0f),
+	  last_build_time_ms_(0.0), last_max_neighbors_(0) {
+
+	// Configure smart updates for Pairlist mode
+	sorter_.enable_smart_updates(true);
+	sorter_.set_displacement_thresholds(0.05f, 0.1f); // validation_threshold, update_threshold
 
 	LOGINFO("Created ZOrderPairlist with capacity {} particles, {} pairs on {}",
 			max_particles_,
@@ -51,8 +62,7 @@ void ZOrderPairlist::build_pairlist(const DeviceBuffer<Vector3>& positions,
 	// Step 5: Update internal state
 	update_state(num_particles, cutoff);
 
-	// Store positions for update detection
-	positions.copy_to_host(old_positions_.data(), num_particles);
+	// ZOrderSort in Pairlist mode handles position tracking automatically
 
 	auto end_time = std::chrono::high_resolution_clock::now();
 	last_build_time_ms_ = std::chrono::duration<double, std::milli>(end_time - start_time).count();
@@ -61,9 +71,8 @@ void ZOrderPairlist::build_pairlist(const DeviceBuffer<Vector3>& positions,
 }
 
 void ZOrderPairlist::update_pairlist(const DeviceBuffer<Vector3>& positions, size_t num_particles) {
-	// For now, always rebuild
-	// Future optimization: check if particles have moved significantly
-	// and reuse existing sort if displacement is small
+	// The ZOrderSort in Pairlist mode handles smart updates automatically
+	// Just delegate to build_pairlist - the sorter will decide whether to rebuild or update
 	build_pairlist(positions, num_particles, cutoff_);
 }
 
@@ -71,13 +80,11 @@ bool ZOrderPairlist::needs_update(const DeviceBuffer<Vector3>& positions,
 								  const DeviceBuffer<Vector3>& old_positions,
 								  size_t num_particles,
 								  float skin_distance) const {
-	// Simple criterion: maximum displacement > skin_distance/2
-	// More sophisticated implementations could track average displacement
-	// or use other criteria
+	// Delegate to ZOrderSort's displacement computation
+	float max_disp = sorter_.compute_max_displacement(positions, num_particles);
 
-	// For now, always return true (conservative approach)
-	// TODO: Implement displacement-based update criterion
-	return true;
+	// Update needed if max displacement exceeds threshold
+	return max_disp > (skin_distance * 0.5f);
 }
 
 void ZOrderPairlist::resize(size_t new_max_particles, size_t new_max_pairs) {
@@ -85,9 +92,11 @@ void ZOrderPairlist::resize(size_t new_max_particles, size_t new_max_pairs) {
 
 	sorter_.resize(new_max_particles);
 	sorted_positions_.resize(new_max_particles);
-	old_positions_.resize(new_max_particles);
+	adaptive_search_ranges_.resize(new_max_particles);
 
-	LOGINFO("Resized ZOrderPairlist to {} particles, {} pairs", new_max_particles, new_max_pairs);
+	LOGINFO("Resized ZOrderPairlist to {} particles, {} pairs",
+			new_max_particles,
+			new_max_pairs);
 }
 
 Pairlist::Statistics ZOrderPairlist::get_statistics() const {
@@ -120,31 +129,23 @@ void ZOrderPairlist::get_bounding_box(const DeviceBuffer<Vector3>& positions,
 									  Vector3& box_min,
 									  Vector3& box_max) const {
 	if (auto_bbox_) {
-		// Compute bounding box from particle positions
-		// This is a simplified version - production code should use reduction
-		BoundingBoxKernel kernel{positions.data(), &box_min, &box_max, num_particles};
-
-		// Initialize bounds
+		// Use persistent buffers to avoid recreation
 		box_min = Vector3(std::numeric_limits<float>::max());
 		box_max = Vector3(std::numeric_limits<float>::lowest());
 
-		// Create temporary buffers for reduction
-		DeviceBuffer<Vector3> temp_min(1, resource_);
-		DeviceBuffer<Vector3> temp_max(1, resource_);
-
-		temp_min.copy_from_host(&box_min, 1);
-		temp_max.copy_from_host(&box_max, 1);
+		persistent_bbox_min_.copy_from_host(&box_min, 1);
+		persistent_bbox_max_.copy_from_host(&box_max, 1);
 
 		BoundingBoxKernel bbox_kernel{positions.data(),
-									  temp_min.data(),
-									  temp_max.data(),
+									  persistent_bbox_min_.data(),
+									  persistent_bbox_max_.data(),
 									  num_particles};
 
 		KernelConfig config = KernelConfig::for_1d(num_particles, resource_);
 		launch_kernel(resource_, config, bbox_kernel);
 
-		temp_min.copy_to_host(&box_min, 1, true);
-		temp_max.copy_to_host(&box_max, 1, true);
+		persistent_bbox_min_.copy_to_host(&box_min, 1, true);
+		persistent_bbox_max_.copy_to_host(&box_max, 1, true);
 
 		// Add small margin to avoid boundary issues
 		Vector3 margin = (box_max - box_min) * 0.01f;
@@ -156,5 +157,8 @@ void ZOrderPairlist::get_bounding_box(const DeviceBuffer<Vector3>& positions,
 		box_max = manual_box_max_;
 	}
 }
+
+
+
 
 } // namespace ARBD

@@ -1,9 +1,5 @@
 #pragma once
-#include "Header.h"
-#ifdef __SYCL_DEVICE_ONLY__
-#include <sycl/sycl.hpp>
-#endif
-#ifdef HOST_GUARD
+
 #include "ARBDException.h"
 #include <chrono>
 #include <cstdio>
@@ -124,9 +120,9 @@ inline LogLevel Logger::current_level = LogLevel::INFO;
 // ============================================================================
 // Simple printf-based logging for CUDA devices
 // Note: Use printf-style format strings (%d, %s, %f, etc.) in device code
-#else
-#if defined(__SYCL_DEVICE_ONLY__)
-extern sycl::stream global_stream;
+/**
+#elif defined(__SYCL_DEVICE_ONLY__)
+extern sycl::queue global_queue;
 // SYCL device code - use sycl::stream (requires stream object)
 #define LOGTRACE(fmt, ...) global_stream << "[DEVICE-TRACE]: " << fmt << "\n"
 #define LOGDEBUG(fmt, ...) global_stream << "[DEVICE-DEBUG]: " << fmt << "\n"
@@ -144,3 +140,4 @@ extern sycl::stream global_stream;
 #define LOGCRITICAL(fmt, ...) printf("[DEVICE-CRITICAL]: " fmt "\n", ##__VA_ARGS__)
 #endif // HOST_GUARD
 #endif
+*/

@@ -72,7 +72,7 @@ class TestBackendManager {
 
 	// Unified resource owning its own streams/queues
 	ARBD::Resource device_resource_{};
-	ARBD::ResourceCollection resources_{};
+	std::vector<ARBD::Resource> resources_{};
 
 	// Private constructor for singleton pattern
 	TestBackendManager() {
@@ -89,7 +89,7 @@ class TestBackendManager {
 		return device_resource_;
 	}
 
-	const ARBD::ResourceCollection& get_resources() const {
+	const std::vector<ARBD::Resource>& get_resources() const {
 		return resources_;
 	}
 
@@ -182,11 +182,11 @@ class TestBackendManager {
 			ARBD::CUDA::Manager::load_info();
 			int cuda_count = ARBD::CUDA::Manager::device_count();
 			for (int i = 0; i < cuda_count; ++i) {
-				resources_.resources.push_back(
+				resources_.push_back(
 					ARBD::Resource::create_cuda_device(static_cast<short>(i)));
 			}
 			device_resource_ =
-				resources_.resources.empty() ? ARBD::Resource{} : resources_.resources.front();
+				resources_.empty() ? ARBD::Resource{} : resources_.front();
 #elif defined(USE_SYCL)
 			// Build ResourceCollection from all SYCL devices
 			// Note: SYCL Manager will show "[WARN] SYCL Manager already initialized" on non-rank-0
@@ -195,25 +195,22 @@ class TestBackendManager {
 			ARBD::SYCL::Manager::load_info();
 			size_t sycl_count = ARBD::SYCL::Manager::device_count();
 			for (size_t i = 0; i < sycl_count; ++i) {
-				resources_.resources.push_back(
+				resources_.push_back(
 					ARBD::Resource::create_sycl_device(static_cast<short>(i)));
 			}
 			device_resource_ =
-				resources_.resources.empty() ? ARBD::Resource{} : resources_.resources.front();
+				resources_.empty() ? ARBD::Resource{} : resources_.front();
 #elif defined(USE_METAL)
 			// Build ResourceCollection from all METAL devices
 			ARBD::METAL::Manager::init();
 			ARBD::METAL::Manager::load_info();
-			size_t metal_count = ARBD::METAL::Manager::get_device_count();
-			for (size_t i = 0; i < metal_count; ++i) {
-				resources_.resources.emplace_back(ARBD::ResourceType::METAL, static_cast<short>(i));
-			}
+			resources_.emplace_back(ARBD::ResourceType::METAL, static_cast<short>(0));
 			device_resource_ =
-				resources_.resources.empty() ? ARBD::Resource{} : resources_.resources.front();
+				resources_.empty() ? ARBD::Resource{} : resources_.front();
 #else
 			// CPU fallback: single resource
 			device_resource_ = ARBD::Resource(ARBD::ResourceType::CPU, 0);
-			resources_.resources.push_back(device_resource_);
+			resources_.push_back(device_resource_);
 #endif
 			device_resource_.ensure_context();
 			initialized_ = true;

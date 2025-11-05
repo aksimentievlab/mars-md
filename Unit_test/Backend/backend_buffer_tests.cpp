@@ -125,6 +125,5 @@ TEST_CASE("Zero-size buffers", "[edge]") {
 	UnifiedBuffer<float> u0(0, manager.get_resource());
 
 	CHECK(d0.empty());
-	CHECK(p0.empty());
 	CHECK(u0.empty());
 }

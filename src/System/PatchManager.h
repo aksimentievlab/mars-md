@@ -22,21 +22,23 @@
 // src/System/PatchManager.h
 #pragma once
 
+#ifdef USE_MPI
 #include "Backend/MPIManager.h"
+#endif
 #include "Backend/Resource.h"
+#include "System/Decomposer.h"
 #include "System/Patch.h"
 #include "System/PeriodicBox.h"
 #include "Types/Types.h"
 #include <array>
 #include <numeric>
 #include <unordered_set>
-
 namespace ARBD {
 
 // Forward declarations
 class SimSystem;
+class Patch;
 class Decomposer;
-class CellDecomposer;
 
 /**
  * @brief Enhanced PatchManager with MPI communication support
@@ -49,7 +51,6 @@ class CellDecomposer;
  */
 class PatchManager {
 	friend Decomposer;
-	friend CellDecomposer;
 
   public:
 	PatchManager(SimSystem& sys);
@@ -72,24 +73,29 @@ class PatchManager {
 		std::array<int, 3> grid_coords = {-1, -1, -1}; ///< Grid coordinates (i,j,k)
 
 		Metadata() = default;
-		Metadata(const PatchManager& p)
-			: num(p.num), capacity(p.capacity), min(p.lower_bound), max(p.upper_bound) {}
 	};
 
 	/**
 	 * @brief Neighbor communication structure
 	 */
 	struct NeighborComm {
-		int neighbor_rank;				 ///< MPI rank of neighbor
-		std::array<int, 3> direction;	 ///< Direction vector to neighbor
-		DeviceBuffer<float> send_buffer; ///< Buffer for outgoing halo data
-		DeviceBuffer<float> recv_buffer; ///< Buffer for incoming halo data
-		idx_t halo_size;				 ///< Number of halo particles
-		bool active = false;			 ///< Whether this neighbor exists
+		int neighbor_rank = -1;					  ///< MPI rank of neighbor
+		std::array<int, 3> direction = {0, 0, 0}; ///< Direction vector to neighbor
+		DeviceBuffer<float> send_buffer;		  ///< Buffer for outgoing halo data
+		DeviceBuffer<float> recv_buffer;		  ///< Buffer for incoming halo data
+		idx_t halo_size = 0;					  ///< Number of halo particles
+		bool active = false;					  ///< Whether this neighbor exists
 
+		NeighborComm() = default;
 		NeighborComm(const Resource& resource, idx_t max_halo_size)
 			: send_buffer(max_halo_size * 6, resource), // 6 = 3 position + 3 velocity
 			  recv_buffer(max_halo_size * 6, resource), halo_size(0) {}
+	};
+	struct GridInfo {
+		std::array<int, 3> dimensions; ///< Grid dimensions (nx, ny, nz)
+		std::array<bool, 3> periodic;  ///< Periodic boundary conditions
+		Vector3 grid_spacing;		   ///< Physical spacing between grid cells
+		Vector3 system_origin;		   ///< Origin of the simulation domain
 	};
 
   private:
@@ -104,15 +110,10 @@ class PatchManager {
 	std::vector<Metadata> all_metadata_; ///< Metadata for all patches (gathered from all ranks)
 
 	// Spatial grid information
-	struct GridInfo {
-		std::array<int, 3> dimensions; ///< Grid dimensions (nx, ny, nz)
-		std::array<bool, 3> periodic;  ///< Periodic boundary conditions
-		Vector3 grid_spacing;		   ///< Physical spacing between grid cells
-		Vector3 system_origin;		   ///< Origin of the simulation domain
-	} grid_info_;
+	GridInfo grid_info_;
 
 	// Communication structures
-	std::array<NeighborComm, 6> neighbors_; ///< 6 face neighbors in 3D grid
+	std::array<NeighborComm, 2> neighbors_; ///< just 2 neighbors in 2D grid
 	idx_t max_ghost_particles_;
 
 	// Communication tags for different data types
@@ -123,19 +124,28 @@ class PatchManager {
 		METADATA_TAG = 4000
 	};
 
-  protected:
-	idx_t capacity;
-	idx_t num;
-	Vector3 lower_bound, upper_bound;
-
-	static idx_t global_patch_idx; ///< Unique ID across ranks
-	idx_t patch_idx;			   ///< Unique ID for this patch
-
   public:
 	// ==================== Initialization ====================
 
 	/**
+	 * @brief Initialize patch manager from a decomposition plan
+	 *
+	 * This is the primary initialization method that should be called once
+	 * during system setup after decomposition. It creates patches based on
+	 * the provided decomposition plan.
+	 *
+	 * @param plan The decomposition plan computed by a PatchDecomposer
+	 * @param estimated_particles_per_patch Estimated number of particles per patch
+	 * @param cutoff Cutoff radius for halo region calculation
+	 */
+	void initialize_from_plan(const struct DecompositionPlan& plan,
+							  idx_t estimated_particles_per_patch,
+							  const Length& cutoff);
+
+	/**
 	 * @brief Initialize patch manager with MPI integration
+	 * @deprecated Use initialize_from_plan() instead. This method is kept for backward
+	 * compatibility.
 	 */
 	void initialize(int grid_nx,
 					int grid_ny,
@@ -192,17 +202,17 @@ class PatchManager {
 
 	/**
 	 * @brief Get neighbor in specific direction
-	 * @param direction 0=x-, 1=x+, 2=y-, 3=y+, 4=z-, 5=z+
+	 * @param direction 0=left, 1=right
 	 */
 	int get_neighbor_rank(int direction) const {
-		return (direction >= 0 && direction < 6) ? neighbors_[direction].neighbor_rank : -1;
+		return (direction >= 0 && direction < 2) ? neighbors_[direction].neighbor_rank : -1;
 	}
 
 	/**
 	 * @brief Check if patch has neighbor in direction
 	 */
 	bool has_neighbor(int direction) const {
-		return direction >= 0 && direction < 6 && neighbors_[direction].active;
+		return direction >= 0 && direction < 2 && neighbors_[direction].active;
 	}
 
 	/**
@@ -448,42 +458,6 @@ class PatchManager {
 							   DeviceBuffer<float>& halo_velocities,
 							   idx_t received_count);
 
-	/**
-	 * @brief Check if particle needs to migrate to neighbor patch
-	 */
-	int check_particle_migration(const Vector3& position) const {
-		for (int dir = 0; dir < 6; ++dir) {
-			if (!neighbors_[dir].active)
-				continue;
-
-			bool needs_migration = false;
-			switch (dir) {
-			case 0:
-				needs_migration = position.x < local_metadata_.min.x;
-				break; // x-
-			case 1:
-				needs_migration = position.x >= local_metadata_.max.x;
-				break; // x+
-			case 2:
-				needs_migration = position.y < local_metadata_.min.y;
-				break; // y-
-			case 3:
-				needs_migration = position.y >= local_metadata_.max.y;
-				break; // y+
-			case 4:
-				needs_migration = position.z < local_metadata_.min.z;
-				break; // z-
-			case 5:
-				needs_migration = position.z >= local_metadata_.max.z;
-				break; // z+
-			}
-
-			if (needs_migration)
-				return dir;
-		}
-		return -1; // No migration needed
-	}
-
 	// ==================== Synchronization ====================
 
 	/**
@@ -498,6 +472,10 @@ class PatchManager {
 	 */
 	void synchronize_all_patches() {
 		mpi_manager_.barrier();
+	}
+
+	const std::vector<Patch>& get_all_patches() {
+		return patches_;
 	}
 
 	/**
@@ -594,46 +572,6 @@ class PatchManager {
 		}
 
 		return true;
-	}
-
-  private:
-	/**
-	 * @brief Calculate halo region bounds for specific direction
-	 */
-	std::pair<Vector3, Vector3> calculate_halo_bounds(int direction, const Length& cutoff) const {
-		Vector3 halo_min = local_metadata_.min;
-		Vector3 halo_max = local_metadata_.max;
-
-		float halo_width = cutoff.value;
-
-		switch (direction) {
-		case 0: // x-
-			halo_max.x = local_metadata_.min.x;
-			halo_min.x = local_metadata_.min.x - halo_width;
-			break;
-		case 1: // x+
-			halo_min.x = local_metadata_.max.x;
-			halo_max.x = local_metadata_.max.x + halo_width;
-			break;
-		case 2: // y-
-			halo_max.y = local_metadata_.min.y;
-			halo_min.y = local_metadata_.min.y - halo_width;
-			break;
-		case 3: // y+
-			halo_min.y = local_metadata_.max.y;
-			halo_max.y = local_metadata_.max.y + halo_width;
-			break;
-		case 4: // z-
-			halo_max.z = local_metadata_.min.z;
-			halo_min.z = local_metadata_.min.z - halo_width;
-			break;
-		case 5: // z+
-			halo_min.z = local_metadata_.max.z;
-			halo_max.z = local_metadata_.max.z + halo_width;
-			break;
-		}
-
-		return {halo_min, halo_max};
 	}
 };
 

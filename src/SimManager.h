@@ -50,9 +50,8 @@ class SimManager {
 	/**
 	 * @brief Construct simulation manager
 	 * @param sys Simulation system containing configuration and global objects
-	 * @param resources Available computational resources (GPUs, etc.)
 	 */
-	SimManager(SimSystem& sys, const ResourceCollection& resources);
+	SimManager(SimSystem& sys);
 
 	/**
 	 * @brief Initialize simulation manager
@@ -83,9 +82,8 @@ class SimManager {
 	//================================================================================
 	// Core Components
 	//================================================================================
-	SimSystem& sys_;
-	ResourceCollection resources_;
-	PatchManager patch_manager_{sys_};
+	SimSystem& sys_; // System owns PatchManager, accessible via sys_.get_patch_manager()
+
 	// Random number generators per resource
 	std::unordered_map<const Resource*, int> rngs_; // Placeholder - replace with actual RNG type
 

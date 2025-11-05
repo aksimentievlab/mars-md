@@ -55,15 +55,48 @@ class SimSystem {
 		LOGINFO("SimSystem: Using decomposer '{}'", decomposer_->get_name());
 	}
 
+	/**
+	 * @brief Perform domain decomposition (should only be called once during setup)
+	 *
+	 * This method:
+	 * 1. Calls the decomposer to compute a decomposition plan
+	 * 2. Creates and initializes PatchManager from the plan
+	 * 3. Stores the PatchManager for runtime use
+	 */
 	void decompose_system() {
 		if (!decomposer_) {
 			throw Exception(ExceptionType::ValueError,
 							SourceLocation(),
 							"No decomposer has been set");
 		}
+
+		if (patch_manager_) {
+			LOGWARN("SimSystem: Decomposition already performed. Use rebalance_system() to "
+					"re-decompose.");
+			return;
+		}
+
 		LOGINFO("SimSystem: Starting patch decomposition");
-		decomposer_->decompose(*this, resources_);
-		LOGINFO("SimSystem: patch decomposition completed");
+
+		// Step 1: Compute decomposition plan (Decomposer responsibility)
+		DecompositionPlan plan = decomposer_->decompose(*this);
+
+		// Step 2: Create PatchManager from plan (PatchManager responsibility)
+		auto patch_manager = std::make_unique<PatchManager>(*this);
+
+		// Get estimated particles per patch (could be refined based on actual particle
+		// distribution)
+		idx_t estimated_particles = 1024; // Default estimate, could be computed from system
+		const Length cutoff = Length(get_cutoff());
+
+		// Initialize PatchManager with the decomposition plan
+		patch_manager->initialize_from_plan(plan, estimated_particles, cutoff);
+
+		// Step 3: Store PatchManager (SimSystem ownership)
+		patch_manager_ = std::move(patch_manager);
+
+		LOGINFO("SimSystem: Patch decomposition completed - {} patches created",
+				plan.total_patches());
 	}
 
 	/**
@@ -151,10 +184,17 @@ class SimSystem {
 	/**
 	 * @brief Get available computational resources
 	 */
-	const ResourceCollection& get_resources() const {
+	const std::vector<Resource>& get_resources() const {
 		return resources_;
 	}
 
+	void add_resource(Resource resource) {
+		resources_.push_back(resource);
+	}
+
+	void add_resources(std::vector<Resource>& resources) {
+		resources_ = resources;
+	}
 	//================================================================================
 	// System State Queries
 	//================================================================================
@@ -238,9 +278,13 @@ class SimSystem {
 	//================================================================================
 	// Patch Management Accessors
 	//================================================================================
+	// Design: SimSystem owns PatchManager as part of system structure
+	// - PatchManager defines the domain decomposition (spatial structure)
+	// - Decomposer initializes it during decompose()
+	// - SimManager accesses it for runtime coordination via get_patch_manager()
 
 	/**
-	 * @brief Get patch manager for particle decomposition
+	 * @brief Get patch manager for domain decomposition
 	 */
 	PatchManager* get_patch_manager() const {
 		return patch_manager_.get();
@@ -251,6 +295,25 @@ class SimSystem {
 	 */
 	bool has_patch_manager() const {
 		return patch_manager_ != nullptr;
+	}
+
+	/**
+	 * @brief Initialize patch manager (called by decomposer)
+	 * @param manager Configured patch manager from decomposer
+	 */
+	void set_patch_manager(std::unique_ptr<PatchManager> manager) {
+		if (patch_manager_) {
+			LOGWARN("SimSystem: Replacing existing PatchManager during redecomposition");
+		}
+		patch_manager_ = std::move(manager);
+		LOGINFO("SimSystem: PatchManager installed");
+	}
+
+	/**
+	 * @brief Get the patch decomposer for this system
+	 */
+	PatchDecomposer* get_decomposer() const {
+		return decomposer_.get();
 	}
 
 	/**
@@ -275,9 +338,9 @@ class SimSystem {
 	BaseGrid<Vector3>* force_grid_;
 
 	// Resources and decomposition (host-only)
-	ResourceCollection resources_;
+	std::vector<Resource> resources_;
 	std::unique_ptr<PatchDecomposer> decomposer_;
-	std::unique_ptr<PatchManager> patch_manager_;
+	std::unique_ptr<PatchManager> patch_manager_; // Domain decomposition structure
 
 	// Runtime system state
 	SystemState current_system_state_;

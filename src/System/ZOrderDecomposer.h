@@ -41,9 +41,9 @@ class ZOrderDecomposer : public PatchDecomposer {
 	/**
 	 * @brief Perform Z-order based patch decomposition
 	 * @param sys The global system containing particle data
-	 * @param resources Collection of hardware resources (GPUs)
+	 * @return DecompositionPlan containing the computed patch layout
 	 */
-	void decompose(SimSystem& sys, const ResourceCollection& resources) override;
+	DecompositionPlan decompose(SimSystem& sys) override;
 
 	/**
 	 * @brief Get decomposer name
@@ -111,13 +111,7 @@ class ZOrderDecomposer : public PatchDecomposer {
 	std::unique_ptr<DeviceBuffer<uint32_t>> global_indices_;
 	std::unique_ptr<ZOrderSort> global_sorter_;
 
-	/**
-	 * @brief Collect all particle positions from patches
-	 * @param sys System containing patch data
-	 * @param total_particles Output: total number of particles
-	 * @return Device buffer with all positions
-	 */
-	void collect_global_positions(SimSystem& sys, size_t& total_particles);
+	// collect_global_positions removed - particles now come directly from SimSystem in decompose()
 
 	/**
 	 * @brief Compute global bounding box
@@ -141,21 +135,14 @@ class ZOrderDecomposer : public PatchDecomposer {
 																		size_t num_patches);
 
 	/**
-	 * @brief Redistribute particles to patches based on Morton ranges
-	 * @param sys System to update
-	 * @param resources Available compute resources
-	 * @param patch_boundaries Morton code ranges for each patch
+	 * @brief Validate decomposition and compute statistics
+	 * @param sys System containing particle data
+	 * @param num_patches Number of patches
 	 */
-	void redistribute_particles(SimSystem& sys,
-								const ResourceCollection& resources,
-								const std::vector<std::pair<morton_t, morton_t>>& patch_boundaries);
+	void validate_and_compute_stats(const SimSystem& sys, size_t num_patches);
 
-	/**
-	 * @brief Update patch metadata after redistribution
-	 * @param sys System containing patch data
-	 * @param resources Collection of hardware resources (GPUs)
-	 */
-	void update_patch_metadata(SimSystem& sys, const ResourceCollection& resources);
+	// Note: redistribute_particles and update_patch_metadata removed
+	// Patches are created by PatchManager from DecompositionPlan, not by decomposer
 };
 
 } // namespace ARBD

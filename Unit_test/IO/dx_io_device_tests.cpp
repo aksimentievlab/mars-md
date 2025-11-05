@@ -49,7 +49,7 @@ TEST_CASE("DX IO: read and roundtrip to device", "[io][device][dx]") {
 
 	// Copy grid values to host buffer using host-only accessors
 	std::vector<float> host_values(grid.size());
-	std::memcpy(host_values.data(), grid.data(), grid.size() * sizeof(float));
+	std::memcpy(host_values.data(), grid.get_device_pointer(res), grid.size() * sizeof(float));
 
 	// Upload to device
 	ARBD::DeviceBuffer<float> d_src(grid.size(), res);

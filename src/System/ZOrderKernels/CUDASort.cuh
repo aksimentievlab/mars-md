@@ -1,37 +1,45 @@
 #pragma once
 
+// Temporarily undefine Debug macro to avoid conflicts with CUB
+#ifdef Debug
+#undef Debug
+#include <cub/cub.cuh>
+#define Debug(x) static_cast<void>(0)
+#else
+#include <cub/cub.cuh>
+#endif
+
 #include "Backend/Buffer.h"
 #include "Header.h"
 #include "Types/Types.h"
 
-#include <thrust/device_ptr.h>
-#include <thrust/device_vector.h>
-#include <thrust/iterator/zip_iterator.h>
-#include <thrust/sort.h>
-#include <thrust/tuple.h>
-
 namespace ARBD {
 
-DEVICE void sort_morton_codes_cuda(const DeviceBuffer<morton_t>& morton_codes_,
-								   const DeviceBuffer<uint32_t>& sorted_indices_,
-								   size_t num_particles_) {
+void sort_morton_codes_cuda(DeviceBuffer<morton_t>& morton_codes_in,
+                           DeviceBuffer<uint32_t>& indices_in,
+                           DeviceBuffer<morton_t>& morton_codes_out,
+                           DeviceBuffer<uint32_t>& indices_out,
+                           DeviceBuffer<uint8_t>& temp_storage,
+                           size_t num_particles) {
 
-	// Use Thrust for sorting Morton codes along with indices
-	thrust::device_ptr<morton_t> morton_ptr(morton_codes_.data());
-	thrust::device_ptr<uint32_t> indices_ptr(sorted_indices_.data());
+    size_t temp_storage_bytes = 0;
 
-	// Create zip iterator to sort both arrays together
-	auto zip_begin = thrust::make_zip_iterator(thrust::make_tuple(morton_ptr, indices_ptr));
-	auto zip_end = thrust::make_zip_iterator(
-		thrust::make_tuple(morton_ptr + num_particles_, indices_ptr + num_particles_));
+    // Determine temporary storage requirements
+    cub::DeviceRadixSort::SortPairs(nullptr, temp_storage_bytes,
+                                   morton_codes_in.data(), morton_codes_out.data(),
+                                   indices_in.data(), indices_out.data(),
+                                   num_particles);
 
-	// Sort by Morton code (first element of tuple)
-	thrust::sort(
-		zip_begin,
-		zip_end,
-		[](const thrust::tuple<morton_t, uint32_t>& a, const thrust::tuple<morton_t, uint32_t>& b) {
-			return thrust::get<0>(a) < thrust::get<0>(b);
-		});
+    // Resize temp storage if needed
+    if (temp_storage.size() < temp_storage_bytes) {
+        temp_storage.resize(temp_storage_bytes);
+    }
+
+    // Perform the sort
+    cub::DeviceRadixSort::SortPairs(temp_storage.data(), temp_storage_bytes,
+                                   morton_codes_in.data(), morton_codes_out.data(),
+                                   indices_in.data(), indices_out.data(),
+                                   num_particles);
 }
 
 } // namespace ARBD

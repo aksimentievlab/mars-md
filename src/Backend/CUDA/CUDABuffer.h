@@ -4,7 +4,13 @@
 #ifdef USE_CUDA
 #include "ARBDException.h"
 #include "Backend/Resource.h"
-#include "MemoryKernels.cuh"
+// Forward declarations for CUDA memory operations
+namespace ARBD {
+namespace CUDA {
+template<typename T>
+void fill_impl(void* dst, T value, size_t num_elements, void* queue, bool sync);
+} // namespace CUDA
+} // namespace ARBD
 #include <cstddef>
 #include <cstring>
 #include <cuda_runtime.h>

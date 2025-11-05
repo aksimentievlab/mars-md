@@ -46,9 +46,7 @@ class ZOrderPairlist : public Pairlist {
 	 * @param num_particles Number of particles
 	 * @param cutoff Interaction cutoff distance
 	 */
-	void build_pairlist(const DeviceBuffer<Vector3>& positions,
-						size_t num_particles,
-						float cutoff) override;
+	void build_pairlist(const DeviceBuffer<Vector3>& positions, size_t num_particles, float cutoff) override;
 
 	/**
 	 * @brief Update pairlist (rebuilds with current sort if particles haven't moved much)
@@ -124,6 +122,45 @@ class ZOrderPairlist : public Pairlist {
 	}
 
 	/**
+	 * @brief Set displacement thresholds for intelligent updates
+	 * @param validation_threshold Threshold for Morton code validation
+	 * @param update_threshold Threshold for full rebuild
+	 */
+	void set_displacement_thresholds(float validation_threshold, float update_threshold) {
+		sorter_.set_displacement_thresholds(validation_threshold, update_threshold);
+	}
+
+	/**
+	 * @brief Enable/disable adaptive search ranges
+	 * @param enable Whether to use per-particle adaptive search ranges
+	 */
+	void set_adaptive_ranges(bool enable) {
+		use_adaptive_ranges_ = enable;
+	}
+
+	/**
+	 * @brief Enable/disable hierarchical Morton search
+	 * @param enable Whether to use hierarchical Morton code search
+	 */
+	void set_hierarchical_search(bool enable) {
+		use_hierarchical_search_ = enable;
+	}
+
+	/**
+	 * @brief Get adaptive ranges status
+	 */
+	bool is_using_adaptive_ranges() const {
+		return use_adaptive_ranges_;
+	}
+
+	/**
+	 * @brief Get hierarchical search status
+	 */
+	bool is_using_hierarchical_search() const {
+		return use_hierarchical_search_;
+	}
+
+	/**
 	 * @brief Get current search range
 	 */
 	size_t get_search_range() const {
@@ -147,7 +184,15 @@ class ZOrderPairlist : public Pairlist {
   private:
 	ZOrderSort sorter_;						 ///< Z-order sorting utility
 	DeviceBuffer<Vector3> sorted_positions_; ///< Positions sorted by Morton code
-	DeviceBuffer<Vector3> old_positions_;	 ///< Previous positions for update detection
+
+	// Persistent buffers for bounding box computation (avoid recreation)
+	mutable DeviceBuffer<Vector3> persistent_bbox_min_; ///< Persistent bounding box minimum buffer
+	mutable DeviceBuffer<Vector3> persistent_bbox_max_; ///< Persistent bounding box maximum buffer
+
+	// Adaptive search range optimization
+	DeviceBuffer<uint32_t> adaptive_search_ranges_; ///< Per-particle adaptive search ranges
+	bool use_adaptive_ranges_;						///< Whether to use adaptive search ranges
+	bool use_hierarchical_search_;					///< Whether to use hierarchical Morton search
 
 	// Configuration parameters
 	size_t search_range_;	 ///< Search range in sorted order
@@ -176,6 +221,7 @@ class ZOrderPairlist : public Pairlist {
 						  size_t num_particles,
 						  Vector3& box_min,
 						  Vector3& box_max) const;
+
 };
 
 } // namespace ARBD

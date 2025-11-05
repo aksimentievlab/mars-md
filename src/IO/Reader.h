@@ -7,6 +7,7 @@
 #include "ARBDException.h"
 #include "ARBDLogger.h"
 #include "FileHandle.h"
+#include "Types/TypeName.h"
 #include "Types/Types.h"
 #include <algorithm>
 #include <cstdio>

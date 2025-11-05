@@ -40,6 +40,9 @@ set(LIB_SOURCES
     Configuration.cpp
     IO/ConfigParser.cpp
     Backend/Resource.cpp
+    System/ZOrderSort.cpp
+    System/ZOrderDecomposer.cpp
+    Compute/ZOrderPairlist.cpp
     #Math/BaseGrid.cpp
 )
 
@@ -56,6 +59,7 @@ if(USE_CUDA)
     list(APPEND LIB_SOURCES
         Backend/CUDA/CUDAManager.cpp
         Backend/CUDA/KernelHelper.cu
+        System/ZOrderKernels/CUDASort.cu
     )
     message(STATUS "Backend: Adding CUDA specific sources to lib${PROJECT_NAME}")
 endif()
@@ -226,6 +230,7 @@ if(USE_CUDA)
     # Set CUDA properties for .cu files
     set_source_files_properties(
         Backend/CUDA/KernelHelper.cu
+        System/ZOrderKernels/CUDASort.cu
         PROPERTIES
         LANGUAGE CUDA
         CUDA_SEPARABLE_COMPILATION ON

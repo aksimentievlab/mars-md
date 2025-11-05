@@ -1,15 +1,11 @@
 #include "SignalManager.h"
-#include "ARBDLogger.h"
-#include "Header.h"
 #include <csignal>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <execinfo.h>
 #include <memory>
 #include <unistd.h>
-
-#if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__) && !defined(__METAL_VERSION__)
-#include <execinfo.h>
 
 namespace ARBD::SignalManager {
 volatile sig_atomic_t shutdown_requested = 0;
@@ -102,4 +98,3 @@ void manage_segfault() {
 	sigaction(SIGSEGV, &sa, NULL);
 }
 } // namespace ARBD::SignalManager
-#endif

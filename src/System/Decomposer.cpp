@@ -1,7 +1,7 @@
 #include "System/Decomposer.h"
-#include "System/ZOrderDecomposer.h"
 #include "SimSystem.h"
 #include "System/PatchManager.h"
+#include "System/ZOrderDecomposer.h"
 #include "Types/Types.h"
 #include <algorithm>
 #include <cmath>
@@ -12,7 +12,7 @@ namespace ARBD {
 // SpatialPatchDecomposer Implementation
 //================================================================================
 
-void SpatialPatchDecomposer::decompose(SimSystem& sys, const ResourceCollection& resources) {
+DecompositionPlan SpatialPatchDecomposer::decompose(SimSystem& sys) {
 	const PeriodicBox& bcs = sys.get_boundary_conditions();
 	const Length cutoff = Length(sys.get_cutoff());
 
@@ -36,20 +36,32 @@ void SpatialPatchDecomposer::decompose(SimSystem& sys, const ResourceCollection&
 		static_cast<size_t>(std::max(1.0f, std::ceil(dr.z / cutoff.value)))};
 
 	size_t total_patches = n_patches.x * n_patches.y * n_patches.z;
-	size_t num_resources = resources.resources.size();
+	size_t num_resources = sys.get_resources().size();
 
-	LOGINFO("Creating {} patches ({}x{}x{}) across {} resources",
+	LOGINFO("Computed {} patches ({}x{}x{}) across {} resources",
 			total_patches,
 			n_patches.x,
 			n_patches.y,
 			n_patches.z,
 			num_resources);
 
-	// Create patch boundaries
-	std::vector<Vector3> patch_mins(total_patches);
-	std::vector<Vector3> patch_maxs(total_patches);
-	std::vector<Resource> patch_resources(total_patches);
+	// Create decomposition plan
+	DecompositionPlan plan;
+	plan.grid_dimensions = {static_cast<int>(n_patches.x),
+							static_cast<int>(n_patches.y),
+							static_cast<int>(n_patches.z)};
+	plan.system_min = min;
+	plan.system_max = max;
 
+	const auto& periodicity = bcs.get_periodicity();
+	plan.periodicity = {periodicity[0], periodicity[1], periodicity[2]};
+
+	// Reserve space for patch data
+	plan.patch_min_bounds.reserve(total_patches);
+	plan.patch_max_bounds.reserve(total_patches);
+	plan.patch_resources.reserve(total_patches);
+
+	// Calculate patch boundaries and assign resources
 	for (size_t idx = 0; idx < total_patches; ++idx) {
 		Vector3_t<size_t> ijk = index_to_ijk(idx, n_patches.x, n_patches.y, n_patches.z);
 
@@ -63,59 +75,30 @@ void SpatialPatchDecomposer::decompose(SimSystem& sys, const ResourceCollection&
 		pmax.y = std::min(pmax.y, max.y);
 		pmax.z = std::min(pmax.z, max.z);
 
-		patch_mins[idx] = pmin;
-		patch_maxs[idx] = pmax;
+		plan.patch_min_bounds.push_back(pmin);
+		plan.patch_max_bounds.push_back(pmax);
 
 		// Assign resource (round-robin distribution)
 		size_t resource_idx = idx % num_resources;
-		patch_resources[idx] = resources.resources[resource_idx];
+		plan.patch_resources.push_back(sys.get_resources()[resource_idx]);
 	}
 
-	// Create PatchManager for multi-GPU/MPI coordination
-	LOGINFO("Creating PatchManager for patch coordination and communication");
-
-	// Create PatchManager (handles multi-patch coordination, not individual patches)
-	sys.patch_manager_ = std::make_unique<PatchManager>(sys);
-
-	// Initialize PatchManager with spatial grid dimensions
-	const auto& periodicity = bcs.get_periodicity();
-	sys.patch_manager_->initialize(static_cast<int>(n_patches.x),
-								   static_cast<int>(n_patches.y),
-								   static_cast<int>(n_patches.z),
-								   periodicity[0], // periodic_x
-								   periodicity[1], // periodic_y
-								   periodicity[2]  // periodic_z
-	);
-
-	// Note: Individual Patch objects are created by PatchManager during initialization
-	// The decomposer's job is to:
-	// 1. Calculate patch boundaries (done above)
-	// 2. Create PatchManager for coordination (done above)
-	// 3. Assign particles to patches (TODO: implement with ParticleAssignmentFunctor)
-
-	// Get particle data from system
-	const auto& particles = sys.get_particle_positions();
-	if (!particles.empty()) {
-		LOGINFO("Assigning {} particles to patches", particles.size());
-
-		// TODO: Implement actual particle assignment to patches
-		// This would use the ParticleAssignmentFunctor from DecomposeKernels.h
-		// to assign particles to patches based on their positions
-		// Individual Patch objects will be created by PatchManager
-
-		// For now, just log that we have particles to assign
-		LOGINFO("Particle assignment to patches not yet implemented");
+	// Validate the plan
+	if (!plan.is_valid()) {
+		throw Exception(ExceptionType::RuntimeError,
+						SourceLocation(),
+						"Generated invalid decomposition plan");
 	}
 
-	LOGINFO("Spatial patch decomposition completed with PatchManager created");
+	LOGINFO("Spatial patch decomposition completed: {} patches computed", plan.total_patches());
+	return plan;
 }
 
 //================================================================================
 // RecursiveBisectionPatchDecomposer Implementation
 //================================================================================
 
-void RecursiveBisectionPatchDecomposer::decompose(SimSystem& sys,
-												  const ResourceCollection& resources) {
+DecompositionPlan RecursiveBisectionPatchDecomposer::decompose(SimSystem& sys) {
 	LOGINFO("RecursiveBisectionPatchDecomposer: Starting recursive bisection patch decomposition");
 
 	// TODO: Implement recursive bisection algorithm
@@ -123,6 +106,7 @@ void RecursiveBisectionPatchDecomposer::decompose(SimSystem& sys,
 	// 1. Analyzing particle distribution
 	// 2. Recursively dividing domain to balance load
 	// 3. Creating hierarchical decomposition structure
+	// 4. Returning DecompositionPlan with computed patch layout
 
 	throw Exception(ExceptionType::NotImplementedError,
 					SourceLocation(),
@@ -133,7 +117,7 @@ void RecursiveBisectionPatchDecomposer::decompose(SimSystem& sys,
 // GeometricPatchDecomposer Implementation
 //================================================================================
 
-void GeometricPatchDecomposer::decompose(SimSystem& sys, const ResourceCollection& resources) {
+DecompositionPlan GeometricPatchDecomposer::decompose(SimSystem& sys) {
 	LOGINFO("GeometricPatchDecomposer: Starting geometric patch decomposition");
 
 	// TODO: Implement geometric decomposition
@@ -141,6 +125,7 @@ void GeometricPatchDecomposer::decompose(SimSystem& sys, const ResourceCollectio
 	// 1. Analyzing system geometry (membranes, interfaces, etc.)
 	// 2. Creating partitions that respect geometric boundaries
 	// 3. Optimizing for minimal cross-boundary communication
+	// 4. Returning DecompositionPlan with computed patch layout
 
 	throw Exception(ExceptionType::NotImplementedError,
 					SourceLocation(),

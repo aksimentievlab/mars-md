@@ -276,12 +276,4 @@ class Resource {
 	void* get_stream_impl(size_t stream_id, StreamType stream_type = StreamType::Compute) const;
 };
 
-/**
- * @brief A collection of resources. Stored on CPU only.
- */
-
-struct ResourceCollection {
-	std::vector<Resource> resources;
-};
-
 } // namespace ARBD

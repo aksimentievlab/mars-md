@@ -7,15 +7,16 @@
 #include <mpi.h>
 #endif
 
-#include "ARBDException.h"
-#include "Backend/Resource.h"
-
-#include "SignalManager.h"
 #include <cstdio>	// For printf
 #include <cstring>	// For strcmp
 #include <iostream> // For std::cout, std::endl (modern C++)
 #include <string>	// For std::string (modern C++)
+#include <vector>	// For std::vector
 
+#include "ARBDException.h"
+#include "Backend/Resource.h"
+#include "SignalManager.h"
+#include "SimSystem.h"
 // Define this if not provided by CMake/build system for version info
 #ifndef VERSION
 #define VERSION "Development Build - June 2025"
@@ -30,7 +31,7 @@ unsigned int gpus[] = {kDefaultGpus};
 struct ProgramOptions {
 	std::string configFile;
 	std::string outputFile;
-	std::vector<int> gpuIds;
+	std::vector<short> gpuIds;
 	int numGpus = 0;
 	int numNodes = 1;
 	int stride = 1;
@@ -140,7 +141,7 @@ int main(int argc, char* argv[]) {
 
 	std::cout << "Initializing Simulation Manager..." << std::endl;
 
-	ARBD::ResourceCollection resource_collection;
+	std::vector<ARBD::Resource> resource_collection;
 
 #ifdef USE_CUDA
 	std::cout << "ARBD compiled with CUDA support." << std::endl;
@@ -173,9 +174,9 @@ int main(int argc, char* argv[]) {
 	}
 
 	// Fallback to CPU if no GPUs available or selected
-	if (resource_collection.resources.empty()) {
+	if (resource_collection.empty()) {
 		std::cout << "No GPUs available. Falling back to CPU." << std::endl;
-		resource_collection.resources.push_back(ARBD::Resource::CPU());
+		resource_collection.push_back(ARBD::Resource::CPU());
 	}
 
 #elif defined(USE_SYCL)
@@ -183,22 +184,22 @@ int main(int argc, char* argv[]) {
 
 	if (!options.gpuIds.empty()) {
 		for (int gpuId : options.gpuIds) {
-			resource_collection.resources.push_back(ARBD::Resource(gpuId));
+			resource_collection.push_back(ARBD::Resource(gpuId));
 		}
 	}
 	// If user specified number of GPUs, try first N devices
 	else if (options.numGpus > 0) {
 		for (int i = 0; i < options.numGpus; ++i) {
-			resource_collection.resources.push_back(ARBD::Resource(i));
+			resource_collection.push_back(ARBD::Resource(i));
 		}
 	}
 	// Default: try device 0
 	else {
-		resource_collection.resources.push_back(ARBD::Resource(0));
+		resource_collection.push_back(ARBD::Resource(0));
 	}
 
 	// Fallback to CPU if no SYCL devices available
-	if (resource_collection.resources.empty()) {
+	if (resource_collection.empty()) {
 		std::cout << "No SYCL devices available. Falling back to CPU." << std::endl;
 	}
 
@@ -209,15 +210,15 @@ int main(int argc, char* argv[]) {
 	options.gpuIds.push_back(0);
 	options.numGpus = 1;
 
-	resource_collection.resources.push_back(ARBD::Resource(0));
+	resource_collection.push_back(ARBD::Resource(0));
 #endif
 
 	// Validate all selected resources and remove invalid ones
-	std::cout << "Validating " << resource_collection.resources.size() << " compute resource(s)..."
+	std::cout << "Validating " << resource_collection.size() << " compute resource(s)..."
 			  << std::endl;
 	std::vector<ARBD::Resource> validResources;
 
-	for (const auto& res : resource_collection.resources) {
+	for (const auto& res : resource_collection) {
 		try {
 			// Create a copy to validate (validate() is const)
 			ARBD::Resource resCopy = res;
@@ -230,15 +231,15 @@ int main(int argc, char* argv[]) {
 	}
 
 	// Update resources with only valid ones
-	resource_collection.resources = validResources;
+	resource_collection = validResources;
 
 	// If no valid resources, fallback to CPU
-	if (resource_collection.resources.empty()) {
+	if (resource_collection.empty()) {
 		std::cout << "No valid compute resources found. Falling back to CPU." << std::endl;
 	}
 
-	std::cout << "Selected " << resource_collection.resources.size() << " compute resource(s): ";
-	for (const auto& res : resource_collection.resources) {
+	std::cout << "Selected " << resource_collection.size() << " compute resource(s): ";
+	for (const auto& res : resource_collection) {
 		std::cout << res.toString() << " ";
 	}
 	std::cout << std::endl;

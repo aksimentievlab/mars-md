@@ -544,6 +544,10 @@ class Buffer {
 		Policy::fill(device_ptr_, value, count_, queue, sync);
 	}
 
+	void fill(T value, void* queue = nullptr, bool sync = false) const {
+		Policy::fill(device_ptr_, value, count_, queue, sync);
+	}
+
 	/**
 	 * @brief Copy between device buffers with sync control.
 	 * @param src Source buffer

@@ -32,9 +32,43 @@ if(USE_MPI)
 	target_link_libraries(arbd_unit_tests PRIVATE MPI::MPI_CXX)
 endif()
 
+# ZOrder tests executable
+add_executable(arbd_zorder_tests
+    ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/System/zorder_tests.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Compute/zorder_pairlist_tests.cpp
+)
+
+# Includes for ZOrder tests
+target_include_directories(arbd_zorder_tests PRIVATE
+	${CMAKE_SOURCE_DIR}
+	${CMAKE_SOURCE_DIR}/src
+	${CMAKE_CURRENT_LIST_DIR}
+)
+
+# Link against project library and optional backends for ZOrder tests
+target_link_libraries(arbd_zorder_tests PRIVATE lib${PROJECT_NAME})
+
+if(USE_CUDA)
+	target_link_libraries(arbd_zorder_tests PRIVATE CUDA::cudart)
+endif()
+
+if(USE_MPI)
+	target_link_libraries(arbd_zorder_tests PRIVATE MPI::MPI_CXX)
+endif()
+
 # Register tests with labels
 add_test(NAME unit_device COMMAND arbd_unit_tests [device])
 set_tests_properties(unit_device PROPERTIES LABELS "device")
+
+add_test(NAME unit_zorder COMMAND arbd_zorder_tests [zorder])
+set_tests_properties(unit_zorder PROPERTIES LABELS "zorder")
+
+add_test(NAME unit_zorder_system COMMAND arbd_zorder_tests [zorder][system])
+set_tests_properties(unit_zorder_system PROPERTIES LABELS "zorder;system")
+
+add_test(NAME unit_zorder_pairlist COMMAND arbd_zorder_tests [zorder][pairlist])
+set_tests_properties(unit_zorder_pairlist PROPERTIES LABELS "zorder;pairlist")
 
 if(USE_MPI)
 	add_test(NAME unit_mpi_2ranks

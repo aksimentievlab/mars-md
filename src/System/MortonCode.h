@@ -48,15 +48,27 @@ class MortonCode {
 	HOST DEVICE static morton_t
 	encode(const Vector3& pos, const Vector3& box_min, const Vector3& box_max) {
 		// Normalize coordinates to [0, MAX_COORD]
-		Vector3 normalized = (pos - box_min).element_mult(1.0f / (box_max - box_min));
+		Vector3 range = box_max - box_min;
+		Vector3 offset = pos - box_min;
+		Vector3 normalized = Vector3(offset.x / range.x, offset.y / range.y, offset.z / range.z);
 
 		// Clamp to valid range and convert to integer coordinates
+		// Use appropriate math functions for each backend
+#ifdef USE_SYCL
 		coord_t x = static_cast<coord_t>(
-			fmin(fmax(normalized.x * MAX_COORD, 0.0f), static_cast<float>(MAX_COORD)));
+			sycl::fmin(sycl::fmax(normalized.x * MAX_COORD, 0.0f), static_cast<float>(MAX_COORD)));
 		coord_t y = static_cast<coord_t>(
-			fmin(fmax(normalized.y * MAX_COORD, 0.0f), static_cast<float>(MAX_COORD)));
+			sycl::fmin(sycl::fmax(normalized.y * MAX_COORD, 0.0f), static_cast<float>(MAX_COORD)));
 		coord_t z = static_cast<coord_t>(
-			fmin(fmax(normalized.z * MAX_COORD, 0.0f), static_cast<float>(MAX_COORD)));
+			sycl::fmin(sycl::fmax(normalized.z * MAX_COORD, 0.0f), static_cast<float>(MAX_COORD)));
+#else
+		coord_t x = static_cast<coord_t>(
+			fminf(fmaxf(normalized.x * MAX_COORD, 0.0f), static_cast<float>(MAX_COORD)));
+		coord_t y = static_cast<coord_t>(
+			fminf(fmaxf(normalized.y * MAX_COORD, 0.0f), static_cast<float>(MAX_COORD)));
+		coord_t z = static_cast<coord_t>(
+			fminf(fmaxf(normalized.z * MAX_COORD, 0.0f), static_cast<float>(MAX_COORD)));
+#endif
 
 		return encode(x, y, z);
 	}

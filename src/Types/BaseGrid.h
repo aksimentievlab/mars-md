@@ -86,11 +86,11 @@ class BaseGrid {
 		Vector3_t<idx_t> dimensions{1, 1, 1}; ///< Grid dimensions (nx, ny, nz)
 		BoundaryCondition boundary = BoundaryCondition::Periodic;
 
-		HOST DEVICE constexpr idx_t total_size() const noexcept {
+		HOST DEVICE idx_t total_size() const noexcept {
 			return dimensions.x * dimensions.y * dimensions.z;
 		}
 
-		HOST DEVICE constexpr bool is_valid() const noexcept {
+		HOST DEVICE bool is_valid() const noexcept {
 			return dimensions.x > 0 && dimensions.y > 0 && dimensions.z > 0;
 		}
 	};

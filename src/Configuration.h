@@ -39,7 +39,7 @@ struct Configuration {
 	LongRangeMethod long_range_method{LongRangeMethod::PPPM};
 	DynamicType ParticleDynamicType{DynamicType::Langevin};
 	DynamicType RigidBodyDynamicType{DynamicType::Langevin};
-	std::map<std::string, int> functions_id_map;
+	std::unordered_map<std::string, int> functions_id_map{};
 	// Simulation control
 	SimSteps steps{1e-5f, 1000}; // timestep in ns.
 	DecomposeDirection decompose_direction{DecomposeDirection::Z};
@@ -145,14 +145,14 @@ struct Configuration {
 										   int angle2_idx,
 										   const std::string& name = "AngleAngle") {
 		init_product_potentials.push_back(ProductPotential(i,
-													  j,
-													  k,
-													  l,
-													  ProductPotentialType::AngleAngle,
-													  angle1_idx,
-													  -1,
-													  angle2_idx,
-													  name));
+														   j,
+														   k,
+														   l,
+														   ProductPotentialType::AngleAngle,
+														   angle1_idx,
+														   -1,
+														   angle2_idx,
+														   name));
 	}
 
 	void add_bond_bond_product_potential(int i,
@@ -162,14 +162,14 @@ struct Configuration {
 										 int bond2_idx,
 										 const std::string& name = "BondBond") {
 		init_product_potentials.push_back(ProductPotential(i,
-													  j,
-													  k,
-													  -1,
-													  ProductPotentialType::BondBond,
-													  bond1_idx,
-													  bond2_idx,
-													  -1,
-													  name));
+														   j,
+														   k,
+														   -1,
+														   ProductPotentialType::BondBond,
+														   bond1_idx,
+														   bond2_idx,
+														   -1,
+														   name));
 	}
 
 	size_t get_num_product_potentials() const {

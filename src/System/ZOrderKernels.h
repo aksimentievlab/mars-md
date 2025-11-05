@@ -16,6 +16,9 @@
 #include "Types/Types.h"
 #include "Types/Vector3.h"
 
+// Include adaptive kernels for Pairlist mode optimizations
+#include "System/ZOrderKernels/AdaptiveKernels.h"
+
 namespace ARBD {
 
 /**
@@ -127,6 +130,47 @@ struct BoundingBoxKernel {
 		atomicMax(&max_bounds->x, pos.x);
 		atomicMax(&max_bounds->y, pos.y);
 		atomicMax(&max_bounds->z, pos.z);
+#elif defined(__SYCL_DEVICE_ONLY__)
+		// Create separate atomic refs for each component
+		sycl::atomic_ref<float,
+						 sycl::memory_order::relaxed,
+						 sycl::memory_scope::device,
+						 sycl::access::address_space::global_space>
+			atomic_min_x(min_bounds->x);
+		sycl::atomic_ref<float,
+						 sycl::memory_order::relaxed,
+						 sycl::memory_scope::device,
+						 sycl::access::address_space::global_space>
+			atomic_min_y(min_bounds->y);
+		sycl::atomic_ref<float,
+						 sycl::memory_order::relaxed,
+						 sycl::memory_scope::device,
+						 sycl::access::address_space::global_space>
+			atomic_min_z(min_bounds->z);
+
+		atomic_min_x.fetch_min(pos.x);
+		atomic_min_y.fetch_min(pos.y);
+		atomic_min_z.fetch_min(pos.z);
+
+		sycl::atomic_ref<float,
+						 sycl::memory_order::relaxed,
+						 sycl::memory_scope::device,
+						 sycl::access::address_space::global_space>
+			atomic_max_x(max_bounds->x);
+		sycl::atomic_ref<float,
+						 sycl::memory_order::relaxed,
+						 sycl::memory_scope::device,
+						 sycl::access::address_space::global_space>
+			atomic_max_y(max_bounds->y);
+		sycl::atomic_ref<float,
+						 sycl::memory_order::relaxed,
+						 sycl::memory_scope::device,
+						 sycl::access::address_space::global_space>
+			atomic_max_z(max_bounds->z);
+
+		atomic_max_x.fetch_max(pos.x);
+		atomic_max_y.fetch_max(pos.y);
+		atomic_max_z.fetch_max(pos.z);
 #else
 		min_bounds->x = fmin(min_bounds->x, pos.x);
 		min_bounds->y = fmin(min_bounds->y, pos.y);

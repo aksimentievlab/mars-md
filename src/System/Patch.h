@@ -4,6 +4,7 @@
 #include "SimParam.h"
 #include "System/PeriodicBox.h"
 #include "Types/Types.h"
+#include <utility>
 
 namespace ARBD {
 
@@ -250,15 +251,124 @@ class Patch {
 		return false;
 	}
 
+	/**
+	 * @brief Get resource for this patch
+	 * @return Resource for this patch
+	 */
+	const Resource& get_resource() const {
+		return resource_;
+	}
+
+	void set_resource(const Resource& resource) {
+		resource_ = resource;
+	}
+
+	/**
+	 * @brief Check if a particle position needs to migrate to a neighbor patch
+	 * @param position Particle position to check
+	 * @return Direction index if migration needed, -1 otherwise
+	 *         Direction: 0=x-, 1=x+, 2=y-, 3=y+, 4=z-, 5=z+
+	 */
+	int check_particle_migration(const Vector3& position) const {
+		if (position.x < bounds_min_.x)
+			return 0; // x-
+		if (position.x >= bounds_max_.x)
+			return 1; // x+
+		if (position.y < bounds_min_.y)
+			return 2; // y-
+		if (position.y >= bounds_max_.y)
+			return 3; // y+
+		if (position.z < bounds_min_.z)
+			return 4; // z-
+		if (position.z >= bounds_max_.z)
+			return 5; // z+
+		return -1;	  // No migration needed
+	}
+
+	/**
+	 * @brief Check if a position is within the boundary region that should be sent to neighbor
+	 * @param position Position to check
+	 * @param direction Direction to neighbor (0=x-, 1=x+, 2=y-, 3=y+, 4=z-, 5=z+)
+	 * @param halo_width Width of the halo region
+	 * @return True if position is in boundary region
+	 */
+	bool is_in_boundary_region(const Vector3& position, int direction, float halo_width) const {
+		switch (direction) {
+		case 0: // x-
+			return position.x >= bounds_min_.x && position.x < bounds_min_.x + halo_width;
+		case 1: // x+
+			return position.x >= bounds_max_.x - halo_width && position.x < bounds_max_.x;
+		case 2: // y-
+			return position.y >= bounds_min_.y && position.y < bounds_min_.y + halo_width;
+		case 3: // y+
+			return position.y >= bounds_max_.y - halo_width && position.y < bounds_max_.y;
+		case 4: // z-
+			return position.z >= bounds_min_.z && position.z < bounds_min_.z + halo_width;
+		case 5: // z+
+			return position.z >= bounds_max_.z - halo_width && position.z < bounds_max_.z;
+		default:
+			return false;
+		}
+	}
+
+	/**
+	 * @brief Calculate halo region bounds for specific direction
+	 * @param direction Direction index (0=x-, 1=x+, 2=y-, 3=y+, 4=z-, 5=z+)
+	 * @param halo_width Width of halo region
+	 * @return Pair of (halo_min, halo_max) bounds
+	 */
+	std::pair<Vector3, Vector3> calculate_halo_bounds(int direction, float halo_width) const {
+		Vector3 halo_min = bounds_min_;
+		Vector3 halo_max = bounds_max_;
+
+		switch (direction) {
+		case 0: // x-
+			halo_max.x = bounds_min_.x;
+			halo_min.x = bounds_min_.x - halo_width;
+			break;
+		case 1: // x+
+			halo_min.x = bounds_max_.x;
+			halo_max.x = bounds_max_.x + halo_width;
+			break;
+		case 2: // y-
+			halo_max.y = bounds_min_.y;
+			halo_min.y = bounds_min_.y - halo_width;
+			break;
+		case 3: // y+
+			halo_min.y = bounds_max_.y;
+			halo_max.y = bounds_max_.y + halo_width;
+			break;
+		case 4: // z-
+			halo_max.z = bounds_min_.z;
+			halo_min.z = bounds_min_.z - halo_width;
+			break;
+		case 5: // z+
+			halo_min.z = bounds_max_.z;
+			halo_max.z = bounds_max_.z + halo_width;
+			break;
+		}
+
+		return {halo_min, halo_max};
+	}
+
   private:
 	// Core patch properties
-	short gpu_id_{0};		///< GPU ID for this patch
+	short gpu_id_{-1};		///< GPU ID for this patch
+	Resource resource_;		///< Resource for this patch
 	patch_t patch_idx_;		///< Unique identifier for this patch
 	idx_t capacity_;		///< Maximum number of particles this patch can hold
 	idx_t num_replicas_{1}; ///< Number of replicas of this patch
 	idx_t num_; ///< Current number of particles in this patch, num_*num_replicas_<=capacity_
 	int num_group_sites_{0}; ///< Number of group sites in this patch
 	float ghost_thickness_{0.0f};
+
+  protected:
+	idx_t capacity;
+	idx_t num;
+	Vector3 lower_bound, upper_bound;
+
+	static idx_t global_patch_idx; ///< Unique ID across ranks
+	idx_t patch_idx;			   ///< Unique ID for this patch
 
 	// Spatial bounds
 	Vector3 bounds_min_{0.0f, 0.0f, 0.0f}; ///< Minimum corner of patch

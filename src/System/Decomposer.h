@@ -15,14 +15,59 @@
 #include "Configuration.h"
 #include "SimParam.h"
 #include "Types/Types.h"
+#include <array>
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace ARBD {
 
 // Forward declarations
 class SimSystem;
-class PatchManager;
+
+/**
+ * @brief Result of patch decomposition - describes the patch layout and structure
+ *
+ * This structure encapsulates all information computed during decomposition
+ * and is used to initialize the PatchManager. It represents a one-time
+ * decomposition plan created during system setup.
+ */
+struct DecompositionPlan {
+	// Grid structure
+	std::array<int, 3> grid_dimensions = {0,
+										  0,
+										  0}; ///< Number of patches in each dimension (nx, ny, nz)
+	std::array<bool, 3> periodicity = {true, true, true}; ///< Periodic boundary flags (x, y, z)
+
+	// Patch boundaries (one per patch in the grid)
+	std::vector<Vector3> patch_min_bounds; ///< Minimum bounds for each patch
+	std::vector<Vector3> patch_max_bounds; ///< Maximum bounds for each patch
+
+	// Resource assignment
+	std::vector<Resource> patch_resources; ///< Resource assigned to each patch
+
+	// System-wide information
+	Vector3 system_min = Vector3(0.0f); ///< Global system minimum bounds
+	Vector3 system_max = Vector3(0.0f); ///< Global system maximum bounds
+
+	/**
+	 * @brief Get total number of patches
+	 */
+	size_t total_patches() const {
+		return static_cast<size_t>(grid_dimensions[0]) * static_cast<size_t>(grid_dimensions[1]) *
+			   static_cast<size_t>(grid_dimensions[2]);
+	}
+
+	/**
+	 * @brief Validate that the decomposition plan is consistent
+	 */
+	bool is_valid() const {
+		size_t expected_patches = total_patches();
+		return expected_patches > 0 && patch_min_bounds.size() == expected_patches &&
+			   patch_max_bounds.size() == expected_patches &&
+			   patch_resources.size() == expected_patches;
+	}
+};
 
 /**
  * @brief Abstract base class for patch decomposition strategies
@@ -41,10 +86,14 @@ class PatchDecomposer {
 
 	/**
 	 * @brief The core function that performs the patch decomposition.
+	 *
+	 * This method computes the decomposition plan and stores it in the SimSystem.
+	 * Decomposition should only be called once during system setup.
+	 *
 	 * @param sys The global system containing particle data and configuration.
-	 * @param resources The collection of hardware resources (e.g., GPUs) to distribute to.
+	 * @return DecompositionPlan containing the computed patch layout
 	 */
-	virtual void decompose(SimSystem& sys, const ResourceCollection& resources) = 0;
+	virtual DecompositionPlan decompose(SimSystem& sys) = 0;
 
 	virtual const std::string get_name() {
 		switch (type_) {
@@ -75,7 +124,7 @@ class SpatialPatchDecomposer : public PatchDecomposer {
   public:
 	SpatialPatchDecomposer() : type_(DecomposerType::Spatial) {}
 
-	void decompose(SimSystem& sys, const ResourceCollection& resources) override;
+	DecompositionPlan decompose(SimSystem& sys) override;
 
   private:
 	DecomposerType type_;
@@ -91,7 +140,7 @@ class RecursiveBisectionPatchDecomposer : public PatchDecomposer {
   public:
 	RecursiveBisectionPatchDecomposer() : type_(DecomposerType::RecursiveBisection) {}
 
-	void decompose(SimSystem& sys, const ResourceCollection& resources) override;
+	DecompositionPlan decompose(SimSystem& sys) override;
 
   private:
 	DecomposerType type_;
@@ -107,7 +156,7 @@ class GeometricPatchDecomposer : public PatchDecomposer {
   public:
 	GeometricPatchDecomposer() : type_(DecomposerType::Geometric) {}
 
-	void decompose(SimSystem& sys, const ResourceCollection& resources) override;
+	DecompositionPlan decompose(SimSystem& sys) override;
 
   private:
 	DecomposerType type_;

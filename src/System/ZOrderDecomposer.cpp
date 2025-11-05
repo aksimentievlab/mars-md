@@ -1,274 +1,289 @@
 #include "System/ZOrderDecomposer.h"
-#include "SimSystem.h"
-#include "System/PatchManager.h"
 #include "ARBDException.h"
 #include "ARBDLogger.h"
-
-#include <chrono>
+#include "SimSystem.h"
+#include "System/PeriodicBox.h"
 #include <algorithm>
+#include <chrono>
+#include <limits>
 
 namespace ARBD {
 
 ZOrderDecomposer::ZOrderDecomposer() : PatchDecomposer() {
-    type_ = DecomposerType::ZOrder;
+	type_ = DecomposerType::ZOrder;
 
-    // Set default configuration
-    config_ = Config{};
+	// Set default configuration
+	config_ = Config{};
 
-    LOGINFO("Created ZOrderDecomposer with default configuration");
+	LOGINFO("Created ZOrderDecomposer with default configuration");
 }
 
-void ZOrderDecomposer::decompose(SimSystem& sys, const ResourceCollection& resources) {
-    auto start_time = std::chrono::high_resolution_clock::now();
+DecompositionPlan ZOrderDecomposer::decompose(SimSystem& sys) {
+	auto start_time = std::chrono::high_resolution_clock::now();
 
-    LOGINFO("Starting Z-order decomposition for {} resources", resources.size());
+	const auto& resources = sys.get_resources();
+	const PeriodicBox& bcs = sys.get_boundary_conditions();
 
-    if (resources.empty()) {
-        ARBD_Exception(ExceptionType::ValueError, "Cannot decompose with zero resources");
-    }
+	LOGINFO("Starting Z-order decomposition for {} resources", resources.size());
 
-    // Step 1: Collect all particle positions from existing patches
-    size_t total_particles = 0;
-    collect_global_positions(sys, total_particles);
+	// Step 1: Get particle positions from SimSystem (not from patches!)
+	std::vector<Vector3> particle_positions = sys.get_particle_positions();
+	size_t total_particles = particle_positions.size();
 
-    if (total_particles == 0) {
-        LOGWARN("No particles found for decomposition");
-        return;
-    }
+	if (total_particles == 0) {
+		LOGWARN("No particles found for decomposition");
+		// Return minimal plan - could use boundary conditions for system bounds
+		DecompositionPlan plan;
+		plan.system_min = bcs.get_origin();
+		auto basis = bcs.get_basis();
+		plan.system_max = plan.system_min + basis[0] + basis[1] + basis[2];
+		plan.grid_dimensions = {1, 1, 1};
+		plan.periodicity = {bcs.get_periodicity()[0],
+							bcs.get_periodicity()[1],
+							bcs.get_periodicity()[2]};
+		return plan;
+	}
 
-    LOGINFO("Collected {} particles for decomposition", total_particles);
+	LOGINFO("Collected {} particles for decomposition", total_particles);
 
-    // Step 2: Compute global bounding box
-    Vector3 global_box_min, global_box_max;
-    if (config_.auto_bounding_box) {
-        compute_global_bounding_box(*global_positions_, total_particles,
-                                   global_box_min, global_box_max);
-        LOGTRACE("Computed global bounding box: [{:.3f}, {:.3f}, {:.3f}] to [{:.3f}, {:.3f}, {:.3f}]",
-                global_box_min.x, global_box_min.y, global_box_min.z,
-                global_box_max.x, global_box_max.y, global_box_max.z);
-    } else {
-        global_box_min = config_.manual_box_min;
-        global_box_max = config_.manual_box_max;
-        LOGTRACE("Using manual bounding box: [{:.3f}, {:.3f}, {:.3f}] to [{:.3f}, {:.3f}, {:.3f}]",
-                global_box_min.x, global_box_min.y, global_box_min.z,
-                global_box_max.x, global_box_max.y, global_box_max.z);
-    }
+	// Step 2: Initialize buffers and compute bounding box
+	const auto& first_resource = resources.empty() ? Resource(ResourceType::CPU, 0) : resources[0];
 
-    // Step 3: Sort particles globally by Morton code
-    global_sorter_->sort_particles(*global_positions_, total_particles,
-                                  global_box_min, global_box_max);
+	if (!global_positions_ || global_positions_->size() < total_particles) {
+		global_positions_ =
+			std::make_unique<DeviceBuffer<Vector3>>(total_particles, first_resource);
+		global_morton_codes_ =
+			std::make_unique<DeviceBuffer<morton_t>>(total_particles, first_resource);
+		global_indices_ = std::make_unique<DeviceBuffer<uint32_t>>(total_particles, first_resource);
+		global_sorter_ = std::make_unique<ZOrderSort>(first_resource,
+													  total_particles,
+													  ZOrderOptimizationMode::System);
+	}
 
-    LOGTRACE("Sorted {} particles by Morton code", total_particles);
+	// Copy positions to device buffer
+	global_positions_->copy_from_host(particle_positions.data(), total_particles);
 
-    // Step 4: Determine optimal patch boundaries
-    auto patch_boundaries = compute_patch_boundaries(total_particles, resources.size());
+	Vector3 global_box_min, global_box_max;
+	if (config_.auto_bounding_box) {
+		compute_global_bounding_box(*global_positions_,
+									total_particles,
+									global_box_min,
+									global_box_max);
+		LOGTRACE(
+			"Computed global bounding box: [{:.3f}, {:.3f}, {:.3f}] to [{:.3f}, {:.3f}, {:.3f}]",
+			global_box_min.x,
+			global_box_min.y,
+			global_box_min.z,
+			global_box_max.x,
+			global_box_max.y,
+			global_box_max.z);
+	} else {
+		global_box_min = config_.manual_box_min;
+		global_box_max = config_.manual_box_max;
+		LOGTRACE("Using manual bounding box: [{:.3f}, {:.3f}, {:.3f}] to [{:.3f}, {:.3f}, {:.3f}]",
+				 global_box_min.x,
+				 global_box_min.y,
+				 global_box_min.z,
+				 global_box_max.x,
+				 global_box_max.y,
+				 global_box_max.z);
+	}
 
-    // Step 5: Redistribute particles to patches
-    redistribute_particles(sys, resources, patch_boundaries);
+	// Step 3: Sort particles globally by Morton code
+	global_sorter_->sort_particles(*global_positions_,
+								   total_particles,
+								   global_box_min,
+								   global_box_max);
+	LOGTRACE("Sorted {} particles by Morton code", total_particles);
 
-    // Step 6: Update patch metadata
-    update_patch_metadata(sys, resources);
+	// Step 4: Compute patch boundaries based on Z-order
+	size_t num_patches = resources.size();
+	auto patch_boundaries = compute_patch_boundaries(total_particles, num_patches);
 
-    // Step 7: Validate and compute statistics
-    validate_and_compute_stats(sys, resources.size());
+	// Step 5: Create DecompositionPlan from Z-order results
+	DecompositionPlan plan;
+	plan.system_min = global_box_min;
+	plan.system_max = global_box_max;
 
-    auto end_time = std::chrono::high_resolution_clock::now();
-    stats_.decomposition_time_ms =
-        std::chrono::duration<double, std::milli>(end_time - start_time).count();
-    stats_.global_box_min = global_box_min;
-    stats_.global_box_max = global_box_max;
+	// For Z-order, we need to compute actual spatial bounds for each patch
+	// This is simplified - full implementation would compute bounds from Morton ranges
+	const auto& periodicity = bcs.get_periodicity();
+	plan.periodicity = {periodicity[0], periodicity[1], periodicity[2]};
 
-    LOGINFO("Z-order decomposition completed in {:.2f} ms, load imbalance factor: {:.3f}",
-            stats_.decomposition_time_ms, stats_.load_imbalance_factor);
+	// Determine grid dimensions (for Z-order, patches may not form a regular grid)
+	// For now, create a simple 1D arrangement
+	plan.grid_dimensions = {static_cast<int>(num_patches), 1, 1};
+
+	// Compute patch bounds from sorted particle positions
+	plan.patch_min_bounds.reserve(num_patches);
+	plan.patch_max_bounds.reserve(num_patches);
+	plan.patch_resources.reserve(num_patches);
+
+	// Get sorted positions from device
+	std::vector<Vector3> sorted_positions(total_particles);
+	global_positions_->copy_to_host(sorted_positions.data(), total_particles);
+
+	size_t particles_per_patch = total_particles / num_patches;
+	size_t remainder = total_particles % num_patches;
+
+	size_t start_idx = 0;
+	for (size_t patch_id = 0; patch_id < num_patches; ++patch_id) {
+		size_t patch_size = particles_per_patch + (patch_id < remainder ? 1 : 0);
+		size_t end_idx = std::min(start_idx + patch_size, total_particles);
+
+		// Compute bounding box for this patch's particles
+		Vector3 patch_min = Vector3(std::numeric_limits<float>::max());
+		Vector3 patch_max = Vector3(std::numeric_limits<float>::lowest());
+
+		for (size_t i = start_idx; i < end_idx; ++i) {
+			const auto& pos = sorted_positions[i];
+			patch_min.x = std::min(patch_min.x, pos.x);
+			patch_min.y = std::min(patch_min.y, pos.y);
+			patch_min.z = std::min(patch_min.z, pos.z);
+			patch_max.x = std::max(patch_max.x, pos.x);
+			patch_max.y = std::max(patch_max.y, pos.y);
+			patch_max.z = std::max(patch_max.z, pos.z);
+		}
+
+		// Add small margin
+		Vector3 margin = (patch_max - patch_min) * 0.01f;
+		if (margin.x < 0.1f)
+			margin.x = 0.1f;
+		if (margin.y < 0.1f)
+			margin.y = 0.1f;
+		if (margin.z < 0.1f)
+			margin.z = 0.1f;
+
+		patch_min -= margin;
+		patch_max += margin;
+
+		plan.patch_min_bounds.push_back(patch_min);
+		plan.patch_max_bounds.push_back(patch_max);
+
+		// Assign resource
+		size_t resource_idx = patch_id % resources.size();
+		plan.patch_resources.push_back(resources[resource_idx]);
+
+		start_idx = end_idx;
+	}
+
+	// Validate plan
+	if (!plan.is_valid()) {
+		throw Exception(ExceptionType::RuntimeError,
+						SourceLocation(),
+						"Generated invalid Z-order decomposition plan");
+	}
+
+	auto end_time = std::chrono::high_resolution_clock::now();
+	stats_.decomposition_time_ms =
+		std::chrono::duration<double, std::milli>(end_time - start_time).count();
+	stats_.global_box_min = global_box_min;
+	stats_.global_box_max = global_box_max;
+
+	LOGINFO("Z-order decomposition completed in {:.2f} ms - {} patches created",
+			stats_.decomposition_time_ms,
+			plan.total_patches());
+
+	return plan;
 }
 
-void ZOrderDecomposer::collect_global_positions(SimSystem& sys, size_t& total_particles) {
-    // Get patch manager to access current patches
-    auto& patch_manager = sys.get_patch_manager();
-
-    // Count total particles across all patches
-    total_particles = 0;
-    for (const auto& patch : patch_manager.get_patches()) {
-        total_particles += patch.get_num_particles();
-    }
-
-    if (total_particles == 0) {
-        return;
-    }
-
-    // Initialize global buffers if needed
-    if (!global_positions_ || global_positions_->size() < total_particles) {
-        // Use the first available resource for global operations
-        const auto& first_resource = sys.get_resource_collection()[0];
-
-        global_positions_ = std::make_unique<DeviceBuffer<Vector3>>(total_particles, first_resource);
-        global_morton_codes_ = std::make_unique<DeviceBuffer<MortonCode::morton_t>>(total_particles, first_resource);
-        global_indices_ = std::make_unique<DeviceBuffer<uint32_t>>(total_particles, first_resource);
-        global_sorter_ = std::make_unique<ZOrderSort>(first_resource, total_particles);
-    }
-
-    // Copy positions from all patches to global buffer
-    size_t offset = 0;
-    for (const auto& patch : patch_manager.get_patches()) {
-        const auto& positions = patch.get_positions();
-        size_t num_particles = patch.get_num_particles();
-
-        if (num_particles > 0) {
-            // Copy from patch to global buffer
-            // Note: This is a simplified implementation
-            // Production code would handle cross-device transfers more efficiently
-            positions.copy_to_buffer(*global_positions_, num_particles, 0, offset);
-            offset += num_particles;
-        }
-    }
-}
+// Removed collect_global_positions - particles now come directly from SimSystem
+// This method was moved to decompose() since it's decomposition-specific logic
 
 void ZOrderDecomposer::compute_global_bounding_box(const DeviceBuffer<Vector3>& positions,
-                                                  size_t num_particles,
-                                                  Vector3& box_min,
-                                                  Vector3& box_max) {
-    // Initialize bounds
-    box_min = Vector3(std::numeric_limits<float>::max());
-    box_max = Vector3(std::numeric_limits<float>::lowest());
+												   size_t num_particles,
+												   Vector3& box_min,
+												   Vector3& box_max) {
+	// Simple host-side computation (can be optimized with GPU kernel later)
+	std::vector<Vector3> pos_host(num_particles);
+	positions.copy_to_host(pos_host.data(), num_particles);
 
-    // Use the same resource as the positions buffer
-    DeviceBuffer<Vector3> temp_min(1, positions.get_resource());
-    DeviceBuffer<Vector3> temp_max(1, positions.get_resource());
+	// Initialize bounds
+	box_min = Vector3(std::numeric_limits<float>::max());
+	box_max = Vector3(std::numeric_limits<float>::lowest());
 
-    temp_min.copy_from_host(&box_min, 1);
-    temp_max.copy_from_host(&box_max, 1);
+	// Compute bounding box
+	for (size_t i = 0; i < num_particles; ++i) {
+		const auto& pos = pos_host[i];
+		box_min.x = std::min(box_min.x, pos.x);
+		box_min.y = std::min(box_min.y, pos.y);
+		box_min.z = std::min(box_min.z, pos.z);
+		box_max.x = std::max(box_max.x, pos.x);
+		box_max.y = std::max(box_max.y, pos.y);
+		box_max.z = std::max(box_max.z, pos.z);
+	}
 
-    BoundingBoxKernel kernel{
-        positions.data(),
-        temp_min.data(),
-        temp_max.data(),
-        num_particles
-    };
-
-    launch_kernel(positions.get_resource(), kernel, num_particles);
-
-    temp_min.copy_to_host(&box_min, 1, true);
-    temp_max.copy_to_host(&box_max, 1, true);
-
-    // Add small margin to avoid boundary issues
-    Vector3 margin = (box_max - box_min) * 0.001f;
-    box_min -= margin;
-    box_max += margin;
+	// Add small margin to avoid boundary issues
+	Vector3 margin = (box_max - box_min) * 0.001f;
+	box_min -= margin;
+	box_max += margin;
 }
 
-std::vector<std::pair<MortonCode::morton_t, MortonCode::morton_t>>
+std::vector<std::pair<morton_t, morton_t>>
 ZOrderDecomposer::compute_patch_boundaries(size_t num_particles, size_t num_patches) {
-    std::vector<std::pair<MortonCode::morton_t, MortonCode::morton_t>> boundaries;
-    boundaries.reserve(num_patches);
+	std::vector<std::pair<morton_t, morton_t>> boundaries;
+	boundaries.reserve(num_patches);
 
-    if (num_patches == 1) {
-        // Special case: all particles go to single patch
-        boundaries.emplace_back(0, std::numeric_limits<MortonCode::morton_t>::max());
-        return boundaries;
-    }
+	if (num_patches == 1) {
+		// Special case: all particles go to single patch
+		boundaries.emplace_back(0, std::numeric_limits<morton_t>::max());
+		return boundaries;
+	}
 
-    // Get sorted Morton codes
-    const auto& morton_codes = global_sorter_->get_morton_codes();
+	// Get sorted Morton codes
+	const auto& morton_codes = global_sorter_->get_morton_codes();
 
-    // Simple equal-size partitioning
-    // More sophisticated approaches could consider load balancing
-    size_t particles_per_patch = num_particles / num_patches;
-    size_t remainder = num_particles % num_patches;
+	// Simple equal-size partitioning
+	// More sophisticated approaches could consider load balancing
+	size_t particles_per_patch = num_particles / num_patches;
+	size_t remainder = num_particles % num_patches;
 
-    size_t start_idx = 0;
-    for (size_t patch_id = 0; patch_id < num_patches; ++patch_id) {
-        size_t patch_size = particles_per_patch + (patch_id < remainder ? 1 : 0);
+	size_t start_idx = 0;
+	for (size_t patch_id = 0; patch_id < num_patches; ++patch_id) {
+		size_t patch_size = particles_per_patch + (patch_id < remainder ? 1 : 0);
 
-        if (patch_size < config_.min_particles_per_patch && num_patches > 1) {
-            patch_size = config_.min_particles_per_patch;
-        }
+		if (patch_size < config_.min_particles_per_patch && num_patches > 1) {
+			patch_size = config_.min_particles_per_patch;
+		}
 
-        size_t end_idx = std::min(start_idx + patch_size, num_particles);
+		size_t end_idx = std::min(start_idx + patch_size, num_particles);
 
-        MortonCode::morton_t start_morton = 0;
-        MortonCode::morton_t end_morton = std::numeric_limits<MortonCode::morton_t>::max();
+		morton_t start_morton = 0;
+		morton_t end_morton = std::numeric_limits<morton_t>::max();
 
-        if (start_idx < num_particles) {
-            // Get Morton code from device (simplified - production code would be more efficient)
-            morton_codes.copy_to_host(&start_morton, 1, true, start_idx);
-        }
+		if (start_idx < num_particles) {
+			// Get Morton code from device (simplified - production code would be more efficient)
+			morton_codes.copy_to_host(&start_morton, 1, start_idx);
+		}
 
-        if (end_idx < num_particles) {
-            morton_codes.copy_to_host(&end_morton, 1, true, end_idx);
-        }
+		if (end_idx < num_particles) {
+			morton_codes.copy_to_host(&end_morton, 1, end_idx);
+		}
 
-        boundaries.emplace_back(start_morton, end_morton);
-        start_idx = end_idx;
+		boundaries.emplace_back(start_morton, end_morton);
+		start_idx = end_idx;
 
-        if (start_idx >= num_particles) {
-            break;
-        }
-    }
+		if (start_idx >= num_particles) {
+			break;
+		}
+	}
 
-    return boundaries;
+	return boundaries;
 }
 
-void ZOrderDecomposer::redistribute_particles(SimSystem& sys,
-                                             const ResourceCollection& resources,
-                                             const std::vector<std::pair<MortonCode::morton_t, MortonCode::morton_t>>& patch_boundaries) {
-    // This is a high-level outline of particle redistribution
-    // Production implementation would need to:
-    // 1. Determine which particles belong to which patches based on Morton ranges
-    // 2. Perform efficient data transfers between devices
-    // 3. Update patch particle counts and metadata
-    // 4. Handle inter-device communication for halo particles
-
-    LOGINFO("Redistributing particles across {} patches", patch_boundaries.size());
-
-    // For now, log the intended distribution
-    for (size_t i = 0; i < patch_boundaries.size(); ++i) {
-        LOGTRACE("Patch {}: Morton range [{:016x}, {:016x})",
-                i, patch_boundaries[i].first, patch_boundaries[i].second);
-    }
-
-    // TODO: Implement actual particle redistribution
-    LOGWARN("Particle redistribution not yet implemented - placeholder only");
-}
-
-void ZOrderDecomposer::update_patch_metadata(SimSystem& sys, const ResourceCollection& resources) {
-    // Update patch metadata after redistribution
-    // This includes spatial bounds, neighbor information, etc.
-
-    auto& patch_manager = sys.get_patch_manager();
-
-    // TODO: Update patch metadata based on new particle distribution
-    LOGTRACE("Updated patch metadata for {} patches", resources.size());
-}
+// Removed redistribute_particles and update_patch_metadata
+// These are PatchManager responsibilities, not decomposer responsibilities
+// Patches are created by PatchManager from the DecompositionPlan
 
 void ZOrderDecomposer::validate_and_compute_stats(const SimSystem& sys, size_t num_patches) {
-    stats_.total_particles = 0;
-    stats_.num_patches = num_patches;
-    stats_.particles_per_patch.clear();
-    stats_.particles_per_patch.reserve(num_patches);
+	// This method could be used for validation after decomposition
+	// But it shouldn't depend on patches existing yet
+	// Could compute stats from the DecompositionPlan instead
 
-    // Collect particle counts from patches
-    const auto& patch_manager = sys.get_patch_manager();
-    for (const auto& patch : patch_manager.get_patches()) {
-        size_t count = patch.get_num_particles();
-        stats_.particles_per_patch.push_back(count);
-        stats_.total_particles += count;
-    }
+	stats_.num_patches = num_patches;
+	stats_.load_imbalance_factor = 1.0f; // Would be computed from plan if needed
 
-    // Compute load imbalance factor
-    if (!stats_.particles_per_patch.empty()) {
-        auto max_load = *std::max_element(stats_.particles_per_patch.begin(),
-                                         stats_.particles_per_patch.end());
-        auto min_load = *std::min_element(stats_.particles_per_patch.begin(),
-                                         stats_.particles_per_patch.end());
-
-        double avg_load = static_cast<double>(stats_.total_particles) / num_patches;
-        stats_.load_imbalance_factor = max_load / avg_load;
-
-        LOGTRACE("Load distribution: min={}, max={}, avg={:.1f}, imbalance={:.3f}",
-                min_load, max_load, avg_load, stats_.load_imbalance_factor);
-    } else {
-        stats_.load_imbalance_factor = 1.0f;
-    }
+	LOGTRACE("Z-order decomposition stats: {} patches", num_patches);
 }
 
 } // namespace ARBD
