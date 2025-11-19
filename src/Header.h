@@ -137,32 +137,6 @@ using threadgroup_ptr = threadgroup T*;
 constexpr inline short NUM_QUEUES = 4;
 
 /**
- * @brief Backend-agnostic atomic add operation
- * @tparam T Arithmetic type (int, float, double, etc.)
- * @param ptr Pointer to the value to add to
- * @param value Value to add
- * @return The old value at ptr (before addition)
- *
- * @warning High contention scenarios will cause performance degradation.
- * Consider using optimized reduction patterns for better performance.
- */
-template<typename T>
-inline auto atomic_add(T* ptr, T value) {
-#ifdef USE_CUDA
-	return atomicAdd(ptr, value);
-#elif defined(USE_SYCL)
-	return sycl::atomic_ref<T, sycl::memory_order::relaxed, sycl::memory_scope::device>(*(ptr)) +=
-		   value;
-#elif defined(USE_METAL)
-	return atomic_fetch_add_explicit(reinterpret_cast<device atomic<T>*>(ptr),
-									 value,
-									 memory_order_relaxed);
-#else
-	return (*(ptr) += (value));
-#endif
-}
-
-/**
  * @brief Optimized reduction helper for scenarios with many threads
  *
  * This function provides a pattern for reducing atomic contention by using

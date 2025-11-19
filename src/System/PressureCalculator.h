@@ -36,7 +36,7 @@ class PressureCalculator {
 					  ((num_particles * num_replicas) % NUM_THREADS == 0 ? 0 : 1);
 
 		// Allocate GPU memory for pressure calculation
-		allocateGPUMemory();
+		allocateGPUMemory(resources_->id());
 
 		LOGINFO("PressureCalculator: Initialized for %d particles, %d replicas, %d blocks",
 				num_particles_,
@@ -72,7 +72,7 @@ class PressureCalculator {
 			return 0.0f;
 
 		// Launch pressure calculation kernel
-		launchPressureKernel(positions, forces, system_box);
+		launchPressureKernel(positions, forces, system_box, resources_->id());
 
 		// Copy results back to host
 		copyPressureResults();
@@ -156,9 +156,9 @@ class PressureCalculator {
 		// TODO: Implement actual kernel launch based on backend
 		// This would involve calling the appropriate compute function
 		// from the backend (CUDA, SYCL, or Metal)
-		block_pressure_d_->launch_kernel(resource_id, num_blocks_, [this](int i) {
-			block_pressure_[i] = 0.0f;
-		});
+		// block_pressure_d_->launch_kernel(resource_id, num_blocks_, [this](int i) {
+		// 	block_pressure_[i] = 0.0f;
+		// });
 	}
 
 	/**

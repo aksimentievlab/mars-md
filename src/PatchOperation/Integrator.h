@@ -15,7 +15,7 @@
 #include "Header.h"
 #include "Integrator/BAOAB.h"
 #include "Integrator/BD.h"
-#include "SimSystem.h"
+#include "System/SimSystem.h"
 #include "Types/Types.h"
 #include "Types/Vector3.h"
 

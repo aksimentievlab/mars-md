@@ -1,5 +1,5 @@
-#include "Configuration.h"
 #include "IO/ConfigParser.h"
+#include "IO/Configuration.h"
 #include "SimParam.h"
 
 // pybind11 core

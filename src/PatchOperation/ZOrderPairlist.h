@@ -10,9 +10,9 @@
  * traditional cell-based approaches.
  *********************************************************************/
 
-#include "Compute/Pairlist.h"
-#include "System/ZOrderKernels.h"
-#include "System/ZOrderSort.h"
+#include "PatchOperation/Pairlist.h"
+#include "PatchOperation/ZOrderKernels.h"
+#include "PatchOperation/ZOrderSort.h"
 #include "Types/Types.h"
 
 namespace ARBD {
@@ -46,7 +46,9 @@ class ZOrderPairlist : public Pairlist {
 	 * @param num_particles Number of particles
 	 * @param cutoff Interaction cutoff distance
 	 */
-	void build_pairlist(const DeviceBuffer<Vector3>& positions, size_t num_particles, float cutoff) override;
+	void build_pairlist(const DeviceBuffer<Vector3>& positions,
+						size_t num_particles,
+						float cutoff) override;
 
 	/**
 	 * @brief Update pairlist (rebuilds with current sort if particles haven't moved much)
@@ -221,7 +223,6 @@ class ZOrderPairlist : public Pairlist {
 						  size_t num_particles,
 						  Vector3& box_min,
 						  Vector3& box_max) const;
-
 };
 
 } // namespace ARBD

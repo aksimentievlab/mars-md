@@ -5,7 +5,7 @@
 namespace ARBD {
 
 // run this first, then read in extra exclusions from a file
-void BondedInteraction::make_exclusions(int num_particles, int exclusion_depth) {
+void BondedInteractions::make_exclusions(int num_particles, int exclusion_depth) {
 
 	std::vector<std::vector<int>> adjacency_list(num_particles);
 	for (const auto& bond : bonds_) {

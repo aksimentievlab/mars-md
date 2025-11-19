@@ -89,21 +89,6 @@ class SystemState {
 	}
 
 	/**
-	 * @brief Get temperature grid (if any)
-	 */
-	const BaseGrid<float>* get_temperature_grid() const {
-		return temperature_grid_;
-	}
-
-	/**
-	 * @brief Set temperature grid
-	 * @param grid Temperature grid pointer
-	 */
-	void set_temperature_grid(BaseGrid<float>* grid) {
-		temperature_grid_ = grid;
-	}
-
-	/**
 	 * @brief Gather particle data from all patches into global arrays
 	 * @param patch_manager PatchManager containing all patches
 	 *
@@ -144,7 +129,7 @@ class SystemState {
 	//================================================================================
 	// Member Variables - ONLY Runtime State
 	//================================================================================
-
+	void initialize_system_objects();
 	// Particle data (changes every timestep)
 	size_t num_particles_{0};
 	// Function index mapping
@@ -156,17 +141,17 @@ class SystemState {
 	bool has_bonds_{false};
 	bool has_external_forces_{false};
 	bool has_reactions_{false};
-	BaseGrid<float>* temperature_grid_{nullptr}; // Device pointer
 
 	// Global particle state (host-side, ready for I/O)
 	std::vector<Vector3> global_positions_;	 // For DCD writing
 	std::vector<Vector3> global_momentum_;	 // Optional, for momentum output
 	std::vector<int> global_particle_ids_;	 // Particle IDs in global order
 	std::vector<int> global_particle_types_; // Particle types in global order
-	std::vector<int2> global_bonds_;		 // Bond list in global order
-	std::vector<int3> global_angles_;		 // Angle list in global order
-	std::vector<int4> global_dihedrals_;	 // Dihedral list in global order
-	std::vector<int2> global_exclusitons_;	 // Exclusion list in global order
+
+	std::vector<int2> global_bonds_;	   // Bond list in global order
+	std::vector<int3> global_angles_;	   // Angle list in global order
+	std::vector<int4> global_dihedrals_;   // Dihedral list in global order
+	std::vector<int2> global_exclusitons_; // Exclusion list in global order
 
 	// Metadata
 	size_t global_num_particles_{0};

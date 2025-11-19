@@ -2,6 +2,8 @@
 #include "Array.h"
 #include "Bitmask.h"
 #include "Header.h"
+#include "IndexList.h"
+#include "Math.h"
 #include "Matrix3.h"
 #include "TypeName.h"
 #include "Vector2.h"
@@ -31,7 +33,7 @@ inline std::string string_format(const char* format, Args... args) {
 
 using Vector3 = Vector3_t<float>;
 using Matrix3 = Matrix3_t<float>;
-
+using NeighborList = IndexList<morton_t, 27>;
 // For 3-component indices (Angles)
 using int3 = ARBD::Vector3_t<int>;
 // For 4-component indices (Dihedrals)
@@ -41,6 +43,31 @@ using float4 = ARBD::Vector3_t<float>;
 using int2 = Vec2<int>;
 using float2 = Vec2<float>;
 
-using int_t = int;
-using float_t = float;
+using arbd_int = int;
+using arbd_real = float;
+
+/**
+ * @brief Backend-agnostic atomic add operation
+ * @tparam T Arithmetic type (int, float, double, etc.)
+ * @param ptr Pointer to the value to add to
+ * @param value Value to add
+ * @return The old value at ptr (before addition)
+ *
+ * @warning High contention scenarios will cause performance degradation.
+ * Consider using optimized reduction patterns for better performance.
+ */
+template<typename T>
+HOST DEVICE inline void atomic_add(T* ptr, T value) {
+#ifdef USE_CUDA
+	atomicAdd(ptr, value);
+#elif defined(USE_SYCL)
+	sycl::atomic_ref<T, sycl::memory_order::relaxed, sycl::memory_scope::device>(*(ptr)) += value;
+#elif defined(USE_METAL)
+	atomic_fetch_add_explicit(reinterpret_cast<device atomic<T>*>(ptr),
+							  value,
+							  memory_order_relaxed);
+#else
+	(*(ptr) += (value));
+#endif
+};
 } // namespace ARBD

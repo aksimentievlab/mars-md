@@ -1,7 +1,7 @@
-#include "Compute/Pairlist.h"
+#include "PatchOperation/Pairlist.h"
 #include "ARBDException.h"
-#include "Compute/CellListPairlist.h"
-#include "Compute/ZOrderPairlist.h"
+#include "PatchOperation/CellListPairlist.h"
+#include "PatchOperation/ZOrderPairlist.h"
 
 namespace ARBD {
 

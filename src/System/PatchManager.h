@@ -26,8 +26,8 @@
 #include "Backend/MPIManager.h"
 #endif
 #include "Backend/Resource.h"
+#include "PatchOperation/Patch.h"
 #include "System/Decomposer.h"
-#include "System/Patch.h"
 #include "System/PeriodicBox.h"
 #include "Types/Types.h"
 #include <array>
@@ -440,7 +440,6 @@ class PatchManager {
 	}
 
 	// ==================== Particle Management ====================
-
 
 	// ==================== Synchronization ====================
 

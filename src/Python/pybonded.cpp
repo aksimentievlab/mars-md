@@ -16,18 +16,57 @@ void declare_bond(py::module& m) {
 		.value("REPLACE", BondFlag::REPLACE)
 		.value("ADD", BondFlag::ADD);
 
+	py::enum_<AnalyticalBondType>(m, "AnalyticalBondType")
+		.value("Harmonic", AnalyticalBondType::Harmonic)
+		.value("Morse", AnalyticalBondType::Morse)
+		.value("FENE", AnalyticalBondType::FENE)
+		.value("Half_Harmonic", AnalyticalBondType::Half_Harmonic)
+		.value("WLCSK", AnalyticalBondType::WLCSK);
+
+	py::enum_<AnalyticalAngleType>(m, "AnalyticalAngleType")
+		.value("Harmonic", AnalyticalAngleType::Harmonic)
+		.value("Morse", AnalyticalAngleType::Morse)
+		.value("FENE", AnalyticalAngleType::FENE)
+		.value("Half_Harmonic", AnalyticalAngleType::Half_Harmonic)
+		.value("WLCSK", AnalyticalAngleType::WLCSK);
+
+	py::enum_<AnalyticalDihedralType>(m, "AnalyticalDihedralType")
+		.value("Harmonic", AnalyticalDihedralType::Harmonic)
+		.value("Morse", AnalyticalDihedralType::Morse)
+		.value("FENE", AnalyticalDihedralType::FENE)
+		.value("Half_Harmonic", AnalyticalDihedralType::Half_Harmonic)
+		.value("WLCSK", AnalyticalDihedralType::WLCSK);
+
+	py::class_<Exclude>(m, "Exclude")
+		.def(py::init<>())
+		.def(py::init<int, int>(), py::arg("ind1"), py::arg("ind2"))
+		.def_readwrite("ind1", &Exclude::ind1)
+		.def_readwrite("ind2", &Exclude::ind2)
+		.def("__repr__", [](const Exclude& e) {
+			return "Exclude(ind1=" + std::to_string(e.ind1) + ", ind2=" + std::to_string(e.ind2) +
+				   ")";
+		});
+
+	py::enum_<InteractionForm>(m, "InteractionForm")
+		.value("Tabulated", InteractionForm::Tabulated)
+		.value("Analytical", InteractionForm::Analytical);
+
 	py::class_<Bond>(m, "Bond")
 		.def(py::init<>())
+		.def(py::init<int, int, std::vector<Exclude>&>(),
+			 py::arg("ind1"),
+			 py::arg("ind2"),
+			 py::arg("exclusions"))
 		.def_readwrite("ind1", &Bond::ind1)
 		.def_readwrite("ind2", &Bond::ind2)
-		.def_readwrite("name", &Bond::name)
+		.def_readwrite("name", &Bond::function_name)
 		.def_readwrite("form", &Bond::form)
-		.def_readwrite("functionIndex", &Bond::functionIndex)
+		.def_readwrite("function_index", &Bond::function_index)
 		.def_readwrite("flag", &Bond::flag)
 		.def("add_exclusion", &Bond::add_exclusion)
 		.def("__repr__", [](const Bond& b) {
 			return "Bond(ind1=" + std::to_string(b.ind1) + ", ind2=" + std::to_string(b.ind2) +
-				   ", name='" + b.name + "')";
+				   ", name='" + b.function_name + "')";
 		});
 }
 
@@ -37,12 +76,12 @@ void declare_angle(py::module& m) {
 		.def_readwrite("ind1", &Angle::ind1)
 		.def_readwrite("ind2", &Angle::ind2)
 		.def_readwrite("ind3", &Angle::ind3)
-		.def_readwrite("name", &Angle::name)
+		.def_readwrite("name", &Angle::function_name)
 		.def_readwrite("form", &Angle::form)
-		.def_readwrite("functionIndex", &Angle::functionIndex)
+		.def_readwrite("function_index", &Angle::function_index)
 		.def("__repr__", [](const Angle& a) {
 			return "Angle(ind1=" + std::to_string(a.ind1) + ", ind2=" + std::to_string(a.ind2) +
-				   ", ind3=" + std::to_string(a.ind3) + ", name='" + a.name + "')";
+				   ", ind3=" + std::to_string(a.ind3) + ", name='" + a.function_name + "')";
 		});
 }
 
@@ -53,13 +92,13 @@ void declare_dihedral(py::module& m) {
 		.def_readwrite("ind2", &Dihedral::ind2)
 		.def_readwrite("ind3", &Dihedral::ind3)
 		.def_readwrite("ind4", &Dihedral::ind4)
-		.def_readwrite("name", &Dihedral::name)
+		.def_readwrite("name", &Dihedral::function_name)
 		.def_readwrite("form", &Dihedral::form)
-		.def_readwrite("functionIndex", &Dihedral::functionIndex)
+		.def_readwrite("function_index", &Dihedral::function_index)
 		.def("__repr__", [](const Dihedral& d) {
 			return "Dihedral(ind1=" + std::to_string(d.ind1) + ", ind2=" + std::to_string(d.ind2) +
 				   ", ind3=" + std::to_string(d.ind3) + ", ind4=" + std::to_string(d.ind4) +
-				   ", name='" + d.name + "')";
+				   ", name='" + d.function_name + "')";
 		});
 }
 
@@ -104,18 +143,18 @@ void declare_restraint(py::module& m) {
  * BondedInteraction()
  */
 void declare_bonded_interaction(py::module& m) {
-	py::class_<BondedInteraction>(m, "BondedInteraction")
+	py::class_<BondedInteractions>(m, "BondedInteractions")
 		.def(py::init<std::vector<Bond>, std::vector<Angle>, std::vector<Dihedral>>(),
 			 py::arg("bonds"),
 			 py::arg("angles"),
 			 py::arg("dihedrals"))
-		.def("addBond", &BondedInteraction::addBond)
-		.def("addAngle", &BondedInteraction::addAngle)
-		.def("addDihedral", &BondedInteraction::addDihedral)
-		.def("getNumBonds", &BondedInteraction::getNumBonds)
-		.def("getNumAngles", &BondedInteraction::getNumAngles)
-		.def("getNumDihedrals", &BondedInteraction::getNumDihedrals)
-		.def("__repr__", [](const BondedInteraction& bi) {
+		.def("addBond", &BondedInteractions::addBond)
+		.def("addAngle", &BondedInteractions::addAngle)
+		.def("addDihedral", &BondedInteractions::addDihedral)
+		.def("getNumBonds", &BondedInteractions::getNumBonds)
+		.def("getNumAngles", &BondedInteractions::getNumAngles)
+		.def("getNumDihedrals", &BondedInteractions::getNumDihedrals)
+		.def("__repr__", [](const BondedInteractions& bi) {
 			return "BondedInteraction(bonds=" + std::to_string(bi.getNumBonds()) +
 				   ", angles=" + std::to_string(bi.getNumAngles()) +
 				   ", dihedrals=" + std::to_string(bi.getNumDihedrals()) + ")";

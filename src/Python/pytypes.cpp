@@ -118,7 +118,7 @@ void declare_vector(py::module& m, const std::string& typestr) {
 		.def_readwrite("x", &Class::x)
 		.def_readwrite("y", &Class::y)
 		.def_readwrite("z", &Class::z)
-		.def_readwrite("w", &Class::w)
+		.def_readwrite("w", &Class::t)
 		// Conversions
 		.def("__repr__", &Class::to_string)
 		.def("__getitem__",

@@ -257,8 +257,8 @@ static void load_bonds_file(const std::string& path,
 			b.flag = static_cast<BondFlag>(std::stoi(toks[1]));
 			b.ind1 = std::stoi(toks[2]);
 			b.ind2 = std::stoi(toks[3]);
-			b.name = toks[4];
-			if (b.name.find(".dat") != std::string::npos) {
+			b.function_name = toks[4];
+			if (b.function_name.find(".dat") != std::string::npos) {
 				b.form = InteractionForm::Tabulated;
 			} else {
 				b.form = InteractionForm::Analytical;
@@ -293,9 +293,9 @@ static void load_angles_file(const std::string& path,
 			a.ind1 = std::stoi(toks[0]);
 			a.ind2 = std::stoi(toks[1]);
 			a.ind3 = std::stoi(toks[2]);
-			a.name = toks[3];
+			a.function_name = toks[3];
 			a.form = InteractionForm::Tabulated;
-			a.functionIndex = 0;
+			a.function_index = 0;
 			out.push_back(a);
 		}
 		if (line)
@@ -327,9 +327,8 @@ static void load_dihedrals_file(const std::string& path,
 			d.ind2 = std::stoi(toks[1]);
 			d.ind3 = std::stoi(toks[2]);
 			d.ind4 = std::stoi(toks[3]);
-			d.name = toks[4];
+			d.function_name = toks[4];
 			d.form = InteractionForm::Tabulated;
-			d.functionIndex = 0;
 			out.push_back(d);
 		}
 		if (line)
@@ -400,7 +399,7 @@ static void load_restraints_file(const std::string& path,
 	}
 }
 static void load_particles_file(const std::string& path,
-								std::vector<Particle>& out,
+								std::vector<ParticleRead>& out,
 								const std::string& config_file_path) {
 	std::string resolved_path = resolve_file_path(path, config_file_path);
 	try {
@@ -416,7 +415,7 @@ static void load_particles_file(const std::string& path,
 			auto toks = tokenize(s);
 			if (toks.size() < 6)
 				continue;
-			Particle p{};
+			ParticleRead p{};
 			p.id = std::stoi(toks[1]);
 			p.type_id = std::stoi(toks[2]);
 			p.position.x = std::stof(toks[3]);
@@ -478,7 +477,7 @@ void ConfigParser::get_elements(const Reader& reader) {
 			config_.particle_types.push_back(std::move(ptype));
 			// Create particles for this type
 			for (int n = 0; n < num; ++n) {
-				Particle p{};
+				ParticleRead p{};
 				p.id = static_cast<int>(config_.init_particles.size());
 				p.type_id = type_index;
 				config_.init_particles.push_back(p);

@@ -39,12 +39,12 @@ struct LongRangeNonBonded {
 /**
  * @brief Host-Side Nonbonded interaction manager
  */
-class NonBondedInteraction {
+class NonBondedInteractions {
   public:
-	NonBondedInteraction(std::vector<PairNonBonded> pair_nonbonded,
-						 std::vector<LongRangeNonBonded> long_range_nonbonded)
+	NonBondedInteractions(std::vector<PairNonBonded> pair_nonbonded,
+						  std::vector<LongRangeNonBonded> long_range_nonbonded)
 		: pair_nonbonded_(pair_nonbonded), long_range_nonbonded_(long_range_nonbonded) {}
-	~NonBondedInteraction() = default;
+	~NonBondedInteractions() = default;
 
 	// Host-side data management
 	void addPairNonBonded(const PairNonBonded& pair_nonbonded) {

@@ -1,10 +1,10 @@
-#include "Compute/ZOrderPairlist.h"
+#include "PatchOperation/ZOrderPairlist.h"
 #include "ARBDException.h"
 #include "ARBDLogger.h"
 #include "Backend/Kernels.h"
 #include "Backend/Buffer.h"
-#include "Compute/PairListKernels/DisplacementTracker.h"
-#include "Compute/PairListKernels/ZOrderNeighbor.h"
+#include "PatchOperation/PairListKernels/DisplacementTracker.h"
+#include "PatchOperation/PairListKernels/ZOrderNeighbor.h"
 #include <chrono>
 #include <cmath>
 

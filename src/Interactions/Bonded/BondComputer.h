@@ -11,7 +11,7 @@ namespace ARBD {
 // ============================================================================
 // DEVICE BOND COMPUTER - Uses 2-step approach with BondGeometry
 // ============================================================================
-
+// Analytical bond computer
 template<int BondTypeId>
 struct BondComputer {
 	DEVICE static inline void compute(idx_t i,
@@ -36,14 +36,10 @@ struct BondComputer {
 			AnalyticalBondComputer<BondTypeId>::compute(geom.distance, bond_params);
 		// Phase 3: Apply forces using precomputed geometry
 		const Vector3 force = geom.unit_vector * fe.force_magnitude;
-		atomic_add(&force_energy[indices.x].x, -force.x);
-		atomic_add(&force_energy[indices.x].y, -force.y);
-		atomic_add(&force_energy[indices.x].z, -force.z);
-		atomic_add(&force_energy[indices.y].x, force.x);
-		atomic_add(&force_energy[indices.y].y, force.y);
-		atomic_add(&force_energy[indices.y].z, force.z);
+		const float energy = fe.energy * 0.5f;
+		atomic_add(&force_energy[indices.x], -force);
+		atomic_add(&force_energy[indices.y], force);
 		if (get_energy) {
-			const float energy = fe.energy * 0.5f;
 			atomic_add(&force_energy[indices.x].t, energy);
 			atomic_add(&force_energy[indices.y].t, energy);
 		}
@@ -73,12 +69,8 @@ struct TabulatedBondComputer {
 		// Phase 3: Apply forces using precomputed geometry
 		const Vector3 force = geom.unit_vector * fe.force_magnitude;
 		const float energy = fe.energy * 0.5f;
-		atomic_add(&forces_energy[indices.x].x, -force.x);
-		atomic_add(&forces_energy[indices.x].y, -force.y);
-		atomic_add(&forces_energy[indices.x].z, -force.z);
-		atomic_add(&forces_energy[indices.y].x, force.x);
-		atomic_add(&forces_energy[indices.y].y, force.y);
-		atomic_add(&forces_energy[indices.y].z, force.z);
+		atomic_add(&forces_energy[indices.x], -force);
+		atomic_add(&forces_energy[indices.y], force);
 		if (get_energy) {
 			atomic_add(&forces_energy[indices.x].t, energy);
 			atomic_add(&forces_energy[indices.y].t, energy);
@@ -113,15 +105,9 @@ struct TabulatedAngleComputer {
 		const Vector3 force1 = geom.ab.cross(geom.bc) * fe.force_magnitude;
 		const Vector3 force3 = geom.bc.cross(geom.ab) * fe.force_magnitude;
 		const float energy = fe.energy * 0.3333333333f;
-		atomic_add(&forces_energy[indices.x].x, -force1.x);
-		atomic_add(&forces_energy[indices.x].y, -force1.y);
-		atomic_add(&forces_energy[indices.x].z, -force1.z);
-		atomic_add(&forces_energy[indices.y].x, force1.x + force3.x);
-		atomic_add(&forces_energy[indices.y].y, force1.y + force3.y);
-		atomic_add(&forces_energy[indices.y].z, force1.z + force3.z);
-		atomic_add(&forces_energy[indices.z].x, -force3.x);
-		atomic_add(&forces_energy[indices.z].y, -force3.y);
-		atomic_add(&forces_energy[indices.z].z, -force3.z);
+		atomic_add(&forces_energy[indices.x], -force1);
+		atomic_add(&forces_energy[indices.y], force1 + force3);
+		atomic_add(&forces_energy[indices.z], -force3);
 
 		if (get_energy) {
 			atomic_add(&forces_energy[indices.x].t, energy);
@@ -150,19 +136,27 @@ struct TabulatedDihedralComputer {
 
 		// Phase 1: Compute geometry using the excellent DihedralGeometry approach
 		DihedralGeometry geom = DihedralGeometry::compute(positions, indices, pbox);
+		// Phase 2: Compute force and energy (placeholder - implement angle potentials)
+		const ScalarForceEnergy fe =
+			TabulatedPotential::compute(geom.dihedral_angle + BD_PI, &tables[i]);
 
-		// TODO: Implement AnalyticalDihedralComputer templates similar to bond computers
-		const float force_magnitude = 0.0f; // Placeholder
-		const float energy = 0.0f;			// Placeholder
+		// Phase 3: Apply forces using precomputed geometry
+		// f1, f2-f1 , f3-f2, -f3 );
+		const Vector3 f1 = geom.f1 * fe.force_magnitude;
+		const Vector3 f2 = geom.f2 * fe.force_magnitude;
+		const Vector3 f3 = geom.f3 * fe.force_magnitude;
 
-		// Phase 3: Apply forces (would use dihedral force distribution)
-		// TODO: Implement proper dihedral force distribution
+		const float energy = fe.energy * 0.25f;
+		atomic_add(&forces_energy[indices.x], -f1);
+		atomic_add(&forces_energy[indices.y], f2 - f1);
+		atomic_add(&forces_energy[indices.z], f3 - f2);
+		atomic_add(&forces_energy[indices.t], -f3);
 
 		if (get_energy) {
-			atomic_add(&forces_energy[indices.x].t, energy * 0.25f);
-			atomic_add(&forces_energy[indices.y].t, energy * 0.25f);
-			atomic_add(&forces_energy[indices.z].t, energy * 0.25f);
-			atomic_add(&forces_energy[indices.t].t, energy * 0.25f);
+			atomic_add(&forces_energy[indices.x].t, energy);
+			atomic_add(&forces_energy[indices.y].t, energy);
+			atomic_add(&forces_energy[indices.z].t, energy);
+			atomic_add(&forces_energy[indices.t].t, energy);
 		}
 	}
 };

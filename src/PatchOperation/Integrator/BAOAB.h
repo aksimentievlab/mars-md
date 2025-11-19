@@ -1,8 +1,8 @@
 #pragma once
+#include "../Random/philox.h"
 #include "Header.h"
 #include "Objects/ParticleProperties.h"
-#include "../Random/philox.h"
-#include "SimSystem.h"
+#include "System/SimSystem.h"
 #include "Types/IndexList.h"
 #include "Types/Types.h"
 #include "Types/Vector3.h"
@@ -16,7 +16,7 @@ struct BAOABIntegrate {
 						   Vector3* momenta,
 						   const Vector3* forces,
 						   const int* types,
-						   const ParticleType* particle_types,
+						   const ParticleTypeView* particle_types,
 						   const Vector3& box_size,
 						   float timestep,
 						   float kT,
@@ -31,10 +31,10 @@ struct BAOABIntegrate {
 		Vector3 force = forces[idx];
 		int type = types[idx];
 
-		const ParticleType& pt = particle_types[type]; // Do I really need this?
-		float mass = pt.mass;
-		float gamma = pt.transDamping.x;
-
+		const ParticleTypeView& pt = particle_types[idx]; // Do I really need this?
+		float mass = *pt.mass;
+		Vector3 gamma3 = pt.transDamping[idx];
+		float gamma = gamma3.length(); //???
 		// BAOAB integration scheme
 		// B: momentum update (half step)
 		mom += 0.5f * timestep * force;

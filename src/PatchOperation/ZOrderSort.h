@@ -13,10 +13,10 @@
 #include "Backend/Buffer.h"
 #include "Backend/Kernels.h"
 #include "Backend/Resource.h"
-#include "System/MortonCode.h"
-#include "System/ZOrderKernels.h"
+#include "MortonCode.h"
 #include "Types/Types.h"
 #include "Types/Vector3.h"
+#include "ZOrderKernels.h"
 
 // Forward declarations for CUDA/SYCL specific functions
 #ifdef USE_CUDA
@@ -30,7 +30,7 @@ void sort_morton_codes_cuda(size_t num_particles,
 							const Resource& resource);
 }
 #elif defined(USE_SYCL)
-#include "System/ZOrderKernels/SYCLSort.h"
+#include "ZOrderKernels/SYCLSort.h"
 #endif
 
 namespace ARBD {
@@ -250,7 +250,13 @@ class ZOrderSort {
 // #elif defined(USE_SYCL_ICPX)
 //	sort_morton_codes_oneapi(morton_codes_, sorted_indices_, num_particles_, resource_);
 #elif defined(USE_SYCL)
-		sort_morton_codes_sycl(morton_codes_, sorted_indices_, num_particles_, resource_);
+		sort_morton_codes_sycl(num_particles_,
+							   morton_codes_,
+							   sorted_indices_,
+							   temp_morton_codes_,
+							   temp_indices_,
+							   cub_temp_storage_,
+							   resource_);
 #else
 		ARBD_Exception(ExceptionType::NotImplementedError,
 					   "Z-order sorting not implemented for non-CUDA or SYCL backends");

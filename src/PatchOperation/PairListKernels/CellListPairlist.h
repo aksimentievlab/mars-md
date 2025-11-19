@@ -10,8 +10,8 @@
  * performance with uniform particle distributions.
  *********************************************************************/
 
-#include "Compute/DecomposeKernels.h"
-#include "Compute/Pairlist.h"
+#include "PatchOperation/DecomposeKernels.h"
+#include "PatchOperation/Pairlist.h"
 #include "Types/Types.h"
 
 #ifdef USE_CUDA

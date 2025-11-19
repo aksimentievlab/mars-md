@@ -112,7 +112,7 @@ struct Angle {
 	int ind1, ind2, ind3;
 	std::string function_name;
 	InteractionForm form;
-	int functionIndex;
+	int function_index{-1};
 };
 
 // Host-side dihedral definition
@@ -120,7 +120,7 @@ struct Dihedral {
 	int ind1, ind2, ind3, ind4;
 	std::string function_name;
 	InteractionForm form;
-	int functionIndex;
+	int function_index{-1};
 };
 
 // Host-side restraint definition, harmonic restraint
@@ -221,13 +221,13 @@ struct ProductPotential {
  * @param sys_angles System angles
  * @param sys_dihedrals System dihedrals
  */
-class BondedInteraction {
+class BondedInteractions {
   public:
-	BondedInteraction(std::vector<Bond> sys_bonds,
-					  std::vector<Angle> sys_angles,
-					  std::vector<Dihedral> sys_dihedrals)
+	BondedInteractions(std::vector<Bond> sys_bonds,
+					   std::vector<Angle> sys_angles,
+					   std::vector<Dihedral> sys_dihedrals)
 		: bonds_(sys_bonds), angles_(sys_angles), dihedrals_(sys_dihedrals) {}
-	~BondedInteraction() = default;
+	~BondedInteractions() = default;
 
 	// Host-side data management
 	void addBond(const Bond& bond) {

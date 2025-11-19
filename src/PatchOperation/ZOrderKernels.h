@@ -12,12 +12,12 @@
  *********************************************************************/
 
 #include "Backend/Kernels.h"
-#include "System/MortonCode.h"
+#include "MortonCode.h"
 #include "Types/Types.h"
 #include "Types/Vector3.h"
 
 // Include adaptive kernels for Pairlist mode optimizations
-#include "System/ZOrderKernels/AdaptiveKernels.h"
+#include "ZOrderKernels/AdaptiveKernels.h"
 
 namespace ARBD {
 

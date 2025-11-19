@@ -77,10 +77,11 @@ class BondConfigReader {
 		std::istringstream iss(line);
 		Angle angle;
 
-		if (iss >> angle.ind1 >> angle.ind2 >> angle.ind3 >> angle.name) {
+		if (iss >> angle.ind1 >> angle.ind2 >> angle.ind3 >> angle.function_name) {
 			angle.form = InteractionForm::Tabulated;
 			// Resolve via registry: assumes name is a filename or key and path == name
-			angle.functionIndex = TablesRegistry::instance().getOrLoadAngle(angle.name, angle.name);
+			angle.function_index =
+				TablesRegistry::instance().getOrLoadAngle(angle.function_name, angle.function_name);
 			angles_.push_back(angle);
 		} else {
 			LOGWARN("BondConfigReader.h: Failed to parse ANGLE line: {}", line);
@@ -92,10 +93,11 @@ class BondConfigReader {
 		Dihedral dihedral;
 
 		if (iss >> dihedral.ind1 >> dihedral.ind2 >> dihedral.ind3 >> dihedral.ind4 >>
-			dihedral.name) {
+			dihedral.function_name) {
 			dihedral.form = InteractionForm::Tabulated;
-			dihedral.functionIndex =
-				TablesRegistry::instance().getOrLoadDihedral(dihedral.name, dihedral.name);
+			dihedral.function_index =
+				TablesRegistry::instance().getOrLoadDihedral(dihedral.function_name,
+															 dihedral.function_name);
 			dihedrals_.push_back(dihedral);
 		} else {
 			LOGWARN("BondConfigReader.h: Failed to parse DIHEDRAL line: {}", line);
@@ -106,9 +108,10 @@ class BondConfigReader {
 		std::istringstream iss(line);
 		Bond bond;
 
-		if (iss >> bond.ind1 >> bond.ind2 >> bond.name) {
+		if (iss >> bond.ind1 >> bond.ind2 >> bond.function_name) {
 			bond.form = InteractionForm::Tabulated;
-			bond.functionIndex = TablesRegistry::instance().getOrLoadBond(bond.name, bond.name);
+			bond.function_index =
+				TablesRegistry::instance().getOrLoadBond(bond.function_name, bond.function_name);
 			bond.flag = BondFlag::DEFAULT;
 			bonds_.push_back(bond);
 		} else {

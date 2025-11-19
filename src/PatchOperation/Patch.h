@@ -6,8 +6,8 @@
 #include "Objects/ParticleProperties.h"
 #include "SimParam.h"
 #include "System/PeriodicBox.h"
-#include "System/ZOrderSort.h"
 #include "Types/Types.h"
+#include "ZOrderSort.h"
 #include <utility>
 
 namespace ARBD {
@@ -30,20 +30,10 @@ class Patch {
 		: patch_idx_(other.patch_idx_), capacity_(other.capacity_), num_(other.num_),
 		  num_replicas_(other.num_replicas_), gpu_id_(other.gpu_id_),
 		  num_group_sites_(other.num_group_sites_), bounds_min_(other.bounds_min_),
-		  bounds_max_(other.bounds_max_), particle_ids(std::move(other.particle_ids)),
-		  particle_type_ids(std::move(other.particle_type_ids)),
-		  particle_positions(std::move(other.particle_positions)),
-		  particle_momenta(std::move(other.particle_momenta)),
-		  particle_forces(std::move(other.particle_forces)),
-		  particle_energies(std::move(other.particle_energies)),
-		  particle_orientations(std::move(other.particle_orientations)),
-		  particle_is_dummy(std::move(other.particle_is_dummy)),
-		  particle_has_orientation(std::move(other.particle_has_orientation)),
-		  particle_is_ghost(std::move(other.particle_is_ghost)),
+		  bounds_max_(other.bounds_max_), particle_data_(std::move(other.particle_data_)),
 		  d_cell_starts(std::move(other.d_cell_starts)), d_cell_ends(std::move(other.d_cell_ends)),
 		  d_cell_neighbors(std::move(other.d_cell_neighbors)),
-		  pmf_grids_(std::move(other.pmf_grids_)), density_grids_(std::move(other.density_grids_)),
-		  force_grids_(std::move(other.force_grids_)), system_sim_box_(other.system_sim_box_) {
+		  system_sim_box_(other.system_sim_box_) {
 		// Reset moved object
 		other.patch_idx_ = 0;
 		other.capacity_ = 0;
@@ -62,18 +52,7 @@ class Patch {
 			num_replicas_ = other.num_replicas_;
 			gpu_id_ = other.gpu_id_;
 			num_group_sites_ = other.num_group_sites_;
-			particle_ids = std::move(other.particle_ids);
-			particle_type_ids = std::move(other.particle_type_ids);
-			particle_positions = std::move(other.particle_positions);
-			particle_momenta = std::move(other.particle_momenta);
-			particle_forces = std::move(other.particle_forces);
-			particle_energies = std::move(other.particle_energies);
-			particle_orientations = std::move(other.particle_orientations);
-			particle_is_dummy = std::move(other.particle_is_dummy);
-			particle_has_orientation = std::move(other.particle_has_orientation);
-			particle_is_ghost = std::move(other.particle_is_ghost);
-			nonbonded_interactions_ = std::move(other.nonbonded_interactions_);
-			bonded_interactions_ = std::move(other.bonded_interactions_);
+			particle_data_ = std::move(other.particle_data_);
 			system_sim_box_ = other.system_sim_box_;
 
 			// Reset moved object
@@ -127,36 +106,6 @@ class Patch {
 	}
 
 	/**
-	 * @brief Get particle types
-	 */
-	const std::vector<ParticleType>& get_types() const {
-		return types_;
-	}
-	std::vector<ParticleType>& get_types() {
-		return types_;
-	}
-
-	/**
-	 * @brief Get nonbonded interactions
-	 */
-	const std::vector<NonBondedInteraction*>& get_nonbonded_interactions() const {
-		return nonbonded_interactions_;
-	}
-	std::vector<NonBondedInteraction*>& get_nonbonded_interactions() {
-		return nonbonded_interactions_;
-	}
-
-	/**
-	 * @brief Get bonded interactions
-	 */
-	const std::vector<BondedInteraction*>& get_bonded_interactions() const {
-		return bonded_interactions_;
-	}
-	std::vector<BondedInteraction*>& get_bonded_interactions() {
-		return bonded_interactions_;
-	}
-
-	/**
 	 * @brief Set the number of particles in this patch
 	 * @param num New particle count
 	 */
@@ -200,13 +149,13 @@ class Patch {
 
 	DEVICE void push_particle(const ParticleRead& particle) {
 		if (has_space()) {
-			particle_ids.push_back(particle.id);
-			particle_type_ids.push_back(particle.type_id);
-			particle_positions.push_back(particle.position);
-			particle_momenta.push_back(particle.momentum);
-			particle_forces.push_back(particle.force);
-			particle_energies.push_back(particle.energy);
-			particle_orientations.push_back(particle.orientation);
+			particle_data_.id.push_back(particle.id);
+			particle_data_.type_id.push_back(particle.type_id);
+			particle_data_.pos.push_back(particle.position);
+			particle_data_.mom.push_back(particle.momentum);
+			particle_data_.force.push_back(particle.force);
+			particle_data_.energy.push_back(particle.energy);
+			particle_data_.orient.push_back(particle.orientation);
 			num_++;
 		}
 	}
@@ -375,6 +324,10 @@ class Patch {
 		zorder_sorters_.sort_particles(positions, num_particles, box_min, box_max);
 	}
 
+	const HostParticleData& get_particle_data() const {
+		return particle_data_;
+	}
+
 	/**
 	 * @brief Pack particles from this patch's boundary region for halo exchange
 	 * This method also marks the packed particles as inactive (is_dummy = true)
@@ -417,28 +370,10 @@ class Patch {
 	Vector3 bounds_min_{0.0f, 0.0f, 0.0f}; ///< Minimum corner of patch
 	Vector3 bounds_max_{0.0f, 0.0f, 0.0f}; ///< Maximum corner of patch
 	// Particle data
-	std::vector<int> particle_ids;
-	std::vector<int> particle_type_ids;
-	std::vector<Vector3> particle_positions;
-	std::vector<Vector3> particle_momenta;
-	std::vector<Vector3> particle_forces;
-	std::vector<float> particle_energies;
-	std::vector<Vector3> particle_orientations;
-	std::vector<bool> particle_is_dummy;
-	std::vector<bool> particle_has_orientation;
-	std::vector<bool> particle_is_ghost;
-
+	HostParticleData particle_data_;
 	DeviceBuffer<int> d_cell_starts;
 	DeviceBuffer<int> d_cell_ends;
 	DeviceBuffer<int> d_cell_neighbors;
-
-	std::vector<BaseGrid<float>> pmf_grids_;
-	std::vector<BaseGrid<float>> density_grids_;
-	std::vector<BaseGrid<float>> force_grids_;
-	// Interactions
-	std::vector<NonBondedInteraction*> nonbonded_interactions_;
-	std::vector<BondedInteraction*> bonded_interactions_;
-
 	// System-wide simulation box
 	const PeriodicBox* system_sim_box_{
 		nullptr}; ///< Reference to system-wide simulation box (not owned)

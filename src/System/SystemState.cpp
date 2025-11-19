@@ -1,7 +1,5 @@
 #include "System/SystemState.h"
-#include "Configuration.h"
-#include <algorithm>
-#include <cstring>
+#include "PatchOperation/Patch.h"
 
 namespace ARBD {
 
@@ -74,7 +72,7 @@ void SystemState::cleanup_gpu_resources() {
 void SystemState::gather_from_patches(PatchManager& patch_manager) {
 	// Clear previous state
 	global_positions_.clear();
-	global_velocities_.clear();
+	global_momentum_.clear();
 	global_particle_ids_.clear();
 	global_particle_types_.clear();
 
@@ -85,11 +83,11 @@ void SystemState::gather_from_patches(PatchManager& patch_manager) {
 	// Collect from local patch
 	idx_t local_num = local_patch.get_num();
 	for (idx_t i = 0; i < local_num; ++i) {
-		global_positions_.push_back(local_patch.get_particle_positions[i]);
-		global_velocities_.push_back(
-			local_patch.get_particle_momenta[i]); // Assuming momentum = velocity * mass
-		global_particle_ids_.push_back(local_patch.get_particle_ids[i]);
-		global_particle_types_.push_back(local_patch.get_particle_type_ids[i]);
+		HostParticleData particle_data = local_patch.get_particle_data();
+		global_positions_.push_back(particle_data.pos[i]);
+		global_momentum_.push_back(particle_data.mom[i]); // Assuming momentum = velocity * mass
+		global_particle_ids_.push_back(particle_data.id[i]);
+		global_particle_types_.push_back(particle_data.type_id[i]);
 	}
 
 	// TODO: MPI_Gatherv to collect from all ranks and assemble in global order

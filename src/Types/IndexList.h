@@ -408,25 +408,6 @@ class IndexList {
 };
 
 /*===================*\
-|  TYPE ALIASES       |
-\*===================*/
-
-// Common type aliases with different capacities
-template<idx_t N = 27>
-using NeighborList = IndexList<morton_t, N>; // Larger for neighbor lists
-
-template<idx_t N = 32>
-using IntIndexList = IndexList<int, N>;
-template<idx_t N = 32>
-using SizeIndexList = IndexList<idx_t, N>;
-template<idx_t N = 16>
-using SmallIndexList = IndexList<int, N>; // Smaller for simple cases
-
-// Default aliases (backward compatibility)
-using DefaultIndexList = IndexList<int, 32>;
-using ParticleIndexList = IndexList<idx_t, 64>;
-
-/*===================*\
 |  HELPER FUNCTIONS   |
 \*===================*/
 

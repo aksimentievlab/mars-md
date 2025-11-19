@@ -23,7 +23,7 @@ struct AnalyticalBondComputer<0> {
 		const float r0 = params[1]; // Equilibrium distance
 		float energy = 0.5f * k * (distance - r0) * (distance - r0);
 		float force = -k * (distance - r0);
-		return {force, energy};
+		return ScalarForceEnergy{float2(force, energy)};
 	}
 };
 
@@ -40,7 +40,7 @@ struct AnalyticalBondComputer<1> {
 		const float exp_term = expf(-a * (distance - r0));
 		float force = 2.0f * D0 * a * exp_term * (1.0f - exp_term);
 		float energy = D0 * (1.0f - exp_term);
-		return {force, energy};
+		return ScalarForceEnergy{float2(force, energy)};
 	}
 };
 
@@ -55,7 +55,7 @@ struct AnalyticalBondComputer<2> {
 		float force = -k * distance * (1.0f - distance / r0);
 		float energy =
 			0.5f * k * (distance - r0) * (distance - r0); // TODO: check if this is correct
-		return {force, energy};
+		return ScalarForceEnergy{float2(force, energy)};
 	}
 };
 
@@ -69,7 +69,7 @@ struct AnalyticalBondComputer<3> {
 		const float r0 = params[1]; // Equilibrium distance
 		float force = distance > r0 ? -k * (distance - r0) : 0.0f;
 		float energy = distance > r0 ? 0.5f * k * (distance - r0) * (distance - r0) : 0.0f;
-		return {force, energy};
+		return ScalarForceEnergy{float2(force, energy)};
 	}
 };
 // WLCSK Bond (Worm-Like Chain with Shear and Kink)
@@ -99,7 +99,7 @@ struct AnalyticalBondComputer<4> {
 			kT * nk *
 			(a1 / (1.0f - q2) - a2 * logf(1.0f - q2) + a3 * q2 - 0.5f * a4 * q2 * (q2 - 2.0f));
 		const float energy = kT * nk * (1.0f - q2); // TODO: check if this is correct
-		return {force_magnitude, energy};
+		return ScalarForceEnergy{float2(force_magnitude, energy)};
 	}
 };
 } // namespace ARBD

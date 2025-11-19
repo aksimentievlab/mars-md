@@ -92,7 +92,7 @@ class SimSystem {
 
 		// Get estimated particles per patch (could be refined based on actual particle
 		// distribution)
-		idx_t estimated_particles = 1024; // Default estimate, could be computed from system
+		idx_t estimated_particles = 1024000; // Default estimate, could be computed from system
 		const Length cutoff = Length(get_cutoff());
 
 		// Initialize PatchManager with the decomposition plan
@@ -351,7 +351,6 @@ class SimSystem {
   private:
 	// Configuration management (host-only)
 	Configuration config_;
-	BaseGrid<Vector3>* force_grid_;
 
 	// Loaded grids and tabulated functions (moved from Configuration)
 	std::unordered_map<std::string, int> fname_tab_dictionary_; // Filename -> tabulated function ID
@@ -359,6 +358,13 @@ class SimSystem {
 	std::unordered_map<int, std::vector<BaseGrid<float>>>
 		grid_id_dictionary_; // Grid ID -> loaded grids
 
+	std::vector<BaseGrid<float>> pmf_grids_;
+	std::vector<BaseGrid<float>> density_grids_;
+	std::vector<BaseGrid<float>> force_grids_;
+	std::vector<Reservoir> reservoirs_;
+	std::vector<ParticleType> particle_types_;
+	NonBondedInteractions nonbonded_interactions_;
+	BondedInteractions bonded_interactions_;
 	// Resources and decomposition (host-only)
 	std::vector<Resource> resources_;
 	std::unique_ptr<PatchDecomposer> decomposer_;

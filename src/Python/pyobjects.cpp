@@ -1,4 +1,4 @@
-#include "Configuration.h"
+#include "IO/Configuration.h"
 #include "Objects/ParticleProperties.h"
 #include "Objects/RigidBodyProperties.h"
 #include <pybind11/pybind11.h>
@@ -24,7 +24,7 @@ using namespace ARBD;
  * Particle(id=0, type_id=1, position=[0.0, 0.0, 0.0])
  * ```
  */
-
+using Particle = ParticleRead;
 void declare_particle(py::module& m) {
 	py::class_<Particle>(m, "Particle")
 		.def(py::init<>())
@@ -35,9 +35,8 @@ void declare_particle(py::module& m) {
 		.def_readwrite("force", &Particle::force)
 		.def_readwrite("orientation", &Particle::orientation)
 		.def_readwrite("energy", &Particle::energy)
-		.def_readwrite("is_dummy", &Particle::is_dummy)
 		.def_readwrite("has_orientation", &Particle::has_orientation)
-		.def_readwrite("colvars_groups", &Particle::colvars_groups)
+		.def_readwrite("group_id", &Particle::group_id)
 		.def("__repr__", [](const Particle& p) {
 			return "Particle(id=" + std::to_string(p.id) +
 				   ", type_id=" + std::to_string(p.type_id) +
@@ -67,8 +66,12 @@ void declare_particle_type(py::module& m) {
 		.def_readwrite("diffusion", &ParticleType::diffusion)
 		.def_readwrite("transDamping", &ParticleType::transDamping)
 		.def_readwrite("mu", &ParticleType::mu)
-		.def_readwrite("numPartGridFiles", &ParticleType::numPartGridFiles)
-		.def_readwrite("grid_ids", &ParticleType::grid_ids)
+		.def_readwrite("pmf_scale", &ParticleType::pmf_scale)
+		.def_readwrite("pmf_scale_slope", &ParticleType::pmf_scale_slope)
+		.def_readwrite("pmf_smd_freq", &ParticleType::pmf_smd_freq)
+		.def_readwrite("pmfGrid", &ParticleType::pmfGrid)
+		.def_readwrite("diffusionGrid", &ParticleType::diffusionGrid)
+		.def_readwrite("forceGrid", &ParticleType::forceGrid)
 		.def("__repr__", [](const ParticleType& pt) {
 			return "ParticleType(name='" + pt.name + "', id=" + std::to_string(pt.id) +
 				   ", num=" + std::to_string(pt.num) + ")";
@@ -169,8 +172,8 @@ void declare_arbd_objects(py::module& m) {
 		.def_readwrite("init_dihedrals", &Configuration::init_dihedrals)
 		.def_readwrite("init_exclusions", &Configuration::init_exclusions)
 		.def_readwrite("restraints", &Configuration::restraints)
-		.def_readwrite("tabulated_file_names", &Configuration::tabulated_file_names)
-		.def_readwrite("grid_file_names", &Configuration::grid_file_names)
+		.def_readwrite("fname_tab_dictionary", &Configuration::fname_tab_dictionary)
+		.def_readwrite("fname_grid_dictionary", &Configuration::fname_grid_dictionary)
 		// Helper methods
 		.def("add_particle_type",
 			 [](Configuration& obj, const ParticleType& pt) { obj.particle_types.push_back(pt); })
@@ -193,8 +196,8 @@ void declare_arbd_objects(py::module& m) {
 				 obj.init_dihedrals.clear();
 				 obj.init_exclusions.clear();
 				 obj.restraints.clear();
-				 obj.tabulated_file_names.clear();
-				 obj.grid_file_names.clear();
+				 obj.fname_tab_dictionary.clear();
+				 obj.fname_grid_dictionary.clear();
 			 })
 		.def("__repr__", [](const Configuration& obj) {
 			return "Configuration(particles=" + std::to_string(obj.init_particles.size()) +
