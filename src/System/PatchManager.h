@@ -167,10 +167,10 @@ class PatchManager {
 	// ==================== Spatial Bounds ====================
 
 	const Vector3 get_min() const {
-		return local_metadata_.min;
+		return !patches_.empty() ? patches_[0].get_bounds_min() : local_metadata_.min;
 	}
 	const Vector3 get_max() const {
-		return local_metadata_.max;
+		return !patches_.empty() ? patches_[0].get_bounds_max() : local_metadata_.max;
 	}
 
 	const Vector3 get_global_min() const {
@@ -441,22 +441,6 @@ class PatchManager {
 
 	// ==================== Particle Management ====================
 
-	/**
-	 * @brief Pack particles near boundaries for halo exchange
-	 */
-	idx_t pack_boundary_particles(DeviceBuffer<float>& positions,
-								  DeviceBuffer<float>& velocities,
-								  DeviceBuffer<float>& packed_data,
-								  int direction,
-								  const Length& cutoff);
-
-	/**
-	 * @brief Unpack received halo particles
-	 */
-	void unpack_halo_particles(DeviceBuffer<float>& packed_data,
-							   DeviceBuffer<float>& halo_positions,
-							   DeviceBuffer<float>& halo_velocities,
-							   idx_t received_count);
 
 	// ==================== Synchronization ====================
 
@@ -476,6 +460,24 @@ class PatchManager {
 
 	const std::vector<Patch>& get_all_patches() {
 		return patches_;
+	}
+
+	/**
+	 * @brief Get the local patch for this MPI rank
+	 * @return Reference to the local patch
+	 */
+	Patch& get_local_patch() {
+		if (patches_.empty()) {
+			throw std::runtime_error("No patches initialized");
+		}
+		return patches_[0]; // In MPI mode, each rank has one local patch
+	}
+
+	const Patch& get_local_patch() const {
+		if (patches_.empty()) {
+			throw std::runtime_error("No patches initialized");
+		}
+		return patches_[0]; // In MPI mode, each rank has one local patch
 	}
 
 	/**

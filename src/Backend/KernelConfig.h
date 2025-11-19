@@ -32,7 +32,8 @@ struct kerneldim3 {
  * dependencies. It also provides methods for auto-configuring the kernel based
  * on the resource type.
  * @param grid_size The grid size for the kernel launch.
- * @param block_size The block size for the kernel launch.
+ * @param block_size The block size for the kernel launch. Should be a power of 2 (32, 64, 128, 256,
+ * or 512) for optimal performance.
  * @param problem_size The problem size for the kernel launch.
  * @note problem size is not necessarily the same as the total_thread_size!
  * @param shared_memory The shared memory size for the kernel launch.
@@ -53,7 +54,7 @@ struct KernelConfig {
   public:
 	int dim{1};
 	kerneldim3 grid_size{0, 0, 0};
-	kerneldim3 block_size{256, 1, 1};
+	kerneldim3 block_size{256, 1, 1}; // Default block size is 256
 	kerneldim3 problem_size{0, 0, 0};
 	idx_t shared_memory{0};
 	bool sync{false}; // use this only. async is deprecated.

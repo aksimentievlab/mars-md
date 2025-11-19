@@ -56,7 +56,7 @@ class RigidBodyType {
 	float* meanPmf;
 	float* pmf_scale;
 
-	std::vector<Particle> attached_particle;
+	std::vector<ParticleRead> attached_particle;
 	size_t* potential_grid_idx;
 	size_t* density_grid_idx;
 	size_t* pmf_grid_idx;

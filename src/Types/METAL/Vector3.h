@@ -21,27 +21,27 @@ template<typename T>
 class alignas(4 * sizeof(T)) Vector3_t {
   public:
 	// Constructors
-	constexpr Vector3_t() : x(T(0)), y(T(0)), z(T(0)), w(T(0)) {}
-	constexpr Vector3_t(T s) : x(s), y(s), z(s), w(s) {}
-	constexpr Vector3_t(T x, T y, T z) : x(x), y(y), z(z), w(0) {}
-	constexpr Vector3_t(T x, T y, T z, T w) : x(x), y(y), z(z), w(w) {}
+	constexpr Vector3_t() : x(T(0)), y(T(0)), z(T(0)), t(T(0)) {}
+	constexpr Vector3_t(T s) : x(s), y(s), z(s), t(s) {}
+	constexpr Vector3_t(T x, T y, T z) : x(x), y(y), z(z), t(0) {}
+	constexpr Vector3_t(T x, T y, T z, T t) : x(x), y(y), z(z), t(t) {}
 
 	// Copy constructor - still needs to be by reference in Metal
-	constexpr Vector3_t(thread const Vector3_t<T>& v) : x(v.x), y(v.y), z(v.z), w(v.w) {}
+	constexpr Vector3_t(thread const Vector3_t<T>& v) : x(v.x), y(v.y), z(v.z), t(v.t) {}
 
 	// Device address space copy constructor
-	constexpr Vector3_t(device const Vector3_t<T>& v) : x(v.x), y(v.y), z(v.z), w(v.w) {}
+	constexpr Vector3_t(device const Vector3_t<T>& v) : x(v.x), y(v.y), z(v.z), t(v.t) {}
 
 	// Constant address space copy constructor
-	constexpr Vector3_t(constant const Vector3_t<T>& v) : x(v.x), y(v.y), z(v.z), w(v.w) {}
+	constexpr Vector3_t(constant const Vector3_t<T>& v) : x(v.x), y(v.y), z(v.z), t(v.t) {}
 
 	// Threadgroup address space copy constructor
-	constexpr Vector3_t(threadgroup const Vector3_t<T>& v) : x(v.x), y(v.y), z(v.z), w(v.w) {}
+	constexpr Vector3_t(threadgroup const Vector3_t<T>& v) : x(v.x), y(v.y), z(v.z), t(v.t) {}
 
 	// Backend vector conversion constructor
 	template<typename BackendVec>
 	constexpr Vector3_t(BackendVec v)
-		: x(static_cast<T>(v.x)), y(static_cast<T>(v.y)), z(static_cast<T>(v.z)), w(0) {}
+		: x(static_cast<T>(v.x)), y(static_cast<T>(v.y)), z(static_cast<T>(v.z)), t(0) {}
 
 	// Cross product
 	template<typename U>
@@ -59,7 +59,7 @@ class alignas(4 * sizeof(T)) Vector3_t {
 		x = v.x;
 		y = v.y;
 		z = v.z;
-		w = v.w;
+		t = v.t;
 	}
 
 	void add_assign(Vector3_t<T> v) {
@@ -194,7 +194,7 @@ class alignas(4 * sizeof(T)) Vector3_t {
 	// Comparison operators
 	template<typename U>
 	constexpr bool operator==(Vector3_t<U> b) const {
-		return x == b.x && y == b.y && z == b.z && w == b.w;
+		return x == b.x && y == b.y && z == b.z && t == b.t;
 	}
 
 	template<typename U>
@@ -202,7 +202,7 @@ class alignas(4 * sizeof(T)) Vector3_t {
 		return !(*this == b);
 	}
 
-	T x, y, z, w;
+	T x, y, z, t;
 };
 
 // Free function operators

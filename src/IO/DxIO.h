@@ -68,7 +68,7 @@ void write_data_format(const BaseGrid<T>& grid, const FileHandle& file);
  * @return BaseGrid loaded from file
  * @throws Exception on file I/O errors or invalid format
  */
-template<typename T>
+template<typename T=float>
 BaseGrid<T> read_from_file(std::string_view filename);
 
 /**
@@ -77,7 +77,7 @@ BaseGrid<T> read_from_file(std::string_view filename);
  * @param file Open file handle for reading
  * @throws Exception on file I/O errors or invalid format
  */
-template<typename T>
+template<typename T=float>
 void read_dx_format(BaseGrid<T>& grid, const FileHandle& file);
 
 /**

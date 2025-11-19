@@ -12,9 +12,11 @@
 #include "ARBDException.h"
 #include "ARBDLogger.h"
 #include "Backend/Buffer.h"
+#include "System/PatchManager.h"
 #include "Types/BaseGrid.h"
 #include "Types/Types.h"
 #include <memory>
+#include <unordered_map>
 #include <vector>
 
 namespace ARBD {
@@ -66,11 +68,6 @@ class SystemState {
 	//================================================================================
 
 	/**
-	 * @brief Initialize system objects (bonds, grids, fields) from configuration
-	 */
-	void initialize_system_objects();
-
-	/**
 	 * @brief Check if system has bonded interactions
 	 */
 	bool has_bonds() const {
@@ -106,6 +103,43 @@ class SystemState {
 		temperature_grid_ = grid;
 	}
 
+	/**
+	 * @brief Gather particle data from all patches into global arrays
+	 * @param patch_manager PatchManager containing all patches
+	 *
+	 * This collects data from local patches (and via MPI if needed)
+	 * and assembles into global ordered arrays ready for output.
+	 */
+	void gather_from_patches(PatchManager& patch_manager);
+
+	/**
+	 * @brief Get global particle positions (ready for DCD writing)
+	 */
+	const std::vector<Vector3>& get_global_positions() const {
+		return global_positions_;
+	}
+
+	/**
+	 * @brief Get global particle velocities
+	 */
+	const std::vector<Vector3>& get_global_momentum() const {
+		return global_momentum_;
+	}
+
+	/**
+	 * @brief Get total number of particles across all patches
+	 */
+	size_t get_global_num_particles() const {
+		return global_num_particles_;
+	}
+
+	/**
+	 * @brief Check if global state is synchronized
+	 */
+	bool is_state_synced() const {
+		return state_synced_;
+	}
+
   private:
 	//================================================================================
 	// Member Variables - ONLY Runtime State
@@ -123,6 +157,20 @@ class SystemState {
 	bool has_external_forces_{false};
 	bool has_reactions_{false};
 	BaseGrid<float>* temperature_grid_{nullptr}; // Device pointer
+
+	// Global particle state (host-side, ready for I/O)
+	std::vector<Vector3> global_positions_;	 // For DCD writing
+	std::vector<Vector3> global_momentum_;	 // Optional, for momentum output
+	std::vector<int> global_particle_ids_;	 // Particle IDs in global order
+	std::vector<int> global_particle_types_; // Particle types in global order
+	std::vector<int2> global_bonds_;		 // Bond list in global order
+	std::vector<int3> global_angles_;		 // Angle list in global order
+	std::vector<int4> global_dihedrals_;	 // Dihedral list in global order
+	std::vector<int2> global_exclusitons_;	 // Exclusion list in global order
+
+	// Metadata
+	size_t global_num_particles_{0};
+	bool state_synced_{false}; // Flag indicating if state is up-to-date
 
 	//================================================================================
 	// Private Methods

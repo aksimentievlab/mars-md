@@ -1,21 +1,22 @@
 #pragma once
 #include "Header.h"
+#include "Interactions/Interactions.h"
 
 namespace ARBD {
 
-struct Columb_kernel {
-	KERNEL_FUNC void operator()(float* force,
-								float* potential,
-								float* distance,
-								float* charge,
-								float* charge_i,
-								float* charge_j) {
-		float r = distance[0];
-		float qi = charge[0];
-		float qj = charge[1];
-		float force_x = qi * qj / (r * r);
-		force[0] = force_x;
-		potential[0] = qi * qj / r;
+struct ColumbInteractionKernel {
+	KERNEL_FUNC void operator()(ScalarForceEnergy force_energy,
+								const Vector3* positions,
+								const int2& neighbor_indices,
+								const PeriodicBox* pbox) {
+		Vector3 r_ij =
+			pbox->wrapDiff(positions[neighbor_indices.y] - positions[neighbor_indices.x]);
+		float distance = r_ij.length();
+		ScalarForceEnergy fe = ColumbInteractionKernel::compute(r_ij, distance);
+	}
+	KERNEL_FUNC static ScalarForceEnergy compute(const Vector3& r_ij, float distance) {
+		float2 f{1.0f / (distance * distance), 1.0f / distance};
+		return ScalarForceEnergy{f};
 	}
 };
 

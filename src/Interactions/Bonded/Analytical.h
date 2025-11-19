@@ -6,16 +6,6 @@
 
 namespace ARBD {
 
-enum class AnalyticalBondType { Harmonic = 0, Morse = 1, FENE = 2, Half_Harmonic = 3, WLCSK = 4 };
-enum class AnalyticalAngleType { Harmonic = 0, Morse = 1, FENE = 2, Half_Harmonic = 3, WLCSK = 4 };
-enum class AnalyticalDihedralType {
-	Harmonic = 0,
-	Morse = 1,
-	FENE = 2,
-	Half_Harmonic = 3,
-	WLCSK = 4
-};
-
 // ============================================================================
 // Force Computation Templates - One per bond type
 // Using uniform float* parameter arrays for flexibility
@@ -28,7 +18,7 @@ template<>
 struct AnalyticalBondComputer<0> {
 	static constexpr int NUM_PARAMS = 2;
 
-	DEVICE static inline ForceEnergy compute(float distance, const float* params) {
+	DEVICE static inline ScalarForceEnergy compute(float distance, const float* params) {
 		const float k = params[0];	// Spring constant
 		const float r0 = params[1]; // Equilibrium distance
 		float energy = 0.5f * k * (distance - r0) * (distance - r0);
@@ -43,7 +33,7 @@ template<>
 struct AnalyticalBondComputer<1> {
 	static constexpr int NUM_PARAMS = 3;
 
-	DEVICE static inline ForceEnergy compute(float distance, const float* params) {
+	DEVICE static inline ScalarForceEnergy compute(float distance, const float* params) {
 		const float D0 = params[0]; // Dissociation energy
 		const float a = params[1];	// Width parameter
 		const float r0 = params[2]; // Equilibrium distance
@@ -59,7 +49,7 @@ template<>
 struct AnalyticalBondComputer<2> {
 	static constexpr int NUM_PARAMS = 2;
 
-	DEVICE static inline ForceEnergy compute(float distance, const float* params) {
+	DEVICE static inline ScalarForceEnergy compute(float distance, const float* params) {
 		const float k = params[0];	// Spring constant
 		const float r0 = params[1]; // Equilibrium distance
 		float force = -k * distance * (1.0f - distance / r0);
@@ -74,7 +64,7 @@ template<>
 struct AnalyticalBondComputer<3> {
 	static constexpr int NUM_PARAMS = 2;
 
-	DEVICE static inline ForceEnergy compute(float distance, const float* params) {
+	DEVICE static inline ScalarForceEnergy compute(float distance, const float* params) {
 		const float k = params[0];	// Spring constant
 		const float r0 = params[1]; // Equilibrium distance
 		float force = distance > r0 ? -k * (distance - r0) : 0.0f;
@@ -88,7 +78,7 @@ template<>
 struct AnalyticalBondComputer<4> {
 	static constexpr int NUM_PARAMS = 3;
 
-	DEVICE static inline ForceEnergy compute(float distance, const float* params) {
+	DEVICE static inline ScalarForceEnergy compute(float distance, const float* params) {
 		const float d = params[0];	// Contour length
 		const float lp = params[1]; // Persistence length
 		const float kT = params[2]; // Thermal energy

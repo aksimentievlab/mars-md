@@ -50,21 +50,21 @@ class alignas(4 * sizeof(T)) Vector3_t {
 		sx::simd<T, sx::simd_abi::fixed_size<4> > native;
 #endif
 		struct {
-			T x, y, z, w;
+			T x, y, z, t;
 		};
 	};
 	// Constructors
-	HOST DEVICE constexpr Vector3_t() : x(T(0)), y(T(0)), z(T(0)), w(T(0)) {}
-	HOST DEVICE constexpr Vector3_t(T s) : x(s), y(s), z(s), w(s) {}
-	HOST DEVICE constexpr Vector3_t(const Vector3_t<T>& v) : x(v.x), y(v.y), z(v.z), w(v.w) {}
-	HOST DEVICE constexpr Vector3_t(T x, T y, T z) : x(x), y(y), z(z), w(0) {}
-	HOST DEVICE constexpr Vector3_t(T x, T y, T z, T w) : x(x), y(y), z(z), w(w) {}
+	HOST DEVICE constexpr Vector3_t() : x(T(0)), y(T(0)), z(T(0)), t(T(0)) {}
+	HOST DEVICE constexpr Vector3_t(T s) : x(s), y(s), z(s), t(s) {}
+	HOST DEVICE constexpr Vector3_t(const Vector3_t<T>& v) : x(v.x), y(v.y), z(v.z), t(v.t) {}
+	HOST DEVICE constexpr Vector3_t(T x, T y, T z) : x(x), y(y), z(z), t(0) {}
+	HOST DEVICE constexpr Vector3_t(T x, T y, T z, T t) : x(x), y(y), z(z), t(t) {}
 	HOST DEVICE constexpr Vector3_t(Vector3_t<T>&&) = default; // move
 
 	// Backend vector conversion constructor
 	template<typename BackendVec>
 	HOST DEVICE constexpr Vector3_t(const BackendVec& v)
-		: x(static_cast<T>(v.x)), y(static_cast<T>(v.y)), z(static_cast<T>(v.z)), w(0) {}
+		: x(static_cast<T>(v.x)), y(static_cast<T>(v.y)), z(static_cast<T>(v.z)), t(0) {}
 
 	// Cross product with template type deduction
 	template<typename U>
@@ -90,18 +90,18 @@ class alignas(4 * sizeof(T)) Vector3_t {
 		if (i == 2)
 			return z;
 		if (i == 3)
-			return w;
+			return t;
 #ifdef HOST_GUARD
 		throw_value_error("Invalid index for Vector3_t");
 #endif
-		return w;
+		return t;
 	}
 
 	HOST DEVICE constexpr Vector3_t<T>& operator=(const Vector3_t<T>& v) {
 		x = v.x;
 		y = v.y;
 		z = v.z;
-		w = v.w;
+		t = v.t;
 		return *this;
 	}
 
@@ -109,7 +109,7 @@ class alignas(4 * sizeof(T)) Vector3_t {
 		x = v.x;
 		y = v.y;
 		z = v.z;
-		w = v.w;
+		t = v.t;
 		return *this;
 	}
 
@@ -293,7 +293,7 @@ class alignas(4 * sizeof(T)) Vector3_t {
 	// Comparison operators
 	template<typename U>
 	HOST DEVICE constexpr bool operator==(const Vector3_t<U>& b) const {
-		return x == b.x && y == b.y && z == b.z && w == b.w;
+		return x == b.x && y == b.y && z == b.z && t == b.t;
 	}
 
 	template<typename U>

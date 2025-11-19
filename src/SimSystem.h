@@ -25,7 +25,6 @@
 #include "ARBDLogger.h"
 #include "Backend/Buffer.h"
 #include "Backend/Resource.h"
-#include "Configuration.h"
 #include "IO/ConfigParser.h"
 #include "System/Decomposer.h"
 #include "System/PatchManager.h"
@@ -46,8 +45,15 @@ class SimSystem {
 	 * @param conf Configuration manager with validated parameters
 	 * @param resources Available computational resources
 	 */
-	SimSystem(const ConfigParser& conf) : config_(conf.get_config()) {
+	SimSystem(ConfigParser& conf) : config_(conf.get_config()) {
 		LOGINFO("SimSystem: Initializing from configuration");
+
+		// Move grids from configuration (configuration will be discarded after init)
+		grid_id_dictionary_ = std::move(conf.get_mutable_config().grid_id_dictionary);
+		fname_grid_dictionary_ = std::move(conf.get_mutable_config().fname_grid_dictionary);
+		fname_tab_dictionary_ = std::move(conf.get_mutable_config().fname_tab_dictionary);
+
+		LOGINFO("SimSystem: Loaded {} grid sets from configuration", grid_id_dictionary_.size());
 
 		// Create the chosen decomposer instance (Factory Pattern)
 		decomposer_ = create_patch_decomposer(config_.decomposer);
@@ -211,14 +217,6 @@ class SimSystem {
 	//================================================================================
 
 	/**
-	 * @brief Get electric field vector (if any)
-	 */
-	Vector3 get_electric_field() const {
-		// TODO: Add electric field to ARBDObjects or return default
-		return Vector3{0, 0, 0};
-	}
-
-	/**
 	 * @brief Get force grid (if any)
 	 */
 	const BaseGrid<Vector3>* get_force_grid() const {
@@ -316,20 +314,38 @@ class SimSystem {
 		return decomposer_.get();
 	}
 
+	//================================================================================
+	// Grid and Tabulated Function Accessors
+	//================================================================================
+
 	/**
-	 * @brief Get system state for runtime operations
-	 * @return Reference to the system state
+	 * @brief Get grid by ID
+	 * @param grid_id Grid identifier
+	 * @return Pointer to grid vector, or nullptr if not found
 	 */
-	SystemState& get_current_system_state() {
-		return current_system_state_;
+	const std::vector<BaseGrid<float>>* get_grids_by_id(int grid_id) const {
+		auto it = grid_id_dictionary_.find(grid_id);
+		return (it != grid_id_dictionary_.end()) ? &it->second : nullptr;
 	}
 
 	/**
-	 * @brief Get system state for runtime operations (const version)
-	 * @return Const reference to the system state
+	 * @brief Get grid ID by filename
+	 * @param filename Grid filename
+	 * @return Grid ID, or -1 if not found
 	 */
-	const SystemState& get_current_system_state() const {
-		return current_system_state_;
+	int get_grid_id_by_filename(const std::string& filename) const {
+		auto it = fname_grid_dictionary_.find(filename);
+		return (it != fname_grid_dictionary_.end()) ? it->second : -1;
+	}
+
+	/**
+	 * @brief Get tabulated function ID by filename
+	 * @param filename Tabulated function filename
+	 * @return Function ID, or -1 if not found
+	 */
+	int get_tabulated_function_id(const std::string& filename) const {
+		auto it = fname_tab_dictionary_.find(filename);
+		return (it != fname_tab_dictionary_.end()) ? it->second : -1;
 	}
 
   private:
@@ -337,13 +353,16 @@ class SimSystem {
 	Configuration config_;
 	BaseGrid<Vector3>* force_grid_;
 
+	// Loaded grids and tabulated functions (moved from Configuration)
+	std::unordered_map<std::string, int> fname_tab_dictionary_; // Filename -> tabulated function ID
+	std::unordered_map<std::string, int> fname_grid_dictionary_; // Filename -> grid ID
+	std::unordered_map<int, std::vector<BaseGrid<float>>>
+		grid_id_dictionary_; // Grid ID -> loaded grids
+
 	// Resources and decomposition (host-only)
 	std::vector<Resource> resources_;
 	std::unique_ptr<PatchDecomposer> decomposer_;
 	std::unique_ptr<PatchManager> patch_manager_; // Domain decomposition structure
-
-	// Runtime system state
-	SystemState current_system_state_;
 };
 
 } // namespace ARBD

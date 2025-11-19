@@ -1,12 +1,12 @@
 #pragma once
-#include "Pairlist.h"
+#include "../Pairlist.h"
 
 namespace ARBD {
 
 class VerletPairlist : public Pairlist {
   public:
 	VerletPairlist(const Resource& resource, size_t max_particles, size_t max_pairs);
-	~NonbondedVerletCompute();
+	~VerletPairlist();
 
 	void decompose(const ComputeForce& compute);
 	float computeTabulated(bool get_energy, const ComputeForce& compute);

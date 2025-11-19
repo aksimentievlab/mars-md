@@ -290,104 +290,6 @@ void PatchManager::update_local_bounds(const Vector3& new_min, const Vector3& ne
 	}
 }
 
-// Pack particles near boundaries for halo exchange
-idx_t PatchManager::pack_boundary_particles(DeviceBuffer<float>& positions,
-											DeviceBuffer<float>& velocities,
-											DeviceBuffer<float>& packed_data,
-											int direction,
-											const Length& cutoff) {
-	if (!has_neighbor(direction)) {
-		return 0;
-	}
-
-	const auto& local_patch = get_local_patch();
-	float halo_width = cutoff.value;
-	idx_t packed_count = 0;
-
-	// Get the boundary region bounds from the patch
-	auto [halo_min, halo_max] = local_patch.calculate_halo_bounds(direction, halo_width);
-
-	// This is a placeholder implementation
-	// In a full implementation, you would:
-	// 1. Launch a kernel to identify particles in the boundary region
-	// 2. Pack their positions and velocities into the packed_data buffer
-	// 3. Return the count
-
-	// For now, we'll assume positions/velocities are already in DeviceBuffer format
-	// and we need to extract particles within the boundary region
-	// This would typically be done with a CUDA/SYCL/Metal kernel
-
-	idx_t total_particles = local_metadata_.num;
-	idx_t max_packed = max_ghost_particles_;
-
-	// Simple host-side implementation (would be GPU kernel in production)
-	// Note: This assumes positions/velocities are accessible on host
-	// In real implementation, use GPU kernel for filtering
-	std::vector<float> pos_host(total_particles);
-	std::vector<float> vel_host(total_particles * 3);
-	std::vector<float> packed_host(max_packed * 6); // 3 pos + 3 vel per particle
-
-	positions.copy_to_host(pos_host.data(), total_particles * 3);
-	velocities.copy_to_host(vel_host.data(), total_particles * 3);
-
-	for (idx_t i = 0; i < total_particles && packed_count < max_packed; ++i) {
-		Vector3 pos(pos_host[i * 3], pos_host[i * 3 + 1], pos_host[i * 3 + 2]);
-
-		if (local_patch.is_in_boundary_region(pos, direction, halo_width)) {
-			// Pack position
-			packed_host[packed_count * 6 + 0] = pos.x;
-			packed_host[packed_count * 6 + 1] = pos.y;
-			packed_host[packed_count * 6 + 2] = pos.z;
-
-			// Pack velocity
-			packed_host[packed_count * 6 + 3] = vel_host[i * 3];
-			packed_host[packed_count * 6 + 4] = vel_host[i * 3 + 1];
-			packed_host[packed_count * 6 + 5] = vel_host[i * 3 + 2];
-
-			packed_count++;
-		}
-	}
-
-	// Copy packed data back to device
-	packed_data.copy_from_host(packed_host.data(), packed_count * 6);
-
-	return packed_count;
-}
-
-// Unpack received halo particles
-void PatchManager::unpack_halo_particles(DeviceBuffer<float>& packed_data,
-										 DeviceBuffer<float>& halo_positions,
-										 DeviceBuffer<float>& halo_velocities,
-										 idx_t received_count) {
-	if (received_count == 0) {
-		return;
-	}
-
-	// Copy unpacked data to halo buffers
-	// In this simple implementation, we assume packed_data contains interleaved pos+vel
-	// positions would be extracted to halo_positions, velocities to halo_velocities
-
-	// For now, we'll do a simple copy assuming the data is already separated
-	// In production, you'd extract pos/vel from packed_data
-	std::vector<float> packed_host(received_count * 6);
-	packed_data.copy_to_host(packed_host.data(), received_count * 6);
-
-	std::vector<float> halo_pos_host(received_count * 3);
-	std::vector<float> halo_vel_host(received_count * 3);
-
-	for (idx_t i = 0; i < received_count; ++i) {
-		halo_pos_host[i * 3 + 0] = packed_host[i * 6 + 0];
-		halo_pos_host[i * 3 + 1] = packed_host[i * 6 + 1];
-		halo_pos_host[i * 3 + 2] = packed_host[i * 6 + 2];
-
-		halo_vel_host[i * 3 + 0] = packed_host[i * 6 + 3];
-		halo_vel_host[i * 3 + 1] = packed_host[i * 6 + 4];
-		halo_vel_host[i * 3 + 2] = packed_host[i * 6 + 5];
-	}
-
-	halo_positions.copy_from_host(halo_pos_host.data(), received_count * 3);
-	halo_velocities.copy_from_host(halo_vel_host.data(), received_count * 3);
-}
 
 // Exchange halo particles with all neighbors
 std::vector<Event> PatchManager::exchange_halo_particles(DeviceBuffer<float>& positions,
@@ -411,12 +313,11 @@ std::vector<Event> PatchManager::exchange_halo_particles(DeviceBuffer<float>& po
 
 		int neighbor_rank = get_neighbor_rank(dir);
 
-		// Pack boundary particles for this direction
-		idx_t packed_count = pack_boundary_particles(positions,
-													 velocities,
-													 neighbors_[dir].send_buffer,
-													 dir,
-													 cutoff);
+		// Pack boundary particles for this direction from local patch
+		Patch& local_patch = get_local_patch();
+		idx_t packed_count = local_patch.pack_boundary_particles(neighbors_[dir].send_buffer,
+																 dir,
+																 cutoff);
 		send_counts[dir] = packed_count;
 
 		if (packed_count > 0) {

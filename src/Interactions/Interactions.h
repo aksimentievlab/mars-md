@@ -1,18 +1,46 @@
 #pragma once
 #include "Header.h"
+#include "System/PeriodicBox.h"
 #include "Types/Types.h"
 
 namespace ARBD {
 
-struct ForceEnergy {
-	float force_magnitude;
-	float energy;
+struct ScalarForceEnergy {
+	union {
+		float2 fe{0.0f, 0.0f};
+		struct {
+			float force_magnitude;
+			float energy;
+		};
+	};
 };
+
+struct ScalarForceEnergy2 {
+	float2 n;
+};
+
+struct CalcDistance {
+	Vector3 r_ij;		 // vector between two particles
+	float distance;		 // distance between two particles
+	Vector3 unit_vector; // unit vector in the direction of the vector
+
+	KERNEL_FUNC static CalcDistance
+	compute(const Vector3* positions, const int2& particle_indices, const PeriodicBox* pbox) {
+		CalcDistance dist;
+		dist.r_ij = pbox->wrapDiff(positions[particle_indices.y] - positions[particle_indices.x]);
+		dist.distance = dist.r_ij.length();
+		if (dist.distance > 1e-6f) {
+			dist.unit_vector = dist.r_ij / dist.distance;
+		} else {
+			dist.unit_vector = Vector3(0.0f);
+		}
+		return dist;
+	}
+};
+/** Future pybind class for new analytical pairwise potential registration */
 // ============================================================================
 // POTENTIAL REGISTRATION
 // ============================================================================
-
-/** Future pybind class for new analytical pairwise potential registration */
 class Register_Potential {
   public:
 	int register_potential(const std::string& name) {

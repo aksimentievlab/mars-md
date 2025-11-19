@@ -188,5 +188,5 @@ using patch_t = size_t;
 using particle_t = size_t;
 using device_id_t = unsigned short;
 using grid_t = size_t; // grid ids
-using morton_t = uint64_t;
+using morton_t = uint32_t;
 using coord_t = uint32_t;

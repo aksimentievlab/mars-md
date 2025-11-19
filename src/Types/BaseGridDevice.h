@@ -22,7 +22,7 @@ struct BaseGridView {
 	Matrix3_t<T> basis;			 ///< Basis vectors (grid spacing)
 	Matrix3_t<T> basis_inv;		 ///< Cached inverse basis
 	Vector3_t<idx_t> dimensions; ///< Grid dimensions (nx, ny, nz)
-
+	int grid_id;
 	/*===================*\
 	|  INDEX OPERATIONS   |
 	\*===================*/
@@ -474,4 +474,11 @@ HOST DEVICE T get_neighbor_from_grid(const T* grid_values,
 	const idx_t neighbor_idx = nk + nj * dimensions.z + ni * dimensions.y * dimensions.z;
 	return grid_values[neighbor_idx];
 }
+
 } // namespace ARBD
+
+#ifdef USE_SYCL
+#include <sycl/sycl.hpp>
+template<typename T>
+struct sycl::is_device_copyable<ARBD::BaseGridView<T>> : std::true_type {};
+#endif

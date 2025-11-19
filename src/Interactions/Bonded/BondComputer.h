@@ -1,8 +1,8 @@
 #pragma once
 #include "Analytical.h"
 #include "BondGeometry.h"
-#include "Interactions/Bonded/TabulatedPotential.h"
 #include "Interactions/BondedInteraction.h"
+#include "Interactions/TabulatedPotential.h"
 #include "System/PeriodicBox.h"
 #include "Types/Types.h"
 
@@ -17,8 +17,7 @@ struct BondComputer {
 	DEVICE static inline void compute(idx_t i,
 									  DEVICE_PTR(const int2) particle_indices,
 									  DEVICE_PTR(Vector3) positions,
-									  DEVICE_PTR(Vector3) forces,
-									  DEVICE_PTR(float) energies,
+									  DEVICE_PTR(Vector3) force_energy,
 									  DEVICE_PTR(const float) params,
 									  const PeriodicBox* pbox,
 									  bool get_energy,
@@ -33,22 +32,20 @@ struct BondComputer {
 		// Phase 2: Compute force and energy using analytical bond computer
 		constexpr int num_params = AnalyticalBondComputer<BondTypeId>::NUM_PARAMS;
 		const float* bond_params = params + (i * num_params);
-		const ForceEnergy fe =
+		const ScalarForceEnergy fe =
 			AnalyticalBondComputer<BondTypeId>::compute(geom.distance, bond_params);
-
 		// Phase 3: Apply forces using precomputed geometry
 		const Vector3 force = geom.unit_vector * fe.force_magnitude;
-
-		atomic_add(&forces[indices.x].x, -force.x);
-		atomic_add(&forces[indices.x].y, -force.y);
-		atomic_add(&forces[indices.x].z, -force.z);
-		atomic_add(&forces[indices.y].x, force.x);
-		atomic_add(&forces[indices.y].y, force.y);
-		atomic_add(&forces[indices.y].z, force.z);
-
+		atomic_add(&force_energy[indices.x].x, -force.x);
+		atomic_add(&force_energy[indices.x].y, -force.y);
+		atomic_add(&force_energy[indices.x].z, -force.z);
+		atomic_add(&force_energy[indices.y].x, force.x);
+		atomic_add(&force_energy[indices.y].y, force.y);
+		atomic_add(&force_energy[indices.y].z, force.z);
 		if (get_energy) {
-			atomic_add(&energies[indices.x], fe.energy * 0.5f);
-			atomic_add(&energies[indices.y], fe.energy * 0.5f);
+			const float energy = fe.energy * 0.5f;
+			atomic_add(&force_energy[indices.x].t, energy);
+			atomic_add(&force_energy[indices.y].t, energy);
 		}
 	}
 };
@@ -58,8 +55,7 @@ struct TabulatedBondComputer {
 	DEVICE static inline void compute(idx_t i,
 									  DEVICE_PTR(const int2) particle_indices,
 									  DEVICE_PTR(Vector3) positions,
-									  DEVICE_PTR(Vector3) forces,
-									  DEVICE_PTR(float) energies,
+									  DEVICE_PTR(Vector3) forces_energy,
 									  DEVICE_PTR(const TabulatedPotential) tables,
 									  const PeriodicBox* pbox,
 									  bool get_energy,
@@ -72,21 +68,20 @@ struct TabulatedBondComputer {
 			return;
 
 		// Phase 2: Compute force and energy using tabulated potential
-		const ForceEnergy fe = TabulatedPotential::compute(geom.distance, &tables[i]);
+		const ScalarForceEnergy fe = TabulatedPotential::compute(geom.distance, &tables[i]);
 
 		// Phase 3: Apply forces using precomputed geometry
 		const Vector3 force = geom.unit_vector * fe.force_magnitude;
-
-		atomic_add(&forces[indices.x].x, -force.x);
-		atomic_add(&forces[indices.x].y, -force.y);
-		atomic_add(&forces[indices.x].z, -force.z);
-		atomic_add(&forces[indices.y].x, force.x);
-		atomic_add(&forces[indices.y].y, force.y);
-		atomic_add(&forces[indices.y].z, force.z);
-
+		const float energy = fe.energy * 0.5f;
+		atomic_add(&forces_energy[indices.x].x, -force.x);
+		atomic_add(&forces_energy[indices.x].y, -force.y);
+		atomic_add(&forces_energy[indices.x].z, -force.z);
+		atomic_add(&forces_energy[indices.y].x, force.x);
+		atomic_add(&forces_energy[indices.y].y, force.y);
+		atomic_add(&forces_energy[indices.y].z, force.z);
 		if (get_energy) {
-			atomic_add(&energies[indices.x], fe.energy * 0.5f);
-			atomic_add(&energies[indices.y], fe.energy * 0.5f);
+			atomic_add(&forces_energy[indices.x].t, energy);
+			atomic_add(&forces_energy[indices.y].t, energy);
 		}
 	}
 };
@@ -99,8 +94,7 @@ struct TabulatedAngleComputer {
 	DEVICE static inline void compute(idx_t i,
 									  DEVICE_PTR(const int3) particle_indices,
 									  DEVICE_PTR(Vector3) positions,
-									  DEVICE_PTR(Vector3) forces,
-									  DEVICE_PTR(float) energies,
+									  DEVICE_PTR(Vector3) forces_energy,
 									  DEVICE_PTR(const TabulatedPotential) tables,
 									  const PeriodicBox* pbox,
 									  bool get_energy,
@@ -113,26 +107,26 @@ struct TabulatedAngleComputer {
 		AngleGeometry geom = AngleGeometry::compute(positions, indices, pbox);
 
 		// Phase 2: Compute force and energy (placeholder - implement angle potentials)
-		const ForceEnergy fe = TabulatedPotential::compute(geom.angle, &tables[i]);
+		const ScalarForceEnergy fe = TabulatedPotential::compute(geom.angle, &tables[i]);
 
 		// Phase 3: Apply forces using precomputed geometry
 		const Vector3 force1 = geom.ab.cross(geom.bc) * fe.force_magnitude;
 		const Vector3 force3 = geom.bc.cross(geom.ab) * fe.force_magnitude;
-
-		atomic_add(&forces[indices.x].x, -force1.x);
-		atomic_add(&forces[indices.x].y, -force1.y);
-		atomic_add(&forces[indices.x].z, -force1.z);
-		atomic_add(&forces[indices.y].x, force1.x + force3.x);
-		atomic_add(&forces[indices.y].y, force1.y + force3.y);
-		atomic_add(&forces[indices.y].z, force1.z + force3.z);
-		atomic_add(&forces[indices.z].x, -force3.x);
-		atomic_add(&forces[indices.z].y, -force3.y);
-		atomic_add(&forces[indices.z].z, -force3.z);
+		const float energy = fe.energy * 0.3333333333f;
+		atomic_add(&forces_energy[indices.x].x, -force1.x);
+		atomic_add(&forces_energy[indices.x].y, -force1.y);
+		atomic_add(&forces_energy[indices.x].z, -force1.z);
+		atomic_add(&forces_energy[indices.y].x, force1.x + force3.x);
+		atomic_add(&forces_energy[indices.y].y, force1.y + force3.y);
+		atomic_add(&forces_energy[indices.y].z, force1.z + force3.z);
+		atomic_add(&forces_energy[indices.z].x, -force3.x);
+		atomic_add(&forces_energy[indices.z].y, -force3.y);
+		atomic_add(&forces_energy[indices.z].z, -force3.z);
 
 		if (get_energy) {
-			atomic_add(&energies[indices.x], fe.energy * 0.3333333333f);
-			atomic_add(&energies[indices.y], fe.energy * 0.3333333333f);
-			atomic_add(&energies[indices.z], fe.energy * 0.3333333333f);
+			atomic_add(&forces_energy[indices.x].t, energy);
+			atomic_add(&forces_energy[indices.y].t, energy);
+			atomic_add(&forces_energy[indices.z].t, energy);
 		}
 	}
 };
@@ -145,8 +139,7 @@ struct TabulatedDihedralComputer {
 	DEVICE static inline void compute(idx_t i,
 									  DEVICE_PTR(const int4) particle_indices,
 									  DEVICE_PTR(Vector3) positions,
-									  DEVICE_PTR(Vector3) forces,
-									  DEVICE_PTR(float) energies,
+									  DEVICE_PTR(Vector3) forces_energy,
 									  DEVICE_PTR(const TabulatedPotential) tables,
 									  const PeriodicBox* pbox,
 									  bool get_energy,
@@ -166,10 +159,10 @@ struct TabulatedDihedralComputer {
 		// TODO: Implement proper dihedral force distribution
 
 		if (get_energy) {
-			atomic_add(&energies[indices.x], energy * 0.25f);
-			atomic_add(&energies[indices.y], energy * 0.25f);
-			atomic_add(&energies[indices.z], energy * 0.25f);
-			atomic_add(&energies[indices.w], energy * 0.25f);
+			atomic_add(&forces_energy[indices.x].t, energy * 0.25f);
+			atomic_add(&forces_energy[indices.y].t, energy * 0.25f);
+			atomic_add(&forces_energy[indices.z].t, energy * 0.25f);
+			atomic_add(&forces_energy[indices.t].t, energy * 0.25f);
 		}
 	}
 };

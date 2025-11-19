@@ -4,28 +4,9 @@
 #include "Backend/Resource.h"
 #include "BondedInteraction.h"
 #include "Header.h"
-#include "SimSystem.h"
 #include "Types/Types.h"
 
 namespace ARBD {
-// build exclude tree
-/**
- *@param num_particles Number of particles
- *@param bonds List of sorted cell bonds
- *@param exclusion_depth Depth of exclusion
- *@return Array of Excludes
- *This algorithm finds the central particle in every bond tree,
- *then creates a list of exclusions for the particle pairs
- *defined in exList. For example, 1-2 means that there should
- *be an exclusion between the central particle and every
- *particle it is directly bonded to. 1-3 means that there should
- *be an exclusion between the central particle and every particle
- *it is two bonds away from
- */
-std::vector<Exclude>
-make_exclusions_cpu(int num_particles, const std::vector<Bond>& bonds, int exclusion_depth);
-
-// Device side exclusion generation kernel, for reaction when bonds can break.
 struct GenerateExclusionsFunctor {
 	// A constant defining the max exclusion depth (e.g., 1-4 bonds)
 	// This allows us to use a static array for the frontier, avoiding dynamic allocation.

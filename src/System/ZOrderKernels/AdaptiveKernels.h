@@ -185,7 +185,7 @@ struct ComputeSearchRangeKernel {
 };
 
 /**
- * @brief Enhanced Z-order neighbor kernel with adaptive search ranges and optimizations
+ * @brief Z-order neighbor kernel with adaptive search ranges and optimizations
  *
  * Uses per-particle adaptive search ranges and improved early termination
  * to optimize neighbor finding performance.
@@ -201,7 +201,7 @@ struct AdaptiveZOrderNeighborKernel {
 	size_t num_particles;
 	size_t max_pairs;
 
-	HOST DEVICE void operator()(idx_t i) const {
+	KERNEL_FUNC void operator()(idx_t i) const {
 		if (i >= num_particles)
 			return;
 
@@ -269,7 +269,7 @@ struct AdaptiveZOrderNeighborKernel {
 	}
 
   private:
-	HOST DEVICE void flush_local_pairs(const int2* local_buffer,
+	KERNEL_FUNC void flush_local_pairs(const int2* local_buffer,
 									   uint32_t count,
 									   uint32_t* global_count,
 									   int2* global_pairs,
@@ -294,7 +294,7 @@ struct AdaptiveZOrderNeighborKernel {
 		}
 	}
 
-	HOST DEVICE morton_t get_morton_threshold(uint32_t search_range) const {
+	KERNEL_FUNC morton_t get_morton_threshold(uint32_t search_range) const {
 		// Adaptive threshold based on search range
 		// Larger search ranges allow larger Morton code differences
 		return 0x100000 + (search_range << 12);

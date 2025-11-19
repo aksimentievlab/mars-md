@@ -15,7 +15,7 @@ HOST void Vector3_t<T>::print() const {
 template<typename T>
 HOST std::string Vector3_t<T>::to_string() const {
 	std::ostringstream oss;
-	oss << x << " " << y << " " << z << " (" << w << ")";
+	oss << x << " " << y << " " << z << " (" << t << ")";
 	return oss.str();
 }
 

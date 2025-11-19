@@ -26,9 +26,7 @@ SystemState::~SystemState() {
 // Particle State Management
 //================================================================================
 
-std::vector<Vector3> SystemState::get_particle_positions() const {
-
-}
+std::vector<Vector3> SystemState::get_particle_positions() const {}
 
 //================================================================================
 // System Object Management
@@ -71,6 +69,48 @@ void SystemState::cleanup_gpu_resources() {
 	// }
 
 	LOGINFO("SystemState: GPU resources cleaned up");
+}
+
+void SystemState::gather_from_patches(PatchManager& patch_manager) {
+	// Clear previous state
+	global_positions_.clear();
+	global_velocities_.clear();
+	global_particle_ids_.clear();
+	global_particle_types_.clear();
+
+#ifdef USE_MPI
+	// In MPI mode: gather from local patch + exchange with other ranks
+	const Patch& local_patch = patch_manager.get_local_patch();
+
+	// Collect from local patch
+	idx_t local_num = local_patch.get_num();
+	for (idx_t i = 0; i < local_num; ++i) {
+		global_positions_.push_back(local_patch.get_particle_positions[i]);
+		global_velocities_.push_back(
+			local_patch.get_particle_momenta[i]); // Assuming momentum = velocity * mass
+		global_particle_ids_.push_back(local_patch.get_particle_ids[i]);
+		global_particle_types_.push_back(local_patch.get_particle_type_ids[i]);
+	}
+
+	// TODO: MPI_Gatherv to collect from all ranks and assemble in global order
+	// This requires coordination with PatchManager's MPI communication
+
+#else
+	// Non-MPI: collect from all local patches
+	const auto& patches = patch_manager.get_all_patches();
+	for (const auto& patch : patches) {
+		idx_t num = patch.get_num();
+		for (idx_t i = 0; i < num; ++i) {
+			global_positions_.push_back(patch.particle_positions[i]);
+			global_velocities_.push_back(patch.particle_momenta[i]);
+			global_particle_ids_.push_back(patch.particle_ids[i]);
+			global_particle_types_.push_back(patch.particle_type_ids[i]);
+		}
+	}
+#endif
+
+	global_num_particles_ = global_positions_.size();
+	state_synced_ = true;
 }
 
 } // namespace ARBD

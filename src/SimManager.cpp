@@ -24,10 +24,6 @@ void SimManager::init() {
 	// Initialize output writers based on configuration
 	initialize_output_writers();
 
-	// Perform domain decomposition (creates PatchManager in SimSystem)
-	LOGINFO("SimManager: Performing domain decomposition");
-	sys_.decompose_system();
-
 	// Verify PatchManager was created
 	if (!sys_.has_patch_manager()) {
 		throw Exception(ExceptionType::RuntimeError,
@@ -36,6 +32,9 @@ void SimManager::init() {
 	}
 	LOGINFO("SimManager: Domain decomposition complete");
 
+	// Perform domain decomposition (creates PatchManager in SimSystem)
+	LOGINFO("SimManager: Performing domain decomposition");
+	sys_.decompose_system();
 	// Load initial conditions (particles, bonds, etc.)
 	load_initial_conditions();
 
@@ -257,19 +256,29 @@ void SimManager::handle_output(size_t step) {
 }
 
 void SimManager::write_dcd_frame(size_t step) {
-	// Get particle positions from system
-	const auto& positions = sys_.get_particle_positions();
+	// Gather global state from patches
+	SystemState& state = sys_.get_current_system_state();
+	PatchManager* patch_mgr = sys_.get_patch_manager();
+
+	if (!patch_mgr) {
+		LOGWARN("SimManager: No PatchManager available for output");
+		return;
+	}
+
+	// Collect data from all patches into SystemState
+	state.gather_from_patches(*patch_mgr);
+
+	// Get global positions for DCD writing
+	const auto& positions = state.get_global_positions();
 
 	if (positions.empty()) {
 		LOGWARN("SimManager: No particles to write at step {}", step);
 		return;
 	}
 
-	// TODO: Actually write DCD frame
-	// dcd_writer_->write_frame(positions);
-
-	if (step == sys_.get_output_period()) {
-		LOGINFO("SimManager: DCD writing not yet fully implemented");
+	// Write DCD frame
+	if (dcd_writer_) {
+		dcd_writer_->writeStep(positions);
 	}
 }
 

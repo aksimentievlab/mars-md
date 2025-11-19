@@ -12,125 +12,149 @@
 #include "Header.h"
 #include "Types/Types.h"
 #include "Types/Vector3.h"
-#include <cstdint>
 
 namespace ARBD {
 
+struct MortonConfig {
+	Vector3 box_min;
+	Vector3 box_max;
+	float cutoff_inv;
+	int3 grid_cells; // Number of cells (Nx, Ny, Nz)
+	float max_coord; // For Morton encoding (e.g. 1023.0f)
+};
+
 /**
- * @brief Morton code utilities for 3D space-filling curves
- *
- * Provides functions to convert 3D coordinates to Morton codes
- * for cache-friendly spatial data organization.
+ * @brief Morton code utilities with adaptive precision
  */
 class MortonCode {
   public:
-	static constexpr int MAX_COORD_BITS = 21; // 21 bits per dimension = 63 bits total
-	static constexpr coord_t MAX_COORD = (1u << MAX_COORD_BITS) - 1;
+	// Runtime-configurable bits per dimension (set during initialization)
+	static int max_coord_bits; // Will be 9, 10, or 11
+	static coord_t max_coord;  // Will be (1 << max_coord_bits) - 1
+	static float actual_spacing;
+	static morton_t morton_threshold;
 
 	/**
-	 * @brief Encode 3D coordinates into a Morton code
-	 * @param x X coordinate (normalized to [0, MAX_COORD])
-	 * @param y Y coordinate (normalized to [0, MAX_COORD])
-	 * @param z Z coordinate (normalized to [0, MAX_COORD])
-	 * @return 64-bit Morton code
+	 * @brief Initialize Morton code precision based on system parameters
+	 * @param box_size Largest dimension of the simulation box
+	 * @param cutoff Interaction cutoff distance
+	 *
+	 * Automatically selects bits per dimension to ensure:
+	 *   grid_spacing = box_size / (2^bits) < 0.1 * cutoff
 	 */
+	HOST static void initialize(float box_size, float cutoff) {
+		// We want: box_size / (2^bits) < 0.1 * cutoff
+		// So: 2^bits > box_size / (0.1 * cutoff)
+		// bits > log2(box_size / (0.1 * cutoff))
+
+		float required_resolution = box_size / (0.1f * cutoff);
+		int required_bits = static_cast<int>(std::ceil(std::log2(required_resolution)));
+
+		// Clamp to valid range for 32-bit Morton codes
+		// 3 * bits_per_dim must be <= 32, so bits_per_dim <= 10
+		if (required_bits <= 8) {
+			max_coord_bits = 8; // Conservative: 256 levels per dimension
+			morton_threshold = 0x40000;
+		} else if (required_bits <= 9) {
+			max_coord_bits = 9; // Conservative: 512 levels per dimension
+			morton_threshold = 0x80000;
+		} else if (required_bits <= 10) {
+			max_coord_bits = 10; // Standard: 1024 levels per dimension
+			morton_threshold = 0x100000;
+		} else {
+			// Box is too large relative to cutoff for 32-bit Morton codes
+			LOGWARN("Box size {} is very large relative to cutoff {}. "
+					"Morton code resolution may be insufficient. "
+					"Consider using 64-bit Morton codes or smaller patches.",
+					box_size,
+					cutoff);
+			max_coord_bits = 10; // Use maximum available
+			morton_threshold = 0x100000;
+		}
+
+		max_coord = (1u << max_coord_bits) - 1;
+
+		actual_spacing = box_size / (1u << max_coord_bits);
+		LOGINFO("MortonCode: Using {} bits/dim ({} levels), "
+				"grid spacing = {:.4f} nm (cutoff = {:.4f} nm, ratio = {:.3f})",
+				max_coord_bits,
+				(1u << max_coord_bits),
+				actual_spacing,
+				cutoff,
+				actual_spacing / cutoff);
+	}
+
 	HOST DEVICE static morton_t encode(coord_t x, coord_t y, coord_t z) {
 		return splitBy3(z) | (splitBy3(y) << 1) | (splitBy3(x) << 2);
 	}
 
-	/**
-	 * @brief Encode 3D position vector into Morton code
-	 * @param pos 3D position
-	 * @param box_min Minimum bounds of the domain
-	 * @param box_max Maximum bounds of the domain
-	 * @return 64-bit Morton code
-	 */
 	HOST DEVICE static morton_t
 	encode(const Vector3& pos, const Vector3& box_min, const Vector3& box_max) {
-		// Normalize coordinates to [0, MAX_COORD]
 		Vector3 range = box_max - box_min;
 		Vector3 offset = pos - box_min;
 		Vector3 normalized = Vector3(offset.x / range.x, offset.y / range.y, offset.z / range.z);
 
-		// Clamp to valid range and convert to integer coordinates
-		// Use appropriate math functions for each backend
 #ifdef USE_SYCL
 		coord_t x = static_cast<coord_t>(
-			sycl::fmin(sycl::fmax(normalized.x * MAX_COORD, 0.0f), static_cast<float>(MAX_COORD)));
+			sycl::fmin(sycl::fmax(normalized.x * max_coord, 0.0f), static_cast<float>(max_coord)));
 		coord_t y = static_cast<coord_t>(
-			sycl::fmin(sycl::fmax(normalized.y * MAX_COORD, 0.0f), static_cast<float>(MAX_COORD)));
+			sycl::fmin(sycl::fmax(normalized.y * max_coord, 0.0f), static_cast<float>(max_coord)));
 		coord_t z = static_cast<coord_t>(
-			sycl::fmin(sycl::fmax(normalized.z * MAX_COORD, 0.0f), static_cast<float>(MAX_COORD)));
+			sycl::fmin(sycl::fmax(normalized.z * max_coord, 0.0f), static_cast<float>(max_coord)));
 #else
 		coord_t x = static_cast<coord_t>(
-			fminf(fmaxf(normalized.x * MAX_COORD, 0.0f), static_cast<float>(MAX_COORD)));
+			fminf(fmaxf(normalized.x * max_coord, 0.0f), static_cast<float>(max_coord)));
 		coord_t y = static_cast<coord_t>(
-			fminf(fmaxf(normalized.y * MAX_COORD, 0.0f), static_cast<float>(MAX_COORD)));
+			fminf(fmaxf(normalized.y * max_coord, 0.0f), static_cast<float>(max_coord)));
 		coord_t z = static_cast<coord_t>(
-			fminf(fmaxf(normalized.z * MAX_COORD, 0.0f), static_cast<float>(MAX_COORD)));
+			fminf(fmaxf(normalized.z * max_coord, 0.0f), static_cast<float>(max_coord)));
 #endif
 
 		return encode(x, y, z);
 	}
 
-	/**
-	 * @brief Decode Morton code back to 3D coordinates
-	 * @param code Morton code to decode
-	 * @return Tuple of (x, y, z) coordinates
-	 */
 	HOST DEVICE static void decode(morton_t code, coord_t& x, coord_t& y, coord_t& z) {
 		x = compactBy3(code >> 2);
 		y = compactBy3(code >> 1);
 		z = compactBy3(code);
 	}
 
-	/**
-	 * @brief Decode Morton code back to 3D position
-	 * @param code Morton code to decode
-	 * @param box_min Minimum bounds of the domain
-	 * @param box_max Maximum bounds of the domain
-	 * @return 3D position vector
-	 */
 	HOST DEVICE static Vector3
 	decode(morton_t code, const Vector3& box_min, const Vector3& box_max) {
 		coord_t x, y, z;
 		decode(code, x, y, z);
 
-		Vector3 normalized(static_cast<float>(x) / MAX_COORD,
-						   static_cast<float>(y) / MAX_COORD,
-						   static_cast<float>(z) / MAX_COORD);
+		Vector3 normalized(static_cast<float>(x) / max_coord,
+						   static_cast<float>(y) / max_coord,
+						   static_cast<float>(z) / max_coord);
 
 		return box_min + normalized.element_mult(box_max - box_min);
 	}
 
   private:
 	/**
-	 * @brief Split bits by 3 (insert 2 zeros between each bit)
-	 * Used for Morton encoding: 0b00000abc becomes 0b000a000b000c
+	 * @brief Split bits by 3 - supports up to 11 bits input
+	 * Works for 9, 10, or 11 bit inputs
 	 */
 	HOST DEVICE static morton_t splitBy3(coord_t a) {
-		morton_t x = a & 0x1fffff; // Only keep lower 21 bits
+		// Mask based on max_coord_bits
+		morton_t x = a & max_coord; // Keep only valid bits
 
-		x = (x | x << 32) & 0x1f00000000ffff;
-		x = (x | x << 16) & 0x1f0000ff0000ff;
-		x = (x | x << 8) & 0x100f00f00f00f00f;
-		x = (x | x << 4) & 0x10c30c30c30c30c3;
-		x = (x | x << 2) & 0x1249249249249249;
+		// Generic bit-splitting that works for 9-11 bits
+		x = (x | x << 16) & 0x30000ff;
+		x = (x | x << 8) & 0x300f00f;
+		x = (x | x << 4) & 0x30c30c3;
+		x = (x | x << 2) & 0x9249249;
 
 		return x;
 	}
 
-	/**
-	 * @brief Compact bits by 3 (remove 2 zeros between each bit)
-	 * Used for Morton decoding: reverse of splitBy3
-	 */
 	HOST DEVICE static coord_t compactBy3(morton_t x) {
-		x &= 0x1249249249249249;
-		x = (x ^ (x >> 2)) & 0x10c30c30c30c30c3;
-		x = (x ^ (x >> 4)) & 0x100f00f00f00f00f;
-		x = (x ^ (x >> 8)) & 0x1f0000ff0000ff;
-		x = (x ^ (x >> 16)) & 0x1f00000000ffff;
-		x = (x ^ (x >> 32)) & 0x1fffff;
+		x &= 0x9249249;
+		x = (x ^ (x >> 2)) & 0x30c30c3;
+		x = (x ^ (x >> 4)) & 0x300f00f;
+		x = (x ^ (x >> 8)) & 0x30000ff;
+		x = (x ^ (x >> 16)) & max_coord;
 
 		return static_cast<coord_t>(x);
 	}

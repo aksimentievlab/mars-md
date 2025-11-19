@@ -1,4 +1,3 @@
-#include "Exclusion.h"
 #include "BondedInteraction.h"
 #include <queue>
 #include <vector>
@@ -6,20 +5,13 @@
 namespace ARBD {
 
 // run this first, then read in extra exclusions from a file
-std::vector<Exclude>
-make_exclusions_cpu(int num_particles, const std::vector<Bond>& bonds, int exclusion_depth) {
-
-	if (num_particles <= 0 || exclusion_depth <= 0) {
-		return {}; // Return empty list if there's nothing to do
-	}
+void BondedInteraction::make_exclusions(int num_particles, int exclusion_depth) {
 
 	std::vector<std::vector<int>> adjacency_list(num_particles);
-	for (const auto& bond : bonds) {
+	for (const auto& bond : bonds_) {
 		adjacency_list[bond.ind1].push_back(bond.ind2);
 		adjacency_list[bond.ind2].push_back(bond.ind1);
 	}
-
-	std::vector<Exclude> all_exclusions;
 
 	// 2. Perform a Breadth-First Search (BFS) starting from each particle.
 	for (int start_node = 0; start_node < num_particles; ++start_node) {
@@ -43,7 +35,7 @@ make_exclusions_cpu(int num_particles, const std::vector<Bond>& bonds, int exclu
 				if (!visited[neighbor]) {
 					visited[neighbor] = true;
 
-					all_exclusions.push_back(
+					exclusions_.push_back(
 						{std::min(start_node, neighbor), std::max(start_node, neighbor)});
 
 					// Add the neighbor to the queue to explore in the next level
@@ -52,12 +44,8 @@ make_exclusions_cpu(int num_particles, const std::vector<Bond>& bonds, int exclu
 			}
 		}
 	}
-
 	// 3. Sort and remove duplicate exclusions.
-	std::sort(all_exclusions.begin(), all_exclusions.end());
-	all_exclusions.erase(std::unique(all_exclusions.begin(), all_exclusions.end()),
-						 all_exclusions.end());
-
-	return all_exclusions;
+	std::sort(exclusions_.begin(), exclusions_.end());
+	exclusions_.erase(std::unique(exclusions_.begin(), exclusions_.end()), exclusions_.end());
 }
 } // namespace ARBD

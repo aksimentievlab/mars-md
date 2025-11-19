@@ -83,10 +83,10 @@ class SimManager {
 	// Core Components
 	//================================================================================
 	SimSystem& sys_; // System owns PatchManager, accessible via sys_.get_patch_manager()
+	SystemState sys_state_;
 
 	// Random number generators per resource
-	std::unordered_map<const Resource*, int> rngs_; // Placeholder - replace with actual RNG type
-
+	std::unordered_map<const Resource*, int> rngs_;
 	//================================================================================
 	// Timing and Performance
 	//================================================================================

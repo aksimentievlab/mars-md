@@ -58,7 +58,6 @@ struct ReorderDataKernel {
 		if (idx >= num_elements)
 			return;
 
-		// Reorder data according to sorted indices
 		output_data[idx] = input_data[sorted_indices[idx]];
 	}
 };

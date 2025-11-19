@@ -1,11 +1,12 @@
 #pragma once
 // #include "Types/BaseGrid.h"
+#include "System/Reservoir.h"
+#include "Types/BaseGrid.h"
 #include "Types/Types.h"
 #include <string>
 
 namespace ARBD {
-class NonbondedInteraction;
-class BondedInteraction;
+
 /**
  * @brief Atom group definition for collective variables
  */
@@ -23,19 +24,18 @@ struct ColvarsGroup {
 	}
 };
 
-struct ParticleAoS {
+struct ParticleRead {
 	int id;
 	int type_id;
 	Vector3 position;
 	Vector3 momentum;
-	Vector3 force;
 	Vector3 orientation;
+	Vector3 force;
 	float energy;
-	bool is_dummy = false;
 	bool has_orientation = false;
-	std::vector<ColvarsGroup> colvars_groups;
+	int group_id = -1; // belongs to no one.
 	// colvars groups this particle belongs to. One particle can belong to multiple groups.
-	ParticleAoS& operator=(const ParticleAoS& src) {
+	ParticleRead& operator=(const ParticleRead& src) {
 		id = src.id;
 		type_id = src.type_id;
 		position = src.position;
@@ -43,42 +43,97 @@ struct ParticleAoS {
 		force = src.force;
 		orientation = src.orientation;
 		energy = src.energy;
-		is_dummy = src.is_dummy;
 		has_orientation = src.has_orientation;
+		group_id = src.group_id;
 		return *this;
 	}
 };
-using Particle = ParticleAoS;
 
 class ParticleType {
-  private:
-	void clear();
-	void copy(const ParticleType& src);
-
   public:
 	std::string name;
-	int id;
-	int num; // number of particles of this type
-	float mass;
-	float charge;
-	float radius; // vdw radius
-	float eps;	  // vdw
-	float diffusion;
-	Vector3 transDamping;
-	float mu; // for Nose-Hoover Langevin dynamics
-	int numPartGridFiles;
-	float* meanPmf;
-	float* pmf_scale;
-	std::vector<grid_t> grids;
+	int id = -1; // Default to invalid, will be set after initialization
+	int num = 0; // Count starts at 0
 
-	// BaseGrid<float>** pmfGrid;
-	// BaseGrid<float>* diffusionGrid; // uncommon
-	// BaseGrid<Vector3>* forceGrid;
+	// --- Physics Constants (Initialized to safe defaults) ---
+	float mass = 1.0f; // Avoid divide-by-zero if missed
+	float charge = 0.0f;
+	float radius = 0.0;
+	float eps = 0.0f;
+	float diffusion = 0.0f;
+	Vector3 transDamping = {0.0f, 0.0f, 0.0f};
+	float mu = 0.0f;
+	float meanPmf = 0.0f;
+	// --- PMF / SMD Control ---
+	float pmf_scale = 1.0f;
+	float pmf_scale_slope = 0.0f;
+	float pmf_smd_freq = 0.0f;
 
-	ParticleType(const std::string& name) : name(name){};
-	ParticleType(const ParticleType& src);
-	ParticleType& operator=(const ParticleType& src);
-	~ParticleType();
+	std::shared_ptr<BaseGrid<float>> pmfGrid = nullptr;
+	std::shared_ptr<BaseGrid<float>> diffusionGrid = nullptr;
+	std::shared_ptr<BaseGrid<Vector3>> forceGrid = nullptr;
+
+	std::unique_ptr<Reservoir> reservoir = nullptr;
+
+	ParticleType(const std::string& name)
+		: name(name), num(0), diffusion(0.0f), radius(1.0f), charge(0.0f), eps(0.0f), meanPmf(0),
+		  reservoir(nullptr), pmf_scale(1.0f), pmf_scale_slope(0.0f), pmf_smd_freq(0.0f),
+		  pmfGrid(nullptr), diffusionGrid(nullptr), forceGrid(nullptr) {}
+	ParticleType(const ParticleType& src)
+		: name(src.name), id(src.id), num(src.num), mass(src.mass), charge(src.charge),
+		  radius(src.radius), eps(src.eps), diffusion(src.diffusion),
+		  transDamping(src.transDamping), mu(src.mu), pmf_scale(src.pmf_scale),
+		  pmf_scale_slope(src.pmf_scale_slope), pmf_smd_freq(src.pmf_smd_freq),
+		  pmfGrid(src.pmfGrid), diffusionGrid(src.diffusionGrid), forceGrid(src.forceGrid),
+		  reservoir(std::make_unique<Reservoir>(*src.reservoir)) {}
+	ParticleType(const std::string& name,
+				 float mass,
+				 float charge,
+				 float radius,
+				 float eps,
+				 float diffusion,
+				 Vector3 transDamping,
+				 float mu,
+				 float pmf_scale,
+				 float pmf_scale_slope,
+				 float pmf_smd_freq,
+				 std::shared_ptr<BaseGrid<float>> pmfGrid,
+				 std::shared_ptr<BaseGrid<float>> diffusionGrid,
+				 std::shared_ptr<BaseGrid<Vector3>> forceGrid,
+				 std::unique_ptr<Reservoir> reservoir)
+		: name(name), mass(mass), charge(charge), radius(radius), eps(eps), diffusion(diffusion),
+		  transDamping(transDamping), mu(mu), pmf_scale(pmf_scale),
+		  pmf_scale_slope(pmf_scale_slope), pmf_smd_freq(pmf_smd_freq), pmfGrid(pmfGrid),
+		  diffusionGrid(diffusionGrid), forceGrid(forceGrid),
+		  reservoir(std::make_unique<Reservoir>(*reservoir)) {}
+};
+// ============================================================================
+// 4. HOST STORAGE (For IO / Init)
+// ============================================================================
+struct HostParticleData {
+	std::vector<int> id;
+	std::vector<int> type_id;
+	std::vector<Vector3> pos;
+	std::vector<Vector3> mom;
+	std::vector<Vector3> force;
+	std::vector<float> energy;
+	std::vector<Vector3> orient;
+	std::vector<uint32_t> flags;
+
+	void resize(size_t n) {
+		id.resize(n);
+		type_id.resize(n);
+		pos.resize(n);
+		mom.resize(n);
+		force.resize(n);
+		energy.resize(n);
+		orient.resize(n);
+		flags.resize(n);
+	}
+
+	size_t size() const {
+		return id.size();
+	}
 };
 
 } // namespace ARBD

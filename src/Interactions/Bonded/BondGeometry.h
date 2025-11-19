@@ -1,29 +1,14 @@
 #pragma once
+#include "Interactions/Interactions.h"
 #include "System/PeriodicBox.h"
 #include "Types/Math.h"
 #include "Types/Types.h"
 #include "Types/Vector3.h"
-
 namespace ARBD {
 
-struct BondGeometry {
-	Vector3 r_ij;		 // Bond vector
-	float distance;		 // Bond distance
-	Vector3 unit_vector; // Normalized direction
-
-	DEVICE static BondGeometry
-	compute(const Vector3* positions, const int2& particle_indices, const PeriodicBox* pbox) {
-		BondGeometry geom;
-		geom.r_ij = pbox->wrapDiff(positions[particle_indices.y] - positions[particle_indices.x]);
-		geom.distance = geom.r_ij.length();
-		if (geom.distance > 1e-6f) {
-			geom.unit_vector = geom.r_ij / geom.distance;
-		} else {
-			geom.unit_vector = Vector3(0.0f);
-		}
-		return geom;
-	}
-};
+using BondGeometry = CalcDistance;
+// CalcDistance is already defined in Interactions.h since it is also used in non-bonded
+// interactions
 
 struct AngleGeometry {
 	Vector3 ab, bc, ac; // Vectors
@@ -69,7 +54,7 @@ struct DihedralGeometry {
 		DihedralGeometry geom;
 		geom.ab = pbox->wrapDiff(positions[particle_indices.y] - positions[particle_indices.x]);
 		geom.bc = pbox->wrapDiff(positions[particle_indices.z] - positions[particle_indices.y]);
-		geom.cd = pbox->wrapDiff(positions[particle_indices.w] - positions[particle_indices.z]);
+		geom.cd = pbox->wrapDiff(positions[particle_indices.t] - positions[particle_indices.z]);
 
 		Vector3 crossABC = geom.ab.cross(geom.bc);
 		Vector3 crossBCD = geom.bc.cross(geom.cd);
@@ -136,7 +121,7 @@ struct ProductPotentialGeometry {
 
 		// Compute angle 2 (j-k-l)
 		geom.angle2 =
-			AngleGeometry::compute(positions, int3(indices.y, indices.z, indices.w), pbox);
+			AngleGeometry::compute(positions, int3(indices.y, indices.z, indices.t), pbox);
 
 		// Check for singularities
 		geom.is_singular =
@@ -166,7 +151,7 @@ struct ProductPotentialGeometry {
 
 		// Compute angle 2 (j-k-l)
 		geom.angle_b =
-			AngleGeometry::compute(positions, int3(indices.y, indices.z, indices.w), pbox);
+			AngleGeometry::compute(positions, int3(indices.y, indices.z, indices.t), pbox);
 
 		// Check for singularities
 		geom.is_singular = (geom.angle_a.angle < 1e-6f || geom.angle_b.angle < 1e-6f);

@@ -4,9 +4,9 @@ This module defines both **bonded** and **nonbonded** interactions for the simul
 
 ## Structure
 
-- **Bonded Interactions:**  
+- **Bonded Interactions:**
   Handle forces between particles connected by bonds, angles, or dihedrals (e.g., Harmonic, Tabulated, Lennard-Jones).
-- **Nonbonded Interactions:**  
+- **Nonbonded Interactions:**
   Handle pairwise or long-range interactions not requiring explicit bonds (e.g., Lennard-Jones, Coulomb).
 
 ## Implementation Notes

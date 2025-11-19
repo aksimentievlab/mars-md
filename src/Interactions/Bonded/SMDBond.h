@@ -339,7 +339,7 @@ class SMDManager {
 				dihedral.getParticles().x,
 				dihedral.getParticles().y,
 				dihedral.getParticles().z,
-				dihedral.getParticles().w);
+				dihedral.getParticles().t);
 	}
 
 	/**
@@ -493,7 +493,7 @@ class SMDManager {
 				 particles.x,
 				 particles.y,
 				 particles.z,
-				 particles.w);
+				 particles.t);
 	}
 };
 

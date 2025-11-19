@@ -19,7 +19,7 @@
 #include "SimSystem.h"
 // Define this if not provided by CMake/build system for version info
 #ifndef VERSION
-#define VERSION "Development Build - June 2025"
+#define VERSION "Development Build - Oct 2025"
 #endif
 
 // Consider moving constants to a dedicated configuration header or class

@@ -12,17 +12,18 @@
 #include "Backend/Buffer.h"
 #include "Backend/Resource.h"
 #include "Objects/ParticleProperties.h"
-#include "Objects/RigidBodyProperties.h"
 #include "SimParam.h"
-#include "System/Patch.h"
+
 #include "Types/BaseGrid.h"
+#include <complex>
 #include <memory>
 #include <string>
 #include <unordered_map>
 #include <variant>
 
 namespace ARBD {
-
+class Patch;
+class ParticleTypeManager;
 /*==========================*\
 |  LONG-RANGE METHOD ENUM    |
 \*==========================*/
@@ -222,12 +223,9 @@ class CutoffAMRElectrostatics : public LongRangeElectrostatics {
 			grid->zero();
 		}
 
-		// Deposit particles onto grids
-		if (particles.get_layout() == ParticleBuffer) {
-			const Vector3* positions = particles.get_position_array();
-			for (size_t i = 0; i < particles.size(); ++i) {
-				deposit_particle_to_amr(positions[i], 1.0f);
-			}
+		const Vector3* positions = particles.get_position_array();
+		for (size_t i = 0; i < particles.size(); ++i) {
+			deposit_particle_to_amr(positions[i], 1.0f);
 		}
 	}
 
@@ -254,7 +252,7 @@ class CutoffAMRElectrostatics : public LongRangeElectrostatics {
 	void deposit_particle_to_amr(const Vector3& position, float contribution) {
 		// Find appropriate AMR level and deposit particle
 		for (auto& grid : particle_count_grids_) {
-			if (grid->in_bounds(position)) {
+			if (grid->is_in_bounds(position)) {
 				Vector3 grid_pos = grid->transform_to_grid(position);
 				size_t ix = static_cast<size_t>(grid_pos.x);
 				size_t iy = static_cast<size_t>(grid_pos.y);
@@ -383,7 +381,7 @@ class PPPMElectrostatics : public LongRangeElectrostatics {
 		size_t ny = static_cast<size_t>(config_.parameters.at("grid_ny"));
 		size_t nz = static_cast<size_t>(config_.parameters.at("grid_nz"));
 
-		Matrix3 basis = Matrix3::diagonal(1.0f, 1.0f, 1.0f); // Unit spacing
+		Matrix3 basis = Matrix3(1.0f, 1.0f, 1.0f); // Unit spacing
 		Vector3 origin(-static_cast<float>(nx) / 2,
 					   -static_cast<float>(ny) / 2,
 					   -static_cast<float>(nz) / 2);
@@ -400,12 +398,12 @@ class PPPMElectrostatics : public LongRangeElectrostatics {
 	}
 
 	void calculate_real_space_forces(ParticleBuffer& particles,
-									 const ParticleTypeManager& type_manager) {
+									 const ParticleProperties& type_manager) {
 		// Direct pairwise interactions with erfc(alpha*r)/r
 	}
 
 	void assign_charges_to_mesh(const ParticleBuffer& particles,
-								const ParticleTypeManager& type_manager) {
+								const ParticleProperties& type_manager) {
 		// B-spline or other interpolation scheme
 	}
 

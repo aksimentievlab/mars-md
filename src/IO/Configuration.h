@@ -3,7 +3,9 @@
 #include "ARBDException.h"
 #include "ARBDLogger.h"
 #include "Constants.h"
+#include "IO/DxIO.h"
 #include "IO/Reader.h"
+#include "IO/TabulatedReader.h"
 #include "Interactions/BondedInteraction.h"
 #include "Interactions/Interactions.h"
 #include "Objects/ParticleProperties.h"
@@ -22,59 +24,76 @@
 namespace ARBD {
 
 /**
- * @brief Configuration class container for the simulation system.
- * To be interact with pybind or plain text .bd file.
+ * @brief Container for initial simulation configuration and state.
+ *
+ * Stores both static parameters (temperature, timestep, box size) and initial state
+ * (particles, bonds, grids, etc.) loaded from Python scripts or .bd text files.
+ *
+ * @note This is a transient object - SimSystem moves ownership of large data structures
+ *       (grids, particle arrays) during initialization. Configuration should be discarded
+ *       after SimSystem construction.
+ *
+ * @note Designed to interact with pybind11 for Python interface and text file parsers.
  */
-
 struct Configuration {
 	// Physical parameters
 	Temperature temperature{298.15f};
 	int replicas{1};
 	Length cutoff{10.0f};
 	Length pairlist_cutoff{20.0f};
-	float salt_concentration{0.15f};  // Salt concentration for electrostatics, in mol/L
-	float dielectric_constant{80.0f}; // Dielectric constant for electrostatics
+	float salt_concentration{0.15f};  // Salt concentration for solvent, in mol/L
+	float dielectric_constant{80.0f}; // Dielectric constant for solvent
 	PeriodicBox sim_box;
-	DecomposerType decomposer{DecomposerType::Spatial};
-	LongRangeMethod long_range_method{LongRangeMethod::PPPM};
+
 	DynamicType ParticleDynamicType{DynamicType::Langevin};
 	DynamicType RigidBodyDynamicType{DynamicType::Langevin};
 	std::unordered_map<std::string, int> functions_id_map{};
 	// Simulation control
 	SimSteps steps{1e-5f, 1000}; // timestep in ns.
-	DecomposeDirection decompose_direction{DecomposeDirection::Z};
 
-	ThermostatType thermostat{ThermostatType::NVE};
-	BarostatType barostat{BarostatType::Isobaric};
 	float output_period{10.0f};
 	float energy_output_period{100.0f};
 	float neighbor_list_rebuild_period{100.0f};
 	size_t global_seed{214};
-
 	std::string output_name{"out"};
 	OutputFormat output_format{OutputFormat::DCD};
 
+	// arbd2 additions start
+	DecomposerType decomposer{DecomposerType::Spatial};
+	DecomposeDirection decompose_direction{DecomposeDirection::Z};
+
+	LongRangeMethod long_range_method{LongRangeMethod::PPPM};
+	ThermostatType thermostat{ThermostatType::NVE};
 	Pressure pressure{1.0f};
 	std::vector<Reservoir> reservoirs;
+	bool enable_bond_reactions = false;
+	bool enable_particle_reactions = false;
 	bool has_reaction = false;
+	BarostatType barostat{BarostatType::Isobaric};
+	bool calculate_pressure{false};
+	float pressure_output_period{100.0f};
+	// arbd2 additions end
 
 	std::vector<RigidBodyType> rigid_body_types{};
 	std::vector<ParticleType> particle_types{};
-	std::vector<RigidBody> init_rigid_bodies{}; // init only
-	std::vector<Particle> init_particles{};		// init only
-	std::vector<Bond> init_bonds{};				// init only
-	std::vector<Angle> init_angles{};			// init only
+	std::vector<ProductPotential> init_product_potentials{};
+
+	// Loaded grids and tabulated functions (moved to SimSystem during initialization)
+	std::unordered_map<std::string, int>
+		fname_tab_dictionary{}; // Filename -> tabulated function ID
+	std::unordered_map<std::string, int> fname_grid_dictionary{}; // Filename -> grid ID
+	std::unordered_map<int, std::vector<BaseGrid<float>>>
+		grid_id_dictionary{}; // Grid ID -> loaded grids
+
+	// Initial Objects
+	std::vector<RigidBody> init_rigid_bodies{}; // init state only
+	std::vector<ParticleRead> init_particles{}; // init only
+	std::vector<Bond> init_bonds{};				// init only, can be modified during simulation
+	std::vector<Angle> init_angles{};			// init only, can also be modified during simulation
 	std::vector<Dihedral> init_dihedrals{};		// init only
 	std::vector<Exclude> init_exclusions{};		// init only
-	std::vector<Restraint> restraints{};
-	std::vector<ProductPotential> init_product_potentials{}; // Product potentials (BondAngle, etc.)
-	std::vector<std::string> tabulated_file_names{};
-	std::vector<std::string> grid_file_names{};
-	std::unordered_map<int, std::vector<BaseGrid<float>>> part_grid_dictionary{};
+	std::vector<Restraint> restraints{};		// Can be released during simulation
 
-	// Pressure calculation features
-	bool calculate_pressure{false};
-	float pressure_output_period{100.0f};
 	bool enable_smd{false};
 
 	// DCD parsing features

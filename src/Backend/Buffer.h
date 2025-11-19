@@ -540,12 +540,8 @@ class Buffer {
 		copy_from_host(host_src, num_elements, true);
 	}
 
-	void fill(T value, void* queue = nullptr, bool sync = false) {
-		Policy::fill(device_ptr_, value, count_, queue, sync);
-	}
-
-	void fill(T value, void* queue = nullptr, bool sync = false) const {
-		Policy::fill(device_ptr_, value, count_, queue, sync);
+	void fill(T value, bool sync = false) {
+		Policy::fill(device_ptr_, value, count_, stream_, sync);
 	}
 
 	/**

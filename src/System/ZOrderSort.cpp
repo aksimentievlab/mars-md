@@ -75,11 +75,14 @@ void ZOrderSort::compute_bounding_box(const DeviceBuffer<Vector3>& positions,
 	bbox_min_.copy_from_host(&init_min, 1);
 	bbox_max_.copy_from_host(&init_max, 1);
 
-	// Launch kernel to find bounds
-	BoundingBoxKernel kernel{positions.data(), bbox_min_.data(), bbox_max_.data(), num_particles};
-
 	KernelConfig config = KernelConfig::for_1d(num_particles, resource_);
-	launch_kernel(resource_, config, kernel);
+	launch_kernel(resource_,
+				  config,
+				  BoundingBoxKernel{},
+				  positions.data(),
+				  bbox_min_.data(),
+				  bbox_max_.data(),
+				  num_particles);
 
 	// Copy results back
 	bbox_min_.copy_to_host(&box_min, 1, true);
@@ -201,7 +204,7 @@ bool ZOrderSort::validate_morton_codes(const DeviceBuffer<Vector3>& current_posi
 
 	// Reset invalid count
 	invalid_count_.fill(0);
-	
+
 	KernelConfig config = KernelConfig::for_1d(num_particles, resource_);
 	launch_kernel(resource_,
 				  config,

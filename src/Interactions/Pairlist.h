@@ -10,12 +10,11 @@ namespace ARBD {
 
 class CheckPairlist {
   public:
-	CheckPairlist(SimSystem& sys, const ResourceCollection& resources);
-	void check_pairlist(SimSystem& sys, const ResourceCollection& resources);
+	CheckPairlist(SimSystem& sys);
+	void check_pairlist(SimSystem& sys);
 
   private:
 	SimSystem& sys_;
-	ResourceCollection resources_;
 };
 
 } // namespace ARBD

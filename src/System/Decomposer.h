@@ -12,7 +12,6 @@
 #include "ARBDException.h"
 #include "ARBDLogger.h"
 #include "Backend/Resource.h"
-#include "Configuration.h"
 #include "SimParam.h"
 #include "Types/Types.h"
 #include <array>

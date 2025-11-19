@@ -21,12 +21,13 @@
 // Forward declarations for CUDA/SYCL specific functions
 #ifdef USE_CUDA
 namespace ARBD {
-void sort_morton_codes_cuda(DeviceBuffer<morton_t>& morton_codes_in,
+void sort_morton_codes_cuda(size_t num_particles,
+							DeviceBuffer<morton_t>& morton_codes_in,
 							DeviceBuffer<uint32_t>& indices_in,
 							DeviceBuffer<morton_t>& morton_codes_out,
 							DeviceBuffer<uint32_t>& indices_out,
 							DeviceBuffer<uint8_t>& temp_storage,
-							size_t num_particles);
+							const Resource& resource);
 }
 #elif defined(USE_SYCL)
 #include "System/ZOrderKernels/SYCLSort.h"
@@ -63,7 +64,7 @@ class ZOrderSort {
 	 */
 	ZOrderSort(const Resource& resource,
 			   size_t max_particles,
-			   ZOrderOptimizationMode mode = ZOrderOptimizationMode::System);
+			   ZOrderOptimizationMode mode = ZOrderOptimizationMode::Pairlist);
 
 	/**
 	 * @brief Destructor

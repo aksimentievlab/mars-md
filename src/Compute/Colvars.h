@@ -76,7 +76,7 @@ struct BiasDefinition {
 
 /**
  * @brief Grid data for PMF/histograms
- * Uses your existing BaseGrid
+ * Uses BaseGrid
  */
 struct ColvarGrid {
 	std::unique_ptr<BaseGrid<float>> grid;
