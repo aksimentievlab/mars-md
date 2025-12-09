@@ -5,7 +5,7 @@ find_package(Python 3.10 COMPONENTS Interpreter Development REQUIRED)
 pybind11_add_module("py${PROJECT_NAME}" MODULE
     pyarbd.cpp
     pytypes.cpp
-    pyconfig.cpp
+    pysystem.cpp
     pyobjects.cpp
     pybonded.cpp
 )

@@ -22,7 +22,8 @@
 #include "IO/DcdWriter.h"
 #include "IO/TrajectoryWriter.h"
 #include "IO/WKFUtils.h"
-#include "SimSystem.h"
+#include "System/SimSystem.h"
+#include "System/SystemState.h"
 
 // Q: what is our parallel heirarchy?
 // A: depends!
@@ -148,6 +149,13 @@ class SimManager {
 	//================================================================================
 	// Output Methods
 	//================================================================================
+
+	/**
+	 * @brief Gather particle data from all patches into SystemState
+	 * Collects positions, momenta, and IDs from all patches and assembles
+	 * them into global arrays in SystemState for output.
+	 */
+	void gather_particle_data_from_patches();
 
 	/**
 	 * @brief Write a single DCD trajectory frame

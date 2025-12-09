@@ -16,7 +16,7 @@
 #include <memory>
 
 namespace ARBD {
-
+typedef float Length;
 /**
  * @brief Temperature configuration - supports both constant values and spatial grids
  */
@@ -25,53 +25,60 @@ struct Temperature {
 	Format format;
 	float value; // Kelvin
 	float kT;
-	std::shared_ptr<BaseGrid<float>> grid = nullptr;
+	BaseGrid<float> temperature_grid;
 
 	Temperature(float value = 298.15f) : value(value) {
 		format = Format::Value;
 		kT = value * constants::BOLTZMANN;
 	}
-	Temperature(BaseGrid<float>* grid) : grid(grid) {
+	Temperature(BaseGrid<float> grid) : temperature_grid(grid) {
 		format = Format::Grid;
 		value = 0.0f; // No scalar value defined for grid.
 		kT = 0.0f;	  // No global kT, but for compatibility we set it to zero.
-		if (grid) {
-			std::shared_ptr<BaseGrid<float>> kT_grid = std::make_shared<BaseGrid<float>>(*grid);
-#ifdef HOST_GUARD
-			kT_grid->scale(constants::BOLTZMANN);
-#endif
-			this->grid = kT_grid;
-		} else {
-			this->grid = nullptr;
+		if (temperature_grid.config().is_valid()) {
+			temperature_grid.scale(constants::BOLTZMANN);
 		}
 	}
+
 	float get_kT(Vector3 position) {
 		if (format == Format::Grid) {
-			return grid->get_value(position);
+			return temperature_grid.get_value(position);
 		}
 		return value;
+	}
+
+	/**
+	 * @brief Transfer temperature data to device for GPU access
+	 * @param resource Target computational resource
+	 */
+	void sync_to_device(const Resource& resource) {
+		if (format == Format::Grid) {
+			temperature_grid.sync_to_device(resource);
+		}
+	}
+
+	/**
+	 * @brief Get device pointer for temperature data
+	 * @param resource Target computational resource
+	 * @return Device pointer (null for constant temperature)
+	 */
+	float* get_device_pointer(const Resource& resource) {
+		if (format == Format::Grid) {
+			return temperature_grid.get_device_pointer(resource);
+		}
+		return nullptr; // Constant temperature doesn't need device pointer
+	}
+
+	/**
+	 * @brief Check if temperature uses grid format
+	 */
+	bool is_grid() const {
+		return format == Format::Grid;
 	}
 };
 
 struct Pressure {
 	float value = 1.0f;
-};
-/**
- * @brief Length/distance configuration
- */
-struct Length {
-	/**
-	 * @brief Length in angstroms
-	 */
-	float value = 0.0f;
-
-	// Python-friendly constructor
-	explicit Length(float val = 0.0f) : value(val) {}
-
-	// Implicit conversion for ease of use
-	operator float() const {
-		return value;
-	}
 };
 
 /**
@@ -144,6 +151,5 @@ enum class OutputFormat { DCD, PDB, HDF5 };
 enum class ThermostatType { NVE, NoseHooverLangevin };
 enum class BarostatType { Isobaric, Isochoric };
 enum class InteractionForm { Grid, Tabulated, Analytical };
-enum class TabulatedType { NBPair, Bond, Angle, Dihedral, Custom };
 
 } // namespace ARBD

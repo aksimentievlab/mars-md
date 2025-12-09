@@ -15,6 +15,19 @@ namespace ARBD {
 enum class BondFlag { DEFAULT = 1, REPLACE = 1, ADD = 2 };
 enum BondedPotentialType { UNSET, BOND, ANGLE, DIHEDRAL, VECANGLE };
 constexpr auto BD_PI = constants::PI;
+namespace AnalyticalNameList {
+const std::vector<std::string> bond_types = {"Harmonic", "Morse", "FENE", "Half_Harmonic", "WLCSK"};
+const std::vector<std::string> angle_types = {"Harmonic",
+											  "Morse",
+											  "FENE",
+											  "Half_Harmonic",
+											  "WLCSK"};
+const std::vector<std::string> dihedral_types = {"Harmonic",
+												 "Morse",
+												 "FENE",
+												 "Half_Harmonic",
+												 "WLCSK"};
+} // namespace AnalyticalNameList
 enum class AnalyticalBondType {
 	Harmonic = 0,
 	Morse = 1,
@@ -225,24 +238,28 @@ class BondedInteractions {
   public:
 	BondedInteractions(std::vector<Bond> sys_bonds,
 					   std::vector<Angle> sys_angles,
-					   std::vector<Dihedral> sys_dihedrals)
-		: bonds_(sys_bonds), angles_(sys_angles), dihedrals_(sys_dihedrals) {}
+					   std::vector<Dihedral> sys_dihedrals,
+					   std::vector<Exclude> sys_excludes,
+					   std::vector<Restraint> sys_restraints)
+		: bonds_(sys_bonds), angles_(sys_angles), dihedrals_(sys_dihedrals),
+		  exclusions_(sys_excludes), restraints_(sys_restraints) {}
+	BondedInteractions() = default;
 	~BondedInteractions() = default;
 
 	// Host-side data management
-	void addBond(const Bond& bond) {
+	void add_bond(const Bond& bond) {
 		bonds_.push_back(bond);
 	}
-	void addAngle(const Angle& angle) {
+	void add_angle(const Angle& angle) {
 		angles_.push_back(angle);
 	}
-	void addDihedral(const Dihedral& dihedral) {
+	void add_dihedral(const Dihedral& dihedral) {
 		dihedrals_.push_back(dihedral);
 	}
-	void addExclude(const Exclude& exclude) {
+	void add_exclude(const Exclude& exclude) {
 		exclusions_.push_back(exclude);
 	}
-	void addRestraint(const Restraint& restraint) {
+	void add_restraint(const Restraint& restraint) {
 		restraints_.push_back(restraint);
 	}
 
@@ -263,11 +280,11 @@ class BondedInteractions {
 	void make_exclusions(int num_particles, int exclusion_depth);
 
   private:
-	std::vector<Bond> bonds_;
-	std::vector<Angle> angles_;
-	std::vector<Dihedral> dihedrals_;
-	std::vector<Exclude> exclusions_;
-	std::vector<Restraint> restraints_;
+	std::vector<Bond> bonds_{};
+	std::vector<Angle> angles_{};
+	std::vector<Dihedral> dihedrals_{};
+	std::vector<Exclude> exclusions_{};
+	std::vector<Restraint> restraints_{};
 };
 
 } // namespace ARBD

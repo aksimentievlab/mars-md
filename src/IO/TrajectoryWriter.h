@@ -524,9 +524,3 @@ class TrajectoryWriter {
 	}
 };
 } // namespace ARBD
-// #else
-// Forward declaration for non-host compilation
-// namespace ARBD {
-// class TrajectoryWriter;
-//} // namespace ARBD
-// #endif

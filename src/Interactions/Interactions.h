@@ -15,10 +15,6 @@ struct ScalarForceEnergy {
 	};
 };
 
-struct ScalarForceEnergy2 {
-	float2 n;
-};
-
 struct CalcDistance {
 	Vector3 r_ij;		 // vector between two particles
 	float distance;		 // distance between two particles

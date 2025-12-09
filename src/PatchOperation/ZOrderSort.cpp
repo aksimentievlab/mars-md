@@ -1,10 +1,10 @@
-#include "System/ZOrderSort.h"
+#include "ZOrderSort.h"
 #include "ARBDException.h"
 #include "ARBDLogger.h"
 #ifdef USE_CUDA
-#include "System/ZOrderKernels/CUDASort.h"
+#include "ZOrderKernels/CUDASort.h"
 #elif defined(USE_SYCL)
-#include "System/ZOrderKernels/SYCLSort.h"
+#include "ZOrderKernels/SYCLSort.h"
 #endif
 
 namespace ARBD {

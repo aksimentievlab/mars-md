@@ -36,7 +36,7 @@
 namespace ARBD {
 
 // Forward declarations
-class SimSystem;
+
 class Patch;
 class Decomposer;
 

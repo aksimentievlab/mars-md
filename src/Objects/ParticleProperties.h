@@ -1,5 +1,6 @@
 #pragma once
 // #include "Types/BaseGrid.h"
+#include "Objects/Grid.h"
 #include "System/Reservoir.h"
 #include "Types/BaseGrid.h"
 #include "Types/Types.h"
@@ -26,7 +27,7 @@ struct ColvarsGroup {
 
 struct ParticleRead {
 	int id;
-	int type_id;
+	std::string type_name;
 	Vector3 position;
 	Vector3 momentum;
 	Vector3 orientation;
@@ -37,7 +38,7 @@ struct ParticleRead {
 	// colvars groups this particle belongs to. One particle can belong to multiple groups.
 	ParticleRead& operator=(const ParticleRead& src) {
 		id = src.id;
-		type_id = src.type_id;
+		type_name = src.type_name;
 		position = src.position;
 		momentum = src.momentum;
 		force = src.force;
@@ -63,29 +64,29 @@ class ParticleType {
 	float diffusion = 0.0f;
 	Vector3 transDamping = {0.0f, 0.0f, 0.0f};
 	float mu = 0.0f;
-	float meanPmf = 0.0f;
+
 	// --- PMF / SMD Control ---
+	float meanPmf = 0.0f;
 	float pmf_scale = 1.0f;
 	float pmf_scale_slope = 0.0f;
-	float pmf_smd_freq = 0.0f;
+	uint32_t pmf_smd_freq = 0;
 
-	std::shared_ptr<BaseGrid<float>> pmfGrid = nullptr;
-	std::shared_ptr<BaseGrid<float>> diffusionGrid = nullptr;
-	std::shared_ptr<BaseGrid<Vector3>> forceGrid = nullptr;
+	// --- Grid IDs ---
+	int pmf_grid_id = -1;
+	int diffusion_grid_id = -1;
+	int3 force_grid_id = {-1, -1, -1}; // 3d grid
 
 	std::unique_ptr<Reservoir> reservoir = nullptr;
 
-	ParticleType(const std::string& name)
-		: name(name), num(0), diffusion(0.0f), radius(1.0f), charge(0.0f), eps(0.0f), meanPmf(0),
-		  reservoir(nullptr), pmf_scale(1.0f), pmf_scale_slope(0.0f), pmf_smd_freq(0.0f),
-		  pmfGrid(nullptr), diffusionGrid(nullptr), forceGrid(nullptr) {}
+	ParticleType(const std::string& name) : name(name) {}
 	ParticleType(const ParticleType& src)
 		: name(src.name), id(src.id), num(src.num), mass(src.mass), charge(src.charge),
 		  radius(src.radius), eps(src.eps), diffusion(src.diffusion),
 		  transDamping(src.transDamping), mu(src.mu), pmf_scale(src.pmf_scale),
 		  pmf_scale_slope(src.pmf_scale_slope), pmf_smd_freq(src.pmf_smd_freq),
-		  pmfGrid(src.pmfGrid), diffusionGrid(src.diffusionGrid), forceGrid(src.forceGrid),
-		  reservoir(std::make_unique<Reservoir>(*src.reservoir)) {}
+		  pmf_grid_id(src.pmf_grid_id), diffusion_grid_id(src.diffusion_grid_id),
+		  force_grid_id(src.force_grid_id), reservoir(std::make_unique<Reservoir>(*src.reservoir)) {
+	}
 	ParticleType(const std::string& name,
 				 float mass,
 				 float charge,
@@ -97,14 +98,14 @@ class ParticleType {
 				 float pmf_scale,
 				 float pmf_scale_slope,
 				 float pmf_smd_freq,
-				 std::shared_ptr<BaseGrid<float>> pmfGrid,
-				 std::shared_ptr<BaseGrid<float>> diffusionGrid,
-				 std::shared_ptr<BaseGrid<Vector3>> forceGrid,
+				 int pmf_grid_id,
+				 int diffusion_grid_id,
+				 int3 force_grid_ids,
 				 std::unique_ptr<Reservoir> reservoir)
 		: name(name), mass(mass), charge(charge), radius(radius), eps(eps), diffusion(diffusion),
 		  transDamping(transDamping), mu(mu), pmf_scale(pmf_scale),
-		  pmf_scale_slope(pmf_scale_slope), pmf_smd_freq(pmf_smd_freq), pmfGrid(pmfGrid),
-		  diffusionGrid(diffusionGrid), forceGrid(forceGrid),
+		  pmf_scale_slope(pmf_scale_slope), pmf_smd_freq(pmf_smd_freq), pmf_grid_id(pmf_grid_id),
+		  diffusion_grid_id(diffusion_grid_id), force_grid_id(force_grid_ids),
 		  reservoir(std::make_unique<Reservoir>(*reservoir)) {}
 };
 // ============================================================================

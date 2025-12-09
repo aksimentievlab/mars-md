@@ -7,8 +7,6 @@
   >>> loadfile("tabulated.txt")
   ```
 */
-#include "IO/ConfigParser.h"
-#include "IO/Configuration.h"
 #include "SimParam.h"
 #include "Types/Grid.h"
 

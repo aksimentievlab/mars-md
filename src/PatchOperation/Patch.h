@@ -21,7 +21,7 @@ class Patch {
 	 * @param capacity Initial capacity for particle storage
 	 */
 	Patch(patch_t patch_idx = 0, idx_t capacity = 1024)
-		: patch_idx_(patch_idx), capacity_(capacity), num_(0){};
+		: patch_idx_(patch_idx), capacity_(capacity), num_(0), particle_data_(capacity){};
 
 	/**
 	 * @brief Move constructor
@@ -30,7 +30,7 @@ class Patch {
 		: patch_idx_(other.patch_idx_), capacity_(other.capacity_), num_(other.num_),
 		  num_replicas_(other.num_replicas_), gpu_id_(other.gpu_id_),
 		  num_group_sites_(other.num_group_sites_), bounds_min_(other.bounds_min_),
-		  bounds_max_(other.bounds_max_), particle_data_(std::move(other.particle_data_)),
+		  bounds_max_(other.bounds_max_), particle_data_(other.particle_data_),
 		  d_cell_starts(std::move(other.d_cell_starts)), d_cell_ends(std::move(other.d_cell_ends)),
 		  d_cell_neighbors(std::move(other.d_cell_neighbors)),
 		  system_sim_box_(other.system_sim_box_) {
@@ -147,10 +147,10 @@ class Patch {
 		return num_ < capacity_;
 	}
 
-	DEVICE void push_particle(const ParticleRead& particle) {
+	void push_particle(const ParticleRead& particle) {
 		if (has_space()) {
 			particle_data_.id.push_back(particle.id);
-			particle_data_.type_id.push_back(particle.type_id);
+			particle_data_.type_name.push_back(particle.type_name);
 			particle_data_.pos.push_back(particle.position);
 			particle_data_.mom.push_back(particle.momentum);
 			particle_data_.force.push_back(particle.force);
@@ -370,7 +370,7 @@ class Patch {
 	Vector3 bounds_min_{0.0f, 0.0f, 0.0f}; ///< Minimum corner of patch
 	Vector3 bounds_max_{0.0f, 0.0f, 0.0f}; ///< Maximum corner of patch
 	// Particle data
-	HostParticleData particle_data_;
+	HostParticleData& particle_data_; // Reference to particle data
 	DeviceBuffer<int> d_cell_starts;
 	DeviceBuffer<int> d_cell_ends;
 	DeviceBuffer<int> d_cell_neighbors;

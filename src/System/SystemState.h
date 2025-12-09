@@ -22,7 +22,7 @@
 namespace ARBD {
 
 /**
- * @brief Manages runtime system state during simulation
+ * @brief Manages runtime, mutable system state during simulation
  *
  * SystemState handles ONLY changing runtime state:
  * - Particle positions, velocities, and types (change every timestep)
@@ -36,14 +36,20 @@ class SystemState {
   public:
 	/**
 	 * @brief Construct system state (no configuration needed)
+	 * @param sim_system Simulation system
 	 */
-	SystemState();
+	SystemState(SimSystem& sim_system) : sim_system_(sim_system) {
+		initialize_system_objects();
+		LOGINFO("SystemState: System state initialized");
+	}
 
 	/**
 	 * @brief Destructor - cleans up GPU resources
 	 */
-	~SystemState();
 
+	~SystemState() {
+		cleanup_gpu_resources();
+	}
 	/**
 	 * @brief Set particle positions (GPU-compatible)
 	 * @param positions New particle positions
@@ -51,51 +57,69 @@ class SystemState {
 	void set_particle_positions(const std::vector<Vector3>& positions);
 
 	/**
-	 * @brief Get particle positions (GPU-compatible)
-	 * @return Current particle positions
-	 */
-	std::vector<Vector3> get_particle_positions() const;
-
-	/**
 	 * @brief Get number of particles in the system
 	 */
 	size_t get_num_particles() const {
-		return num_particles_;
-	}
-
-	//================================================================================
-	// System Object Management
-	//================================================================================
-
-	/**
-	 * @brief Check if system has bonded interactions
-	 */
-	bool has_bonds() const {
-		return has_bonds_;
+		return global_num_particles_;
 	}
 
 	/**
-	 * @brief Check if system has external forces
+	 * @brief Set particle data
+	 * @param positions Particle positions
+	 * @param momenta Particle momenta
+	 * @param ids Particle IDs
 	 */
-	bool has_external_forces() const {
-		return has_external_forces_;
+	void set_init_particle_data(const std::vector<ParticleRead>& particles) {
+		global_positions_.resize(particles.size());
+		global_momentum_.resize(particles.size());
+		global_particle_ids_.resize(particles.size());
+		for (const auto& particle : particles) {
+			global_positions_[particle.id] = particle.position;
+			global_momentum_[particle.id] = particle.momentum;
+			global_particle_ids_[particle.id] = particle.id;
+		}
+		global_num_particles_ = global_positions_.size();
 	}
 
 	/**
-	 * @brief Check if system has reactions
+	 * @brief Clear global particle arrays (called before gathering new data)
 	 */
-	bool has_reactions() const {
-		return has_reactions_;
+	void clear_global_arrays() {
+		global_positions_.clear();
+		global_momentum_.clear();
+		global_particle_ids_.clear();
+		global_num_particles_ = 0;
+		state_synced_ = false;
 	}
 
 	/**
-	 * @brief Gather particle data from all patches into global arrays
-	 * @param patch_manager PatchManager containing all patches
-	 *
-	 * This collects data from local patches (and via MPI if needed)
-	 * and assembles into global ordered arrays ready for output.
+	 * @brief Add particle data to global arrays (called by SimManager during gathering)
+	 * @param positions Particle positions
+	 * @param momenta Particle momenta
+	 * @param ids Particle IDs
 	 */
-	void gather_from_patches(PatchManager& patch_manager);
+	void add_particle_data(const std::vector<Vector3>& positions,
+						   const std::vector<Vector3>& momenta,
+						   const std::vector<int>& ids) {
+		global_positions_.insert(global_positions_.end(), positions.begin(), positions.end());
+		global_momentum_.insert(global_momentum_.end(), momenta.begin(), momenta.end());
+		global_particle_ids_.insert(global_particle_ids_.end(), ids.begin(), ids.end());
+		global_num_particles_ = global_positions_.size();
+	}
+
+	/**
+	 * @brief Mark global state as synchronized (called after gathering is complete)
+	 */
+	void mark_synced() {
+		state_synced_ = true;
+	}
+
+	/**
+	 * @brief Get global particle IDs
+	 */
+	const std::vector<int>& get_global_particle_ids() const {
+		return global_particle_ids_;
+	}
 
 	/**
 	 * @brief Get global particle positions (ready for DCD writing)
@@ -129,32 +153,21 @@ class SystemState {
 	//================================================================================
 	// Member Variables - ONLY Runtime State
 	//================================================================================
+	SimSystem& sim_system_;
 	void initialize_system_objects();
-	// Particle data (changes every timestep)
-	size_t num_particles_{0};
-	// Function index mapping
-	std::unordered_map<int, int> angle_function_to_potential_;
-	std::unordered_map<int, int> dihedral_function_to_potential_;
-	std::unordered_map<int, int> bond_function_to_potential_;
 
-	// System objects that can change during simulation
-	bool has_bonds_{false};
-	bool has_external_forces_{false};
-	bool has_reactions_{false};
+	// Particle data (changes every timestep)
+	size_t global_num_particles_{0};
+	// Function index mapping
 
 	// Global particle state (host-side, ready for I/O)
-	std::vector<Vector3> global_positions_;	 // For DCD writing
-	std::vector<Vector3> global_momentum_;	 // Optional, for momentum output
-	std::vector<int> global_particle_ids_;	 // Particle IDs in global order
-	std::vector<int> global_particle_types_; // Particle types in global order
+	std::vector<Vector3> global_positions_; // For DCD writing
+	std::vector<Vector3> global_momentum_;	// Optional, for momentum output
+	std::vector<int> global_particle_ids_;	// Particle IDs in global order
 
-	std::vector<int2> global_bonds_;	   // Bond list in global order
-	std::vector<int3> global_angles_;	   // Angle list in global order
-	std::vector<int4> global_dihedrals_;   // Dihedral list in global order
-	std::vector<int2> global_exclusitons_; // Exclusion list in global order
+	BondedInteractions bonded_interactions_;
 
 	// Metadata
-	size_t global_num_particles_{0};
 	bool state_synced_{false}; // Flag indicating if state is up-to-date
 
 	//================================================================================

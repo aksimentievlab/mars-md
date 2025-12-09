@@ -1,55 +1,55 @@
-#include "Configuration.h"
+#include "SimSystem.h"
 
 namespace ARBD {
 
-void Configuration::validate_physical_parameters() const {
+void SimSystem::validate_physical_parameters() const {
 
-	if (temperature.value <= 0.0f) {
+	if (temperature_.value <= arbd_real(0.0)) {
 		throw Exception(ExceptionType::ValueError,
 						SourceLocation(),
 						"Temperature must be greater than 0");
 	}
 
-	if (cutoff.value <= 0.0f) {
+	if (cutoff_ <= Length(0.0)) {
 		throw Exception(ExceptionType::ValueError,
 						SourceLocation(),
 						"Cutoff must be greater than 0");
 	}
-	if (sim_box.get_box_size().x <= 0.0f) {
+	if (sim_box_.get_box_size().x <= Length(0.0)) {
 		throw Exception(ExceptionType::ValueError,
 						SourceLocation(),
 						"Box length x must be positive (got {})",
-						sim_box.get_box_size().x);
+						sim_box_.get_box_size().x);
 	}
-	if (sim_box.get_box_size().y <= 0.0f) {
+	if (sim_box_.get_box_size().y <= Length(0.0)) {
 		throw Exception(ExceptionType::ValueError,
 						SourceLocation(),
 						"Box length y must be positive (got {})",
-						sim_box.get_box_size().y);
+						sim_box_.get_box_size().y);
 	}
-	if (sim_box.get_box_size().z <= 0.0f) {
+	if (sim_box_.get_box_size().z <= Length(0.0)) {
 		throw Exception(ExceptionType::ValueError,
 						SourceLocation(),
 						"Box length z must be positive (got {})",
-						sim_box.get_box_size().z);
+						sim_box_.get_box_size().z);
 	}
 };
 
-void Configuration::validate_method_parameters() const {
+void SimSystem::validate_method_parameters() const {
 
-	if (steps.timestep <= 0.0f) {
+	if (steps_.timestep <= arbd_real(0.0)) {
 		throw Exception(ExceptionType::ValueError,
 						SourceLocation(),
 						"Timestep must be positive (got {})",
-						steps.timestep);
+						steps_.timestep);
 	}
-	if (steps.steps <= 0) {
+	if (steps_.steps <= 0) {
 		throw Exception(ExceptionType::ValueError,
 						SourceLocation(),
 						"Number of steps must be positive (got {})",
-						steps.steps);
+						steps_.steps);
 	}
-	if (neighbor_list_rebuild_period <= 0) {
+	if (neighbor_list_rebuild_period <= arbd_real(0.0)) {
 		throw Exception(ExceptionType::ValueError,
 						SourceLocation(),
 						"Neighbor list rebuild period must be positive (got {})",
@@ -57,19 +57,19 @@ void Configuration::validate_method_parameters() const {
 	}
 };
 
-void Configuration::validate_output_parameters() const {
+void SimSystem::validate_output_parameters() const {
 
-	if (output_period <= 0.0f) {
+	if (output_period_ <= arbd_real(0.0)) {
 		throw Exception(ExceptionType::ValueError,
 						SourceLocation(),
 						"Output period must be positive (got {})",
-						output_period);
+						output_period_);
 	}
-	if (energy_output_period <= 0.0f) {
+	if (energy_output_period_ <= arbd_real(0.0)) {
 		throw Exception(ExceptionType::ValueError,
 						SourceLocation(),
 						"Energy output period must be positive (got {})",
-						energy_output_period);
+						energy_output_period_);
 	}
 	if (output_name.empty()) {
 		throw Exception(ExceptionType::ValueError, SourceLocation(), "Output name cannot be empty");

@@ -1,5 +1,5 @@
+#include "../MortonCode.h"
 #include "Header.h"
-#include "System/MortonCode.h"
 #include "Types/Types.h"
 #include "Types/Vector3.h"
 namespace ARBD {

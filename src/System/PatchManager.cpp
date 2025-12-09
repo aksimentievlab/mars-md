@@ -147,7 +147,7 @@ void PatchManager::initialize_local_patch(idx_t estimated_particles, const Lengt
 
 	// Estimate max ghost particles (worst case: all particles in boundary region)
 	// Assuming cutoff-based halo
-	float cutoff_val = cutoff.value;
+	float cutoff_val = cutoff;
 	float patch_volume = (local_metadata_.max.x - local_metadata_.min.x) *
 						 (local_metadata_.max.y - local_metadata_.min.y) *
 						 (local_metadata_.max.z - local_metadata_.min.z);
@@ -290,7 +290,6 @@ void PatchManager::update_local_bounds(const Vector3& new_min, const Vector3& ne
 	}
 }
 
-
 // Exchange halo particles with all neighbors
 std::vector<Event> PatchManager::exchange_halo_particles(DeviceBuffer<float>& positions,
 														 DeviceBuffer<float>& velocities,
@@ -315,9 +314,8 @@ std::vector<Event> PatchManager::exchange_halo_particles(DeviceBuffer<float>& po
 
 		// Pack boundary particles for this direction from local patch
 		Patch& local_patch = get_local_patch();
-		idx_t packed_count = local_patch.pack_boundary_particles(neighbors_[dir].send_buffer,
-																 dir,
-																 cutoff);
+		idx_t packed_count =
+			local_patch.pack_boundary_particles(neighbors_[dir].send_buffer, dir, cutoff);
 		send_counts[dir] = packed_count;
 
 		if (packed_count > 0) {

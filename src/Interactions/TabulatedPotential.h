@@ -2,10 +2,10 @@
 #include "Backend/Resource.h"
 #include "Constants.h"
 #include "Header.h"
-#include "IO/TabulatedReader.h"
 #include "Interactions.h"
 #include "Objects/ParticleProperties.h"
 #include "Types/Types.h"
+
 namespace ARBD {
 
 struct TabulatedPotential {
@@ -19,24 +19,35 @@ struct TabulatedPotential {
 	 * @usage:
 	 * const ScalarForceEnergy fe = TabulatedPotential::compute(geom.distance, &tables[i]);
 	 */
-	DEVICE static inline ScalarForceEnergy compute(float distance,
-												   const TabulatedPotential* table) {
+	KERNEL_FUNC static inline ScalarForceEnergy compute(float dx, const TabulatedPotential* table) {
 		// Table lookup with linear interpolation
-		float t = distance * table->step_inv;
-		int home = int(floorf(t));
-		t = t - home;
+		float w = (dx - table->start) * table->step_inv;
+		int home = static_cast<int>(floorf(w));
+		w = w - home;
 
-		if (home < 0)
-			home = 0;
-		if (home >= table->size)
-			home = table->size - 1;
+		// Handle periodic and non-periodic boundaries
+		if (table->is_periodic) {
+			home %= static_cast<int>(table->size);
+			if (home < 0) {
+				home += static_cast<int>(table->size);
+			}
+		} else {
+			if (home < 0)
+				home = 0;
+			if (home >= static_cast<int>(table->size) - 1)
+				home = static_cast<int>(table->size) - 2;
+		}
 
-		int home1 = (home + 1 >= table->size) ? table->size - 1 : home + 1;
+		int home1 = table->is_periodic ? (home + 1) % static_cast<int>(table->size) : home + 1;
+		if (!table->is_periodic && home1 >= static_cast<int>(table->size)) {
+			home1 = table->size - 1;
+		}
 
 		float U0 = table->pot[home];
 		float dU = table->pot[home1] - U0;
 
-		return ScalarForceEnergy{float2{dU * table->step_inv, dU * t + U0}}; // Force magnitude
+		return ScalarForceEnergy{
+			float2{dU * table->step_inv, dU * w + U0}}; // Force magnitude, energy
 	}
 };
 } // namespace ARBD

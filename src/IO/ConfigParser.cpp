@@ -1,7 +1,9 @@
 #include "ConfigParser.h"
 #include "ARBDException.h"
 #include "ARBDLogger.h"
+#include "IO/BondConfigReader.h"
 #include "IO/Reader.h"
+#include "Objects/Grid.h"
 #include "SimParam.h"
 #include "Types/Types.h"
 
@@ -21,16 +23,17 @@
 #endif
 namespace ARBD {
 
-ConfigParser::ConfigParser(std::string_view file_name) : file_name_(file_name) {
+ConfigParser::ConfigParser(SimSystem& sim_system, std::string_view file_name)
+	: sim_system_ref_(&sim_system), file_name_(file_name),
+	  bond_config_reader_(init_bonded_interactions_, sim_system_ref_->get_tables_registry()) {
 	parse_file(file_name);
 }
 
-ConfigParser::ConfigParser(Configuration config) : config_(std::move(config)) {
-	validate();
-}
-
 #ifdef USE_PYTHON
-ConfigParser::ConfigParser(const std::map<std::string, pybind11::object>& config_dict) {
+ConfigParser::ConfigParser(SimSystem& sim_system,
+						   const std::map<std::string, pybind11::object>& config_dict)
+	: sim_system_ref_(&sim_system),
+	  bond_config_reader_(init_bonded_interactions_, sim_system_ref_->get_tables_registry()) {
 	apply_defaults();
 	parse_dictionary(config_dict);
 	validate();
@@ -58,7 +61,14 @@ void ConfigParser::parse_file(std::string_view file_name) {
 
 void ConfigParser::apply_defaults() {
 	// Configuration struct already has sensible defaults
-	config_ = Configuration{};
+	sim_system_ref_->set_temperature(298.15f);
+	sim_system_ref_->set_cutoff(10.0f);
+	sim_system_ref_->set_timestep(1e-5f);
+	sim_system_ref_->set_num_steps(1000);
+	sim_system_ref_->set_neighbor_list_rebuild_period(100.0f);
+	sim_system_ref_->set_output_period(10.0f);
+	sim_system_ref_->set_energy_output_period(100.0f);
+	sim_system_ref_->set_output_name("out");
 }
 
 void ConfigParser::parse_parameters(const Reader& reader) {
@@ -100,49 +110,54 @@ void ConfigParser::parse_parameters(const Reader& reader) {
 	};
 
 	// Parse basic parameters
-	if (reader.hasParameter("temperature")) {
-		config_.set_temperature(reader.parseValue<float>("temperature"));
+	if (reader.hasParameter("temperature_grid")) {
+		std::string grid_file = reader.findValue("temperature_grid");
+		BaseGrid<float> grid = DXReader::read_from_file<float>(grid_file);
+		sim_system_ref_->set_temperature(grid);
+	} else if (reader.hasParameter("temperature")) {
+		sim_system_ref_->set_temperature(reader.parseValue<float>("temperature"));
 	}
 
 	if (reader.hasParameter("cutoff")) {
-		config_.cutoff = Length(reader.parseValue<float>("cutoff"));
+		sim_system_ref_->set_cutoff(Length(reader.parseValue<float>("cutoff")));
 	}
 
 	if (reader.hasParameter("timestep")) {
-		config_.steps.timestep = reader.parseValue<float>("timestep");
+		sim_system_ref_->set_timestep(reader.parseValue<float>("timestep"));
 	}
 
 	if (reader.hasParameter("steps")) {
-		config_.steps.steps = reader.parseValue<int>("steps");
+		sim_system_ref_->set_num_steps(reader.parseValue<int>("steps"));
 	}
 
 	if (reader.hasParameter("neighborListRebuildPeriod")) {
-		config_.neighbor_list_rebuild_period = reader.parseValue<int>("neighborListRebuildPeriod");
+		sim_system_ref_->set_neighbor_list_rebuild_period(
+			reader.parseValue<float>("neighborListRebuildPeriod"));
 	}
 
 	if (reader.hasParameter("outputPeriod")) {
-		config_.output_period = reader.parseValue<float>("outputPeriod");
+		sim_system_ref_->set_output_period(reader.parseValue<float>("outputPeriod"));
 	}
 
 	if (reader.hasParameter("outputEnergyPeriod")) {
-		config_.energy_output_period = reader.parseValue<float>("outputEnergyPeriod");
+		sim_system_ref_->set_energy_output_period(reader.parseValue<float>("outputEnergyPeriod"));
 	}
 
 	if (reader.hasParameter("outputName")) {
-		config_.output_name = reader.findValue("outputName");
+		sim_system_ref_->set_output_name(reader.findValue("outputName"));
 	}
 
 	// Parse box dimensions
 	if (reader.hasParameter("systemSize")) {
 		Vector3 size = reader.parseVector3("systemSize");
-		config_.set_box_size(size.x, size.y, size.z);
+		sim_system_ref_->set_box_size(size.x, size.y, size.z);
 	}
 
 	if (reader.hasParameter("decomposer")) {
 		std::string val = to_lower(reader.findValue("decomposer"));
 		auto it = decomposer_map.find(val);
 		if (it != decomposer_map.end()) {
-			config_.decomposer = it->second;
+			sim_system_ref_->set_decomposer_type(it->second);
 		} else {
 			LOGWARN("Unknown decomposer '{}', using default", val);
 		}
@@ -152,7 +167,7 @@ void ConfigParser::parse_parameters(const Reader& reader) {
 		std::string val = to_lower(reader.findValue("longRangeMethod"));
 		auto it = longrange_map.find(val);
 		if (it != longrange_map.end()) {
-			config_.long_range_method = it->second;
+			sim_system_ref_->set_long_range_method(it->second);
 		} else {
 			LOGWARN("Unknown long range method '{}', using default", val);
 		}
@@ -162,7 +177,7 @@ void ConfigParser::parse_parameters(const Reader& reader) {
 		std::string val = to_lower(reader.findValue("algorithm"));
 		auto it = dynamic_type_map.find(val);
 		if (it != dynamic_type_map.end()) {
-			config_.ParticleDynamicType = it->second;
+			sim_system_ref_->set_particle_dynamic_type(it->second);
 		} else {
 			LOGWARN("Unknown algorithm '{}', using default", val);
 		}
@@ -172,14 +187,10 @@ void ConfigParser::parse_parameters(const Reader& reader) {
 		std::string val = to_lower(reader.findValue("outputFormat"));
 		auto it = output_format_map.find(val);
 		if (it != output_format_map.end()) {
-			config_.output_format = it->second;
+			sim_system_ref_->set_output_format(it->second);
 		} else {
 			LOGWARN("Unknown output format '{}', using default", val);
 		}
-	}
-
-	if (reader.hasParameter("hasReaction")) {
-		config_.has_reaction = reader.parseValue<bool>("hasReaction");
 	}
 }
 
@@ -236,168 +247,6 @@ static std::vector<std::string> tokenize(const std::string& s) {
 	return out;
 }
 
-static void load_bonds_file(const std::string& path,
-							std::vector<Bond>& out,
-							const std::string& config_file_path) {
-	std::string resolved_path = resolve_file_path(path, config_file_path);
-	try {
-		ARBD::FileHandle fh(resolved_path.c_str(), "r");
-		FILE* fp = fh.get();
-		char* line = nullptr;
-		size_t len = 0;
-		ssize_t rd;
-		while ((rd = getline(&line, &len, fp)) != -1) {
-			std::string s(line, static_cast<size_t>(rd));
-			if (is_comment_or_blank(s))
-				continue;
-			auto toks = tokenize(s);
-			if (toks.size() < 5)
-				continue;
-			Bond b{};
-			b.flag = static_cast<BondFlag>(std::stoi(toks[1]));
-			b.ind1 = std::stoi(toks[2]);
-			b.ind2 = std::stoi(toks[3]);
-			b.function_name = toks[4];
-			if (b.function_name.find(".dat") != std::string::npos) {
-				b.form = InteractionForm::Tabulated;
-			} else {
-				b.form = InteractionForm::Analytical;
-			}
-			out.push_back(b);
-		}
-		if (line)
-			free(line);
-	} catch (const std::exception& e) {
-		LOGWARN("get_elements: Failed to read bonds from '{}': {}", path, e.what());
-	}
-}
-
-static void load_angles_file(const std::string& path,
-							 std::vector<Angle>& out,
-							 const std::string& config_file_path) {
-	std::string resolved_path = resolve_file_path(path, config_file_path);
-	try {
-		ARBD::FileHandle fh(resolved_path.c_str(), "r");
-		FILE* fp = fh.get();
-		char* line = nullptr;
-		size_t len = 0;
-		ssize_t rd;
-		while ((rd = getline(&line, &len, fp)) != -1) {
-			std::string s(line, static_cast<size_t>(rd));
-			if (is_comment_or_blank(s))
-				continue;
-			auto toks = tokenize(s);
-			if (toks.size() < 3)
-				continue;
-			Angle a{};
-			a.ind1 = std::stoi(toks[0]);
-			a.ind2 = std::stoi(toks[1]);
-			a.ind3 = std::stoi(toks[2]);
-			a.function_name = toks[3];
-			a.form = InteractionForm::Tabulated;
-			a.function_index = 0;
-			out.push_back(a);
-		}
-		if (line)
-			free(line);
-	} catch (const std::exception& e) {
-		LOGWARN("get_elements: Failed to read angles from '{}': {}", path, e.what());
-	}
-}
-
-static void load_dihedrals_file(const std::string& path,
-								std::vector<Dihedral>& out,
-								const std::string& config_file_path) {
-	std::string resolved_path = resolve_file_path(path, config_file_path);
-	try {
-		ARBD::FileHandle fh(resolved_path.c_str(), "r");
-		FILE* fp = fh.get();
-		char* line = nullptr;
-		size_t len = 0;
-		ssize_t rd;
-		while ((rd = getline(&line, &len, fp)) != -1) {
-			std::string s(line, static_cast<size_t>(rd));
-			if (is_comment_or_blank(s))
-				continue;
-			auto toks = tokenize(s);
-			if (toks.size() < 4)
-				continue;
-			Dihedral d{};
-			d.ind1 = std::stoi(toks[0]);
-			d.ind2 = std::stoi(toks[1]);
-			d.ind3 = std::stoi(toks[2]);
-			d.ind4 = std::stoi(toks[3]);
-			d.function_name = toks[4];
-			d.form = InteractionForm::Tabulated;
-			out.push_back(d);
-		}
-		if (line)
-			free(line);
-	} catch (const std::exception& e) {
-		LOGWARN("get_elements: Failed to read dihedrals from '{}': {}", path, e.what());
-	}
-}
-
-static void load_excludes_file(const std::string& path,
-							   std::vector<Exclude>& out,
-							   const std::string& config_file_path) {
-	std::string resolved_path = resolve_file_path(path, config_file_path);
-	try {
-		ARBD::FileHandle fh(resolved_path.c_str(), "r");
-		FILE* fp = fh.get();
-		char* line = nullptr;
-		size_t len = 0;
-		ssize_t rd;
-		while ((rd = getline(&line, &len, fp)) != -1) {
-			std::string s(line, static_cast<size_t>(rd));
-			if (is_comment_or_blank(s))
-				continue;
-			auto toks = tokenize(s);
-			if (toks.size() < 2)
-				continue;
-			int i1 = std::stoi(toks[0]);
-			int i2 = std::stoi(toks[1]);
-			out.emplace_back(i1, i2);
-		}
-		if (line)
-			free(line);
-	} catch (const std::exception& e) {
-		LOGWARN("get_elements: Failed to read excludes from '{}': {}", path, e.what());
-	}
-}
-
-static void load_restraints_file(const std::string& path,
-								 std::vector<Restraint>& out,
-								 const std::string& config_file_path) {
-	std::string resolved_path = resolve_file_path(path, config_file_path);
-	try {
-		ARBD::FileHandle fh(resolved_path.c_str(), "r");
-		FILE* fp = fh.get();
-		char* line = nullptr;
-		size_t len = 0;
-		ssize_t rd;
-		while ((rd = getline(&line, &len, fp)) != -1) {
-			std::string s(line, static_cast<size_t>(rd));
-			if (is_comment_or_blank(s))
-				continue;
-			auto toks = tokenize(s);
-			// Accept: id k x0 y0 z0
-			if (toks.size() != 5)
-				continue;
-			int id = std::stoi(toks[0]);
-			float k1 = std::stof(toks[1]);
-
-			float x0 = std::stof(toks[2]);
-			float y0 = std::stof(toks[3]);
-			float z0 = std::stof(toks[4]);
-			out.emplace_back(id, Vector3{x0, y0, z0}, k1);
-		}
-		if (line)
-			free(line);
-	} catch (const std::exception& e) {
-		LOGWARN("get_elements: Failed to read restraints from '{}': {}", path, e.what());
-	}
-}
 static void load_particles_file(const std::string& path,
 								std::vector<ParticleRead>& out,
 								const std::string& config_file_path) {
@@ -417,7 +266,7 @@ static void load_particles_file(const std::string& path,
 				continue;
 			ParticleRead p{};
 			p.id = std::stoi(toks[1]);
-			p.type_id = std::stoi(toks[2]);
+			p.type_name = toks[2];
 			p.position.x = std::stof(toks[3]);
 			p.position.y = std::stof(toks[4]);
 			p.position.z = std::stof(toks[5]);
@@ -444,7 +293,7 @@ void ConfigParser::get_elements(const Reader& reader) {
 		if (key == "particle") {
 			std::string name = value;
 			int num = 0;
-			int type_index = static_cast<int>(config_.particle_types.size());
+			int type_index = static_cast<int>(sim_system_ref_->get_particle_types().size());
 			ParticleType ptype(name);
 
 			// Consume following field lines until next header
@@ -454,156 +303,111 @@ void ConfigParser::get_elements(const Reader& reader) {
 				if (is_block_header(k))
 					break;
 				if (k == "num") {
-					std::cout << "num: " << v << std::endl;
+					LOGDEBUG("num: {}", v);
 					ptype.num = std::stoi(v);
 				} else if (k == "diffusion") {
 					ptype.diffusion = std::stof(v);
-					std::cout << "diffusion: " << v << std::endl;
+					LOGDEBUG("diffusion: {}", v);
 				} else if (k == "transDamping") {
-					std::cout << "transDamping: " << v << std::endl;
-					ptype.transDamping = Vector3(std::stof(v));
+					LOGDEBUG("transDamping: {}", v);
+					auto toks = tokenize(v);
+					if (toks.size() == 3) {
+						ptype.transDamping.x = std::stof(toks[0]);
+						ptype.transDamping.y = std::stof(toks[1]);
+						ptype.transDamping.z = std::stof(toks[2]);
+					} else if (toks.size() == 1) {
+						ptype.transDamping.x = std::stof(toks[0]);
+						ptype.transDamping.y = std::stof(toks[0]);
+						ptype.transDamping.z = std::stof(toks[0]);
+					} else {
+						LOGWARN("Invalid transDamping format: {}", v);
+						ptype.transDamping.x = 0.0f;
+						ptype.transDamping.y = 0.0f;
+						ptype.transDamping.z = 0.0f;
+					}
 				} else if (k == "mass") {
-					std::cout << "mass: " << v << std::endl;
+					LOGDEBUG("mass: {}", v);
 					ptype.mass = std::stof(v);
-				} else if (k == "gridFile" || k == "charge" || k == "radius" || k == "eps" ||
-						   k == "mu") {
+				} else if (k == "gridFile") {
+					LOGDEBUG("gridFile: {}", v);
+					// Load grid using GridManager and store grid_id in ParticleType
+					GridKey grid_key = sim_system_ref_->get_grid_manager().add_dense_grid(v);
+					if (grid_key.is_valid()) {
+						ptype.pmf_grid_id = grid_key.grid_id;
+						LOGDEBUG("Assigned PMF grid '{}' with grid_id={}", v, grid_key.grid_id);
+					} else {
+						LOGWARN("Failed to load grid file '{}'", v);
+					}
+				} else if (k == "gridFileScale") {
+					LOGDEBUG("gridFileScale: {}", v);
+					ptype.pmf_scale = std::stof(v);
+				} else if (k == "gridFileScaleSlope") {
+					LOGDEBUG("gridFileScaleSlope: {}", v);
+					ptype.pmf_scale_slope = std::stof(v);
+				} else if (k == "gridFileSMD") {
+					LOGDEBUG("gridFileSMD: {}", v);
+					ptype.pmf_smd_freq = std::stoi(v);
+				} else {
 					// Recognized but not yet wired into ParticleType storage in this branch
 					(void)0;
-				} else {
-					// Non-field, ignore here
 				}
 			}
 
-			config_.particle_types.push_back(std::move(ptype));
+			sim_system_ref_->get_particle_types().push_back(std::move(ptype));
 			// Create particles for this type
 			for (int n = 0; n < num; ++n) {
 				ParticleRead p{};
-				p.id = static_cast<int>(config_.init_particles.size());
-				p.type_id = type_index;
-				config_.init_particles.push_back(p);
+				p.id = static_cast<int>(init_particles_.size());
+				p.type_name = name;
+				init_particles_.push_back(p);
 			}
 			continue; // i already at next header or end
 		}
 
-		// External lists
-		if (key == "inputBonds") {
-			load_bonds_file(value, config_.init_bonds, file_name_);
-		} else if (key == "inputAngles") {
-			load_angles_file(value, config_.init_angles, file_name_);
-		} else if (key == "inputDihedrals") {
-			load_dihedrals_file(value, config_.init_dihedrals, file_name_);
-		} else if (key == "inputExcludes") {
-			load_excludes_file(value, config_.init_exclusions, file_name_);
-		} else if (key == "inputRestraints") {
-			load_restraints_file(value, config_.restraints, file_name_);
+		// External lists - load into temporary storage
+		if (key == "inputBonds" || key == "inputAngles" || key == "inputDihedrals" ||
+			key == "inputExcludes" || key == "inputRestraints" || key == "inputProductPotentials") {
+			bond_config_reader_.read_file(value);
 		} else if (key == "inputParticles") {
-			load_particles_file(value, config_.init_particles, file_name_);
+			load_particles_file(value, init_particles_, file_name_);
 		}
 
 		++i;
 	}
 }
 
-void ConfigParser::validate() const {
-	validate_physical_parameters();
-	validate_method_parameters();
-	validate_output_parameters();
-
-	if (!config_.is_valid()) {
-		throw Exception(ExceptionType::ValueError,
-						SourceLocation(),
-						"Configuration failed basic validation checks");
-	}
-}
-
-void ConfigParser::validate_physical_parameters() const {
-	if (config_.temperature.value <= 0.0f) {
-		throw Exception(ExceptionType::ValueError,
-						SourceLocation(),
-						"Temperature must be positive (got {})",
-						config_.temperature.value);
-	}
-
-	if (config_.cutoff.value <= 0.0f) {
-		throw Exception(ExceptionType::ValueError,
-						SourceLocation(),
-						"Cutoff distance must be positive (got {})",
-						config_.cutoff.value);
-	}
-}
-
-void ConfigParser::validate_method_parameters() const {
-	if (config_.steps.timestep <= 0.0f) {
-		throw Exception(ExceptionType::ValueError,
-						SourceLocation(),
-						"Timestep must be positive (got {})",
-						config_.steps.timestep);
-	}
-
-	if (config_.steps.steps <= 0) {
-		throw Exception(ExceptionType::ValueError,
-						SourceLocation(),
-						"Number of steps must be positive (got {})",
-						config_.steps.steps);
-	}
-
-	if (config_.neighbor_list_rebuild_period <= 0) {
-		throw Exception(ExceptionType::ValueError,
-						SourceLocation(),
-						"Neighbor list rebuild period must be positive (got {})",
-						config_.neighbor_list_rebuild_period);
-	}
-}
-
-void ConfigParser::validate_output_parameters() const {
-	if (config_.output_period <= 0.0f) {
-		throw Exception(ExceptionType::ValueError,
-						SourceLocation(),
-						"Output period must be positive (got {})",
-						config_.output_period);
-	}
-
-	if (config_.energy_output_period <= 0.0f) {
-		throw Exception(ExceptionType::ValueError,
-						SourceLocation(),
-						"Energy output period must be positive (got {})",
-						config_.energy_output_period);
-	}
-
-	if (config_.output_name.empty()) {
-		throw Exception(ExceptionType::ValueError, SourceLocation(), "Output name cannot be empty");
-	}
-}
 #ifdef USE_PYTHON
 void ConfigParser::parse_dictionary(const std::map<std::string, pybind11::object>& config_dict) {
 
 	for (const auto& [key, value] : config_dict) {
 		try {
 			if (key == "temperature") {
-				config_.set_temperature(pybind11::cast<float>(value));
+				sim_system_ref_->set_temperature(pybind11::cast<float>(value));
 			} else if (key == "cutoff") {
-				config_.cutoff.value = pybind11::cast<float>(value);
+				sim_system_ref_->set_cutoff(Length(pybind11::cast<float>(value)));
 			} else if (key == "timestep") {
-				config_.set_timestep(pybind11::cast<float>(value));
+				sim_system_ref_->set_timestep(pybind11::cast<float>(value));
 			} else if (key == "num_steps" || key == "steps") {
-				config_.set_num_steps(pybind11::cast<int>(value));
+				sim_system_ref_->set_num_steps(pybind11::cast<int>(value));
 			} else if (key == "output_period") {
-				config_.output_period = pybind11::cast<float>(value);
+				sim_system_ref_->set_output_period(pybind11::cast<float>(value));
 			} else if (key == "energy_output_period") {
-				config_.energy_output_period = pybind11::cast<float>(value);
+				sim_system_ref_->set_energy_output_period(pybind11::cast<float>(value));
 			} else if (key == "neighbor_list_rebuild_period") {
-				config_.neighbor_list_rebuild_period = pybind11::cast<float>(value);
+				sim_system_ref_->set_neighbor_list_rebuild_period(pybind11::cast<float>(value));
 			} else if (key == "output_name") {
-				config_.output_name = pybind11::cast<std::string>(value);
+				sim_system_ref_->set_output_name(pybind11::cast<std::string>(value));
 			} else if (key == "pressure") {
-				config_.pressure.value = pybind11::cast<float>(value);
+				// TODO: Add setter for pressure
+				// sim_system_ref_->set_pressure(pybind11::cast<float>(value));
 			} else if (key == "replicas") {
-				config_.replicas = pybind11::cast<int>(value);
+				// TODO: Add setter for replicas
+				// sim_system_ref_->set_replicas(pybind11::cast<int>(value));
 			} else if (key == "box_size") {
 				// Handle box size as tuple/list of 3 floats
 				auto box_list = pybind11::cast<std::vector<float>>(value);
 				if (box_list.size() == 3) {
-					config_.set_box_size(box_list[0], box_list[1], box_list[2]);
+					sim_system_ref_->set_box_size(box_list[0], box_list[1], box_list[2]);
 				} else {
 					throw Exception(ExceptionType::ValueError,
 									SourceLocation(),
@@ -612,11 +416,11 @@ void ConfigParser::parse_dictionary(const std::map<std::string, pybind11::object
 			} else if (key == "decomposer") {
 				std::string decomposer_str = pybind11::cast<std::string>(value);
 				if (decomposer_str == "Spatial") {
-					config_.decomposer = DecomposerType::Spatial;
+					sim_system_ref_->set_decomposer_type(DecomposerType::Spatial);
 				} else if (decomposer_str == "RecursiveBisection") {
-					config_.decomposer = DecomposerType::RecursiveBisection;
+					sim_system_ref_->set_decomposer_type(DecomposerType::RecursiveBisection);
 				} else if (decomposer_str == "Geometric") {
-					config_.decomposer = DecomposerType::Geometric;
+					sim_system_ref_->set_decomposer_type(DecomposerType::Geometric);
 				} else {
 					throw Exception(ExceptionType::ValueError,
 									SourceLocation(),
@@ -626,17 +430,17 @@ void ConfigParser::parse_dictionary(const std::map<std::string, pybind11::object
 			} else if (key == "long_range_method") {
 				std::string method_str = pybind11::cast<std::string>(value);
 				if (method_str == "CutoffAMR") {
-					config_.long_range_method = LongRangeMethod::CutoffAMR;
+					sim_system_ref_->set_long_range_method(LongRangeMethod::CutoffAMR);
 				} else if (method_str == "PPPM") {
-					config_.long_range_method = LongRangeMethod::PPPM;
+					sim_system_ref_->set_long_range_method(LongRangeMethod::PPPM);
 				} else if (method_str == "PME") {
-					config_.long_range_method = LongRangeMethod::PME;
+					sim_system_ref_->set_long_range_method(LongRangeMethod::PME);
 				} else if (method_str == "FMM") {
-					config_.long_range_method = LongRangeMethod::FMM;
+					sim_system_ref_->set_long_range_method(LongRangeMethod::FMM);
 				} else if (method_str == "Direct") {
-					config_.long_range_method = LongRangeMethod::Direct;
+					sim_system_ref_->set_long_range_method(LongRangeMethod::Direct);
 				} else if (method_str == "None") {
-					config_.long_range_method = LongRangeMethod::None;
+					sim_system_ref_->set_long_range_method(LongRangeMethod::None);
 				} else {
 					throw Exception(ExceptionType::ValueError,
 									SourceLocation(),
@@ -646,11 +450,11 @@ void ConfigParser::parse_dictionary(const std::map<std::string, pybind11::object
 			} else if (key == "particle_dynamic_type") {
 				std::string dynamic_str = pybind11::cast<std::string>(value);
 				if (dynamic_str == "Brownian") {
-					config_.ParticleDynamicType = DynamicType::Brownian;
+					sim_system_ref_->set_particle_dynamic_type(DynamicType::Brownian);
 				} else if (dynamic_str == "Langevin") {
-					config_.ParticleDynamicType = DynamicType::Langevin;
+					sim_system_ref_->set_particle_dynamic_type(DynamicType::Langevin);
 				} else if (dynamic_str == "DPD") {
-					config_.ParticleDynamicType = DynamicType::DPD;
+					sim_system_ref_->set_particle_dynamic_type(DynamicType::DPD);
 				} else {
 					throw Exception(ExceptionType::ValueError,
 									SourceLocation(),
@@ -660,11 +464,11 @@ void ConfigParser::parse_dictionary(const std::map<std::string, pybind11::object
 			} else if (key == "rigid_body_dynamic_type") {
 				std::string dynamic_str = pybind11::cast<std::string>(value);
 				if (dynamic_str == "Brownian") {
-					config_.RigidBodyDynamicType = DynamicType::Brownian;
+					sim_system_ref_->set_rigid_body_dynamic_type(DynamicType::Brownian);
 				} else if (dynamic_str == "Langevin") {
-					config_.RigidBodyDynamicType = DynamicType::Langevin;
+					sim_system_ref_->set_rigid_body_dynamic_type(DynamicType::Langevin);
 				} else if (dynamic_str == "DPD") {
-					config_.RigidBodyDynamicType = DynamicType::DPD;
+					sim_system_ref_->set_rigid_body_dynamic_type(DynamicType::DPD);
 				} else {
 					throw Exception(ExceptionType::ValueError,
 									SourceLocation(),
@@ -674,11 +478,11 @@ void ConfigParser::parse_dictionary(const std::map<std::string, pybind11::object
 			} else if (key == "output_format") {
 				std::string format_str = pybind11::cast<std::string>(value);
 				if (format_str == "DCD") {
-					config_.output_format = OutputFormat::DCD;
+					sim_system_ref_->set_output_format(OutputFormat::DCD);
 				} else if (format_str == "PDB") {
-					config_.output_format = OutputFormat::PDB;
+					sim_system_ref_->set_output_format(OutputFormat::PDB);
 				} else if (format_str == "HDF5") {
-					config_.output_format = OutputFormat::HDF5;
+					sim_system_ref_->set_output_format(OutputFormat::HDF5);
 				} else {
 					throw Exception(ExceptionType::ValueError,
 									SourceLocation(),

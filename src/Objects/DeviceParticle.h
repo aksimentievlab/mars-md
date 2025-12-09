@@ -147,8 +147,8 @@ struct ParticleTypeView {
 	float* pmf_scale_slope;
 	float* pmf_smd_freq;
 	int* pmf_grid_id;
-	int* density_grid_id;
-	int* force_grid_id;
+	int* diffusion_grid_id;
+	int3* force_grid_id;
 };
 
 class DeviceParticleTypes {
@@ -165,8 +165,8 @@ class DeviceParticleTypes {
 		pmf_scale_slope_ = DeviceBuffer<float>(types.size(), res);
 		pmf_smd_freq_ = DeviceBuffer<float>(types.size(), res);
 		pmf_grid_id_ = DeviceBuffer<int>(types.size(), res);
-		density_grid_id_ = DeviceBuffer<int>(types.size(), res);
-		force_grid_id_ = DeviceBuffer<int>(types.size(), res);
+		diffusion_grid_id_ = DeviceBuffer<int>(types.size(), res);
+		force_grid_id_ = DeviceBuffer<int3>(types.size(), res);
 	};
 
   private:
@@ -181,8 +181,8 @@ class DeviceParticleTypes {
 	DeviceBuffer<float> pmf_scale_slope_;
 	DeviceBuffer<float> pmf_smd_freq_;
 	DeviceBuffer<int> pmf_grid_id_;
-	DeviceBuffer<int> density_grid_id_;
-	DeviceBuffer<int> force_grid_id_;
+	DeviceBuffer<int> diffusion_grid_id_;
+	DeviceBuffer<int3> force_grid_id_;
 };
 
 } // namespace ARBD

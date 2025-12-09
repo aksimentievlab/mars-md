@@ -79,7 +79,7 @@ class Reader {
 		} catch (const std::exception& e) {
 			throw Exception(ExceptionType::FileIoError,
 							SourceLocation(),
-							"Failed to read configuration file '%s': %s",
+							"Failed to read  file '%s': %s",
 							fileName_.c_str(),
 							e.what());
 		}

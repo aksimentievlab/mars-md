@@ -1,6 +1,5 @@
 #include "PatchOperation/Pairlist.h"
 #include "ARBDException.h"
-#include "PatchOperation/CellListPairlist.h"
 #include "PatchOperation/ZOrderPairlist.h"
 
 namespace ARBD {
@@ -12,9 +11,11 @@ std::unique_ptr<Pairlist> create_pairlist(PairlistBuilderType type,
 	switch (type) {
 	case PairlistBuilderType::ZOrder:
 		return std::make_unique<ZOrderPairlist>(resource, max_particles, max_pairs);
+		break;
 
 	case PairlistBuilderType::CellList:
-		return std::make_unique<CellListPairlist>(resource, max_particles, max_pairs);
+		ARBD_Exception(ExceptionType::NotImplementedError, "CellList pairlist not yet implemented");
+		break;
 
 	case PairlistBuilderType::VerletList:
 		// TODO: Implement VerletListPairlist

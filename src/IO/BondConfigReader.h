@@ -1,7 +1,9 @@
 #pragma once
 #include "Header.h"
 #include "IO/Reader.h"
+#include "Interactions/Bonded/Analytical.h"
 #include "Interactions/BondedInteraction.h"
+#include "Objects/Tables.h"
 #include <string>
 #include <string_view>
 #include <vector>
@@ -12,110 +14,120 @@ namespace ARBD {
  * @param fileName Name of the configuration file to read.
  * @return Returns angles, dihedrals, and bonds from the configuration file.
  */
-// Registry to load and cache tabulated potentials by name
-class TablesRegistry {
-  public:
-	static TablesRegistry& instance();
-
-	int getOrLoadAngle(const std::string& name, const std::string& path);
-	int getOrLoadDihedral(const std::string& name, const std::string& path);
-	int getOrLoadBond(const std::string& name, const std::string& path);
-
-  private:
-	TablesRegistry() = default;
-
-	std::unordered_map<std::string, int> angleNameToIdx_;
-	std::unordered_map<std::string, int> dihedralNameToIdx_;
-	std::unordered_map<std::string, int> bondNameToIdx_;
-};
-
 class BondConfigReader {
   public:
-	explicit BondConfigReader(std::string_view fileName) {
-		readFile(fileName);
-	}
+	explicit BondConfigReader(BondedInteractions& bonded_interactions,
+							  TablesRegistry& tables_registry)
+		: bonded_interactions_(bonded_interactions), tables_registry_(tables_registry) {}
 
-	const std::vector<Angle>& getAngles() const {
-		return angles_;
-	}
-	const std::vector<Dihedral>& getDihedrals() const {
-		return dihedrals_;
-	}
-	const std::vector<Bond>& getBonds() const {
-		return bonds_;
+	void read_file(std::string_view fileName) {
+		Reader reader(fileName);
+		for (auto [key, value] : reader) {
+			std::string line = value;
+			if (key == "ANGLE") {
+				parse_angle_line(value);
+			} else if (key == "DIHEDRAL") {
+				parse_dihedral_line(value);
+			} else if (key == "BOND") {
+				parse_bond_line(value);
+			} else if (key == "EXCLUDE") {
+				parse_exclude_line(value);
+			}
+		}
 	}
 
   private:
-	std::vector<Angle> angles_;
-	std::vector<Dihedral> dihedrals_;
-	std::vector<Bond> bonds_;
+	BondedInteractions& bonded_interactions_;
+	TablesRegistry& tables_registry_;
 
-	void readFile(std::string_view fileName) {
-		Reader reader(fileName);
-
-		for (size_t i = 0; i < reader.length(); ++i) {
-			std::string param = reader.getParameter(i); // ANGLE/DIHEDRAL/BOND
-			std::string value = reader.getValue(i);		// Rest of the line
-
-			if (param == "ANGLE") {
-				parseAngleLine(value);
-			} else if (param == "DIHEDRAL") {
-				parseDihedralLine(value);
-			} else if (param == "BOND") {
-				parseBondLine(value);
-			}
-		}
-
-		LOGINFO("BondConfigReader.h: Loaded {} angles, {} dihedrals, {} bonds from '{}'",
-				angles_.size(),
-				dihedrals_.size(),
-				bonds_.size(),
-				fileName);
-	}
-
-	void parseAngleLine(const std::string& line) {
+	void parse_angle_line(const std::string& line) {
 		std::istringstream iss(line);
 		Angle angle;
 
 		if (iss >> angle.ind1 >> angle.ind2 >> angle.ind3 >> angle.function_name) {
-			angle.form = InteractionForm::Tabulated;
-			// Resolve via registry: assumes name is a filename or key and path == name
-			angle.function_index =
-				TablesRegistry::instance().getOrLoadAngle(angle.function_name, angle.function_name);
-			angles_.push_back(angle);
+			auto it = std::find(AnalyticalNameList::angle_types.begin(),
+								AnalyticalNameList::angle_types.end(),
+								angle.function_name);
+			if (it != AnalyticalNameList::angle_types.end()) {
+				angle.form = InteractionForm::Analytical;
+				angle.function_index = std::distance(AnalyticalNameList::angle_types.begin(), it);
+			} else {
+				angle.form = InteractionForm::Tabulated;
+				angle.function_index = tables_registry_.get_or_load_angle(angle.function_name);
+			}
+			bonded_interactions_.add_angle(angle);
 		} else {
 			LOGWARN("BondConfigReader.h: Failed to parse ANGLE line: {}", line);
 		}
 	}
 
-	void parseDihedralLine(const std::string& line) {
+	void parse_dihedral_line(const std::string& line) {
 		std::istringstream iss(line);
 		Dihedral dihedral;
 
 		if (iss >> dihedral.ind1 >> dihedral.ind2 >> dihedral.ind3 >> dihedral.ind4 >>
 			dihedral.function_name) {
-			dihedral.form = InteractionForm::Tabulated;
-			dihedral.function_index =
-				TablesRegistry::instance().getOrLoadDihedral(dihedral.function_name,
-															 dihedral.function_name);
-			dihedrals_.push_back(dihedral);
+			auto it = std::find(AnalyticalNameList::dihedral_types.begin(),
+								AnalyticalNameList::dihedral_types.end(),
+								dihedral.function_name);
+			if (it != AnalyticalNameList::angle_types.end()) {
+				dihedral.form = InteractionForm::Analytical;
+				dihedral.function_index =
+					std::distance(AnalyticalNameList::angle_types.begin(), it);
+			} else {
+				dihedral.form = InteractionForm::Tabulated;
+				dihedral.function_index =
+					tables_registry_.get_or_load_angle(dihedral.function_name);
+			}
+			bonded_interactions_.add_dihedral(dihedral);
 		} else {
 			LOGWARN("BondConfigReader.h: Failed to parse DIHEDRAL line: {}", line);
 		}
 	}
 
-	void parseBondLine(const std::string& line) {
+	void parse_bond_line(const std::string& line, bool add_exclusions = false) {
 		std::istringstream iss(line);
 		Bond bond;
 
 		if (iss >> bond.ind1 >> bond.ind2 >> bond.function_name) {
-			bond.form = InteractionForm::Tabulated;
-			bond.function_index =
-				TablesRegistry::instance().getOrLoadBond(bond.function_name, bond.function_name);
+			auto it = std::find(AnalyticalNameList::bond_types.begin(),
+								AnalyticalNameList::bond_types.end(),
+								bond.function_name);
+			if (it != AnalyticalNameList::bond_types.end()) {
+				bond.form = InteractionForm::Analytical;
+				bond.function_index = std::distance(AnalyticalNameList::bond_types.begin(), it);
+			} else {
+				bond.form = InteractionForm::Tabulated;
+				bond.function_index = tables_registry_.get_or_load_bond(bond.function_name);
+			}
 			bond.flag = BondFlag::DEFAULT;
-			bonds_.push_back(bond);
+			bonded_interactions_.add_bond(bond);
 		} else {
 			LOGWARN("BondConfigReader.h: Failed to parse BOND line: {}", line);
+		}
+	}
+
+	void parse_exclude_line(const std::string& line) {
+		std::istringstream iss(line);
+		Exclude exclude;
+
+		if (iss >> exclude.ind1 >> exclude.ind2) {
+			bonded_interactions_.add_exclude(exclude);
+		} else {
+			LOGWARN("BondConfigReader.h: Failed to parse EXCLUDE line: {}", line);
+		}
+	}
+
+	void parse_restraint_line(const std::string& line) {
+		std::istringstream iss(line);
+		Restraint restraint;
+		float x0, y0, z0;
+
+		if (iss >> restraint.ind >> restraint.k >> x0 >> y0 >> z0) {
+			restraint.r0 = Vector3{x0, y0, z0};
+			bonded_interactions_.add_restraint(restraint);
+		} else {
+			LOGWARN("BondConfigReader.h: Failed to parse RESTRAINT line: {}", line);
 		}
 	}
 };

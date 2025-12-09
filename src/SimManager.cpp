@@ -7,7 +7,7 @@ namespace ARBD {
 // Constructor
 //================================================================================
 
-SimManager::SimManager(SimSystem& sys) : sys_(sys) {
+SimManager::SimManager(SimSystem& sys) : sys_(sys), sys_state_(sys) {
 	timer0_.timer = wkf_timer_create();
 	timerS_.timer = wkf_timer_create();
 	timerE_.timer = wkf_timer_create();
@@ -24,6 +24,16 @@ void SimManager::init() {
 	// Initialize output writers based on configuration
 	initialize_output_writers();
 
+	// Initialize decomposer if not already set
+	if (!sys_.get_decomposer()) {
+		LOGINFO("SimManager: Setting up default spatial decomposer");
+		sys_.set_decomposer_type(sys_.get_decomposer_type());
+	}
+
+	// Perform domain decomposition (creates PatchManager in SimSystem)
+	LOGINFO("SimManager: Performing domain decomposition");
+	sys_.decompose_system();
+
 	// Verify PatchManager was created
 	if (!sys_.has_patch_manager()) {
 		throw Exception(ExceptionType::RuntimeError,
@@ -32,9 +42,12 @@ void SimManager::init() {
 	}
 	LOGINFO("SimManager: Domain decomposition complete");
 
-	// Perform domain decomposition (creates PatchManager in SimSystem)
-	LOGINFO("SimManager: Performing domain decomposition");
-	sys_.decompose_system();
+	// Transfer grids to all GPU resources
+	sys_.get_grid_manager().build_device_arrays();
+	LOGINFO("SimManager: Grids transferred to all resources");
+	sys_.get_tables_registry().build_device_arrays();
+	LOGINFO("SimManager: Tables transferred to all resources");
+
 	// Load initial conditions (particles, bonds, etc.)
 	load_initial_conditions();
 
@@ -108,28 +121,14 @@ void SimManager::run() {
 //================================================================================
 
 void SimManager::initialize_output_writers() {
-	const auto& config = sys_.get_config();
+	// TODO: Get output format and name from SimSystem when accessors are added
+	// For now, default to DCD format
+	const std::string output_name = "out"; // TODO: Get from SimSystem
 
-	switch (config.output_format) {
-	case OutputFormat::DCD:
-		dcd_writer_ = std::make_unique<DcdWriter>(config.output_name + ".dcd");
-		LOGINFO("SimManager: Initialized DCD writer for '{}.dcd'", config.output_name);
-		break;
+	dcd_writer_ = std::make_unique<DcdWriter>(output_name + ".dcd");
+	LOGINFO("SimManager: Initialized DCD writer for '{}.dcd'", output_name);
 
-	case OutputFormat::PDB:
-		LOGINFO("SimManager: PDB writer not yet implemented");
-		// traj_writer_ = std::make_unique<PdbWriter>(config.output_name + ".pdb");
-		break;
-
-	case OutputFormat::HDF5:
-		LOGINFO("SimManager: HDF5 writer not yet implemented");
-		// traj_writer_ = std::make_unique<Hdf5Writer>(config.output_name + ".h5");
-		break;
-
-	default:
-		LOGWARN("SimManager: Unknown output format, output may not work");
-		break;
-	}
+	// TODO: Add support for other output formats (PDB, HDF5) when needed
 }
 
 void SimManager::initialize_imd(int port) {
@@ -255,21 +254,75 @@ void SimManager::handle_output(size_t step) {
 	}
 }
 
-void SimManager::write_dcd_frame(size_t step) {
-	// Gather global state from patches
-	SystemState& state = sys_.get_current_system_state();
+void SimManager::gather_particle_data_from_patches() {
 	PatchManager* patch_mgr = sys_.get_patch_manager();
-
 	if (!patch_mgr) {
-		LOGWARN("SimManager: No PatchManager available for output");
-		return;
+		throw Exception(ExceptionType::RuntimeError,
+						SourceLocation(),
+						"PatchManager not available for gathering particle data");
 	}
 
-	// Collect data from all patches into SystemState
-	state.gather_from_patches(*patch_mgr);
+	SystemState& state = sys_state_;
+	state.clear_global_arrays();
+
+#ifdef USE_MPI
+	// In MPI mode: gather from local patch + exchange with other ranks
+	const Patch& local_patch = patch_mgr->get_local_patch();
+	const HostParticleData& particle_data = local_patch.get_particle_data();
+	idx_t local_num = local_patch.get_num();
+
+	// Collect from local patch
+	std::vector<Vector3> positions;
+	std::vector<Vector3> momenta;
+	std::vector<int> ids;
+	positions.reserve(local_num);
+	momenta.reserve(local_num);
+	ids.reserve(local_num);
+
+	for (idx_t i = 0; i < local_num; ++i) {
+		positions.push_back(particle_data.pos[i]);
+		momenta.push_back(particle_data.mom[i]);
+		ids.push_back(particle_data.id[i]);
+	}
+
+	state.add_particle_data(positions, momenta, ids);
+
+	// TODO: MPI_Gatherv to collect from all ranks and assemble in global order
+	// This requires coordination with PatchManager's MPI communication
+
+#else
+	// Non-MPI: collect from all local patches
+	const auto& patches = patch_mgr->get_all_patches();
+	for (const auto& patch : patches) {
+		const HostParticleData& particle_data = patch.get_particle_data();
+		idx_t num = patch.get_num();
+
+		std::vector<Vector3> positions;
+		std::vector<Vector3> momenta;
+		std::vector<int> ids;
+		positions.reserve(num);
+		momenta.reserve(num);
+		ids.reserve(num);
+
+		for (idx_t i = 0; i < num; ++i) {
+			positions.push_back(particle_data.pos[i]);
+			momenta.push_back(particle_data.mom[i]);
+			ids.push_back(particle_data.id[i]);
+		}
+
+		state.add_particle_data(positions, momenta, ids);
+	}
+#endif
+
+	state.mark_synced();
+}
+
+void SimManager::write_dcd_frame(size_t step) {
+	// Gather global state from patches
+	gather_particle_data_from_patches();
 
 	// Get global positions for DCD writing
-	const auto& positions = state.get_global_positions();
+	const auto& positions = sys_state_.get_global_positions();
 
 	if (positions.empty()) {
 		LOGWARN("SimManager: No particles to write at step {}", step);
@@ -338,23 +391,14 @@ void SimManager::handle_imd_commands() {
 //================================================================================
 
 void SimManager::load_initial_conditions() {
-	const auto& config = sys_.get_config();
-
-	std::vector<Vector3> positions;
-	std::vector<int> types;
-
-	// TODO: Add restart file support to Configuration
-	// For now, generate initial particles based on configuration
-	LOGINFO("SimManager: Generating initial particle configuration");
-	generate_initial_particles(positions, types);
-
-	LOGINFO("SimManager: Loaded {} particles", positions.size());
+	// SystemState is already initialized in constructor
+	// TODO: Load actual particle data from files or generate initial positions
+	LOGINFO("SimManager: Initial conditions loaded");
 }
 
 void SimManager::generate_initial_particles(std::vector<Vector3>& positions,
 											std::vector<int>& types) {
 	const Vector3 box_size = sys_.get_box_size();
-	const auto& config = sys_.get_config();
 
 	// TODO: Get number of particles from configuration
 	const size_t num_particles = 1000; // Placeholder
@@ -387,11 +431,13 @@ void SimManager::load_restart_data(const std::string& filename) {
 //================================================================================
 
 void SimManager::write_final_restart() {
-	const auto& config = sys_.get_config();
-	const std::string restart_filename = config.output_name + "_final.restart";
+	// Gather particle data before writing restart
+	gather_particle_data_from_patches();
+
+	const std::string restart_filename = "out_final.restart"; // TODO: Get from SimSystem
 
 	// Get current particle positions
-	const auto& positions = sys_.get_particle_positions();
+	const auto& positions = sys_state_.get_global_positions();
 
 	LOGINFO("SimManager: Writing final restart to '{}'", restart_filename);
 	LOGINFO("SimManager: {} particles at final state", positions.size());

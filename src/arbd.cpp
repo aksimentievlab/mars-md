@@ -1,6 +1,7 @@
 
 #ifndef HOST_GUARD
 #define HOST_GUARD
+#include "IO/ConfigParser.h"
 #endif
 
 #ifdef USE_MPI
@@ -15,8 +16,10 @@
 
 #include "ARBDException.h"
 #include "Backend/Resource.h"
+#include "IO/ConfigParser.h"
 #include "SignalManager.h"
-#include "SimSystem.h"
+#include "SimManager.h"
+#include "System/SimSystem.h"
 // Define this if not provided by CMake/build system for version info
 #ifndef VERSION
 #define VERSION "Development Build - Oct 2025"
@@ -244,11 +247,21 @@ int main(int argc, char* argv[]) {
 	}
 	std::cout << std::endl;
 
-	// Load and validate configuration → convert to runtime config
-	// Pseudocode: cfg = Configuration::Load(options.configFile)
-	//            conf = cfg.to_sim_conf()
-	// ARBD::Configuration cfg = ARBD::Configuration::Load(options.configFile);
-	// ARBD::SimSystem::Conf conf = cfg.to_sim_conf();
+	ARBD::SimSystem sys(resource_collection);
+	ARBD::ConfigParser parser(sys, options.configFile);
+	sys.validate_physical_parameters();
+	sys.validate_method_parameters();
+	sys.validate_output_parameters();
+	if (!sys.is_valid()) {
+		throw ARBD::Exception(ARBD::ExceptionType::ValueError,
+							  ARBD::SourceLocation(),
+							  "Invalid system configuration");
+	}
+	ARBD::SimManager manager(sys);
+	ARBD::SystemState init_state(sys);
+	init_state.set_init_particle_data(parser.get_init_particles());
+	manager.init();
+	manager.run();
 
 	// Build system and manager
 	// ARBD::SimSystem sys(conf, resource_collection);

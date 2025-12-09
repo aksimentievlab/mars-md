@@ -6,7 +6,6 @@
  * decomposition.
  * @note: SimManager handles simulation execution, Owns and manages time-invariant simulation data
  * and coordinates decomposition
- * @param const Configuration (or owned immutable copy after init)
  * @param BoundaryConditions (derived from config, immutable)
  * @param PatchDecomposer and PatchManager (structure can rebalance but concept is static)
  * @param ResourceCollection
@@ -25,11 +24,13 @@
 #include "ARBDLogger.h"
 #include "Backend/Buffer.h"
 #include "Backend/Resource.h"
-#include "IO/ConfigParser.h"
+#include "IO/DxIO.h"
+#include "Objects/Grid.h"
+#include "Objects/RigidBodyProperties.h"
+#include "Objects/Tables.h"
 #include "System/Decomposer.h"
 #include "System/PatchManager.h"
 #include "System/PeriodicBox.h"
-#include "System/SystemState.h"
 #include "Types/IndexList.h"
 #include "Types/Types.h"
 #include <memory>
@@ -45,20 +46,115 @@ class SimSystem {
 	 * @param conf Configuration manager with validated parameters
 	 * @param resources Available computational resources
 	 */
-	SimSystem(ConfigParser& conf) : config_(conf.get_config()) {
-		LOGINFO("SimSystem: Initializing from configuration");
+	SimSystem(const std::vector<Resource>& resources) : resources_(resources) {
+		grid_manager_.set_resources(&resources_);
+	}
 
-		// Move grids from configuration (configuration will be discarded after init)
-		grid_id_dictionary_ = std::move(conf.get_mutable_config().grid_id_dictionary);
-		fname_grid_dictionary_ = std::move(conf.get_mutable_config().fname_grid_dictionary);
-		fname_tab_dictionary_ = std::move(conf.get_mutable_config().fname_tab_dictionary);
+	void set_temperature(float temp) {
+		temperature_.format = Temperature::Format::Value;
+		temperature_.value = temp;
+	}
 
-		LOGINFO("SimSystem: Loaded {} grid sets from configuration", grid_id_dictionary_.size());
+	void set_temperature(const BaseGrid<float>& grid) {
+		temperature_ = Temperature(grid);
+	}
 
-		// Create the chosen decomposer instance (Factory Pattern)
-		decomposer_ = create_patch_decomposer(config_.decomposer);
+	void set_cutoff(Length cutoff) {
+		this->cutoff_ = cutoff;
+	}
 
-		LOGINFO("SimSystem: Using decomposer '{}'", decomposer_->get_name());
+	void set_pairlist_cutoff(Length pairlist_cutoff) {
+		this->pairlist_cutoff_ = pairlist_cutoff;
+	}
+
+	void set_timestep(float dt) {
+		steps_.timestep = dt;
+	}
+	void set_num_steps(int n) {
+		steps_.steps = n;
+	}
+
+	void set_salt_concentration(float salt_concentration) {
+		this->salt_concentration_ = salt_concentration;
+	}
+
+	void set_neighbor_list_rebuild_period(float period) {
+		neighbor_list_rebuild_period = period;
+	}
+
+	void set_output_period(float period) {
+		output_period_ = period;
+	}
+
+	void set_energy_output_period(float period) {
+		energy_output_period_ = period;
+	}
+
+	void set_output_name(const std::string& name) {
+		output_name = name;
+	}
+
+	void set_output_format(OutputFormat format) {
+		output_format_ = format;
+	}
+
+	void set_decomposer_type(DecomposerType type,
+							 DecomposeDirection direction = DecomposeDirection::Z) {
+		decomposer_type_ = type;
+		decompose_direction_ = direction;
+		decomposer_ = create_patch_decomposer(decomposer_type_);
+	}
+
+	void set_long_range_method(LongRangeMethod method) {
+		long_range_method_ = method;
+	}
+
+	void set_particle_dynamic_type(DynamicType type) {
+		ParticleDynamicType_ = type;
+	}
+
+	void set_rigid_body_dynamic_type(DynamicType type) {
+		RigidBodyDynamicType_ = type;
+	}
+	void add_particle_type(const ParticleType& type) {
+		particle_types_.push_back(type);
+	}
+	void add_rigid_body_type(const RigidBodyType& type) {
+		rigid_body_types_.push_back(type);
+	}
+	void add_reservoir(const Reservoir& reservoir) {
+		reservoirs_.push_back(reservoir);
+	}
+	void set_particle_types(const std::vector<ParticleType>& types) {
+		particle_types_.clear();
+		for (const auto& type : types) {
+			particle_types_.push_back(type);
+		}
+	}
+	void set_rigid_body_types(const std::vector<RigidBodyType>& types) {
+		rigid_body_types_.clear();
+		for (const auto& type : types) {
+			rigid_body_types_.push_back(type);
+		}
+	}
+	void set_reservoirs(const std::vector<Reservoir>& reservoirs) {
+		reservoirs_.clear();
+		for (const auto& reservoir : reservoirs) {
+			reservoirs_.push_back(reservoir);
+		}
+	}
+
+	/**
+	 * @note It's recommnded to set the box size so that z is the largest dimension.
+	 */
+	void set_box_size(float x, float y, float z) {
+		sim_box_.set_box_size(Vector3(x, y, z));
+	}
+	void set_periodicity(bool px, bool py, bool pz) {
+		sim_box_.set_periodicity(px, py, pz);
+	}
+	void set_estimated_particles(idx_t estimated_particles) {
+		estimated_particles_ = estimated_particles;
 	}
 
 	/**
@@ -92,11 +188,10 @@ class SimSystem {
 
 		// Get estimated particles per patch (could be refined based on actual particle
 		// distribution)
-		idx_t estimated_particles = 1024000; // Default estimate, could be computed from system
-		const Length cutoff = Length(get_cutoff());
+		const Length cutoff = get_cutoff();
 
 		// Initialize PatchManager with the decomposition plan
-		patch_manager->initialize_from_plan(plan, estimated_particles, cutoff);
+		patch_manager->initialize_from_plan(plan, estimated_particles_, cutoff);
 
 		// Step 3: Store PatchManager (SimSystem ownership)
 		patch_manager_ = std::move(patch_manager);
@@ -114,77 +209,54 @@ class SimSystem {
 	}
 
 	/**
-	 * @brief Build neighbor list for force calculations
-	 */
-	void build_neighbor_list();
-
-	/**
-	 * @brief Get particle positions (GPU-compatible)
-	 * @return Current particle positions
-	 */
-	std::vector<Vector3> get_particle_positions() const;
-
-	//================================================================================
-	// Configuration and State Accessors
-	//================================================================================
-
-	/**
-	 * @brief Get temperature at a specific position (GPU-compatible)
+	 * @brief Get temperature at a specific position.
 	 * @param position Optional position for grid-based temperature
 	 * @return Temperature value at the given position
 	 */
 	float get_temperature(Vector3 position = {0, 0, 0}) const {
-		Temperature temperature = config_.temperature;
-		if (temperature.format == Temperature::Format::Value) {
-			return temperature.value;
-		} else if (temperature.format == Temperature::Format::Grid) {
-			return temperature.grid->get_value(position);
+		if (temperature_.format == Temperature::Format::Value) {
+			return temperature_.value;
+		} else if (temperature_.format == Temperature::Format::Grid) {
+			return temperature_.temperature_grid.get_value(position);
 		}
-		return temperature.value;
+		return temperature_.value;
 	}
 
 	/**
 	 * @brief Get cutoff distance for interactions (GPU-compatible)
 	 */
-	float get_cutoff() const {
-		return config_.cutoff.value;
+	Length get_cutoff() const {
+		return cutoff_;
 	}
 
 	/**
 	 * @brief Get boundary conditions
 	 */
 	const PeriodicBox& get_boundary_conditions() const {
-		return config_.sim_box;
+		return sim_box_;
 	}
 
 	/**
 	 * @brief Get timestep (from configuration)
 	 */
 	float get_timestep() const {
-		return config_.steps.timestep;
+		return steps_.timestep;
 	}
 
 	/**
 	 * @brief Get number of simulation steps (from configuration)
 	 */
 	int get_num_steps() const {
-		return config_.steps.steps;
+		return steps_.steps;
 	}
 
 	/**
 	 * @brief Get box dimensions (from configuration)
 	 */
 	Vector3 get_box_size() const {
-		return Vector3(config_.sim_box.get_box_size().x,
-					   config_.sim_box.get_box_size().y,
-					   config_.sim_box.get_box_size().z);
-	}
-
-	/**
-	 * @brief Get complete configuration
-	 */
-	const Configuration& get_config() const {
-		return config_;
+		return Vector3(sim_box_.get_box_size().x,
+					   sim_box_.get_box_size().y,
+					   sim_box_.get_box_size().z);
 	}
 
 	/**
@@ -198,9 +270,6 @@ class SimSystem {
 		resources_.push_back(resource);
 	}
 
-	void add_resources(std::vector<Resource>& resources) {
-		resources_ = resources;
-	}
 	//================================================================================
 	// System State Queries
 	//================================================================================
@@ -208,69 +277,166 @@ class SimSystem {
 	/**
 	 * @brief Check if system has reactions (GPU-compatible)
 	 */
-	bool has_reactions() const {
-		return config_.has_reaction;
-	}
+	bool has_reaction() const {
+		return enable_particle_reactions_ || enable_bond_reactions_;
+	};
 
 	//================================================================================
 	// System Object Accessors (for SimManager)
 	//================================================================================
 
 	/**
-	 * @brief Get force grid (if any)
-	 */
-	const BaseGrid<Vector3>* get_force_grid() const {
-		// TODO: Add force grid to ARBDObjects or return nullptr
-		return nullptr;
-	}
-
-	/**
-	 * @brief Get bond list for bonded force calculations
-	 */
-	const int* get_bond_list() const {
-		return nullptr;
-	}
-
-	/**
-	 * @brief Get bond list size
-	 */
-	size_t get_bond_list_size() const {
-		return config_.init_bonds.size();
-	}
-
-	/**
 	 * @brief Get reservoirs for grand canonical simulations
 	 */
 	const std::vector<Reservoir>& get_reservoirs() const {
-		return config_.reservoirs;
+		return reservoirs_;
 	}
 
 	/**
 	 * @brief Get output period (from configuration)
 	 */
 	float get_output_period() const {
-		return config_.output_period;
+		return output_period_;
 	}
 
 	/**
 	 * @brief Get energy output period (from configuration)
 	 */
 	float get_energy_output_period() const {
-		return config_.energy_output_period;
+		return energy_output_period_;
+	}
+
+	/**
+	 * @brief Get output name
+	 */
+	const std::string& get_output_name() const {
+		return output_name;
+	}
+
+	/**
+	 * @brief Get output format
+	 */
+	OutputFormat get_output_format() const {
+		return output_format_;
+	}
+
+	/**
+	 * @brief Get decomposer type
+	 */
+	DecomposerType get_decomposer_type() const {
+		return decomposer_type_;
+	}
+
+	/**
+	 * @brief Get long range method
+	 */
+	LongRangeMethod get_long_range_method() const {
+		return long_range_method_;
+	}
+
+	/**
+	 * @brief Get neighbor list rebuild period
+	 */
+	float get_neighbor_list_rebuild_period() const {
+		return neighbor_list_rebuild_period;
+	}
+
+	/**
+	 * @brief Get temperature struct (for validation)
+	 */
+	const Temperature& get_temperature_struct() const {
+		return temperature_;
+	}
+
+	/**
+	 * @brief Get steps struct (for validation)
+	 */
+	const SimSteps& get_steps() const {
+		return steps_;
 	}
 
 	/**
 	 * @brief Get algorithm type (from configuration)
 	 */
 	DynamicType get_particle_algorithm() const {
-		return config_.ParticleDynamicType;
+		return ParticleDynamicType_;
 	}
+
+	// Type definitions (time-invariant configuration)
+	std::vector<ParticleType>& get_particle_types() {
+		return particle_types_;
+	}
+
+	const std::vector<ParticleType>& get_particle_types() const {
+		return particle_types_;
+	}
+
+	std::vector<RigidBodyType>& get_rigid_body_types() {
+		return rigid_body_types_;
+	}
+
+	const std::vector<RigidBodyType>& get_rigid_body_types() const {
+		return rigid_body_types_;
+	};
 
 	/**
 	 * @brief Get rigid body algorithm type (from configuration)
 	 */
 	DynamicType get_rigid_body_algorithm() const {
-		return config_.RigidBodyDynamicType;
+		return RigidBodyDynamicType_;
+	}
+
+	//================================================================================
+	// Runtime Lookup Tables (populated by SimManager during initialization)
+	//================================================================================
+	// These dictionaries map filenames/function names to IDs for fast lookup
+	// during simulation. They are empty during SimSystem construction and
+	// populated by SimManager after loading grids and potentials.
+
+	/**
+	 * @brief Get filename -> tabulated function ID mapping
+	 */
+	const std::unordered_map<std::string, int>& get_fname_bond_dictionary() const {
+		return tables_registry_.get_bond_name_to_idx();
+	}
+	const std::unordered_map<std::string, int>& get_fname_angle_dictionary() const {
+		return tables_registry_.get_angle_name_to_idx();
+	}
+	const std::unordered_map<std::string, int>& get_fname_dihedral_dictionary() const {
+		return tables_registry_.get_dihedral_name_to_idx();
+	}
+
+	/**
+	 * @brief Get GridManager for unified grid management
+	 */
+	GridManager& get_grid_manager() {
+		return grid_manager_;
+	}
+
+	const GridManager& get_grid_manager() const {
+		return grid_manager_;
+	}
+
+	/**
+	 * @brief Get TablesRegistry for tabulated function management
+	 */
+	TablesRegistry& get_tables_registry() {
+		return tables_registry_;
+	}
+
+	const TablesRegistry& get_tables_registry() const {
+		return tables_registry_;
+	}
+
+	/**
+	 * @brief Get NonBondedInteractions for non-bonded interaction management
+	 */
+	NonBondedInteractions& get_nonbonded_interactions() {
+		return nonbonded_interactions_;
+	}
+
+	const NonBondedInteractions& get_nonbonded_interactions() const {
+		return nonbonded_interactions_;
 	}
 
 	//================================================================================
@@ -319,56 +485,104 @@ class SimSystem {
 	//================================================================================
 
 	/**
-	 * @brief Get grid by ID
-	 * @param grid_id Grid identifier
-	 * @return Pointer to grid vector, or nullptr if not found
-	 */
-	const std::vector<BaseGrid<float>>* get_grids_by_id(int grid_id) const {
-		auto it = grid_id_dictionary_.find(grid_id);
-		return (it != grid_id_dictionary_.end()) ? &it->second : nullptr;
-	}
-
-	/**
-	 * @brief Get grid ID by filename
-	 * @param filename Grid filename
-	 * @return Grid ID, or -1 if not found
-	 */
-	int get_grid_id_by_filename(const std::string& filename) const {
-		auto it = fname_grid_dictionary_.find(filename);
-		return (it != fname_grid_dictionary_.end()) ? it->second : -1;
-	}
-
-	/**
 	 * @brief Get tabulated function ID by filename
 	 * @param filename Tabulated function filename
 	 * @return Function ID, or -1 if not found
 	 */
-	int get_tabulated_function_id(const std::string& filename) const {
-		auto it = fname_tab_dictionary_.find(filename);
-		return (it != fname_tab_dictionary_.end()) ? it->second : -1;
+	int get_tabulated_function_id(const std::string& filename, BondedPotentialType type) const {
+		switch (type) {
+		case BondedPotentialType::BOND:
+			return tables_registry_.get_bond_name_to_idx().find(filename)->second;
+		case BondedPotentialType::ANGLE:
+			return tables_registry_.get_angle_name_to_idx().find(filename)->second;
+		case BondedPotentialType::DIHEDRAL:
+			return tables_registry_.get_dihedral_name_to_idx().find(filename)->second;
+		default:
+			throw Exception(ExceptionType::ValueError,
+							SourceLocation(),
+							"Invalid bonded potential type: {}",
+							type);
+		}
 	}
+
+	bool has_bond_reactions() const {
+		return enable_bond_reactions_;
+	}
+
+	bool has_particle_reactions() const {
+		return enable_particle_reactions_;
+	}
+
+	/**
+	 * @brief Validate system configuration
+	 */
+	bool is_valid() const {
+		validate_physical_parameters();
+		validate_method_parameters();
+		validate_output_parameters();
+		return true;
+	}
+
+	void validate_physical_parameters() const;
+	void validate_method_parameters() const;
+	void validate_output_parameters() const;
 
   private:
 	// Configuration management (host-only)
-	Configuration config_;
+	Temperature temperature_{298.15f};
+	int replicas_{1};
+	Length cutoff_{10.0f};
+	Length pairlist_cutoff_{20.0f};
+	float salt_concentration_{0.15f};  // Salt concentration for solvent, in mol/L
+	float dielectric_constant_{80.0f}; // Dielectric constant for solvent
+	PeriodicBox sim_box_{Vector3(100.0f, 100.0f, 200.0f), true, true, true};
+	idx_t estimated_particles_{1024000};
+	DynamicType ParticleDynamicType_{DynamicType::Langevin};
+	DynamicType RigidBodyDynamicType_{DynamicType::Langevin};
+	// Simulation control
+	SimSteps steps_{1e-5f, 1000}; // timestep in ns.
 
-	// Loaded grids and tabulated functions (moved from Configuration)
-	std::unordered_map<std::string, int> fname_tab_dictionary_; // Filename -> tabulated function ID
-	std::unordered_map<std::string, int> fname_grid_dictionary_; // Filename -> grid ID
-	std::unordered_map<int, std::vector<BaseGrid<float>>>
-		grid_id_dictionary_; // Grid ID -> loaded grids
+	int output_period_{10};				   // output period in steps
+	int energy_output_period_{100};		   // energy output period in steps
+	int neighbor_list_rebuild_period{100}; // neighbor list rebuild period in steps
+	int rb_update_period_{1};			   // rigid body update period in steps
 
-	std::vector<BaseGrid<float>> pmf_grids_;
-	std::vector<BaseGrid<float>> density_grids_;
-	std::vector<BaseGrid<float>> force_grids_;
-	std::vector<Reservoir> reservoirs_;
-	std::vector<ParticleType> particle_types_;
-	NonBondedInteractions nonbonded_interactions_;
-	BondedInteractions bonded_interactions_;
+	size_t global_seed_{214};
+	std::string output_name{"out"};
+	OutputFormat output_format_{OutputFormat::DCD};
+
+	LongRangeMethod long_range_method_{LongRangeMethod::PPPM};
+	ThermostatType thermostat_{ThermostatType::NVE};
+	Pressure pressure_{1.0f};
+
+	BarostatType barostat_{BarostatType::Isobaric};
+	bool calculate_pressure_{false};
+	float pressure_output_period_{100.0f};
+
+	bool enable_smd{false};
+
+	bool enable_bond_reactions_{false};
+	bool enable_particle_reactions_{false};
+
+	// DCD parsing features
+	int dcd_stride{1};
+	bool parse_dcd_mode{false};
+	std::string dcd_input_file{};
+
+	// Type definitions (time-invariant configuration)
+	std::vector<RigidBodyType> rigid_body_types_{};
+	std::vector<ParticleType> particle_types_{};
+	std::vector<Reservoir> reservoirs_{};
+
+	DecomposerType decomposer_type_{DecomposerType::Spatial};
+	DecomposeDirection decompose_direction_{DecomposeDirection::Z};
 	// Resources and decomposition (host-only)
 	std::vector<Resource> resources_;
-	std::unique_ptr<PatchDecomposer> decomposer_;
 	std::unique_ptr<PatchManager> patch_manager_; // Domain decomposition structure
+	std::unique_ptr<PatchDecomposer> decomposer_;
+	GridManager grid_manager_;
+	TablesRegistry tables_registry_;
+	NonBondedInteractions nonbonded_interactions_;
 };
 
 } // namespace ARBD

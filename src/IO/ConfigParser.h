@@ -1,8 +1,9 @@
 #pragma once
 
 #include "BondConfigReader.h"
-#include "Configuration.h"
 #include "Reader.h"
+#include "System/SimSystem.h"
+#include "System/SystemState.h"
 #include <map>
 #include <string>	   // For std::string member
 #include <string_view> // For function parameters
@@ -19,33 +20,34 @@ namespace ARBD {
  * @brief Configuration manager with file I/O and validation
  *
  * This class handles:
- * - Loading configuration from files
+ * - Loading configuration from files (configures existing SimSystem)
+ * - Temporarily holds initial topology data (particles, bonds, etc.)
+ * - Initial data is retrieved once and then discarded
  * - Validation of parameters
  * - Python bindings
+ *
+ * Architecture:
+ * - SimSystem: time-invariant configuration only
+ * - SystemState: current runtime state only
+ * - ConfigParser: temporary initial data loader
  */
 class ConfigParser {
   public:
-	ConfigParser() = default;
-
 	/**
 	 * @brief Construct from configuration file
+	 * @param sim_system Simulation system to configure
 	 * @param file_name Path to configuration file
 	 * @throws ARBD::Exception on I/O or validation error
 	 */
-	explicit ConfigParser(std::string_view file_name);
-
-	/**
-	 * @brief Construct from Configuration struct (Python-friendly)
-	 * @param config Configuration structure
-	 */
-	ConfigParser(Configuration config);
+	ConfigParser(SimSystem& sim_system, std::string_view file_name);
 
 #ifdef USE_PYTHON
 	/**
 	 * @brief Construct from Python dictionary (pybind11-friendly)
+	 * @param sim_system Simulation system to configure
 	 * @param config_dict Python dictionary with configuration parameters
 	 */
-	ConfigParser(const std::map<std::string, pybind11::object>& config_dict);
+	ConfigParser(SimSystem& sim_system, const std::map<std::string, pybind11::object>& config_dict);
 #endif
 	/**
 	 * @brief Parse configuration from file
@@ -55,30 +57,49 @@ class ConfigParser {
 	void parse_file(std::string_view file_name);
 
 	/**
-	 * @brief Get the configuration structure
-	 * @return Const reference to internal configuration
-	 */
-	[[nodiscard]] const Configuration& get_config() const noexcept {
-		return config_;
-	}
-
-	/**
-	 * @brief Get mutable configuration (Python-friendly)
-	 * @return Reference to internal configuration
-	 */
-	Configuration& get_mutable_config() {
-		return config_;
-	}
-
-	/**
 	 * @brief Validate the current configuration
 	 * @throws ARBD::Exception if validation fails
 	 */
 	void validate() const;
 
+	/**
+	 * @brief Get the configured SimSystem
+	 */
+	SimSystem& get_sim_system() {
+		return *sim_system_ref_;
+	}
+
+	const SimSystem& get_sim_system() const {
+		return *sim_system_ref_;
+	}
+
+	/**
+	 * @brief Get initial particles (temporary data, used once during initialization)
+	 */
+	std::vector<ParticleRead>& get_init_particles() {
+		return init_particles_;
+	}
+
+	const std::vector<ParticleRead>& get_init_particles() const {
+		return init_particles_;
+	}
+
+	const BondedInteractions& get_init_bonded_interactions() const {
+		return init_bonded_interactions_;
+	}
+
   private:
-	Configuration config_;
-	std::string file_name_;
+	// Reference to the SimSystem being configured
+	SimSystem* sim_system_ref_;
+
+	std::string file_name_; //*.bd
+
+	// Temporary initial topology data (used once during initialization, then discarded)
+	std::vector<ParticleRead> init_particles_{};
+	BondedInteractions init_bonded_interactions_{};
+
+	// BondConfigReader initialized in constructor body to ensure sim_system_ref_ is set
+	BondConfigReader bond_config_reader_;
 
 	// Parsing helpers
 	void parse_parameters(const Reader& reader);
@@ -87,10 +108,5 @@ class ConfigParser {
 #ifdef USE_PYTHON
 	void parse_dictionary(const std::map<std::string, pybind11::object>& config_dict);
 #endif
-
-	// Validation helpers
-	void validate_physical_parameters() const;
-	void validate_method_parameters() const;
-	void validate_output_parameters() const;
 };
 } // namespace ARBD

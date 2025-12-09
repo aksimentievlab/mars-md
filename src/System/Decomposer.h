@@ -20,10 +20,7 @@
 #include <vector>
 
 namespace ARBD {
-
-// Forward declarations
 class SimSystem;
-
 /**
  * @brief Result of patch decomposition - describes the patch layout and structure
  *

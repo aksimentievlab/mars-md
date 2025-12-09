@@ -53,22 +53,17 @@ class RigidBodyType {
 	float diffusion;
 	float mu; // for Nose-Hoover Langevin dynamics
 	int numPartGridFiles;
-	float* meanPmf;
-	float* pmf_scale;
+	float meanPmf;
+	float pmf_scale;
+	float pmf_scale_slope;
+	uint32_t pmf_smd_freq;
 
 	std::vector<ParticleRead> attached_particle;
-	size_t* potential_grid_idx;
-	size_t* density_grid_idx;
-	size_t* pmf_grid_idx;
+	std::vector<uint32_t> potential_grid_ids;
+	std::vector<uint32_t> density_grid_ids;
+	std::vector<uint32_t> pmf_grid_ids;
 
-	size_t* potential_grid_idx_d;
-	size_t* density_grid_idx_d;
-	size_t* pmf_grid_idx_d;
-
-	RigidBodyController* RBC;
-	BaseGrid<float>** pmfGrid;
-	BaseGrid<float>* diffusionGrid;
-	BaseGrid<float>* forceGrid;
+	std::shared_ptr<RigidBodyController> RBC;
 };
 
 } // namespace ARBD

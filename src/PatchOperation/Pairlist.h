@@ -16,9 +16,6 @@
 
 namespace ARBD {
 
-// Forward declarations
-class SimSystem;
-
 /**
  * @brief Enumeration of available pairlist strategies
  */

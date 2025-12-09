@@ -1,4 +1,3 @@
-#include "IO/Configuration.h"
 #include "Objects/ParticleProperties.h"
 #include "Objects/RigidBodyProperties.h"
 #include <pybind11/pybind11.h>
@@ -148,65 +147,17 @@ void declare_rigid_body_type(py::module& m) {
 }
 
 // ============================================================================
-// ARBD OBJECTS CONTAINER BINDINGS
+// NOTE: SystemState is NOT exposed to Python
 // ============================================================================
-
-/**
- * @note Example usage (in Python):
- * ```python
- * >>> from arbd2v import Configuration
- * >>> obj = Configuration()
- * >>> print(obj)
- * Configuration(particles=0, rigid_bodies=0, bonds=0, angles=0, dihedrals=0)
- * ```
- */
-void declare_arbd_objects(py::module& m) {
-	py::class_<Configuration>(m, "Configuration")
-		.def(py::init<>())
-		.def_readwrite("rigid_body_types", &Configuration::rigid_body_types)
-		.def_readwrite("particle_types", &Configuration::particle_types)
-		.def_readwrite("init_rigid_bodies", &Configuration::init_rigid_bodies)
-		.def_readwrite("init_particles", &Configuration::init_particles)
-		.def_readwrite("init_bonds", &Configuration::init_bonds)
-		.def_readwrite("init_angles", &Configuration::init_angles)
-		.def_readwrite("init_dihedrals", &Configuration::init_dihedrals)
-		.def_readwrite("init_exclusions", &Configuration::init_exclusions)
-		.def_readwrite("restraints", &Configuration::restraints)
-		.def_readwrite("fname_tab_dictionary", &Configuration::fname_tab_dictionary)
-		.def_readwrite("fname_grid_dictionary", &Configuration::fname_grid_dictionary)
-		// Helper methods
-		.def("add_particle_type",
-			 [](Configuration& obj, const ParticleType& pt) { obj.particle_types.push_back(pt); })
-		.def("add_particle",
-			 [](Configuration& obj, const Particle& p) { obj.init_particles.push_back(p); })
-		.def("add_rigid_body_type",
-			 [](Configuration& obj, const RigidBodyType& rbt) {
-				 obj.rigid_body_types.push_back(rbt);
-			 })
-		.def("add_rigid_body",
-			 [](Configuration& obj, const RigidBody& rb) { obj.init_rigid_bodies.push_back(rb); })
-		.def("clear",
-			 [](Configuration& obj) {
-				 obj.rigid_body_types.clear();
-				 obj.particle_types.clear();
-				 obj.init_rigid_bodies.clear();
-				 obj.init_particles.clear();
-				 obj.init_bonds.clear();
-				 obj.init_angles.clear();
-				 obj.init_dihedrals.clear();
-				 obj.init_exclusions.clear();
-				 obj.restraints.clear();
-				 obj.fname_tab_dictionary.clear();
-				 obj.fname_grid_dictionary.clear();
-			 })
-		.def("__repr__", [](const Configuration& obj) {
-			return "Configuration(particles=" + std::to_string(obj.init_particles.size()) +
-				   ", rigid_bodies=" + std::to_string(obj.init_rigid_bodies.size()) +
-				   ", bonds=" + std::to_string(obj.init_bonds.size()) +
-				   ", angles=" + std::to_string(obj.init_angles.size()) +
-				   ", dihedrals=" + std::to_string(obj.init_dihedrals.size()) + ")";
-		});
-}
+// SystemState is an internal runtime container managed by SimManager.
+// Python users should:
+// 1. Configure the system via SimSystem
+// 2. Provide initial data via ConfigParser or direct particle creation
+// 3. Run simulation via SimManager (when exposed)
+// 4. Read results from output files (DCD, etc.)
+//
+// SystemState contains internal methods (clear_global_arrays, add_particle_data,
+// mark_synced) that are only meant for C++ SimManager, not Python users.
 
 // ============================================================================
 // MAIN INITIALIZATION FUNCTION
@@ -221,5 +172,5 @@ void init_pyobjects(py::module_& m) {
 	declare_rigid_body(m);
 	declare_rigid_body_type(m);
 
-	// ARBD objects container
+	// Note: SystemState is NOT exposed to Python - it's managed internally by SimManager
 }
