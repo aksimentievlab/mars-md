@@ -1,217 +1,137 @@
 #include "../catch_boiler.h"
-#include "System/ZOrderKernels.h"
-#include "System/ZOrderSort.h"
-#include <random>
+#include "PatchOperation/Random/Random.h"
+#include "PatchOperation/ZOrderKernels/DeviceRadix.h"
 #include <vector>
 
+short single_resource_id = Global::single_resource_id;
 using namespace ARBD;
+using namespace Tests;
 
-TEST_CASE("ZOrderSort Basic Functionality", "[zorder][system]") {
-	Tests::TestBackendManager& manager = Tests::TestBackendManager::getInstance();
-	REQUIRE(manager.isInitialized());
-
-	const auto& resource = manager.get_resource();
-	const size_t max_particles = 1000;
-
-	SECTION("System Mode Construction") {
-		ZOrderSort sorter(resource, max_particles, ZOrderOptimizationMode::System);
-		REQUIRE(sorter.get_optimization_mode() == ZOrderOptimizationMode::System);
-		REQUIRE(sorter.get_num_particles() == 0);
+Resource single_resource(single_resource_id);
+void generate_random_data_drs(const Resource& device,
+							  std::vector<uint32_t>& data,
+							  uint32_t seed,
+							  float entropy = 1.0f) {
+	Random<Resource> rng(device, 128);
+	rng.init(seed, 0);
+	DeviceBuffer<uint32_t> d_data(data.size(), device.id());
+	uint32_t min_val = 0;
+	uint32_t max_val;
+	if (entropy >= 0.99f) {
+		max_val = UINT32_MAX;
+	} else if (entropy >= 0.8f) {
+		max_val = (1u << 26) - 1;
+	} else if (entropy >= 0.5f) {
+		max_val = (1u << 18) - 1;
+	} else {
+		max_val = (1u << 7) - 1;
 	}
-
-	SECTION("Pairlist Mode Construction") {
-		ZOrderSort sorter(resource, max_particles, ZOrderOptimizationMode::Pairlist);
-		REQUIRE(sorter.get_optimization_mode() == ZOrderOptimizationMode::Pairlist);
-		REQUIRE(sorter.get_num_particles() == 0);
-	}
+	Event gen_event = rng.generate_uniform(d_data, min_val, max_val);
+	gen_event.wait();
+	d_data.copy_to_host(data.data(), data.size());
 }
 
-TEST_CASE("ZOrderSort Particle Sorting", "[zorder][system]") {
-	Tests::TestBackendManager& manager = Tests::TestBackendManager::getInstance();
-	REQUIRE(manager.isInitialized());
+TEST_CASE("DeviceRadixSort Key-Value Pairs - Small", "[deviceradix][sort][pairs][small]") {
+	initialize_backend_once();
+	Resource device = single_resource;
+	const uint32_t size = 1024;
 
-	const auto& resource = manager.get_resource();
-	const size_t num_particles = 100;
-	ZOrderSort sorter(resource, num_particles, ZOrderOptimizationMode::System);
+	SECTION("Sort 1K elements") {
+		std::vector<uint32_t> h_keys(size);
+		std::vector<uint32_t> h_payloads(size);
+		generate_random_data_drs(device, h_keys, 12345);
+		std::iota(h_payloads.begin(), h_payloads.end(), 0);
 
-	// Create test particles in a cube
-	std::vector<Vector3> positions(num_particles);
-	std::mt19937 rng(42);
-	std::uniform_real_distribution<float> dist(0.0f, 10.0f);
+		DeviceBuffer<uint32_t> d_keys(size, device.id());
+		DeviceBuffer<uint32_t> d_payloads(size, device.id());
+		d_keys.copy_from_host(h_keys.data(), size);
+		d_payloads.copy_from_host(h_payloads.data(), size);
 
-	for (size_t i = 0; i < num_particles; ++i) {
-		positions[i] = Vector3(dist(rng), dist(rng), dist(rng));
-	}
+		DeviceBuffer<uint32_t> d_alt_keys(size, device.id());
+		DeviceBuffer<uint32_t> d_alt_payloads(size, device.id());
+		DeviceBuffer<uint32_t> d_globalHistogram(DRS_RADIX * 4, device.id());
+		const uint32_t threadBlocks = (size + DRS_PART_SIZE - 1) / DRS_PART_SIZE;
+		DeviceBuffer<uint32_t> d_passHistogram(DRS_RADIX * threadBlocks, device.id());
+		d_globalHistogram.fill(0, true);
+		d_passHistogram.fill(0, true);
+		device_radix_sort_pairs_usm(device,
+									d_keys.data(),
+									d_payloads.data(),
+									d_alt_keys.data(),
+									d_alt_payloads.data(),
+									d_globalHistogram.data(),
+									d_passHistogram.data(),
+									size);
 
-	DeviceBuffer<Vector3> device_positions(num_particles, resource);
-	device_positions.copy_from_host(positions.data(), num_particles);
+		std::vector<uint32_t> h_sorted_keys(size);
+		std::vector<uint32_t> h_sorted_payloads(size);
+		d_keys.copy_to_host(h_sorted_keys.data(), size);
+		d_payloads.copy_to_host(h_sorted_payloads.data(), size);
 
-	Vector3 box_min(0.0f, 0.0f, 0.0f);
-	Vector3 box_max(10.0f, 10.0f, 10.0f);
-
-	SECTION("Basic Sorting") {
-		sorter.sort_particles(device_positions, num_particles, box_min, box_max);
-
-		REQUIRE(sorter.get_num_particles() == num_particles);
-
-		// Verify we have Morton codes and indices
-		const auto& morton_codes = sorter.get_morton_codes();
-		const auto& sorted_indices = sorter.get_sorted_indices();
-		const auto& inverse_indices = sorter.get_inverse_indices();
-
-		REQUIRE(morton_codes.size() >= num_particles);
-		REQUIRE(sorted_indices.size() >= num_particles);
-		REQUIRE(inverse_indices.size() >= num_particles);
-	}
-
-	SECTION("Sort Validation") {
-		sorter.sort_particles(device_positions, num_particles, box_min, box_max);
-
-		uint32_t errors = sorter.validate_sorting();
-		REQUIRE(errors == 0);
-	}
-
-	SECTION("Data Reordering") {
-		// Create some test data to reorder
-		std::vector<float> test_data(num_particles);
-		for (size_t i = 0; i < num_particles; ++i) {
-			test_data[i] = static_cast<float>(i);
+		// Verify keys are sorted
+		for (uint32_t i = 1; i < size; ++i) {
+			REQUIRE(h_sorted_keys[i - 1] <= h_sorted_keys[i]);
 		}
 
-		DeviceBuffer<float> device_data(num_particles, resource);
-		DeviceBuffer<float> reordered_data(num_particles, resource);
-		device_data.copy_from_host(test_data.data(), num_particles);
-
-		sorter.sort_particles(device_positions, num_particles, box_min, box_max);
-		sorter.reorder_data(device_data, reordered_data, num_particles);
-
-		// Copy back and verify the data was reordered
-		std::vector<float> result(num_particles);
-		reordered_data.copy_to_host(result.data(), num_particles, true);
-
-		// Data should be different from original order (unless very unlikely)
-		bool reordered = false;
-		for (size_t i = 0; i < num_particles; ++i) {
-			if (result[i] != test_data[i]) {
-				reordered = true;
-				break;
-			}
+		// Verify stability: payloads should maintain relative order for equal keys
+		std::vector<std::pair<uint32_t, uint32_t>> original(size);
+		for (uint32_t i = 0; i < size; ++i) {
+			original[i] = {h_keys[i], h_payloads[i]};
 		}
-		REQUIRE(reordered);
-	}
-}
+		std::stable_sort(original.begin(), original.end(), [](const auto& a, const auto& b) {
+			return a.first < b.first;
+		});
 
-TEST_CASE("ZOrderSort Pairlist Mode Features", "[zorder][pairlist]") {
-	Tests::TestBackendManager& manager = Tests::TestBackendManager::getInstance();
-	REQUIRE(manager.isInitialized());
-
-	const auto& resource = manager.get_resource();
-	const size_t num_particles = 50;
-	ZOrderSort sorter(resource, num_particles, ZOrderOptimizationMode::Pairlist);
-
-	// Create test particles
-	std::vector<Vector3> positions(num_particles);
-	std::vector<Vector3> new_positions(num_particles);
-
-	for (size_t i = 0; i < num_particles; ++i) {
-		positions[i] = Vector3(static_cast<float>(i), 0.0f, 0.0f);
-		new_positions[i] = positions[i] + Vector3(0.01f, 0.0f, 0.0f); // Small displacement
-	}
-
-	DeviceBuffer<Vector3> device_positions(num_particles, resource);
-	DeviceBuffer<Vector3> device_new_positions(num_particles, resource);
-	device_positions.copy_from_host(positions.data(), num_particles);
-	device_new_positions.copy_from_host(new_positions.data(), num_particles);
-
-	Vector3 box_min(-1.0f, -1.0f, -1.0f);
-	Vector3 box_max(static_cast<float>(num_particles) + 1.0f, 1.0f, 1.0f);
-
-	SECTION("Smart Updates Configuration") {
-		sorter.enable_smart_updates(true);
-		sorter.set_displacement_thresholds(0.05f, 0.1f);
-
-		// Initial sort
-		sorter.sort_particles(device_positions, num_particles, box_min, box_max);
-
-		// Note: update_positions_incremental and compute_max_displacement are private methods
-		// These would be tested through the public interface in real usage
-
-		// For now, just verify the sorter was created with the right mode
-		REQUIRE(sorter.get_optimization_mode() == ZOrderOptimizationMode::Pairlist);
-	}
-
-	SECTION("Morton Code Validation") {
-		sorter.sort_particles(device_positions, num_particles, box_min, box_max);
-
-		// Note: validate_morton_codes is also a private method
-		// In real usage, this would be tested through the public API
-		// For now, just verify the sort completed without error
-		REQUIRE(sorter.get_num_particles() == num_particles);
-	}
-}
-
-TEST_CASE("ZOrderSort Resize Functionality", "[zorder][system]") {
-	Tests::TestBackendManager& manager = Tests::TestBackendManager::getInstance();
-	REQUIRE(manager.isInitialized());
-
-	const auto& resource = manager.get_resource();
-	const size_t initial_particles = 100;
-	const size_t new_particles = 200;
-
-	ZOrderSort sorter(resource, initial_particles, ZOrderOptimizationMode::System);
-
-	SECTION("Resize Buffers") {
-		sorter.resize(new_particles);
-
-		// Create larger dataset
-		std::vector<Vector3> positions(new_particles);
-		for (size_t i = 0; i < new_particles; ++i) {
-			positions[i] = Vector3(static_cast<float>(i % 10), static_cast<float>(i / 10), 0.0f);
+		for (uint32_t i = 0; i < size; ++i) {
+			REQUIRE(h_sorted_keys[i] == original[i].first);
+			REQUIRE(h_sorted_payloads[i] == original[i].second);
 		}
-
-		DeviceBuffer<Vector3> device_positions(new_particles, resource);
-		device_positions.copy_from_host(positions.data(), new_particles);
-
-		Vector3 box_min(0.0f, 0.0f, -1.0f);
-		Vector3 box_max(10.0f, 20.0f, 1.0f);
-
-		// Should work without issues after resize
-		sorter.sort_particles(device_positions, new_particles, box_min, box_max);
-		REQUIRE(sorter.get_num_particles() == new_particles);
-
-		uint32_t errors = sorter.validate_sorting();
-		REQUIRE(errors == 0);
 	}
 }
 
-TEST_CASE("ZOrderSort Error Handling", "[zorder][error]") {
-	Tests::TestBackendManager& manager = Tests::TestBackendManager::getInstance();
-	REQUIRE(manager.isInitialized());
+TEST_CASE("DeviceRadixSort Key-Value Pairs - Medium", "[deviceradix][sort][pairs][medium]") {
+	initialize_backend_once();
+	Resource device = single_resource;
+	const size_t size = 1024 * 1024; // 1M elements
 
-	const auto& resource = manager.get_resource();
-	const size_t max_particles = 100;
+	SECTION("Sort 1M elements") {
+		std::vector<uint32_t> h_keys(size);
+		std::vector<uint32_t> h_payloads(size);
+		generate_random_data_drs(device, h_keys, 54321);
+		std::iota(h_payloads.begin(), h_payloads.end(), 0);
 
-	ZOrderSort sorter(resource, max_particles, ZOrderOptimizationMode::System);
+		DeviceBuffer<uint32_t> d_keys(size, device.id());
+		DeviceBuffer<uint32_t> d_payloads(size, device.id());
+		d_keys.copy_from_host(h_keys.data(), size);
+		d_payloads.copy_from_host(h_payloads.data(), size);
 
-	SECTION("Particle Count Validation") {
-		std::vector<Vector3> positions(max_particles + 50); // Too many particles
-		DeviceBuffer<Vector3> device_positions(max_particles + 50, resource);
+		DeviceBuffer<uint32_t> d_alt_keys(size, device.id());
+		DeviceBuffer<uint32_t> d_alt_payloads(size, device.id());
+		DeviceBuffer<uint32_t> d_globalHistogram(DRS_RADIX * 4, device.id());
+		const uint32_t threadBlocks = (size + DRS_PART_SIZE - 1) / DRS_PART_SIZE;
+		DeviceBuffer<uint32_t> d_passHistogram(DRS_RADIX * threadBlocks, device.id());
+		d_globalHistogram.fill(0, true);
+		d_passHistogram.fill(0, true);
+		auto start = std::chrono::high_resolution_clock::now();
+		device_radix_sort_pairs_usm(device,
+									d_keys.data(),
+									d_payloads.data(),
+									d_alt_keys.data(),
+									d_alt_payloads.data(),
+									d_globalHistogram.data(),
+									d_passHistogram.data(),
+									size);
+		auto end = std::chrono::high_resolution_clock::now();
+		auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
 
-		Vector3 box_min(0.0f);
-		Vector3 box_max(1.0f);
+		std::cout << "Sorted " << size << " elements in " << duration.count() << " ms" << std::endl;
 
-		// Should throw exception for too many particles
-		REQUIRE_THROWS_AS(
-			sorter.sort_particles(device_positions, max_particles + 50, box_min, box_max),
-			Exception);
-	}
+		std::vector<uint32_t> h_sorted_keys(size);
+		d_keys.copy_to_host(h_sorted_keys.data(), size);
 
-	SECTION("Mode Verification") {
-		ZOrderSort system_sorter(resource, max_particles, ZOrderOptimizationMode::System);
-
-		// Note: The private method exception tests have been removed since these methods
-		// are private and not part of the public API. In real usage, mode-specific behavior
-		// would be tested through the public interfaces.
-		REQUIRE(system_sorter.get_optimization_mode() == ZOrderOptimizationMode::System);
+		// Verify keys are sorted
+		for (uint32_t i = 1; i < size; ++i) {
+			REQUIRE(h_sorted_keys[i - 1] <= h_sorted_keys[i]);
+		}
 	}
 }

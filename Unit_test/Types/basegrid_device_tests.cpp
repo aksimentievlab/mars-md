@@ -10,13 +10,9 @@ using Catch::Approx;
 using namespace ARBD;
 
 TEST_CASE("BaseGrid device interpolate and nearest", "[basegrid][device]") {
-	Tests::TestBackendManager& manager = Tests::TestBackendManager::getInstance();
-	if (!manager.isInitialized()) {
-		WARN("Backend not initialized; skipping BaseGrid device tests");
-		return;
-	}
+	initialize_backend_once();
 
-	auto& res = manager.get_resource();
+	auto res = Resource{Global::single_resource_id};
 
 	using T = float;
 	struct Params {
@@ -62,8 +58,10 @@ TEST_CASE("BaseGrid device interpolate and nearest", "[basegrid][device]") {
 					 const Params* params) {
 		const Params p = params[0];
 		const Vector3_t<T> pt = pos[i];
-		const T vi = interpolate_grid_point<T>(values, pt, p.origin, p.basis_inv, p.dims);
-		const T vn = get_value_nearest<T>(values, pt, p.origin, p.basis_inv, p.dims);
+		const T vi =
+			interpolate_grid_point<T>(values, pt, p.origin, p.basis_inv, p.dims, 2); // 2 = Periodic
+		const T vn =
+			get_value_nearest<T>(values, pt, p.origin, p.basis_inv, p.dims, 2); // 2 = Periodic
 		out_interp[i] = vi;
 		out_nearest[i] = vn;
 	};

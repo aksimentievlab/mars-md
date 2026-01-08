@@ -11,7 +11,6 @@
 
 using Catch::Approx;
 using namespace ARBD;
-
 // Static traits --------------------------------------------------------------
 static_assert(sizeof(Vector3_t<float>) == 4 * sizeof(float),
 			  "Vector3_t<float> must occupy four scalars");
@@ -33,7 +32,7 @@ TEST_CASE("Vector3 constructors and indexing", "[vector3]") {
 	CHECK(zero.x == 0.0f);
 	CHECK(zero.y == 0.0f);
 	CHECK(zero.z == 0.0f);
-	CHECK(zero.w == 0.0f);
+	CHECK(zero.t == 0.0f);
 
 	Vector3_t<float> scalar(2.5f);
 	CHECK(scalar.x == Approx(2.5f));
@@ -41,10 +40,10 @@ TEST_CASE("Vector3 constructors and indexing", "[vector3]") {
 	CHECK(scalar.z == Approx(2.5f));
 
 	Vector3_t<float> xyz(1.f, 2.f, 3.f);
-	CHECK(xyz.w == Approx(0.f));
+	CHECK(xyz.t == Approx(0.f));
 
 	Vector3_t<float> xyzw(1.f, 2.f, 3.f, 4.f);
-	CHECK(xyzw.w == Approx(4.f));
+	CHECK(xyzw.t == Approx(4.f));
 
 	Vector3_t<float> copy = xyz;
 	CHECK(copy == xyz);
@@ -61,7 +60,7 @@ TEST_CASE("Vector3 constructors and indexing", "[vector3]") {
 	CHECK(moved.x == Approx(-1.f));
 	CHECK(moved.y == Approx(-2.f));
 	CHECK(moved.z == Approx(-3.f));
-	CHECK(moved.w == Approx(-4.f));
+	CHECK(moved.t == Approx(-4.f));
 
 #ifdef HOST_GUARD
 	Vector3_t<float> idx_vec;
@@ -181,13 +180,9 @@ TEST_CASE("Vector3 numeric limits", "[vector3]") {
 }
 
 TEST_CASE("Vector3 DeviceBuffer roundtrip", "[vector3][device]") {
-	Tests::TestBackendManager& manager = Tests::TestBackendManager::getInstance();
-	if (!manager.isInitialized()) {
-		WARN("Backend not initialized; skipping device buffer roundtrip test");
-		return;
-	}
+	initialize_backend_once();
 
-	auto& res = manager.get_resource();
+	Resource res(Global::single_resource_id);
 	Vector3_t<float> host_data[2] = {Vector3_t<float>(1.f, 2.f, 3.f),
 									 Vector3_t<float>(4.f, 5.f, 6.f)};
 
@@ -206,13 +201,8 @@ TEST_CASE("Vector3 DeviceBuffer roundtrip", "[vector3][device]") {
 }
 
 TEST_CASE("Vector3 DeviceBuffer device-to-device copy", "[vector3][device]") {
-	Tests::TestBackendManager& manager = Tests::TestBackendManager::getInstance();
-	if (!manager.isInitialized()) {
-		WARN("Backend not initialized; skipping device-to-device copy test");
-		return;
-	}
-
-	auto& res = manager.get_resource();
+	initialize_backend_once();
+	Resource res(Global::single_resource_id);
 	Vector3_t<float> host_data[2] = {Vector3_t<float>(-1.f, -2.f, -3.f),
 									 Vector3_t<float>(7.f, 8.f, 9.f)};
 

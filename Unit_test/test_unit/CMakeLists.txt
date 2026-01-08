@@ -6,13 +6,20 @@ include(CTest)
 
 # Common source files for core tests
 set(CORE_TEST_SOURCES
-    ${CMAKE_SOURCE_DIR}/Unit_test/parse_config.cpp
+    Buffer/generic_Buffer.cpp
+    Buffer/buffer_test.cpp
+    Buffer/Buffer.cpp
+    Buffer/Pinned_Unified.cpp
+    Buffer/async_buffer_tests.cpp
+    backend_tests.cpp
     ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp
 )
 
 # Math folder sources - explicitly list what to include in math tests
 set(MATH_SOURCES
-
+    Math/RandomDevice.cpp
+    Math/RandomProfile.cpp
+    Math/Kernel_for_test.h
     # Add more math sources here as needed
     ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp
 )
@@ -45,23 +52,6 @@ set_tests_properties(Config_Parse_Tests PROPERTIES
 # Add to common list
 list(APPEND COMMON_TEST_EXECUTABLES arbd_test_config_parse)
 message(STATUS "Added configuration parsing test executable: arbd_test_config_parse")
-
-# Buffer Fill comprehensive tests - platform independent
-add_executable(arbd_test_buffer_fill
-    buffer_fill_comprehensive_tests.cpp
-)
-target_include_directories(arbd_test_buffer_fill PRIVATE ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(arbd_test_buffer_fill PRIVATE "lib${PROJECT_NAME}")
-
-# Add buffer fill test
-add_test(NAME Buffer_Fill_Comprehensive_Tests COMMAND arbd_test_buffer_fill)
-set_tests_properties(Buffer_Fill_Comprehensive_Tests PROPERTIES
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-)
-
-# Add to common list
-list(APPEND COMMON_TEST_EXECUTABLES arbd_test_buffer_fill)
-message(STATUS "Added buffer fill comprehensive test executable: arbd_test_buffer_fill")
 
 # Backend comprehensive tests - platform independent, tests all backend abstractions
 add_executable(arbd_test_kernel
@@ -166,6 +156,9 @@ endif()
 if(USE_SYCL_ACPP OR USE_SYCL_ICPX)
     # SYCL backend tests
     add_executable(arbd_test_sycl
+        Backends/sycl_backend.cpp
+        Backends/sycl_manager.cpp
+        Backends/sycl_omp.cpp
         ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp)
     target_include_directories(arbd_test_sycl PRIVATE ${CMAKE_SOURCE_DIR}/src)
     target_link_libraries(arbd_test_sycl PRIVATE "lib${PROJECT_NAME}" Threads::Threads)

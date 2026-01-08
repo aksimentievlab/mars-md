@@ -23,6 +23,8 @@ std::string get_dx_path() {
 } // namespace
 
 TEST_CASE("DX IO: read and roundtrip to device", "[io][device][dx]") {
+	initialize_backend_once();
+	ARBD::Resource res(Global::single_resource_id);
 	// Locate DX file
 	const std::string dx_path = get_dx_path();
 	auto file_exists = [](const std::string& p) -> bool {
@@ -44,8 +46,6 @@ TEST_CASE("DX IO: read and roundtrip to device", "[io][device][dx]") {
 		WARN("Backend not initialized; skipping device roundtrip for DX grid");
 		return;
 	}
-
-	auto& res = manager.get_resource();
 
 	// Copy grid values to host buffer using host-only accessors
 	std::vector<float> host_values(grid.size());

@@ -10,7 +10,10 @@ enable_testing()
 add_executable(arbd_unit_tests
     ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Backend/backend_buffer_tests.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/Backend/mpi_tests.cpp
+		${CMAKE_CURRENT_LIST_DIR}/Types/vector3_tests.cpp
+		${CMAKE_CURRENT_LIST_DIR}/Types/basegrid_device_tests.cpp
+		${CMAKE_CURRENT_LIST_DIR}/Objects/Particles.cpp
+		${CMAKE_CURRENT_LIST_DIR}/TestParticle.cpp
 )
 # Includes
 target_include_directories(arbd_unit_tests PRIVATE
@@ -55,6 +58,13 @@ endif()
 
 if(USE_MPI)
 	target_link_libraries(arbd_zorder_tests PRIVATE MPI::MPI_CXX)
+endif()
+
+# Ensure SYCL tests are compiled with device targets so kernels are available
+if(USE_SYCL_ACPP OR USE_SYCL_ICPX)
+    separate_arguments(SYCL_DEVICE_EXTRA_FLAGS_LIST UNIX_COMMAND "${SYCL_DEVICE_EXTRA_FLAGS}")
+    target_compile_options(arbd_unit_tests PRIVATE ${SYCL_DEVICE_EXTRA_FLAGS_LIST} -DSYCL_DEVICE_SOURCE)
+    target_compile_options(arbd_zorder_tests PRIVATE ${SYCL_DEVICE_EXTRA_FLAGS_LIST} -DSYCL_DEVICE_SOURCE)
 endif()
 
 # Register tests with labels

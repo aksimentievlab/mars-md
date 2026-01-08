@@ -1,15 +1,14 @@
 #include "../catch_boiler.h"
-#include "Compute/ZOrderPairlist.h"
-#include <vector>
+#include "PatchOperation/PairListKernels/ZOrderPairlist.h"
+#include "PatchOperation/ZOrderKernels/ZOrderSort.h"
 #include <random>
+#include <vector>
 
 using namespace ARBD;
 
 TEST_CASE("ZOrderPairlist Integration", "[zorder][pairlist][integration]") {
-	Tests::TestBackendManager& manager = Tests::TestBackendManager::getInstance();
-	REQUIRE(manager.isInitialized());
-
-	const auto& resource = manager.get_resource();
+	initialize_backend_once();
+	const auto& resource = Resource(Global::single_resource_id);
 	const size_t max_particles = 200;
 	const size_t max_pairs = 1000;
 	const float cutoff = 2.0f;
@@ -30,11 +29,9 @@ TEST_CASE("ZOrderPairlist Integration", "[zorder][pairlist][integration]") {
 		for (int i = 0; i < 4; ++i) {
 			for (int j = 0; j < 4; ++j) {
 				for (int k = 0; k < 4; ++k) {
-					positions[idx++] = Vector3(
-						static_cast<float>(i) * 1.5f,
-						static_cast<float>(j) * 1.5f,
-						static_cast<float>(k) * 1.5f
-					);
+					positions[idx++] = Vector3(static_cast<float>(i) * 1.5f,
+											   static_cast<float>(j) * 1.5f,
+											   static_cast<float>(k) * 1.5f);
 				}
 			}
 		}
@@ -96,11 +93,17 @@ TEST_CASE("ZOrderPairlist Integration", "[zorder][pairlist][integration]") {
 		const float skin_distance = 1.0f;
 
 		// Should not need update for same positions
-		bool needs_update = pairlist.needs_update(device_positions, device_old_positions, num_particles, skin_distance);
+		bool needs_update = pairlist.needs_update(device_positions,
+												  device_old_positions,
+												  num_particles,
+												  skin_distance);
 		REQUIRE_FALSE(needs_update);
 
 		// Should need update for far positions
-		bool needs_update_far = pairlist.needs_update(device_far_positions, device_old_positions, num_particles, skin_distance);
+		bool needs_update_far = pairlist.needs_update(device_far_positions,
+													  device_old_positions,
+													  num_particles,
+													  skin_distance);
 		REQUIRE(needs_update_far);
 	}
 

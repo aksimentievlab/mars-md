@@ -1,19 +1,20 @@
-#include "catch_boiler.h"
 #include <cassert>
 #include <fstream>
 #include <iostream>
 #include <string>
 #include <vector>
+
 // Include ARBD headers
-#include "IO/ConfigParser.h"
+#include "Configuration.h"
 #include "Objects/ParticleProperties.h"
-short single_resource_id = Global::single_resource_id;
+#include "SimSystem.h"
+
 using namespace ARBD;
 
 /**
  * @brief Test configuration parsing with the circovirus example
  *
- * This test validates that the ConfigParser parser can correctly load:
+ * This test validates that the SimConf parser can correctly load:
  * - Basic simulation parameters (temperature, timestep, etc.)
  * - Particle types (D000, O000, S000) with their properties
  * - Individual particles for each type
@@ -28,56 +29,70 @@ void test_parse_circovirus_config() {
 		"/data/server10/pinyili2/3-grid_capsid/1-compaction/circovirus-1bppb-compaction-rep1.bd";
 
 	try {
-		// Create ConfigParser object and parse the file
-		SimSystem sim_system(std::vector<Resource>({Resource(single_resource_id)}));
-		ConfigParser config_parser(sim_system, config_file);
+		// Create SimConf object and parse the file
+		SimConf sim_conf(config_file);
+		const Configuration& config = sim_conf.get_config();
+
 		std::cout << "✓ Successfully loaded configuration from: " << config_file << std::endl;
 
 		// Test basic simulation parameters
 		std::cout << "\n--- Basic Simulation Parameters ---" << std::endl;
-		std::cout << "Temperature: " << sim_system.get_temperature() << " K" << std::endl;
-		std::cout << "Timestep: " << sim_system.get_timestep() << " ps" << std::endl;
-		std::cout << "Steps: " << sim_system.get_num_steps() << std::endl;
-		std::cout << "Box size: " << sim_system.get_box_size().x << " x "
-				  << sim_system.get_box_size().y << " x " << sim_system.get_box_size().z << " Å"
-				  << std::endl;
-		std::cout << "Cutoff: " << sim_system.get_cutoff() << " Å" << std::endl;
-		std::cout << "Output period: " << sim_system.get_output_period() << " ps" << std::endl;
+		std::cout << "Temperature: " << config.temperature.value << " K" << std::endl;
+		std::cout << "Timestep: " << config.steps.timestep << " ps" << std::endl;
+		std::cout << "Steps: " << config.steps.steps << std::endl;
+		std::cout << "Box size: " << config.box_lengths[0] << " x " << config.box_lengths[1]
+				  << " x " << config.box_lengths[2] << " Å" << std::endl;
+		std::cout << "Cutoff: " << config.cutoff.value << " Å" << std::endl;
+		std::cout << "Output period: " << config.output_period << " ps" << std::endl;
+
+		std::cout << "Output format: "
+				  << (config.output_format == OutputFormat::DCD ? "DCD" : "Other") << std::endl;
+
+		// Validate expected values from the config file
+		assert(config.temperature.value == 291.0f);
+		assert(config.steps.timestep == 2e-05f);
+		assert(config.steps.steps == 100000000);
+		assert(config.box_lengths[0] == 5000.0f);
+		assert(config.box_lengths[1] == 5000.0f);
+		assert(config.box_lengths[2] == 5000.0f);
+		assert(config.cutoff.value == 50.0f);
+		assert(config.output_period == 10000.0f);
 
 		std::cout << "✓ Basic parameters match expected values" << std::endl;
+		sim_conf.parse_file(config_file);
 		// Test particle types
 		std::cout << "\n--- Particle Types ---" << std::endl;
-		const auto& particle_types = sim_system.get_particle_types().size();
-		std::cout << "Number of particle types: " << particle_types << std::endl;
+		const auto& particle_types = config.objects.particle_types;
+		std::cout << "Number of particle types: " << particle_types.size() << std::endl;
 
 		// Expected: 3 particle types (D000, O000, S000)
-		assert(particle_types == 3);
+		assert(particle_types.size() == 3);
 
 		// Check each particle type
-		for (size_t i = 0; i < particle_types; ++i) {
-			const auto& ptype = sim_system.get_particle_types()[i];
+		for (size_t i = 0; i < particle_types.size(); ++i) {
+			const auto& ptype = particle_types[i];
 			std::cout << "Type " << i << ": " << ptype.name << " (num=" << ptype.num
 					  << ", mass=" << ptype.mass << ")" << std::endl;
 		}
 
 		// Validate specific particle types from config
-		assert(sim_system.get_particle_types()[0].name == "D000");
-		assert(sim_system.get_particle_types()[0].num == 530);
-		assert(sim_system.get_particle_types()[0].mass == 300.0f);
+		assert(particle_types[0].name == "D000");
+		assert(particle_types[0].num == 530);
+		assert(particle_types[0].mass == 300.0f);
 
-		assert(sim_system.get_particle_types()[1].name == "O000");
-		assert(sim_system.get_particle_types()[1].num == 530);
-		assert(sim_system.get_particle_types()[1].mass == 300.0f);
+		assert(particle_types[1].name == "O000");
+		assert(particle_types[1].num == 530);
+		assert(particle_types[1].mass == 300.0f);
 
-		assert(sim_system.get_particle_types()[2].name == "S000");
-		assert(sim_system.get_particle_types()[2].num == 738);
-		assert(sim_system.get_particle_types()[2].mass == 150.0f);
+		assert(particle_types[2].name == "S000");
+		assert(particle_types[2].num == 738);
+		assert(particle_types[2].mass == 150.0f);
 
 		std::cout << "✓ Particle types match expected values" << std::endl;
 
 		// Test individual particles
 		std::cout << "\n--- Individual Particles ---" << std::endl;
-		const auto& particles = config_parser.get_init_particles();
+		const auto& particles = config.objects.particles;
 		std::cout << "Total number of particles: " << particles.size() << std::endl;
 
 		// Expected: 530 + 530 + 738 = 1798 particles
@@ -104,10 +119,10 @@ void test_parse_circovirus_config() {
 
 		// Test bonds
 		std::cout << "\n--- Bonded Interactions ---" << std::endl;
-		const auto& bonds = config_parser.get_init_bonded_interactions().get_bonds();
-		const auto& angles = config_parser.get_init_bonded_interactions().get_angles();
-		const auto& dihedrals = config_parser.get_init_bonded_interactions().get_dihedrals();
-		const auto& exclusions = config_parser.get_init_bonded_interactions().get_exclusions();
+		const auto& bonds = config.objects.bonds;
+		const auto& angles = config.objects.angles;
+		const auto& dihedrals = config.objects.dihedrals;
+		const auto& exclusions = config.objects.exclusions;
 
 		std::cout << "Bonds: " << bonds.size() << std::endl;
 		std::cout << "Angles: " << angles.size() << std::endl;
@@ -138,12 +153,12 @@ void test_parse_circovirus_config() {
 
 		// Test tabulated potentials
 		std::cout << "\n--- Tabulated Potentials ---" << std::endl;
-		const TablesRegistry& tables = sim_system.get_tables_registry();
-		std::cout << "Number of potential tables: " << tables.get_num_tables() << std::endl;
+		const auto& tables = config.objects.tables;
+		std::cout << "Number of potential tables: " << tables.size() << std::endl;
 
 		// Test boundary conditions creation
 		std::cout << "\n--- Boundary Conditions ---" << std::endl;
-		const PeriodicBox& bc = sim_system.get_boundary_conditions();
+		BoundaryConditions bc = sim_conf.create_boundary_conditions();
 		const auto& origin = bc.get_origin();
 		const auto& basis = bc.get_basis();
 		const auto& periodic = bc.get_periodicity();
@@ -169,7 +184,7 @@ void test_parse_circovirus_config() {
 
 		// Test configuration validation
 		std::cout << "\n--- Configuration Validation ---" << std::endl;
-		assert(sim_system.is_valid());
+		assert(config.is_valid());
 		std::cout << "✓ Configuration passes validation" << std::endl;
 
 		std::cout << "\n=== All Tests Passed! ===" << std::endl;
@@ -214,17 +229,16 @@ inputAngles nonexistent_angles.txt
 	f.close();
 
 	try {
-		SimSystem sim_system(std::vector<Resource>({Resource(single_resource_id)}));
-		ConfigParser config_parser(sim_system, test_file);
-		const BondedInteractions& bonded_interactions =
-			config_parser.get_init_bonded_interactions();
+		SimConf sim_conf(test_file);
+		const Configuration& config = sim_conf.get_config();
+
 		std::cout << "✓ Configuration loaded successfully with missing files" << std::endl;
-		std::cout << "Bonds loaded: " << bonded_interactions.get_num_bonds() << std::endl;
-		std::cout << "Angles loaded: " << bonded_interactions.get_num_angles() << std::endl;
+		std::cout << "Bonds loaded: " << config.objects.bonds.size() << std::endl;
+		std::cout << "Angles loaded: " << config.objects.angles.size() << std::endl;
 
 		// Should handle missing files gracefully (empty lists)
-		assert(bonded_interactions.get_num_bonds() == 0);
-		assert(bonded_interactions.get_num_angles() == 0);
+		assert(config.objects.bonds.empty());
+		assert(config.objects.angles.empty());
 
 		std::cout << "✓ Missing files handled gracefully" << std::endl;
 
@@ -284,18 +298,16 @@ inputAngles ../test_angles.txt
 	f.close();
 
 	try {
-		SimSystem sim_system(std::vector<Resource>({Resource(single_resource_id)}));
-		ConfigParser config_parser(sim_system, test_file);
-		const BondedInteractions& bonded_interactions =
-			config_parser.get_init_bonded_interactions();
+		SimConf sim_conf(test_file);
+		const Configuration& config = sim_conf.get_config();
 
 		std::cout << "✓ Configuration loaded successfully with relative paths" << std::endl;
-		std::cout << "Bonds loaded: " << bonded_interactions.get_num_bonds() << std::endl;
-		std::cout << "Angles loaded: " << bonded_interactions.get_num_angles() << std::endl;
+		std::cout << "Bonds loaded: " << config.objects.bonds.size() << std::endl;
+		std::cout << "Angles loaded: " << config.objects.angles.size() << std::endl;
 
 		// Should have loaded the files
-		assert(bonded_interactions.get_num_bonds() == 2);
-		assert(bonded_interactions.get_num_angles() == 1);
+		assert(config.objects.bonds.size() == 2);
+		assert(config.objects.angles.size() == 1);
 
 		std::cout << "✓ Relative paths resolved correctly" << std::endl;
 
@@ -315,27 +327,27 @@ void test_config_validation() {
 	std::cout << "\n=== Testing Configuration Validation ===" << std::endl;
 
 	// Test invalid configuration
-	SimSystem sim_system(std::vector<Resource>({Resource(single_resource_id)}));
-	sim_system.set_temperature(-1.0f); // Invalid temperature
-	sim_system.set_cutoff(0.0f);	   // Invalid cutoff
+	Configuration invalid_config;
+	invalid_config.temperature.value = -1.0f; // Invalid temperature
+	invalid_config.cutoff.value = 0.0f;		  // Invalid cutoff
 
 	try {
-		ConfigParser config_parser(sim_system, "test_file");
+		SimConf sim_conf(invalid_config);
 		assert(false && "Should have thrown validation error");
 	} catch (const Exception& e) {
 		std::cout << "✓ Correctly caught validation error: " << e.what() << std::endl;
 	}
 
 	// Test valid configuration
-	SimSystem sim_system(std::vector<Resource>({Resource(single_resource_id)}));
-	sim_system.set_temperature(300.0f);
-	sim_system.set_cutoff(10.0f);
-	sim_system.set_timestep(1e-5f);
-	sim_system.set_num_steps(1000);
-	sim_system.set_box_size(100.0f, 100.0f, 100.0f);
+	Configuration valid_config;
+	valid_config.temperature.value = 300.0f;
+	valid_config.cutoff.value = 10.0f;
+	valid_config.steps.timestep = 1e-5f;
+	valid_config.steps.steps = 1000;
+	valid_config.set_box_size(100.0f, 100.0f, 100.0f);
 
 	try {
-		ConfigParser config_parser(sim_system, "test_file");
+		SimConf sim_conf(valid_config);
 		std::cout << "✓ Valid configuration accepted" << std::endl;
 	} catch (const std::exception& e) {
 		std::cerr << "Unexpected error with valid config: " << e.what() << std::endl;
