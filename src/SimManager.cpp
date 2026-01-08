@@ -13,9 +13,39 @@ SimManager::SimManager(SimSystem& sys) : sys_(sys), sys_state_(sys) {
 	timerE_.timer = wkf_timer_create();
 }
 
+SimManager::SimManager(SimSystem& sys, const ConfigParser& parser) : sys_(sys), sys_state_(sys) {
+	load_config(parser);
+	timer0_.timer = wkf_timer_create();
+	timerS_.timer = wkf_timer_create();
+	timerE_.timer = wkf_timer_create();
+}
+
 //================================================================================
 // Initialization
 //================================================================================
+
+void SimManager::load_config(const ConfigParser& parser) {
+	sys_.set_temperature(parser.get_sim_system().get_temperature());
+	sys_.set_cutoff(parser.get_sim_system().get_cutoff());
+	sys_.set_timestep(parser.get_sim_system().get_timestep());
+	sys_.set_num_steps(parser.get_sim_system().get_num_steps());
+	sys_.set_neighbor_list_rebuild_period(
+		parser.get_sim_system().get_neighbor_list_rebuild_period());
+	sys_.set_output_period(parser.get_sim_system().get_output_period());
+	sys_.set_energy_output_period(parser.get_sim_system().get_energy_output_period());
+	sys_.set_output_name(parser.get_sim_system().get_output_name());
+	sys_.set_output_format(parser.get_sim_system().get_output_format());
+	sys_.set_decomposer_type(parser.get_sim_system().get_decomposer_type());
+	sys_.set_long_range_method(parser.get_sim_system().get_long_range_method());
+	sys_.set_particle_integrator_type(parser.get_sim_system().get_particle_algorithm());
+	sys_.set_rigid_body_integrator_type(parser.get_sim_system().get_rigid_body_algorithm());
+	sys_.set_particle_types(parser.get_sim_system().get_particle_types());
+	sys_.set_rigid_body_types(parser.get_sim_system().get_rigid_body_types());
+	sys_.set_base_seed(parser.get_sim_system().get_base_seed());
+
+	sys_state_.set_init_particle_data(parser.get_init_particles());
+	sys_state_.update_bonded_interactions(parser.get_init_bonded_interactions());
+}
 
 void SimManager::init() {
 	wkf_timer_start(&timer0_);
@@ -23,6 +53,7 @@ void SimManager::init() {
 
 	// Initialize output writers based on configuration
 	initialize_output_writers();
+	// Populate configuration.
 
 	// Initialize decomposer if not already set
 	if (!sys_.get_decomposer()) {
@@ -32,7 +63,7 @@ void SimManager::init() {
 
 	// Perform domain decomposition (creates PatchManager in SimSystem)
 	LOGINFO("SimManager: Performing domain decomposition");
-	sys_.decompose_system();
+	sys_.decompose_system(sys_state_);
 
 	// Verify PatchManager was created
 	if (!sys_.has_patch_manager()) {
@@ -41,21 +72,21 @@ void SimManager::init() {
 						"Domain decomposition failed to create PatchManager");
 	}
 	LOGINFO("SimManager: Domain decomposition complete");
+	// copy partice types to device
 
 	// Transfer grids to all GPU resources
 	sys_.get_grid_manager().build_device_arrays();
 	LOGINFO("SimManager: Grids transferred to all resources");
 	sys_.get_tables_registry().build_device_arrays();
 	LOGINFO("SimManager: Tables transferred to all resources");
+	sys_.get_nonbonded_interactions().prepareDeviceData();
+	LOGINFO("SimManager: Nonbonded interactions transferred to all resources");
+	sys_.assign_particle_type_ids();
+	LOGINFO("SimManager: Particle type IDs assigned");
 
-	// Load initial conditions (particles, bonds, etc.)
-	load_initial_conditions();
-
-	// Initialize IMD if requested
-	// TODO: Add IMD support when needed
-	// if (sys_.get_config().imd_enabled) {
-	//     initialize_imd(sys_.get_config().imd_port);
-	// }
+	LOGINFO("SimManager: Particle types transferred to all resources");
+	sys_.build_name_to_id_maps();
+	LOGINFO("SimManager: Name to ID maps built");
 
 	LOGINFO("SimManager: Initialization completed");
 }
@@ -123,7 +154,7 @@ void SimManager::run() {
 void SimManager::initialize_output_writers() {
 	// TODO: Get output format and name from SimSystem when accessors are added
 	// For now, default to DCD format
-	const std::string output_name = "out"; // TODO: Get from SimSystem
+	std::string output_name = sys_.get_output_name();
 
 	dcd_writer_ = std::make_unique<DcdWriter>(output_name + ".dcd");
 	LOGINFO("SimManager: Initialized DCD writer for '{}.dcd'", output_name);
@@ -148,7 +179,12 @@ void SimManager::execute_force_calculation(size_t step) {
 						SourceLocation(),
 						"PatchManager not available for force calculation");
 	}
-
+	for (auto& patch : patch_mgr->get_patches()) {
+		DeviceParticleTypes particle_types(sys_.get_particle_types(), patch->get_resource());
+		particle_types.copy_from_host(sys_.get_particle_types());
+		Event evt =
+			patch->calculate_nonbonded_forces(sys_.get_nonbonded_interactions(), particle_types);
+	}
 	// TODO: Implement force calculation
 	// For each patch:
 	//   1. Update neighbor list if needed
@@ -168,10 +204,10 @@ void SimManager::execute_force_calculation(size_t step) {
 //================================================================================
 
 void SimManager::execute_integration(size_t step) {
-	const DynamicType particle_algorithm = sys_.get_particle_algorithm();
-	const DynamicType rigidbody_algorithm = sys_.get_rigid_body_algorithm();
+	const IntegratorType particle_algorithm = sys_.get_particle_algorithm();
+	const IntegratorType rigidbody_algorithm = sys_.get_rigid_body_algorithm();
 	const float timestep = sys_.get_timestep();
-	const float temperature = sys_.get_temperature();
+	const Temperature& temperature = sys_.get_temperature_struct();
 
 	// Access PatchManager through SimSystem
 	PatchManager* patch_mgr = sys_.get_patch_manager();
@@ -181,17 +217,13 @@ void SimManager::execute_integration(size_t step) {
 						"PatchManager not available for integration");
 	}
 
-	// TODO: Implement integration for each patch
-	// Select integrator based on algorithm type
-	// Execute integration kernel on each resource
-
-	// Placeholder logging
-	if (step == 1) {
-		LOGINFO("SimManager: Integration (algorithm: {}, dt: {}, T: {}) not yet implemented",
-				static_cast<int>(particle_algorithm),
-				timestep,
-				temperature);
+	// Execute integration for each patch
+	// Each patch runs independently on its assigned resource
+	for (auto& patch : patch_mgr->get_patches()) {
+		Event evt = patch->integrate_motion(timestep, temperature, particle_algorithm, step);
 	}
+
+	current_step_ = step; // Update step counter for RNG state tracking
 }
 
 //================================================================================
@@ -243,94 +275,29 @@ void SimManager::handle_output(size_t step) {
 			// traj_writer_->write_frame(step);
 		}
 
-		// Periodic restart files
-		// TODO: Add restart file writing
-		// const size_t restart_period = 10000; // from config
-		// if (step % restart_period == 0) {
-		//     write_restart_file(step);
-		// }
-
 		wkf_timer_stop(&timerS_);
 	}
 }
 
 void SimManager::gather_particle_data_from_patches() {
 	PatchManager* patch_mgr = sys_.get_patch_manager();
+	sys_state_.clear_global_arrays();
 	if (!patch_mgr) {
 		throw Exception(ExceptionType::RuntimeError,
 						SourceLocation(),
 						"PatchManager not available for gathering particle data");
 	}
+	patch_mgr->gather_particles_to_state(sys_state_);
 
-	SystemState& state = sys_state_;
-	state.clear_global_arrays();
-
-#ifdef USE_MPI
-	// In MPI mode: gather from local patch + exchange with other ranks
-	const Patch& local_patch = patch_mgr->get_local_patch();
-	const HostParticleData& particle_data = local_patch.get_particle_data();
-	idx_t local_num = local_patch.get_num();
-
-	// Collect from local patch
-	std::vector<Vector3> positions;
-	std::vector<Vector3> momenta;
-	std::vector<int> ids;
-	positions.reserve(local_num);
-	momenta.reserve(local_num);
-	ids.reserve(local_num);
-
-	for (idx_t i = 0; i < local_num; ++i) {
-		positions.push_back(particle_data.pos[i]);
-		momenta.push_back(particle_data.mom[i]);
-		ids.push_back(particle_data.id[i]);
-	}
-
-	state.add_particle_data(positions, momenta, ids);
-
-	// TODO: MPI_Gatherv to collect from all ranks and assemble in global order
-	// This requires coordination with PatchManager's MPI communication
-
-#else
-	// Non-MPI: collect from all local patches
-	const auto& patches = patch_mgr->get_all_patches();
-	for (const auto& patch : patches) {
-		const HostParticleData& particle_data = patch.get_particle_data();
-		idx_t num = patch.get_num();
-
-		std::vector<Vector3> positions;
-		std::vector<Vector3> momenta;
-		std::vector<int> ids;
-		positions.reserve(num);
-		momenta.reserve(num);
-		ids.reserve(num);
-
-		for (idx_t i = 0; i < num; ++i) {
-			positions.push_back(particle_data.pos[i]);
-			momenta.push_back(particle_data.mom[i]);
-			ids.push_back(particle_data.id[i]);
-		}
-
-		state.add_particle_data(positions, momenta, ids);
-	}
-#endif
-
-	state.mark_synced();
+	sys_state_.mark_synced();
 }
 
 void SimManager::write_dcd_frame(size_t step) {
 	// Gather global state from patches
 	gather_particle_data_from_patches();
-
-	// Get global positions for DCD writing
-	const auto& positions = sys_state_.get_global_positions();
-
-	if (positions.empty()) {
-		LOGWARN("SimManager: No particles to write at step {}", step);
-		return;
-	}
-
-	// Write DCD frame
-	if (dcd_writer_) {
+	if (sys_state_.prepare_for_dcd_output()) {
+		// 3. Get positions for DCD writing
+		const auto& positions = sys_state_.get_global_positions();
 		dcd_writer_->writeStep(positions);
 	}
 }
@@ -390,12 +357,6 @@ void SimManager::handle_imd_commands() {
 // Initial Conditions
 //================================================================================
 
-void SimManager::load_initial_conditions() {
-	// SystemState is already initialized in constructor
-	// TODO: Load actual particle data from files or generate initial positions
-	LOGINFO("SimManager: Initial conditions loaded");
-}
-
 void SimManager::generate_initial_particles(std::vector<Vector3>& positions,
 											std::vector<int>& types) {
 	const Vector3 box_size = sys_.get_box_size();
@@ -415,7 +376,7 @@ void SimManager::generate_initial_particles(std::vector<Vector3>& positions,
 		types.push_back(0); // All type 0 for now
 	}
 
-	LOGINFO("SimManager: Generated {} particles in box {}", num_particles, box_size);
+	LOGINFO("SimManager: Generated {} particles", num_particles);
 }
 
 void SimManager::load_restart_data(const std::string& filename) {
@@ -446,4 +407,37 @@ void SimManager::write_final_restart() {
 	// write_restart_file(restart_filename, positions, velocities, types);
 }
 
+//================================================================================
+// Particle Reactions
+//================================================================================
+/*
+void SimManager::perform_reactions() {
+	Patch& patch = sys_.get_patch_manager()->get_local_patch();
+
+	// 1. Run Reaction Kernel
+	//    Sets FLAG_DEAD on some particles.
+	//    Creates new particles in a temporary "Birth Buffer".
+
+	// 2. Remove Dead Particles
+	//    Compacts DeviceParticle array.
+	//    Generates 'permutation_map'.
+	auto perm_map = patch.compact_particles();
+
+	// 3. Update Interactions (Fix Indices)
+	if (patch.has_topology_changes()) {
+		for (auto& interaction : interactions_) {
+			interaction->update_topology(perm_map);
+		}
+	}
+
+	// 4. Add New Particles
+	//    Appends from "Birth Buffer" to end of DeviceParticle.
+	//    (No index shifting for existing particles, so safe).
+	patch.append_from_buffer(birth_buffer);
+
+	// 5. Rebuild Neighbor Lists
+	//    Mandatory after moving particles.
+	neighbor_list_.force_rebuild();
+}
+*/
 } // namespace ARBD

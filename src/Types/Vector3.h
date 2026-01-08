@@ -361,4 +361,30 @@ struct common_type<ARBD::Vector3_t<T>, ARBD::Vector3_t<U> > {
 } // namespace std
 #endif
 
+// fmt::formatter specialization for Vector3_t (host-only)
+#ifdef HOST_GUARD
+#ifndef FMT_HEADER_ONLY
+#define FMT_HEADER_ONLY
+#endif
+#include "../extern/fmt/include/fmt/format.h"
+namespace fmt {
+template<typename T>
+struct formatter<ARBD::Vector3_t<T> > {
+	template<typename ParseContext>
+	constexpr auto parse(ParseContext& ctx) {
+		return ctx.begin();
+	}
+
+	template<typename FormatContext>
+	auto format(const ARBD::Vector3_t<T>& v, FormatContext& ctx) const {
+		return format_to(ctx.out(),
+						 "({:.3f}, {:.3f}, {:.3f})",
+						 static_cast<float>(v.x),
+						 static_cast<float>(v.y),
+						 static_cast<float>(v.z));
+	}
+};
+} // namespace fmt
+#endif // HOST_GUARD
+
 #endif // __METAL_VERSION__

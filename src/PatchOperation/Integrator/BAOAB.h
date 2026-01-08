@@ -1,40 +1,49 @@
 #pragma once
 #include "../Random/philox.h"
 #include "Header.h"
-#include "Objects/ParticleProperties.h"
-#include "System/SimSystem.h"
+#include "Objects/DeviceParticle.h"
+#include "Types/BaseGrid.h"
 #include "Types/IndexList.h"
 #include "Types/Types.h"
 #include "Types/Vector3.h"
 
 namespace ARBD {
+template<typename TemperatureType = float>
 struct BAOABIntegrate {
+	ParticleView particle_view;
+	const ParticleTypeView* particle_types;
+	Vector3 box_size;
+	float timestep;
+	TemperatureType kT;
+	size_t num_particles;
+	uint64_t base_seed;
+	uint32_t base_ctr;
 
-	template<typename T>
-	DEVICE void operator()(idx_t idx,
-						   Vector3* positions,
-						   Vector3* momenta,
-						   const Vector3* forces,
-						   const int* types,
-						   const ParticleTypeView* particle_types,
-						   const Vector3& box_size,
-						   float timestep,
-						   float kT,
-						   size_t num_particles,
-						   uint64_t base_seed,
-						   uint32_t base_ctr) {
+	// Constructor for proper initialization
+	BAOABIntegrate(ParticleView pv,
+				   const ParticleTypeView* pt,
+				   const Vector3& box,
+				   float dt,
+				   TemperatureType temp,
+				   size_t n,
+				   uint64_t seed,
+				   uint32_t ctr)
+		: particle_view(pv), particle_types(pt), box_size(box), timestep(dt), kT(temp),
+		  num_particles(n), base_seed(seed), base_ctr(ctr) {}
+
+	DEVICE void operator()(idx_t idx) const {
 		if (idx >= num_particles)
 			return;
 
-		Vector3 pos = positions[idx];
-		Vector3 mom = momenta[idx];
-		Vector3 force = forces[idx];
-		int type = types[idx];
+		Vector3 pos = particle_view.pos[idx];
+		Vector3 mom = particle_view.mom[idx];
+		Vector3 force = particle_view.ForceEnergy[idx];
+		int type = particle_view.type_id[idx];
 
-		const ParticleTypeView& pt = particle_types[idx]; // Do I really need this?
-		float mass = *pt.mass;
-		Vector3 gamma3 = pt.transDamping[idx];
-		float gamma = gamma3.length(); //???
+		const ParticleTypeView& pt = particle_types[type];
+		float mass = pt.mass[type];
+		Vector3 gamma3 = pt.transDamping[type];
+		float gamma = gamma3.length();
 		// BAOAB integration scheme
 		// B: momentum update (half step)
 		mom += 0.5f * timestep * force;
@@ -76,8 +85,15 @@ struct BAOABIntegrate {
 
 		// B: momentum update (half step) - done in next step
 
-		positions[idx] = pos;
-		momenta[idx] = mom;
+		particle_view.pos[idx] = pos;
+		particle_view.mom[idx] = mom;
 	}
 };
 } // namespace ARBD
+
+// SYCL device copyable trait
+#ifdef USE_SYCL
+#include <sycl/sycl.hpp>
+template<typename TemperatureType>
+struct sycl::is_device_copyable<ARBD::BAOABIntegrate<TemperatureType>> : std::true_type {};
+#endif

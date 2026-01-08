@@ -1,25 +1,21 @@
-#include "PatchOperation/ZOrderPairlist.h"
+#include "ZOrderPairlist.h"
 #include "ARBDException.h"
 #include "ARBDLogger.h"
-#include "Backend/Kernels.h"
-#include "Backend/Buffer.h"
-#include "PatchOperation/PairListKernels/DisplacementTracker.h"
-#include "PatchOperation/PairListKernels/ZOrderNeighbor.h"
+
+#include "ZOrderNeighbor.h"
 #include <chrono>
-#include <cmath>
 
 namespace ARBD {
 
 ZOrderPairlist::ZOrderPairlist(const Resource& resource, size_t max_particles, size_t max_pairs)
 	: Pairlist(resource, max_particles, max_pairs),
 	  sorter_(resource, max_particles, ZOrderOptimizationMode::Pairlist), // Use Pairlist mode
-	  sorted_positions_(max_particles, resource),
-	  persistent_bbox_min_(1, resource), persistent_bbox_max_(1, resource),
-	  adaptive_search_ranges_(max_particles, resource),
+	  sorted_positions_(max_particles, resource), persistent_bbox_min_(1, resource),
+	  persistent_bbox_max_(1, resource), adaptive_search_ranges_(max_particles, resource),
 	  use_adaptive_ranges_(true), use_hierarchical_search_(false),
 	  search_range_(64), // Default search range
-	  auto_bbox_(true), manual_box_min_(0.0f), manual_box_max_(1.0f),
-	  last_build_time_ms_(0.0), last_max_neighbors_(0) {
+	  auto_bbox_(true), manual_box_min_(0.0f), manual_box_max_(1.0f), last_build_time_ms_(0.0),
+	  last_max_neighbors_(0) {
 
 	// Configure smart updates for Pairlist mode
 	sorter_.enable_smart_updates(true);
@@ -48,26 +44,33 @@ void ZOrderPairlist::build_pairlist(const DeviceBuffer<Vector3>& positions,
 	// Step 1: Determine bounding box
 	Vector3 box_min, box_max;
 	get_bounding_box(positions, num_particles, box_min, box_max);
+	LOGTRACE("Bounding box: [{:.3f}, {:.3f}, {:.3f}] to [{:.3f}, {:.3f}, {:.3f}]",
+			 box_min.x,
+			 box_min.y,
+			 box_min.z,
+			 box_max.x,
+			 box_max.y,
+			 box_max.z);
 
 	// Step 2: Sort particles by Morton code
 	sorter_.sort_particles(positions, num_particles, box_min, box_max);
+	LOGTRACE("Sorted particles by Morton code");
 
 	// Step 3: Reorder positions for cache-friendly access
 	sorter_.reorder_data(positions, sorted_positions_, num_particles);
-
+	LOGTRACE("Reordered positions for cache-friendly access");
 	// Step 4: Find neighbors using sorted order
 	reset_pair_count();
 	find_neighbors_zorder(num_particles);
-
+	LOGTRACE("Found neighbors using sorted order");
 	// Step 5: Update internal state
 	update_state(num_particles, cutoff);
-
+	LOGTRACE("Updated internal state");
 	// ZOrderSort in Pairlist mode handles position tracking automatically
-
+	LOGTRACE("ZOrderSort in Pairlist mode handles position tracking automatically");
 	auto end_time = std::chrono::high_resolution_clock::now();
 	last_build_time_ms_ = std::chrono::duration<double, std::milli>(end_time - start_time).count();
-
-	LOGTRACE("Z-order pairlist built: {} pairs in {:.2f} ms", num_pairs_, last_build_time_ms_);
+	LOGTRACE("Z-order pairlist built in {:.2f} ms", last_build_time_ms_);
 }
 
 void ZOrderPairlist::update_pairlist(const DeviceBuffer<Vector3>& positions, size_t num_particles) {
@@ -94,9 +97,7 @@ void ZOrderPairlist::resize(size_t new_max_particles, size_t new_max_pairs) {
 	sorted_positions_.resize(new_max_particles);
 	adaptive_search_ranges_.resize(new_max_particles);
 
-	LOGINFO("Resized ZOrderPairlist to {} particles, {} pairs",
-			new_max_particles,
-			new_max_pairs);
+	LOGINFO("Resized ZOrderPairlist to {} particles, {} pairs", new_max_particles, new_max_pairs);
 }
 
 Pairlist::Statistics ZOrderPairlist::get_statistics() const {
@@ -157,8 +158,5 @@ void ZOrderPairlist::get_bounding_box(const DeviceBuffer<Vector3>& positions,
 		box_max = manual_box_max_;
 	}
 }
-
-
-
 
 } // namespace ARBD

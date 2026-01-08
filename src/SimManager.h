@@ -19,6 +19,7 @@
 #include "Backend/Kernels.h"
 #include "Backend/Profiler.h"
 #include "Backend/Resource.h"
+#include "IO/ConfigParser.h"
 #include "IO/DcdWriter.h"
 #include "IO/TrajectoryWriter.h"
 #include "IO/WKFUtils.h"
@@ -53,6 +54,12 @@ class SimManager {
 	 * @param sys Simulation system containing configuration and global objects
 	 */
 	SimManager(SimSystem& sys);
+	/**
+	 * @brief Construct simulation manager
+	 * @param sys Simulation system containing configuration and global objects
+	 * @param parser Configuration parser
+	 */
+	SimManager(SimSystem& sys, const ConfigParser& parser);
 
 	/**
 	 * @brief Initialize simulation manager
@@ -60,6 +67,11 @@ class SimManager {
 	 */
 	void init();
 
+	/**
+	 * @brief Initialize simulation manager configuration
+	 * @param parser Configuration parser
+	 */
+	void load_config(const ConfigParser& parser);
 	/**
 	 * @brief Run the main simulation loop
 	 * Executes the complete simulation with force calculation, integration, and I/O
@@ -86,8 +98,8 @@ class SimManager {
 	SimSystem& sys_; // System owns PatchManager, accessible via sys_.get_patch_manager()
 	SystemState sys_state_;
 
-	// Random number generators per resource
-	std::unordered_map<const Resource*, int> rngs_;
+	// Random number generation
+	size_t current_step_{0}; ///< Current simulation step (used for RNG counter)
 	//================================================================================
 	// Timing and Performance
 	//================================================================================
@@ -206,6 +218,11 @@ class SimManager {
 	 */
 	void write_final_restart();
 	void load_restart_data(const std::string& filename);
+
+	/**
+	 * @brief Perform particle reactions
+	 */
+	void perform_reactions();
 };
 
 } // namespace ARBD

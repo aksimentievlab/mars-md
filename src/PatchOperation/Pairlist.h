@@ -20,8 +20,8 @@ namespace ARBD {
  * @brief Enumeration of available pairlist strategies
  */
 enum class PairlistBuilderType {
-	CellList,	 ///< Traditional cell-based neighbor lists
 	ZOrder,		 ///< Z-order (Morton) based spatial sorting
+	CellList,	 ///< Traditional cell-based neighbor lists
 	VerletList,	 ///< Verlet neighbor lists
 	Hierarchical ///< Hierarchical spatial structures (future)
 };
@@ -84,7 +84,7 @@ class Pairlist {
 	virtual bool needs_update(const DeviceBuffer<Vector3>& positions,
 							  const DeviceBuffer<Vector3>& old_positions,
 							  size_t num_particles,
-							  float pairlist_distance) const {
+							  float skin_distance) const {
 		// Default implementation: always update
 		// Derived classes can implement smarter update criteria
 		return true;

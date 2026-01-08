@@ -1,19 +1,20 @@
+
 #ifdef USE_SYCL
-#include "SYCLSort.h"
-#include "ARBDLogger.h"
+#include "Backend/Resource.h"
+#include "DeviceRadix.h"
 #include <iostream>
 #include <sycl/sycl.hpp>
 
 namespace ARBD {
 
-void sort_morton_codes_sycl(const Resource& device,
-							uint32_t* keys,
-							uint32_t* payloads,
-							uint32_t* alt_keys,
-							uint32_t* alt_payloads,
-							uint32_t* globalHistogram,
-							uint32_t* passHistogram,
-							uint32_t size) {
+void device_radix_sort_pairs_usm(const Resource& device,
+								 uint32_t* keys,
+								 uint32_t* payloads,
+								 uint32_t* alt_keys,
+								 uint32_t* alt_payloads,
+								 uint32_t* globalHistogram,
+								 uint32_t* passHistogram,
+								 uint32_t size) {
 	// Get SYCL queue from resource
 	sycl::queue& q = *static_cast<sycl::queue*>(device.get_stream());
 
@@ -22,13 +23,18 @@ void sort_morton_codes_sycl(const Resource& device,
 		std::cerr << "WARNING: Launching " << threadBlocks
 				  << " blocks. Input size may be too large." << std::endl;
 	}
+
+	std::cout << "DeviceRadixSortUSM: size=" << size << ", threadBlocks=" << threadBlocks
+			  << std::endl;
+
 	// Four radix passes
 	for (uint32_t pass = 0; pass < 4; ++pass) {
 		const uint32_t radixShift = pass * 8;
-		// Reset histograms
-		q.memset(globalHistogram, 0, DRS_RADIX * 4 * sizeof(uint32_t));
-		q.memset(passHistogram, 0, DRS_RADIX * threadBlocks * sizeof(uint32_t));
-		q.wait();
+		if (pass > 0) {
+			// Reset histograms
+			q.memset(globalHistogram, 0, DRS_RADIX * 4 * sizeof(uint32_t));
+			q.memset(passHistogram, 0, DRS_RADIX * threadBlocks * sizeof(uint32_t));
+		}
 
 		uint32_t* input_keys = (pass % 2 == 0) ? keys : alt_keys;
 		uint32_t* input_payloads = (pass % 2 == 0) ? payloads : alt_payloads;
@@ -133,9 +139,11 @@ void sort_morton_codes_sycl(const Resource& device,
 				});
 		});
 		q.wait();
-		//  ========================================================================
-		//  Scan: Compute prefix sums across work-groups
-		//  ========================================================================
+		std::cout << "Pass " << pass << " upsweep completed" << std::endl;
+
+		// ========================================================================
+		// Scan: Compute prefix sums across work-groups
+		// ========================================================================
 		q.submit([&](sycl::handler& h) {
 			sycl::local_accessor<uint32_t, 1> s_scan(DRS_SCAN_THREADS, h);
 
@@ -192,7 +200,8 @@ void sort_morton_codes_sycl(const Resource& device,
 							   }
 						   });
 		});
-		// q.wait();
+		q.wait();
+		std::cout << "Pass " << pass << " scan completed" << std::endl;
 
 		// Compute exclusive prefix sum of global histogram on device
 		// This is needed because globalHistogram is used as base offset in
@@ -223,7 +232,7 @@ void sort_morton_codes_sycl(const Resource& device,
 				globalHistogram[global_offset + local_id] = s_counts[local_id];
 			});
 		});
-		// q.wait();
+		q.wait();
 
 		// ========================================================================
 		// Downsweep: Scatter keys and payloads
@@ -333,7 +342,7 @@ void sort_morton_codes_sycl(const Resource& device,
 					}
 					item.barrier(sycl::access::fence_space::local_space);
 
-// Scatter keys into shared memory
+				// Scatter keys into shared memory
 #pragma unroll
 					for (uint32_t i = 0; i < DRS_BIN_KEYS_PER_THREAD; ++i)
 						s_warpHistograms[offsets[i]] = keys[i];
@@ -350,7 +359,7 @@ void sort_morton_codes_sycl(const Resource& device,
 						}
 						item.barrier(sycl::access::fence_space::local_space);
 
-// Load payloads
+					// Load payloads
 #pragma unroll
 						for (uint32_t i = 0, t = lane_id + bin_sub_part_start + bin_part_start;
 							 i < DRS_BIN_KEYS_PER_THREAD;
@@ -358,13 +367,13 @@ void sort_morton_codes_sycl(const Resource& device,
 							keys[i] = input_payloads[t];
 						}
 
-// Scatter payloads into shared memory
+					// Scatter payloads into shared memory
 #pragma unroll
 						for (uint32_t i = 0; i < DRS_BIN_KEYS_PER_THREAD; ++i)
 							s_warpHistograms[offsets[i]] = keys[i];
 						item.barrier(sycl::access::fence_space::local_space);
 
-// Scatter payloads to device
+					// Scatter payloads to device
 #pragma unroll
 						for (uint32_t i = 0, t = local_id; i < DRS_BIN_KEYS_PER_THREAD;
 							 ++i, t += DRS_BIN_THREADS) {
@@ -408,9 +417,14 @@ void sort_morton_codes_sycl(const Resource& device,
 				});
 		});
 		q.wait();
+		std::cout << "Pass " << pass << " downsweep completed" << std::endl;
 	}
 
-} // namespace ARBD
+	// Determine final output location (after 4 passes: pass 0->alt, 1->keys,
+	// 2->alt, 3->keys) So after pass 3, output is in keys
+	uint32_t* final_keys = keys;
+	uint32_t* final_payloads = payloads;
+}
 
 } // namespace ARBD
 #endif // USE_SYCL

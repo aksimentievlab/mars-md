@@ -15,7 +15,21 @@ namespace ARBD {
  */
 namespace SignalManager {
 
-#ifdef HOST_GUARD
+// Only provide full signal handling on true host code
+// For device code (CUDA/SYCL/Metal kernels), provide minimal stubs
+#if defined(__CUDA_ARCH__) || defined(__SYCL_DEVICE_ONLY__) || defined(__METAL_VERSION__)
+// Pure device code - provide minimal stubs
+struct siginfo_t {
+	int dummy;
+};
+inline void segfault_handler(int sig, siginfo_t* info, void* secret) {}
+inline void manage_segfault() {}
+inline bool is_shutdown_requested() {
+	return false;
+}
+
+#else
+// Host code (including host pass of SYCL/CUDA compilation)
 
 #ifdef SIGNAL
 
@@ -66,17 +80,7 @@ inline bool is_shutdown_requested() {
 	return shutdown_requested != 0;
 }
 
-#else
-// Stub implementations for device compilation
-struct siginfo_t {
-	int dummy;
-};
-inline void segfault_handler(int sig, siginfo_t* info, void* secret) {}
-inline void manage_segfault() {}
-inline bool is_shutdown_requested() {
-	return false;
-}
-#endif
+#endif // device vs host
 
 } // namespace SignalManager
 

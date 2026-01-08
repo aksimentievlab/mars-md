@@ -11,6 +11,7 @@ namespace ARBD {
  * @details Lightweight POD struct safe for passing to CUDA/SYCL kernels by value.
  *          Contains only raw pointers and trivially copyable types.
  *          All operations are const and device-safe.
+ *	@brief Boundary condition types for grid operations
  *
  * @tparam T Grid value type (float/double)
  */
@@ -23,6 +24,8 @@ struct BaseGridView {
 	Matrix3_t<T> basis_inv;		 ///< Cached inverse basis
 	Vector3_t<idx_t> dimensions; ///< Grid dimensions (nx, ny, nz)
 	int grid_id;
+	int boundary_condition;
+	// 1- Dirichlet, 2- Neumann, 3- Periodic
 	/*===================*\
 	|  INDEX OPERATIONS   |
 	\*===================*/
@@ -191,7 +194,8 @@ struct InterpolateGridPoint {
 				 const Vector3_t<T>& world_pos,
 				 const Vector3_t<T>& origin,
 				 const Matrix3_t<T>& basis_inv,
-				 const Vector3_t<idx_t>& dimensions) const {
+				 const Vector3_t<idx_t>& dimensions,
+				 int boundary_condition) const {
 		// Transform world position to grid coordinates
 		const Vector3_t<T> grid_pos = basis_inv.transform(world_pos - origin);
 
@@ -258,7 +262,8 @@ HOST DEVICE T interpolate_grid_point(const T* grid_values,
 									 const Vector3_t<T>& world_pos,
 									 const Vector3_t<T>& origin,
 									 const Matrix3_t<T>& basis_inv,
-									 const Vector3_t<idx_t>& dimensions) {
+									 const Vector3_t<idx_t>& dimensions,
+									 int boundary_condition) {
 	// Transform world position to grid coordinates
 	const Vector3_t<T> grid_pos = basis_inv.transform(world_pos - origin);
 
@@ -324,7 +329,8 @@ HOST DEVICE T get_value_nearest(const T* grid_values,
 								const Vector3_t<T>& world_pos,
 								const Vector3_t<T>& origin,
 								const Matrix3_t<T>& basis_inv,
-								const Vector3_t<idx_t>& dimensions) {
+								const Vector3_t<idx_t>& dimensions,
+								int boundary_condition) {
 	// Transform to grid coordinates
 	const Vector3_t<T> grid_pos = basis_inv.transform(world_pos - origin);
 
@@ -352,7 +358,8 @@ HOST DEVICE Vector3_t<T> compute_gradient(const T* grid_values,
 										  const Vector3_t<T>& origin,
 										  const Matrix3_t<T>& basis,
 										  const Matrix3_t<T>& basis_inv,
-										  const Vector3_t<idx_t>& dimensions) {
+										  const Vector3_t<idx_t>& dimensions,
+										  int boundary_condition) {
 	const Vector3_t<T> grid_pos = basis_inv.transform(world_pos - origin);
 
 	const idx_t nx = dimensions.x;
@@ -466,7 +473,8 @@ HOST DEVICE T get_neighbor_from_grid(const T* grid_values,
 									 int di,
 									 int dj,
 									 int dk,
-									 const Vector3_t<idx_t>& dimensions) {
+									 const Vector3_t<idx_t>& dimensions,
+									 int boundary_condition) {
 	const idx_t ni = wrap_index(static_cast<int>(ix) + di, dimensions.x);
 	const idx_t nj = wrap_index(static_cast<int>(iy) + dj, dimensions.y);
 	const idx_t nk = wrap_index(static_cast<int>(iz) + dk, dimensions.z);

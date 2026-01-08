@@ -87,23 +87,6 @@ inline LogLevel Logger::current_level = LogLevel::INFO;
 
 } // namespace ARBD
 
-// Debug.h compatibility layer
-#ifdef DEBUGMSG
-#define Debug(x) (x)
-#define DebugMsg(level, ...)                                           \
-	ARBD::Logger::log(static_cast<ARBD::LogLevel>(std::min(level, 5)), \
-					  ARBD::SourceLocation(),                          \
-					  __VA_ARGS__)
-#define DebugMessage(level, message)                                   \
-	ARBD::Logger::log(static_cast<ARBD::LogLevel>(std::min(level, 5)), \
-					  ARBD::SourceLocation(),                          \
-					  std::string_view(message))
-#else
-#define Debug(x) static_cast<void>(0)
-#define DebugMsg(level, ...) static_cast<void>(0)
-#define DebugMessage(level, message) static_cast<void>(0)
-#endif
-
 // ============================================================================
 // HOST-ONLY LOGGING MACROS (for .cpp files and host-side code)
 // ============================================================================

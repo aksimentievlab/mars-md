@@ -1,83 +1,113 @@
+# src/CMakeLists.txt
+# Main CMakeLists.txt for the src directory
+# Uses add_subdirectory() to include all subdirectories
 
-# Define HOST-ONLY headers (cannot be included in device code)
+# Initialize lists that will be populated by subdirectories
 set(HOST_ONLY_HEADERS
     SignalManager.h
-    Configuration.h
-    IO/ConfigParser.h
-    Backend/Resource.h
-    Backend/MPIManager.h
-    Backend/CUDA/CUDAManager.h
-    Backend/SYCL/SYCLManager.h
-    Backend/METAL/METALManager.h
-    Backend/SYCL/SYCLBuffer.h
-    Backend/SYCL/SYCLQueues.h
-    Backend/SYCL/SYCLKernels.h
-    Types/Array.h
-    Types/BaseGrid.h
+    SimManager.h
+    ARBDException.h
+    ARBDLogger.h
+)
+set(HOST_DEVICE_HEADERS
+    "SimParam.h"
+    "Header.h"
+    "Constants.h"
 )
 
-# Define DEVICE-SAFE headers (can be included in both host and device code)
-set(DEVICE_SAFE_HEADERS
-    Types/Matrix3.h
-    Types/Vector3.h
-    Types/Vector2.h
-    Types/TypeName.h
-    Types/IndexList.h
-    Types/BaseGridDevice.h
-    Types/Bitmask.h
-    Types/Grid.h
-    Types/NanoGridHandle.h
-    Types/NanoGridKernels.h
-    Types/Types.h
-    Types/Math.h
-    Objects/DeviceParticle.h
-    System/ZOrderKernels/SYCLSort.h
-)
+set(DEVICE_ONLY_HEADERS "")
 
-set(LIB_SOURCES
+set(LIB_SOURCES "")
+
+# SYCL-specific source lists (only used when SYCL is enabled)
+if(USE_SYCL_ICPX OR USE_SYCL_ACPP)
+    set(SYCL_DEVICE_SOURCES "")  # Sources with device kernels (need -fsycl -fsycl-targets)
+    set(SYCL_HOST_SOURCES "")    # Sources using SYCL runtime API only (need -fsycl only)
+endif()
+
+# Root-level source files
+list(APPEND LIB_SOURCES
     SignalManager.cpp
-    Objects/ParticleProperties.cpp
-    Configuration.cpp
-    IO/ConfigParser.cpp
-    Backend/Resource.cpp
-    System/ZOrderSort.cpp
-    System/ZOrderDecomposer.cpp
-    Compute/ZOrderPairlist.cpp
-    #Math/BaseGrid.cpp
+    SimManager.cpp
 )
 
-# Add Backend subdirectory
+# Root-level headers
+list(APPEND HOST_ONLY_HEADERS
+
+)
+
+# Add all subdirectories (order matters for dependencies)
 add_subdirectory(Backend)
+add_subdirectory(Types)
+add_subdirectory(Objects)
+add_subdirectory(Interactions)
+add_subdirectory(IO)
+add_subdirectory(System)
+add_subdirectory(PatchOperation)
 
-# Add conditional Backend sources
-if(USE_MPI)
-    list(APPEND LIB_SOURCES Backend/MPIManager.cpp)
-    message(STATUS "Backend: Adding MPI specific sources to lib${PROJECT_NAME}")
-endif()
-
-if(USE_CUDA)
-    list(APPEND LIB_SOURCES
-        Backend/CUDA/CUDAManager.cpp
-        Backend/CUDA/KernelHelper.cu
-        System/ZOrderKernels/CUDASort.cu
-    )
-    message(STATUS "Backend: Adding CUDA specific sources to lib${PROJECT_NAME}")
-endif()
-
-if(USE_SYCL_ACPP OR USE_SYCL_ICPX)
-    list(APPEND LIB_SOURCES Backend/SYCL/SYCLManager.cpp)
-    message(STATUS "Backend: Adding SYCL specific sources to lib${PROJECT_NAME}")
-endif()
-
-if(USE_METAL)
-    list(APPEND LIB_SOURCES Backend/METAL/METALManager.cpp)
-    message(STATUS "Backend: Adding Metal specific sources to lib${PROJECT_NAME}")
-endif()
-
-# Backend-specific sources are now handled by Backend/CMakeLists.txt
-
-# Define the library with all collected sources.
+# Define the library with all collected sources
 add_library("lib${PROJECT_NAME}" ${LIB_SOURCES})
+
+# For SYCL builds, apply -fsycl-targets only to device sources
+# Note: -fsycl is already set globally in root CMakeLists.txt
+if(USE_SYCL_ICPX OR USE_SYCL_ACPP)
+    # Some files are pure host code and should not be compiled with SYCL at all
+    # These files don't include any SYCL headers or device code
+    # NOTE: Most files need SYCL runtime support (Resource.h uses sycl::queue)
+    # Only exclude files that don't use ANY backend abstractions
+    set(PURE_HOST_SOURCES
+        SignalManager.cpp
+    )
+
+    foreach(source ${PURE_HOST_SOURCES})
+        get_filename_component(source_abs "${CMAKE_CURRENT_SOURCE_DIR}/${source}" ABSOLUTE)
+        if(EXISTS "${source_abs}")
+            set_source_files_properties("${source_abs}"
+                PROPERTIES
+                COMPILE_FLAGS "-fno-sycl"
+            )
+        endif()
+    endforeach()
+    message(STATUS "Configuring SYCL compilation:")
+    message(STATUS "  Device sources (with kernels): ${SYCL_DEVICE_SOURCES}")
+    message(STATUS "  Host SYCL sources (runtime API): ${SYCL_HOST_SOURCES}")
+
+    # Apply -fsycl-targets ONLY to device sources (files with kernels)
+    # These files need device compilation
+    foreach(source ${SYCL_DEVICE_SOURCES})
+        get_filename_component(source_abs "${CMAKE_CURRENT_SOURCE_DIR}/${source}" ABSOLUTE)
+        if(EXISTS "${source_abs}")
+            message(STATUS "  Marking ${source} for SYCL device compilation with targets")
+            set_source_files_properties("${source_abs}"
+                PROPERTIES
+                COMPILE_FLAGS "${SYCL_DEVICE_EXTRA_FLAGS} -DSYCL_DEVICE_SOURCE"
+            )
+        else()
+            message(WARNING "  SYCL device source not found: ${source_abs}")
+        endif()
+    endforeach()
+
+    # Host SYCL sources just use global -fsycl (no extra flags needed)
+    foreach(source ${SYCL_HOST_SOURCES})
+        get_filename_component(source_abs "${CMAKE_CURRENT_SOURCE_DIR}/${source}" ABSOLUTE)
+        if(EXISTS "${source_abs}")
+            message(STATUS "  Marking ${source} for SYCL host compilation")
+            set_source_files_properties("${source_abs}"
+                PROPERTIES
+                COMPILE_FLAGS "-DSYCL_HOST_SOURCE"
+            )
+        else()
+            message(WARNING "  SYCL host source not found: ${source_abs}")
+        endif()
+    endforeach()
+
+    # All other sources compile with global -fsycl (for SYCL headers) but no device compilation
+
+    # Add SYCL link flags to the library
+    # Separate the flags properly - SYCL_LINK_FLAGS is a string, need to split it
+    separate_arguments(SYCL_LINK_FLAGS_LIST UNIX_COMMAND "${SYCL_LINK_FLAGS}")
+    target_link_options("lib${PROJECT_NAME}" PUBLIC ${SYCL_LINK_FLAGS_LIST})
+endif()
 target_link_libraries("lib${PROJECT_NAME}" PUBLIC nanovdb)
 
 # Make the library depend on Metal shaders if Metal is enabled
@@ -228,12 +258,11 @@ endif()
 # --- CUDA specific linking for the library ---
 if(USE_CUDA)
     # Set CUDA properties for .cu files
-    set_source_files_properties(
-        Backend/CUDA/KernelHelper.cu
-        System/ZOrderKernels/CUDASort.cu
-        PROPERTIES
-        LANGUAGE CUDA
+    # Note: Individual .cu files should set their properties in their respective CMakeLists.txt
+    # This is a global setting for the library
+    set_target_properties("lib${PROJECT_NAME}" PROPERTIES
         CUDA_SEPARABLE_COMPILATION ON
+        CUDA_ARCHITECTURES "75;80;86"
     )
 
     # Find and link CUDA toolkit
@@ -242,12 +271,6 @@ if(USE_CUDA)
         PUBLIC
         CUDA::cudart
         CUDA::cuda_driver
-    )
-
-    # Set CUDA architectures (adjust for your target GPUs)
-    set_target_properties("lib${PROJECT_NAME}" PROPERTIES
-        CUDA_SEPARABLE_COMPILATION ON
-        CUDA_ARCHITECTURES "75;80;86"
     )
 
     # Explicitly link C++ standard library for CUDA targets

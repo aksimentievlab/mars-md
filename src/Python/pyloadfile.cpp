@@ -7,8 +7,8 @@
   >>> loadfile("tabulated.txt")
   ```
 */
+#include "Objects/Grid.h"
 #include "SimParam.h"
-#include "Types/Grid.h"
 
 // pybind11 core
 #include <pybind11/pybind11.h>
@@ -35,11 +35,11 @@ void declare_loadfile(py::module& m) {
 		.def(py::init<const std::string&, const GridFormat&>(), py::arg("name"), py::arg("format"))
 		.def_readwrite("name", &GridKey::name)
 		.def_readwrite("format", &GridKey::format)
-		.def_readwrite("functionsid", &GridKey::functionsid)
+		.def_readwrite("grid_id", &GridKey::grid_id)
 		.def("__repr__", [](const GridKey& gk) {
 			return "GridKey(name='" + gk.name +
 				   "', format=" + (gk.format == GridFormat::Dense ? "Dense" : "Sparse") +
-				   ", functionsid=" + std::to_string(gk.functionsid) + ")";
+				   ", grid_id=" + std::to_string(gk.grid_id) + ")";
 		});
 }
 void init_pyloadfile(py::module_& m) {

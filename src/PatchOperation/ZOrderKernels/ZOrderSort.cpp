@@ -1,11 +1,6 @@
 #include "ZOrderSort.h"
 #include "ARBDException.h"
 #include "ARBDLogger.h"
-#ifdef USE_CUDA
-#include "ZOrderKernels/CUDASort.h"
-#elif defined(USE_SYCL)
-#include "ZOrderKernels/SYCLSort.h"
-#endif
 
 namespace ARBD {
 
@@ -14,8 +9,13 @@ ZOrderSort::ZOrderSort(const Resource& resource, size_t max_particles, ZOrderOpt
 	  optimization_mode_(mode), morton_codes_(max_particles, resource),
 	  sorted_indices_(max_particles, resource), inverse_indices_(max_particles, resource),
 	  temp_morton_codes_(max_particles, resource), temp_indices_(max_particles, resource),
-	  cub_temp_storage_(0, resource), bbox_min_(1, resource), bbox_max_(1, resource),
-	  error_count_(1, resource),
+#ifdef USE_CUDA
+	  cub_temp_storage_(0, resource),
+#elif defined(USE_SYCL)
+	  global_histogram_(DRS_RADIX * 4, resource),
+	  pass_histogram_(0, resource), // Resized dynamically in sort_morton_codes()
+#endif
+	  bbox_min_(1, resource), bbox_max_(1, resource), error_count_(1, resource),
 	  // Initialize Pairlist mode buffers only if needed
 	  old_positions_(mode == ZOrderOptimizationMode::Pairlist ? max_particles : 0, resource),
 	  max_displacement_(mode == ZOrderOptimizationMode::Pairlist ? 1 : 0, resource),
@@ -75,14 +75,13 @@ void ZOrderSort::compute_bounding_box(const DeviceBuffer<Vector3>& positions,
 	bbox_min_.copy_from_host(&init_min, 1);
 	bbox_max_.copy_from_host(&init_max, 1);
 
+	BoundingBoxKernel bbox_kernel{positions.data(),
+								  bbox_min_.data(),
+								  bbox_max_.data(),
+								  num_particles};
+
 	KernelConfig config = KernelConfig::for_1d(num_particles, resource_);
-	launch_kernel(resource_,
-				  config,
-				  BoundingBoxKernel{},
-				  positions.data(),
-				  bbox_min_.data(),
-				  bbox_max_.data(),
-				  num_particles);
+	launch_kernel(resource_, config, bbox_kernel);
 
 	// Copy results back
 	bbox_min_.copy_to_host(&box_min, 1, true);
@@ -94,26 +93,24 @@ void ZOrderSort::encode_morton_codes(const DeviceBuffer<Vector3>& positions,
 									 const Vector3& box_min,
 									 const Vector3& box_max) {
 
+	MortonEncodeKernel encode_kernel{positions.data(),
+									 morton_codes_.data(),
+									 sorted_indices_.data(),
+									 box_min,
+									 box_max,
+									 num_particles};
+
 	KernelConfig config = KernelConfig::for_1d(num_particles, resource_);
-	launch_kernel(resource_,
-				  config,
-				  MortonEncodeKernel{},
-				  positions.data(),
-				  morton_codes_.data(),
-				  sorted_indices_.data(),
-				  box_min,
-				  box_max,
-				  num_particles);
+	launch_kernel(resource_, config, encode_kernel);
 }
 
 void ZOrderSort::create_inverse_mapping() {
+	InverseIndexKernel inverse_kernel{sorted_indices_.data(),
+									  inverse_indices_.data(),
+									  num_particles_};
+
 	KernelConfig config = KernelConfig::for_1d(num_particles_, resource_);
-	launch_kernel(resource_,
-				  config,
-				  InverseIndexKernel{},
-				  sorted_indices_.data(),
-				  inverse_indices_.data(),
-				  num_particles_);
+	launch_kernel(resource_, config, inverse_kernel);
 }
 
 uint32_t ZOrderSort::validate_sorting() {
@@ -122,13 +119,10 @@ uint32_t ZOrderSort::validate_sorting() {
 	error_count_.copy_from_host(&zero, 1);
 
 	// Launch validation kernel
+	ValidateZOrderKernel validate_kernel{morton_codes_.data(), error_count_.data(), num_particles_};
+
 	KernelConfig config = KernelConfig::for_1d(num_particles_, resource_);
-	launch_kernel(resource_,
-				  config,
-				  ValidateZOrderKernel{},
-				  morton_codes_.data(),
-				  error_count_.data(),
-				  num_particles_);
+	launch_kernel(resource_, config, validate_kernel);
 
 	// Get result
 	uint32_t errors;
@@ -152,18 +146,22 @@ void ZOrderSort::resize(size_t new_max_particles) {
 
 	max_particles_ = new_max_particles;
 
-	// Resize all buffers
+	// Resize common buffers
 	morton_codes_.resize(max_particles_);
 	sorted_indices_.resize(max_particles_);
 	inverse_indices_.resize(max_particles_);
 	temp_morton_codes_.resize(max_particles_);
 	temp_indices_.resize(max_particles_);
-	// CUB temp storage will be resized dynamically as needed
 
-	// Resize Pairlist mode buffers if enabled
+	/** @note for CUDA: cub_temp_storage_ is resized dynamically by CUB
+	 * @note for SYCL: global_histogram_ is fixed size (DRS_RADIX * 4)
+	 * @note for SYCL: pass_histogram_ resizes dynamically in sort_morton_codes()
+	 * @note Resize Pairlist mode buffers if enabled
+	 */
+
 	if (optimization_mode_ == ZOrderOptimizationMode::Pairlist) {
 		old_positions_.resize(max_particles_);
-		morton_codes_valid_ = false; // Invalidate after resize
+		morton_codes_valid_ = false; /* Invalidate after resize */
 	}
 }
 
@@ -177,14 +175,13 @@ float ZOrderSort::compute_max_displacement(const DeviceBuffer<Vector3>& current_
 	// Reset displacement buffer
 	max_displacement_.fill(0.0f);
 
+	DisplacementKernel disp_kernel{current_positions.data(),
+								   old_positions_.data(),
+								   max_displacement_.data(),
+								   num_particles};
+
 	KernelConfig config = KernelConfig::for_1d(num_particles, resource_);
-	launch_kernel(resource_,
-				  config,
-				  DisplacementKernel{},
-				  current_positions.data(),
-				  old_positions_.data(),
-				  max_displacement_.data(),
-				  num_particles);
+	launch_kernel(resource_, config, disp_kernel);
 
 	// Get result from device
 	float max_disp_sq;
@@ -205,17 +202,16 @@ bool ZOrderSort::validate_morton_codes(const DeviceBuffer<Vector3>& current_posi
 	// Reset invalid count
 	invalid_count_.fill(0);
 
+	MortonValidationKernel validation_kernel{current_positions.data(),
+											 morton_codes_.data(),
+											 sorted_indices_.data(),
+											 box_min,
+											 box_max,
+											 invalid_count_.data(),
+											 num_particles};
+
 	KernelConfig config = KernelConfig::for_1d(num_particles, resource_);
-	launch_kernel(resource_,
-				  config,
-				  MortonValidationKernel{},
-				  current_positions.data(),
-				  morton_codes_.data(),
-				  sorted_indices_.data(),
-				  box_min,
-				  box_max,
-				  invalid_count_.data(),
-				  num_particles);
+	launch_kernel(resource_, config, validation_kernel);
 
 	// Get result from device
 	uint32_t invalid_count;

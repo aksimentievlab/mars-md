@@ -92,7 +92,7 @@ class TablesRegistry {
   public:
 	TablesRegistry() = default;
 
-	int get_or_load_angle(std::string_view file_name) {
+	HOST int get_or_load_angle(std::string_view file_name, std::string_view config_file_path = "") {
 		// file name could be a path or a name, if it is a path, we need to get the name from the
 		// path, otherwise we use the "file_name" as is
 		std::string name = std::filesystem::path(file_name).stem().string();
@@ -103,13 +103,17 @@ class TablesRegistry {
 			return it->second;
 		}
 		Table table(TabulatedType::Angle);
-		table.read_file(file_name, name);
+		std::string resolved_path =
+			config_file_path.empty()
+				? std::string(file_name)
+				: resolve_file_path(std::string(file_name), std::string(config_file_path));
+		table.read_file(resolved_path, name);
 		angle_functions_.push_back(std::move(table));
 		angle_name_to_idx_[name] = static_cast<int>(angle_functions_.size());
 		return angle_name_to_idx_.size();
 	}
 
-	int get_or_load_bond(std::string_view file_name) {
+	HOST int get_or_load_bond(std::string_view file_name, std::string_view config_file_path = "") {
 		// file name could be a path or a name, if it is a path, we need to get the name from the
 		// path, otherwise we use the "file_name" as is
 		std::string name = std::filesystem::path(file_name).stem().string();
@@ -119,25 +123,34 @@ class TablesRegistry {
 			return it->second;
 		}
 		Table table(TabulatedType::Bond);
-		table.read_file(file_name, name);
+		std::string resolved_path =
+			config_file_path.empty()
+				? std::string(file_name)
+				: resolve_file_path(std::string(file_name), std::string(config_file_path));
+		table.read_file(resolved_path, name);
 		bond_name_to_idx_[name] = static_cast<int>(bond_name_to_idx_.size());
 		bond_functions_.push_back(std::move(table));
 		return bond_name_to_idx_[name];
 	}
 
-	int get_or_load_dihedral(std::string_view file_name) {
+	HOST int get_or_load_dihedral(std::string_view file_name,
+								  std::string_view config_file_path = "") {
 		std::string name = std::filesystem::path(file_name).stem().string();
 		auto it = dihedral_name_to_idx_.find(name);
 		if (it != dihedral_name_to_idx_.end()) {
 			return it->second;
 		}
 		Table table(TabulatedType::Dihedral);
-		table.read_file(file_name, name);
+		std::string resolved_path =
+			config_file_path.empty()
+				? std::string(file_name)
+				: resolve_file_path(std::string(file_name), std::string(config_file_path));
+		table.read_file(resolved_path, name);
 		table.is_periodic = true;
 		dihedral_functions_.push_back(std::move(table));
 		dihedral_name_to_idx_[name] = static_cast<int>(dihedral_functions_.size() - 1);
 		return dihedral_name_to_idx_[name];
-	};
+	}
 
 	int load_pair_nonbonded(int type_id_1, int type_id_2, std::string_view file_name) {
 		type_id_1 = std::min(type_id_1, type_id_2);

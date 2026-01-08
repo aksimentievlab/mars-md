@@ -148,16 +148,16 @@ void declare_bonded_interaction(py::module& m) {
 			 py::arg("bonds"),
 			 py::arg("angles"),
 			 py::arg("dihedrals"))
-		.def("addBond", &BondedInteractions::addBond)
-		.def("addAngle", &BondedInteractions::addAngle)
-		.def("addDihedral", &BondedInteractions::addDihedral)
-		.def("getNumBonds", &BondedInteractions::getNumBonds)
-		.def("getNumAngles", &BondedInteractions::getNumAngles)
-		.def("getNumDihedrals", &BondedInteractions::getNumDihedrals)
+		.def("add_bond", &BondedInteractions::add_bond)
+		.def("add_angle", &BondedInteractions::add_angle)
+		.def("add_dihedral", &BondedInteractions::add_dihedral)
+		.def("get_num_bonds", &BondedInteractions::get_num_bonds)
+		.def("get_num_angles", &BondedInteractions::get_num_angles)
+		.def("get_num_dihedrals", &BondedInteractions::get_num_dihedrals)
 		.def("__repr__", [](const BondedInteractions& bi) {
-			return "BondedInteraction(bonds=" + std::to_string(bi.getNumBonds()) +
-				   ", angles=" + std::to_string(bi.getNumAngles()) +
-				   ", dihedrals=" + std::to_string(bi.getNumDihedrals()) + ")";
+			return "BondedInteraction(bonds=" + std::to_string(bi.get_num_bonds()) +
+				   ", angles=" + std::to_string(bi.get_num_angles()) +
+				   ", dihedrals=" + std::to_string(bi.get_num_dihedrals()) + ")";
 		});
 }
 

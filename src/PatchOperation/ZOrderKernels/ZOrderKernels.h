@@ -5,7 +5,7 @@
  *
  * @brief GPU kernel functors for Z-order operations
  *
- * This file contains device-side kernel functors for:
+ * This file contains KERNEL_FUNC-side kernel functors for:
  * - Morton code encoding from particle positions
  * - Data reordering based on sorted indices
  * - Neighbor finding using Z-order locality
@@ -17,7 +17,7 @@
 #include "Types/Vector3.h"
 
 // Include adaptive kernels for Pairlist mode optimizations
-#include "ZOrderKernels/AdaptiveKernels.h"
+#include "AdaptiveKernels.h"
 
 namespace ARBD {
 
@@ -32,7 +32,7 @@ struct MortonEncodeKernel {
 	Vector3 box_max;
 	size_t num_particles;
 
-	DEVICE void operator()(idx_t idx) const {
+	KERNEL_FUNC void operator()(idx_t idx) const {
 		if (idx >= num_particles)
 			return;
 
@@ -54,7 +54,7 @@ struct ReorderDataKernel {
 	const uint32_t* sorted_indices;
 	size_t num_elements;
 
-	DEVICE void operator()(idx_t idx) const {
+	KERNEL_FUNC void operator()(idx_t idx) const {
 		if (idx >= num_elements)
 			return;
 
@@ -70,7 +70,7 @@ struct InverseIndexKernel {
 	uint32_t* inverse_indices;
 	size_t num_elements;
 
-	DEVICE void operator()(idx_t idx) const {
+	KERNEL_FUNC void operator()(idx_t idx) const {
 		if (idx >= num_elements)
 			return;
 
@@ -90,7 +90,7 @@ struct ValidateZOrderKernel {
 	uint32_t* error_count;
 	size_t num_particles;
 
-	DEVICE void operator()(idx_t idx) const {
+	KERNEL_FUNC void operator()(idx_t idx) const {
 		if (idx >= num_particles - 1)
 			return;
 
@@ -114,7 +114,7 @@ struct BoundingBoxKernel {
 	Vector3* max_bounds;
 	size_t num_particles;
 
-	DEVICE void operator()(idx_t idx) const {
+	KERNEL_FUNC void operator()(idx_t idx) const {
 		if (idx >= num_particles)
 			return;
 
@@ -129,21 +129,21 @@ struct BoundingBoxKernel {
 		atomicMax(&max_bounds->x, pos.x);
 		atomicMax(&max_bounds->y, pos.y);
 		atomicMax(&max_bounds->z, pos.z);
-#elif defined(__SYCL_DEVICE_ONLY__)
+#elif defined(__SYCL_KERNEL_FUNC_ONLY__)
 		// Create separate atomic refs for each component
 		sycl::atomic_ref<float,
 						 sycl::memory_order::relaxed,
-						 sycl::memory_scope::device,
+						 sycl::memory_scope::KERNEL_FUNC,
 						 sycl::access::address_space::global_space>
 			atomic_min_x(min_bounds->x);
 		sycl::atomic_ref<float,
 						 sycl::memory_order::relaxed,
-						 sycl::memory_scope::device,
+						 sycl::memory_scope::KERNEL_FUNC,
 						 sycl::access::address_space::global_space>
 			atomic_min_y(min_bounds->y);
 		sycl::atomic_ref<float,
 						 sycl::memory_order::relaxed,
-						 sycl::memory_scope::device,
+						 sycl::memory_scope::KERNEL_FUNC,
 						 sycl::access::address_space::global_space>
 			atomic_min_z(min_bounds->z);
 
@@ -153,17 +153,17 @@ struct BoundingBoxKernel {
 
 		sycl::atomic_ref<float,
 						 sycl::memory_order::relaxed,
-						 sycl::memory_scope::device,
+						 sycl::memory_scope::KERNEL_FUNC,
 						 sycl::access::address_space::global_space>
 			atomic_max_x(max_bounds->x);
 		sycl::atomic_ref<float,
 						 sycl::memory_order::relaxed,
-						 sycl::memory_scope::device,
+						 sycl::memory_scope::KERNEL_FUNC,
 						 sycl::access::address_space::global_space>
 			atomic_max_y(max_bounds->y);
 		sycl::atomic_ref<float,
 						 sycl::memory_order::relaxed,
-						 sycl::memory_scope::device,
+						 sycl::memory_scope::KERNEL_FUNC,
 						 sycl::access::address_space::global_space>
 			atomic_max_z(max_bounds->z);
 
@@ -182,3 +182,27 @@ struct BoundingBoxKernel {
 };
 
 } // namespace ARBD
+
+// SYCL device copyability declarations
+#ifdef USE_SYCL
+template<>
+struct sycl::is_device_copyable<ARBD::MortonEncodeKernel> : std::true_type {};
+
+template<typename T>
+struct sycl::is_device_copyable<ARBD::ReorderDataKernel<T>> : std::true_type {};
+
+template<>
+struct sycl::is_device_copyable<ARBD::InverseIndexKernel> : std::true_type {};
+
+template<>
+struct sycl::is_device_copyable<ARBD::ValidateZOrderKernel> : std::true_type {};
+
+template<>
+struct sycl::is_device_copyable<ARBD::BoundingBoxKernel> : std::true_type {};
+
+template<>
+struct sycl::is_device_copyable<ARBD::DisplacementKernel> : std::true_type {};
+
+template<>
+struct sycl::is_device_copyable<ARBD::MortonValidationKernel> : std::true_type {};
+#endif

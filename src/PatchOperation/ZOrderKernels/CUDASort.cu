@@ -1,5 +1,5 @@
+#include "DeviceRadix.h"
 #include <cuda_runtime.h>
-
 #ifdef Debug
 #undef Debug
 #include <cub/cub.cuh>

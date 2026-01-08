@@ -24,7 +24,9 @@
 #define KERNEL_FUNC [[kernel]]
 #endif
 
-#ifdef USE_SYCL
+// Only include SYCL headers when actually compiling with SYCL support
+// __SYCL_COMPILER_VERSION is defined by icpx when -fsycl is used
+#if defined(USE_SYCL) && (defined(__SYCL_COMPILER_VERSION) || defined(__SYCL_DEVICE_ONLY__))
 #include <sycl/sycl.hpp>
 #include <type_traits>
 #endif
@@ -39,12 +41,61 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
+#include <filesystem>
 #include <memory>
+#include <string>
 #ifndef __CUDACC__
 #include <experimental/simd>
 #include <type_traits>
 namespace sx = std::experimental;
 #endif
+
+namespace ARBD {
+
+/**
+ * @brief Resolve file path relative to a configuration file
+ * @param file_path The file path to resolve (can be absolute, relative, or ~/ home path)
+ * @param config_file_path The path to the configuration file
+ * @return Resolved absolute path
+ */
+inline std::string resolve_file_path(const std::string& file_path,
+									 const std::string& config_file_path) {
+	// If path is already absolute, return as-is
+	if (!file_path.empty() && file_path[0] == '/') {
+		return file_path;
+	}
+
+	// If path starts with ~, expand home directory
+	if (!file_path.empty() && file_path[0] == '~') {
+		const char* home = getenv("HOME");
+		if (home) {
+			return std::string(home) + file_path.substr(1);
+		}
+		return file_path; // Fallback if HOME not set
+	}
+
+	// For relative paths, resolve relative to config file directory
+	std::string config_dir = config_file_path;
+	size_t last_slash = config_dir.find_last_of('/');
+	if (last_slash != std::string::npos) {
+		config_dir = config_dir.substr(0, last_slash + 1);
+	} else {
+		config_dir = "./"; // Current directory if no path separators
+	}
+
+	return config_dir + file_path;
+}
+
+} // namespace ARBD
+
+#else
+// Device compilation: provide stub declaration
+namespace ARBD {
+inline std::string resolve_file_path(const std::string&, const std::string&) {
+	return "";
+}
+} // namespace ARBD
 #endif
 
 #ifndef KERNEL_FUNC

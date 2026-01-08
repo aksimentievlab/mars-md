@@ -130,7 +130,7 @@ class GridManager {
 		// Load sparse grid on first resource (will be replicated later)
 		Resource first_resource =
 			(resources_ && !resources_->empty()) ? (*resources_)[0] : Resource{};
-		auto adapter = NanoGridAdapter<float>::from_file(filename, first_resource);
+		auto adapter = NanoGridAdapter<>::from_file(filename, first_resource);
 
 		// Assign unified grid_id
 		int grid_id = next_grid_id_++;
@@ -212,7 +212,6 @@ class GridManager {
 			std::vector<float*> grid_ptrs(next_grid_id_, nullptr);
 			std::vector<BaseGrid<float>::Config> grid_configs(next_grid_id_);
 
-			// Transfer dense grids to this resource
 			for (const auto& [grid_id, dense_idx] : grid_id_to_dense_idx_) {
 				auto& grid = dense_grids_[dense_idx];
 				grid.sync_to_device(resource);
@@ -286,7 +285,7 @@ class GridManager {
 	/**
 	 * @brief Access sparse grid by grid_id
 	 */
-	NanoGridAdapter<float>& get_sparse_grid(int grid_id) {
+	NanoGridAdapter<>& get_sparse_grid(int grid_id) {
 		auto it = grid_id_to_sparse_idx_.find(grid_id);
 		if (it == grid_id_to_sparse_idx_.end()) {
 			throw std::runtime_error("GridManager: Invalid sparse grid_id: " +
@@ -298,7 +297,7 @@ class GridManager {
   private:
 	// Host-side storage (separate by format, single copy)
 	std::vector<BaseGrid<float>> dense_grids_;
-	std::vector<NanoGridAdapter<float>> sparse_grids_;
+	std::vector<NanoGridAdapter<>> sparse_grids_;
 
 	// Metadata and lookup
 	std::vector<GridKey> grid_keys_;

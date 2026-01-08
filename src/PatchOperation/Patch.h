@@ -1,101 +1,130 @@
 #pragma once
+/**
+ * @file PatchOperation/Patch.h
+ * @author Pin-Yi Li <pinyili2@illinois.edu>
+ * @brief Modern patch-based spatial decomposition unit
+ * @version 2.0
+ * @date 2025-09-09
+ *
+ * Redesigned to work with DeviceParticle system and SystemState/SimSystem architecture.
+ * Each patch manages a spatial region with local particles using DeviceParticle for
+ * optimal GPU memory layout and performance.
+ */
+
+#include "Backend/Events.h"
 #include "Interactions/BondedInteraction.h"
-#include "Interactions/Interactions.h"
 #include "Interactions/NonBondedInteraction.h"
-#include "Objects/DeviceParticle.h"
-#include "Objects/ParticleProperties.h"
-#include "SimParam.h"
+#include "Objects/DeviceParticleManager.h"
+#include "PatchOperation/Pairlist.h"
 #include "System/PeriodicBox.h"
+#include "System/SystemForward.h"
 #include "Types/Types.h"
-#include "ZOrderSort.h"
+#include <memory>
 #include <utility>
 
 namespace ARBD {
 
-class Patch {
+// Forward declarations
+class SimSystem;
+class SystemState;
 
+/**
+ * @brief Spatial decomposition unit for distributed particle simulation
+ *
+ * Each Patch represents a spatial region containing particles and manages:
+ * - Local particle data using DeviceParticle for optimal memory layout
+ * - Spatial bounds and neighbor relationships
+ * - Particle migration and halo exchange
+ * - Local force computation and time integration
+ * - Resource binding for GPU acceleration
+ */
+class Patch {
   public:
 	/**
-	 * @brief Construct a patch with specified capacity and index
-	 * @param patch_idx Unique identifier for this patch
-	 * @param capacity Initial capacity for particle storage
+	 * @brief Construct patch with specified parameters
+	 * @param patch_id Unique patch identifier across the system
+	 * @param capacity Maximum number of particles this patch can store
+	 * @param resource Computational resource (GPU/CPU) assigned to this patch
+	 * @param pairlist_type Type of pairlist to use for neighbor finding
 	 */
-	Patch(patch_t patch_idx = 0, idx_t capacity = 1024)
-		: patch_idx_(patch_idx), capacity_(capacity), num_(0), particle_data_(capacity){};
-
-	/**
-	 * @brief Move constructor
-	 */
-	Patch(Patch&& other) noexcept
-		: patch_idx_(other.patch_idx_), capacity_(other.capacity_), num_(other.num_),
-		  num_replicas_(other.num_replicas_), gpu_id_(other.gpu_id_),
-		  num_group_sites_(other.num_group_sites_), bounds_min_(other.bounds_min_),
-		  bounds_max_(other.bounds_max_), particle_data_(other.particle_data_),
-		  d_cell_starts(std::move(other.d_cell_starts)), d_cell_ends(std::move(other.d_cell_ends)),
-		  d_cell_neighbors(std::move(other.d_cell_neighbors)),
-		  system_sim_box_(other.system_sim_box_) {
-		// Reset moved object
-		other.patch_idx_ = 0;
-		other.capacity_ = 0;
-		other.num_ = 0;
-		other.system_sim_box_ = nullptr;
+	Patch(patch_t patch_id,
+		  idx_t capacity,
+		  const Resource& resource,
+		  PairlistBuilderType pairlist_type = PairlistBuilderType::ZOrder)
+		: patch_id_(patch_id), capacity_(capacity), resource_(resource),
+		  particles_(capacity, resource) {
+		// Estimate max pairs: assume average of ~50 neighbors per particle
+		size_t estimated_max_pairs = capacity * 50;
+		pairlist_ = create_pairlist(pairlist_type, resource, capacity, estimated_max_pairs);
+		initialize_spatial_structures();
 	}
 
 	/**
-	 * @brief Move assignment operator
+	 * @brief Set reference to system-wide periodic boundary conditions
+	 * @param sim_box Pointer to system boundary conditions (not owned)
 	 */
-	Patch& operator=(Patch&& other) noexcept {
-		if (this != &other) {
-			patch_idx_ = other.patch_idx_;
-			capacity_ = other.capacity_;
-			num_ = other.num_;
-			num_replicas_ = other.num_replicas_;
-			gpu_id_ = other.gpu_id_;
-			num_group_sites_ = other.num_group_sites_;
-			particle_data_ = std::move(other.particle_data_);
-			system_sim_box_ = other.system_sim_box_;
+	void set_periodic_box(const PeriodicBox* sim_box) {
+		periodic_box_ = sim_box;
+	}
 
-			// Reset moved object
-			other.patch_idx_ = 0;
-			other.capacity_ = 0;
-			other.num_ = 0;
-			other.system_sim_box_ = nullptr;
+	/**
+	 * @brief Set the current number of active particles in this patch
+	 * @param count New particle count (must be <= capacity)
+	 */
+	void set_particle_count(idx_t count) {
+		if (count <= capacity_) {
+			particle_count_ = count;
 		}
-		return *this;
-	}
-
-	~Patch() = default;
-
-	/**
-	 * @brief Set reference to system-wide simulation box (shared across all patches)
-	 * @param system_box Pointer to system-wide simulation box
-	 *
-	 * Note: The patch does not own this pointer - it's managed by SimSystem/PatchManager
-	 */
-	void set_system_sim_box(const PeriodicBox* system_box) {
-		system_sim_box_ = system_box;
 	}
 
 	/**
-	 * @brief Get system-wide simulation box for boundary calculations
-	 * @return Pointer to system simulation box (device-safe)
+	 * @brief Set halo region thickness for ghost particle exchange
+	 * @param thickness Thickness of halo region (typically cutoff radius)
 	 */
-	const PeriodicBox* get_sim_box() const {
-		return system_sim_box_;
+	void set_halo_thickness(float thickness) {
+		halo_thickness_ = thickness;
 	}
 
 	/**
-	 * @brief Get patch index
+	 * @brief Set device particle types for this patch
+	 * @param particle_types Device particle types (moved into patch)
 	 */
-	patch_t get_patch_idx() const {
-		return patch_idx_;
+	void set_particle_types(std::unique_ptr<DeviceParticleTypes> particle_types) {
+		particle_types_ = std::move(particle_types);
 	}
 
 	/**
-	 * @brief Get current number of particles
+	 * @brief Set spatial boundaries for this patch region
+	 * @param min_bounds Minimum corner coordinates
+	 * @param max_bounds Maximum corner coordinates
 	 */
-	idx_t get_num() const {
-		return num_;
+	void set_bounds(const Vector3& min_bounds, const Vector3& max_bounds) {
+		min_bounds_ = min_bounds;
+		max_bounds_ = max_bounds;
+		// Update any spatial acceleration structures if needed
+		update_space_partition();
+	}
+
+	/**
+	 * @brief Get reference to system-wide periodic boundary conditions
+	 * @return Pointer to periodic boundary conditions
+	 */
+	const PeriodicBox* get_periodic_box() const {
+		return periodic_box_;
+	}
+
+	/**
+	 * @brief Get unique patch identifier
+	 */
+	patch_t get_patch_id() const {
+		return patch_id_;
+	}
+
+	/**
+	 * @brief Get current number of active particles
+	 */
+	idx_t get_particle_count() const {
+		return particle_count_;
 	}
 
 	/**
@@ -106,147 +135,109 @@ class Patch {
 	}
 
 	/**
-	 * @brief Set the number of particles in this patch
-	 * @param num New particle count
-	 */
-	void set_num(idx_t num) {
-		if (num <= capacity_) {
-			num_ = num;
-		}
-	}
-
-	/**
-	 * @brief Add a particle to this patch
-	 * @return Index of the added particle, or -1 if patch is full
-	 */
-	idx_t add_particle() {
-		if (num_ < capacity_) {
-			return num_++;
-		}
-		return -1; // Patch is full
-	}
-
-	/**
-	 * @brief Remove a particle from this patch
-	 * @param index Index of particle to remove
-	 * @return True if successful, false if index is invalid
-	 */
-	bool remove_particle(idx_t index) {
-		if (index < num_) {
-
-			num_--;
-			return true;
-		}
-		return false;
-	}
-
-	/**
 	 * @brief Check if patch has space for more particles
 	 */
 	bool has_space() const {
-		return num_ < capacity_;
-	}
-
-	void push_particle(const ParticleRead& particle) {
-		if (has_space()) {
-			particle_data_.id.push_back(particle.id);
-			particle_data_.type_name.push_back(particle.type_name);
-			particle_data_.pos.push_back(particle.position);
-			particle_data_.mom.push_back(particle.momentum);
-			particle_data_.force.push_back(particle.force);
-			particle_data_.energy.push_back(particle.energy);
-			particle_data_.orient.push_back(particle.orientation);
-			num_++;
-		}
+		return particle_count_ < capacity_;
 	}
 
 	/**
-	 * @brief Get remaining capacity
+	 * @brief Compute non-bonded forces for particles in this patch
+	 * @param interactions Non-bonded interaction parameters from SimSystem
+	 * @param particle_types Device particle type data from SimSystem
+	 * @return Event for async GPU execution
+	 */
+	Event calculate_nonbonded_forces(const NonBondedInteractions& interactions,
+									 const DeviceParticleTypes& particle_types);
+
+	/**
+	 * @brief Compute bonded forces for particles in this patch
+	 * @param interactions Bonded interaction parameters from SystemState
+	 * @param particle_types Device particle type data from SimSystem
+	 * @return Event for async GPU execution
+	 */
+	Event calculate_bonded_forces(const BondedInteractions& interactions,
+								  const DeviceParticleTypes& particle_types);
+
+	/**
+	 * @brief Integrate particle equations of motion
+	 * @param dt Timestep from SimSystem
+	 * @param temperature Temperature from SimSystem (position-dependent if gridded)
+	 * @param integrator_type Integration algorithm from SimSystem
+	 * @param step Current simulation step (for RNG counter)
+	 * @return Event for async GPU execution
+	 */
+	Event integrate_motion(float dt,
+						   const Temperature& temperature,
+						   IntegratorType integrator_type,
+						   size_t step = 0);
+
+	/**
+	 * @brief
+	 *
 	 */
 	idx_t get_remaining_capacity() const {
-		return capacity_ - num_;
+		return capacity_ - particle_count_;
 	}
 
 	/**
-	 * @brief Set spatial bounds for this patch
-	 * @param min Minimum corner of patch
-	 * @param max Maximum corner of patch
+	 * @brief Get patch minimum spatial bounds
 	 */
-	void set_bounds(const Vector3& min, const Vector3& max) {
-		bounds_min_ = min;
-		bounds_max_ = max;
+	const Vector3& get_min_bounds() const {
+		return min_bounds_;
 	}
 
 	/**
-	 * @brief Get patch minimum bounds
+	 * @brief Get patch maximum spatial bounds
 	 */
-	const Vector3& get_bounds_min() const {
-		return bounds_min_;
+	const Vector3& get_max_bounds() const {
+		return max_bounds_;
 	}
 
 	/**
-	 * @brief Get patch maximum bounds
+	 * @brief Get halo region thickness for ghost particles
+	 * @return Halo thickness (typically equal to cutoff radius)
 	 */
-	const Vector3& get_bounds_max() const {
-		return bounds_max_;
+	float get_halo_thickness() const {
+		return halo_thickness_;
 	}
 
 	/**
-	 * @brief Get ghost region thickness from system simulation box
-	 * @return Ghost region thickness
+	 * @brief Check if position is outside patch core region (in halo)
+	 * @param position Position to test
+	 * @return True if position is in halo/ghost region
 	 */
-	float get_ghost_thickness() const {
-		return ghost_thickness_;
-	}
-	void set_ghost_thickness(float ghost_thickness) {
-		ghost_thickness_ = ghost_thickness;
-	}
-
-	/**
-	 * @brief Check if a position is in the ghost region of this patch
-	 * @param pos Position to check
-	 * @return True if position is within ghost region
-	 */
-	bool is_in_ghost_region(const Vector3& pos) const {
-		Vector3 r = pos - bounds_min_;
-		if (pos.x > bounds_max_.x || pos.y > bounds_max_.y || pos.z > bounds_max_.z) {
-			return true;
-		} else if (r.x < 0.0f | r.y < 0.0f || r.z < 0.0f) {
-			return true;
-		}
-		return false;
+	bool is_in_halo_region(const Vector3& position) const {
+		return position.x < min_bounds_.x || position.x >= max_bounds_.x ||
+			   position.y < min_bounds_.y || position.y >= max_bounds_.y ||
+			   position.z < min_bounds_.z || position.z >= max_bounds_.z;
 	}
 
 	/**
-	 * @brief Get resource for this patch
-	 * @return Resource for this patch
+	 * @brief Get computational resource assigned to this patch
+	 * @return Resource (GPU/CPU) for this patch
 	 */
 	const Resource& get_resource() const {
 		return resource_;
 	}
 
-	void set_resource(const Resource& resource) {
-		resource_ = resource;
-	}
-
 	/**
-	 * @brief Check if a particle position needs to migrate to a neighbor patch
-	 * @param position Particle position to check
-	 * @return Direction index if migration needed, -1 otherwise
-	 *         Direction: 0=x-, 1=x+, 2=y-, 3=y+, 4=z-, 5=z+
+	 * @brief Determine if particle needs migration and in which direction
+	 * @param position Particle position to test
+	 * @return Migration direction: 0=x-, 1=x+, 2=y-, 3=y+, 4=z-, 5=z+, -1=no migration
 	 */
-	int check_particle_migration(const Vector3& position) const {
-		if (position.x < bounds_min_.x)
+	int check_migration_direction(const Vector3& position) const {
+		if (position.x < min_bounds_.x)
 			return 0; // x-
-		if (position.x >= bounds_max_.x)
+		if (position.x >= max_bounds_.x)
 			return 1; // x+
-		if (position.y < bounds_min_.y)
+		if (position.y < min_bounds_.y)
 			return 2; // y-
-		if (position.y >= bounds_max_.y)
+		if (position.y >= max_bounds_.y)
 			return 3; // y+
-		if (position.z < bounds_min_.z)
+		if (position.z < min_bounds_.z)
 			return 4; // z-
-		if (position.z >= bounds_max_.z)
+		if (position.z >= max_bounds_.z)
 			return 5; // z+
 		return -1;	  // No migration needed
 	}
@@ -261,17 +252,17 @@ class Patch {
 	bool is_in_boundary_region(const Vector3& position, int direction, float halo_width) const {
 		switch (direction) {
 		case 0: // x-
-			return position.x >= bounds_min_.x && position.x < bounds_min_.x + halo_width;
+			return position.x >= min_bounds_.x && position.x < min_bounds_.x + halo_width;
 		case 1: // x+
-			return position.x >= bounds_max_.x - halo_width && position.x < bounds_max_.x;
+			return position.x >= max_bounds_.x - halo_width && position.x < max_bounds_.x;
 		case 2: // y-
-			return position.y >= bounds_min_.y && position.y < bounds_min_.y + halo_width;
+			return position.y >= min_bounds_.y && position.y < min_bounds_.y + halo_width;
 		case 3: // y+
-			return position.y >= bounds_max_.y - halo_width && position.y < bounds_max_.y;
+			return position.y >= max_bounds_.y - halo_width && position.y < max_bounds_.y;
 		case 4: // z-
-			return position.z >= bounds_min_.z && position.z < bounds_min_.z + halo_width;
+			return position.z >= min_bounds_.z && position.z < min_bounds_.z + halo_width;
 		case 5: // z+
-			return position.z >= bounds_max_.z - halo_width && position.z < bounds_max_.z;
+			return position.z >= max_bounds_.z - halo_width && position.z < max_bounds_.z;
 		default:
 			return false;
 		}
@@ -284,98 +275,201 @@ class Patch {
 	 * @return Pair of (halo_min, halo_max) bounds
 	 */
 	std::pair<Vector3, Vector3> calculate_halo_bounds(int direction, float halo_width) const {
-		Vector3 halo_min = bounds_min_;
-		Vector3 halo_max = bounds_max_;
+		Vector3 halo_min = min_bounds_;
+		Vector3 halo_max = max_bounds_;
 
 		switch (direction) {
 		case 0: // x-
-			halo_max.x = bounds_min_.x;
-			halo_min.x = bounds_min_.x - halo_width;
+			halo_max.x = min_bounds_.x;
+			halo_min.x = min_bounds_.x - halo_width;
 			break;
 		case 1: // x+
-			halo_min.x = bounds_max_.x;
-			halo_max.x = bounds_max_.x + halo_width;
+			halo_min.x = max_bounds_.x;
+			halo_max.x = max_bounds_.x + halo_width;
 			break;
 		case 2: // y-
-			halo_max.y = bounds_min_.y;
-			halo_min.y = bounds_min_.y - halo_width;
+			halo_max.y = min_bounds_.y;
+			halo_min.y = min_bounds_.y - halo_width;
 			break;
 		case 3: // y+
-			halo_min.y = bounds_max_.y;
-			halo_max.y = bounds_max_.y + halo_width;
+			halo_min.y = max_bounds_.y;
+			halo_max.y = max_bounds_.y + halo_width;
 			break;
 		case 4: // z-
-			halo_max.z = bounds_min_.z;
-			halo_min.z = bounds_min_.z - halo_width;
+			halo_max.z = min_bounds_.z;
+			halo_min.z = min_bounds_.z - halo_width;
 			break;
 		case 5: // z+
-			halo_min.z = bounds_max_.z;
-			halo_max.z = bounds_max_.z + halo_width;
+			halo_min.z = max_bounds_.z;
+			halo_max.z = max_bounds_.z + halo_width;
 			break;
 		}
 
 		return {halo_min, halo_max};
 	}
 
-	void sort_particles(const DeviceBuffer<Vector3>& positions,
-						size_t num_particles,
-						const Vector3& box_min,
-						const Vector3& box_max) {
-		zorder_sorters_.sort_particles(positions, num_particles, box_min, box_max);
-	}
-
-	const HostParticleData& get_particle_data() const {
-		return particle_data_;
+	/**
+	 * @brief Get read-only access to local particle data
+	 */
+	const DeviceParticle& get_particles() const {
+		return particles_;
 	}
 
 	/**
-	 * @brief Pack particles from this patch's boundary region for halo exchange
-	 * This method also marks the packed particles as inactive (is_dummy = true)
-	 * @param packed_data Output buffer for packed particle data (position + momentum)
-	 * @param direction Direction index (0=x-, 1=x+, 2=y-, 3=y+, 4=z-, 5=z+)
-	 * @param cutoff Cutoff radius for halo region calculation
-	 * @return Number of particles packed and marked as inactive
+	 * @brief Get mutable access to local particle data
 	 */
-	idx_t
-	pack_boundary_particles(DeviceBuffer<float>& packed_data, int direction, const Length& cutoff);
+	DeviceParticle& get_particles() {
+		return particles_;
+	}
 
 	/**
-	 * @brief Unpack received halo particles into this patch's halo storage
-	 * @param packed_data Input buffer containing packed particle data (position + momentum)
-	 * @param received_count Number of particles to unpack
+	 * @brief Pack boundary particles for halo exchange with neighbor
+	 * @param send_buffer Output buffer for packed data
+	 * @param direction Neighbor direction (0=x-, 1=x+, 2=y-, 3=y+, 4=z-, 5=z+)
+	 * @param halo_width Width of halo region (typically cutoff radius)
+	 * @return Event for async packing and number of particles packed
 	 */
-	void unpack_halo_particles(DeviceBuffer<float>& packed_data, idx_t received_count);
+	std::pair<Event, idx_t>
+	pack_halo_particles(DeviceBuffer<float>& send_buffer, int direction, float halo_width);
+
+	/**
+	 * @brief Unpack received halo particles from neighbor
+	 * @param recv_buffer Input buffer with packed particle data
+	 * @param particle_count Number of particles to unpack
+	 * @return Event for async unpacking
+	 */
+	Event unpack_halo_particles(const DeviceBuffer<float>& recv_buffer, idx_t particle_count);
+
+	/**
+	 * @brief Sort particles using pairlist's spatial sorting (e.g., Z-order curve)
+	 * @return Event for async sorting
+	 */
+	Event sort_particles();
+
+	/**
+	 * @brief Build pairlist for neighbor finding
+	 * @param cutoff Interaction cutoff distance
+	 * @return Event for async pairlist building
+	 */
+	Event build_pairlist(float pairlist_cutoff);
+
+	/**
+	 * @brief Update pairlist if particles have moved significantly
+	 * @return Event for async pairlist update
+	 */
+	Event update_pairlist();
+
+	/**
+	 * @brief Check if pairlist needs updating based on particle displacement
+	 * @param old_positions Previous particle positions
+	 * @param skin_distance Skin distance for update criterion
+	 * @return True if update is needed
+	 */
+	bool needs_pairlist_update(const DeviceBuffer<Vector3>& old_positions, float skin_distance);
+
+	/**
+	 * @brief Get the pairlist for accessing neighbor pairs
+	 * @return Reference to the pairlist
+	 */
+	const Pairlist& get_pairlist() const {
+		return *pairlist_;
+	}
+
+	/**
+	 * @brief Get mutable access to the pairlist
+	 * @return Reference to the pairlist
+	 */
+	Pairlist& get_pairlist() {
+		return *pairlist_;
+	}
+
+	/**
+	 * @brief Execute integration for particles in this patch
+	 * @param dt Timestep from SimSystem
+	 * @param temperature Temperature from SimSystem (position-dependent if gridded)
+	 * @param integrator_type Integration algorithm from SimSystem
+	 * @return Event for async integration
+	 */
+	Event
+	execute_integration(float dt, const Temperature& temperature, IntegratorType integrator_type);
+
+	/**
+	 * @brief Copy particle data from host to this patch's device storage
+	 * @param host_data Host particle data from SystemState
+	 * @param start_idx Starting index in host data
+	 * @param count Number of particles to copy
+	 */
+	void copy_particles_from_host(const HostParticleData& host_data, idx_t start_idx, idx_t count);
+
+	/**
+	 * @brief Copy particle data from this patch to host storage
+	 * @param host_data Output host particle data
+	 * @param start_idx Starting index in host data for output
+	 * @param count Number of particles to copy
+	 */
+	void copy_particles_to_host(HostParticleData& host_data, idx_t start_idx, idx_t count) const;
 
   private:
-	// Core patch properties
-	short gpu_id_{-1};		///< GPU ID for this patch
-	Resource resource_;		///< Resource for this patch
-	patch_t patch_idx_;		///< Unique identifier for this patch
-	idx_t capacity_;		///< Maximum number of particles this patch can hold
-	idx_t num_replicas_{1}; ///< Number of replicas of this patch
-	idx_t num_; ///< Current number of particles in this patch, num_*num_replicas_<=capacity_
-	idx_t num_group_sites_{0}; ///< Number of group sites in this patch
-	float ghost_thickness_{0.0f};
-	ZOrderSort zorder_sorters_{resource_, capacity_, ZOrderOptimizationMode::Pairlist};
-	idx_t num_ghost_particles_{0};
+	/**
+	 * @brief Initialize spatial acceleration structures
+	 */
+	void initialize_spatial_structures();
 
-  protected:
-	idx_t capacity;
-	Vector3 lower_bound, upper_bound;
+	/**
+	 * @brief Update space partitioning after bounds change
+	 */
+	void update_space_partition();
+	//================================================================================
+	// Core Patch Properties
+	//================================================================================
+	patch_t patch_id_;		  ///< Unique patch identifier
+	idx_t capacity_;		  ///< Maximum particle storage capacity
+	idx_t particle_count_{0}; ///< Current number of active particles
+	Resource resource_;		  ///< Computational resource (GPU/CPU)
 
-	static idx_t global_patch_idx; ///< Unique ID across ranks
-	idx_t patch_idx;			   ///< Unique ID for this patch
+	//================================================================================
+	// Particle Data and Spatial Organization
+	//================================================================================
+	HostParticleData host_particles_;	 ///< used for staging on HOST.
+	DeviceParticle particles_;			 ///< Local particle data in SoA format
+	std::unique_ptr<Pairlist> pairlist_; ///< Pairlist for neighbor finding and spatial organization
+	std::unique_ptr<DeviceParticleTypes> particle_types_; ///< Device buffers for all particle types
 
-	// Spatial bounds
-	Vector3 bounds_min_{0.0f, 0.0f, 0.0f}; ///< Minimum corner of patch
-	Vector3 bounds_max_{0.0f, 0.0f, 0.0f}; ///< Maximum corner of patch
-	// Particle data
-	HostParticleData& particle_data_; // Reference to particle data
-	DeviceBuffer<int> d_cell_starts;
-	DeviceBuffer<int> d_cell_ends;
-	DeviceBuffer<int> d_cell_neighbors;
-	// System-wide simulation box
-	const PeriodicBox* system_sim_box_{
-		nullptr}; ///< Reference to system-wide simulation box (not owned)
+	float halo_thickness_{0.0f}; ///< Halo region thickness for ghost particles
+
+	//================================================================================
+	// Spatial Bounds and Geometry
+	//================================================================================
+	Vector3 min_bounds_{0.0f}; ///< Patch minimum spatial bounds
+	Vector3 max_bounds_{0.0f}; ///< Patch maximum spatial bounds
+
+	//================================================================================
+	// System References (not owned)
+	//================================================================================
+	const PeriodicBox* periodic_box_{nullptr}; ///< System boundary conditions
+	//================================================================================
+	// Communication Buffers for Particle Exchange
+	//================================================================================
+	struct HaloBuffers {
+		DeviceBuffer<DeviceParticle> send_particles; ///< Outgoing halo particle data
+		DeviceBuffer<DeviceParticle> recv_particles; ///< Incoming halo particle data
+		DeviceBuffer<int> migration_flags;			 ///< Per-particle migration direction flags
+		DeviceBuffer<int> migration_count; ///< Number of migrating particles per direction
+
+		HaloBuffers(const Resource& resource, idx_t capacity)
+			: send_particles(capacity, resource), // 8 floats per particle (pos+vel+type+flags)
+			  recv_particles(capacity, resource), migration_flags(capacity, resource),
+			  migration_count(6, resource) {} // 6 directions
+	};
+
+	std::unique_ptr<HaloBuffers> halo_buffers_{nullptr};
 };
-}; // namespace ARBD
+
+/**
+ * @brief Factory function to create patch decomposer
+ * @param type Type of decomposer to create
+ * @return Unique pointer to decomposer
+ */
+std::unique_ptr<PatchDecomposer> create_patch_decomposer(DecomposerType type);
+
+} // namespace ARBD

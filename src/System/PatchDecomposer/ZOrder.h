@@ -11,13 +11,12 @@
  *********************************************************************/
 
 #include "Backend/Buffer.h"
-#include "System/Decomposer.h"
-#include "System/MortonCode.h"
-#include "System/ZOrderSort.h"
+#include "PatchOperation/ZOrderKernels/MortonCode.h"
+#include "PatchOperation/ZOrderKernels/ZOrderSort.h"
+#include "System/PatchDecomposer.h"
 #include "Types/Types.h"
 
 namespace ARBD {
-
 /**
  * @brief Z-order based patch decomposition
  *
@@ -43,12 +42,12 @@ class ZOrderDecomposer : public PatchDecomposer {
 	 * @param sys The global system containing particle data
 	 * @return DecompositionPlan containing the computed patch layout
 	 */
-	DecompositionPlan decompose(SimSystem& sys) override;
+	DecompositionPlan decompose(SimSystem& sys, SystemState& state) override;
 
 	/**
 	 * @brief Get decomposer name
 	 */
-	const std::string get_name() override {
+	const std::string get_name() {
 		return "Z-Order Decomposer";
 	}
 
@@ -97,8 +96,14 @@ class ZOrderDecomposer : public PatchDecomposer {
 	/**
 	 * @brief Get decomposition statistics
 	 */
-	const Statistics& get_statistics() const {
-		return stats_;
+	DecompositionStats get_statistics() const override {
+		return DecompositionStats{
+			.decomposition_time_ms = stats_.decomposition_time_ms,
+			.load_balance_factor = stats_.load_imbalance_factor,
+			.communication_volume = 0.0f,
+			.total_particles = stats_.total_particles,
+			.particles_per_patch = stats_.particles_per_patch,
+		};
 	}
 
   private:

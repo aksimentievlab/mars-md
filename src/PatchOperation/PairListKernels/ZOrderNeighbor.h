@@ -1,4 +1,4 @@
-#include "../MortonCode.h"
+#include "../ZOrderKernels/MortonCode.h"
 #include "Header.h"
 #include "Types/Types.h"
 #include "Types/Vector3.h"
@@ -69,3 +69,9 @@ struct ZOrderNeighborKernel {
 	}
 };
 } // namespace ARBD
+
+#ifdef USE_SYCL
+#include <sycl/sycl.hpp>
+template<>
+struct sycl::is_device_copyable<ARBD::ZOrderNeighborKernel> : std::true_type {};
+#endif

@@ -263,21 +263,24 @@ class BondedInteractions {
 		restraints_.push_back(restraint);
 	}
 
-	// Device data preparation
-	void prepareDeviceData();
-	void cleanupDeviceData();
-
-	size_t getNumBonds() const {
+	size_t get_num_bonds() const {
 		return bonds_.size();
 	}
-	size_t getNumAngles() const {
+	size_t get_num_angles() const {
 		return angles_.size();
 	}
-	size_t getNumDihedrals() const {
+	size_t get_num_dihedrals() const {
 		return dihedrals_.size();
 	}
 
 	void make_exclusions(int num_particles, int exclusion_depth);
+	void clear() {
+		bonds_.clear();
+		angles_.clear();
+		dihedrals_.clear();
+		exclusions_.clear();
+		restraints_.clear();
+	}
 
   private:
 	std::vector<Bond> bonds_{};

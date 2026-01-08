@@ -95,7 +95,10 @@ class NanoGridAdapter {
 	template<typename ValueT>
 	DEVICE_PTR(nanovdb::NanoGrid<ValueT>)
 	device_grid() const {
-		return reinterpret_cast<DEVICE_PTR(nanovdb::NanoGrid<ValueT>)>(arbd_buffer_.data());
+		// Use const_cast to remove const qualifier for device pointer
+		// The buffer data is logically non-const from device perspective
+		return reinterpret_cast<DEVICE_PTR(nanovdb::NanoGrid<ValueT>)>(
+			const_cast<uint8_t*>(arbd_buffer_.data()));
 	}
 
 	/**

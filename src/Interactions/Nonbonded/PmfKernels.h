@@ -9,7 +9,7 @@
 #include "Types/Vector3.h"
 
 namespace ARBD {
-struct ComputePMFForcesKernel {
+struct ComputePMFKernel {
 	KERNEL_FUNC void
 	operator()(size_t i,
 			   const Vector3* __restrict__ const positions,
@@ -44,7 +44,8 @@ struct ComputePMFForcesKernel {
 													 pos,
 													 grid_cfg.origin,
 													 grid_cfg.basis.inverse(),
-													 grid_cfg.dimensions);
+													 grid_cfg.dimensions,
+													 static_cast<int>(grid_cfg.boundary));
 
 			// Apply scaling
 			if (ptype.pmf_scale) {
@@ -57,7 +58,8 @@ struct ComputePMFForcesKernel {
 											grid_cfg.origin,
 											grid_cfg.basis,
 											grid_cfg.basis.inverse(),
-											grid_cfg.dimensions);
+											grid_cfg.dimensions,
+											static_cast<int>(grid_cfg.boundary));
 
 			pmf_force -= grad; // Force = -grad(PMF)
 		}

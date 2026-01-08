@@ -1,475 +1,766 @@
 // src/System/PatchManager.cpp
-#include "System/PatchManager.h"
-#include <stdexcept>
 
-#ifdef USE_MPI
-#include "Backend/MPIManager.h"
-#endif
+#include "System/PatchManager.h"
+#include "ARBDLogger.h"
+#include "Objects/DeviceParticleManager.h"
+#include "System/SimSystem.h"
+#include "System/SystemState.h"
+#include <algorithm>
+#include <cmath>
 
 namespace ARBD {
 
+//================================================================================
 // Constructor
-PatchManager::PatchManager(SimSystem& sys)
+//================================================================================
+
+PatchManager::PatchManager(SimSystem& system)
 #ifdef USE_MPI
-	: sys_(sys), mpi_manager_(MPI::Manager::instance()), global_seed_(0), max_ghost_particles_(0)
+	: sim_system_(system), mpi_manager_(MPI::Manager::instance())
 #else
-	: sys_(sys), global_seed_(0), max_ghost_particles_(0)
+	: sim_system_(system)
 #endif
 {
 }
 
-// Initialize patch manager from decomposition plan
+//================================================================================
+// Initialization and Setup
+//================================================================================
+
 void PatchManager::initialize_from_plan(const DecompositionPlan& plan,
-										idx_t estimated_particles_per_patch,
-										const Length& cutoff) {
+										idx_t estimated_particles_per_patch) {
 	if (!plan.is_valid()) {
-		throw std::runtime_error("Invalid decomposition plan provided to PatchManager");
+		throw Exception(ExceptionType::ValueError,
+						SourceLocation(),
+						"PatchManager::initialize_from_plan received invalid decomposition plan");
 	}
+
+	const Length cutoff = sim_system_.get_cutoff();
 
 #ifdef USE_MPI
 	if (!mpi_manager_.is_initialized()) {
-		throw std::runtime_error("MPI Manager must be initialized before PatchManager");
+		throw Exception(ExceptionType::RuntimeError,
+						SourceLocation(),
+						"PatchManager requires initialized MPI::Manager");
 	}
 
-	int mpi_size = mpi_manager_.get_size();
-	size_t total_patches = plan.total_patches();
-
+	const int mpi_size = mpi_manager_.get_size();
+	const size_t total_patches = plan.total_patches();
 	if (static_cast<size_t>(mpi_size) != total_patches) {
-		throw std::runtime_error("MPI size (" + std::to_string(mpi_size) +
-								 ") must match total patches (" + std::to_string(total_patches) +
-								 ")");
+		throw Exception(ExceptionType::ValueError,
+						SourceLocation(),
+						"PatchManager: MPI size ({}) must match total patches ({})",
+						mpi_size,
+						total_patches);
 	}
 #endif
 
-	// Setup spatial grid from plan
+	// Configure spatial grid from plan
+	setup_spatial_grid(plan);
+
+	const size_t num_patches = plan.total_patches();
+	patches_.clear();
+	patch_metadata_.clear();
+	neighbor_comm_.clear();
+
+	patches_.reserve(num_patches);
+	patch_metadata_.reserve(num_patches);
+
+	for (size_t pid = 0; pid < num_patches; ++pid) {
+		const Resource& res = plan.patch_resources[pid];
+		const Vector3& min_b = plan.patch_min_bounds[pid];
+		const Vector3& max_b = plan.patch_max_bounds[pid];
+
+		patch_metadata_.emplace_back(static_cast<patch_t>(pid), res);
+		auto& meta = patch_metadata_.back();
+		meta.capacity = estimated_particles_per_patch;
+		meta.min_bounds = min_b;
+		meta.max_bounds = max_b;
+
+		// Grid coordinates derived from patch id assuming row-major ordering
+		meta.grid_coords = patch_id_to_grid_coords(static_cast<patch_t>(pid));
+
+#ifdef USE_MPI
+		meta.mpi_rank = static_cast<int>(pid);
+		if (mpi_manager_.get_rank() == meta.mpi_rank) {
+			local_patch_id_ = static_cast<patch_t>(pid);
+		}
+#endif
+
+		// Create patch instance
+		auto patch =
+			std::make_unique<Patch>(static_cast<patch_t>(pid), estimated_particles_per_patch, res);
+		patch->set_bounds(min_b, max_b);
+		patch->set_periodic_box(&sim_system_.get_boundary_conditions());
+		patch->set_halo_thickness(static_cast<float>(cutoff));
+
+		// Create and set device particle types for this patch
+		const auto& particle_types = sim_system_.get_particle_types();
+		if (!particle_types.empty()) {
+			auto device_types = std::make_unique<DeviceParticleTypes>(particle_types, res);
+			device_types->copy_from_host(particle_types);
+			patch->set_particle_types(std::move(device_types));
+		}
+
+		patches_.push_back(std::move(patch));
+	}
+
+	// Discover neighbors and allocate communication buffers
+	discover_neighbors();
+	initialize_communication_buffers();
+
+	LOGINFO("PatchManager: Initialized from plan with {} patches", num_patches);
+}
+
+void PatchManager::initialize_local_patches(idx_t estimated_particles, const Length& cutoff) {
+	// Single-patch helper used by SimSystem::create_single_patch_manager
+	patches_.clear();
+	patch_metadata_.clear();
+	neighbor_comm_.clear();
+
+	const auto& resources = sim_system_.get_resources();
+	if (resources.empty()) {
+		throw Exception(ExceptionType::RuntimeError,
+						SourceLocation(),
+						"PatchManager::initialize_local_patches called with no resources");
+	}
+
+	const Resource& res = resources.front();
+
+	// Use full simulation box as single patch bounds
+	const Vector3 box = sim_system_.get_box_size();
+	Vector3 min_bounds(0.0f, 0.0f, 0.0f);
+	Vector3 max_bounds(box.x, box.y, box.z);
+
+	patch_metadata_.emplace_back(0, res);
+	auto& meta = patch_metadata_.back();
+	meta.capacity = estimated_particles;
+	meta.min_bounds = min_bounds;
+	meta.max_bounds = max_bounds;
+	meta.grid_coords = {0, 0, 0};
+	meta.mpi_rank = 0;
+
+	auto patch = std::make_unique<Patch>(0, estimated_particles, res);
+	patch->set_bounds(min_bounds, max_bounds);
+	patch->set_periodic_box(&sim_system_.get_boundary_conditions());
+	patch->set_halo_thickness(static_cast<float>(cutoff));
+
+	// Create and set device particle types for this patch
+	const auto& particle_types = sim_system_.get_particle_types();
+	if (!particle_types.empty()) {
+		auto device_types = std::make_unique<DeviceParticleTypes>(particle_types, res);
+		device_types->copy_from_host(particle_types);
+		patch->set_particle_types(std::move(device_types));
+	}
+
+	patches_.push_back(std::move(patch));
+
+	// Configure trivial grid
+	setup_spatial_grid(1, 1, 1, true, true, true);
+	discover_neighbors();
+	initialize_communication_buffers();
+
+	LOGINFO("PatchManager: Initialized single local patch with capacity {}", estimated_particles);
+}
+
+void PatchManager::setup_spatial_grid(int nx, int ny, int nz, bool px, bool py, bool pz) {
+	grid_info_.dimensions = {nx, ny, nz};
+	grid_info_.periodic = {px, py, pz};
+
+	// Derive grid spacing from simulation box (if available)
+	Vector3 box = sim_system_.get_box_size();
+	grid_info_.grid_spacing = Vector3(box.x / static_cast<float>(nx),
+									  box.y / static_cast<float>(ny),
+									  box.z / static_cast<float>(nz));
+	grid_info_.system_origin = Vector3(0.0f, 0.0f, 0.0f);
+
+	LOGINFO("PatchManager: Setup spatial grid {}x{}x{} with periodicity [{},{},{}]",
+			nx,
+			ny,
+			nz,
+			px,
+			py,
+			pz);
+}
+
+void PatchManager::distribute_particles_from_state(SystemState& state) {
+	const HostParticleData& global_particles = state.get_global_particles();
+
+	if (patches_.empty()) {
+		LOGWARN("PatchManager: No patches available for particle distribution");
+		return;
+	}
+
+	// Single-patch optimization
+	if (patches_.size() == 1) {
+		auto& patch = *patches_.front();
+		patch.copy_particles_from_host(global_particles, 0, global_particles.size());
+		patch.set_particle_count(static_cast<idx_t>(global_particles.size()));
+
+		auto& meta = patch_metadata_.front();
+		meta.particle_count = patch.get_particle_count();
+
+		LOGINFO("PatchManager: Distributed {} particles to single patch", global_particles.size());
+		return;
+	}
+
+	// Simple multi-patch distribution based on spatial bounds
+	std::vector<idx_t> offset_per_patch(patches_.size(), 0);
+	for (size_t i = 0; i < patches_.size(); ++i) {
+		offset_per_patch[i] = 0;
+	}
+
+	// First pass: count particles per patch
+	std::vector<idx_t> counts(patches_.size(), 0);
+	for (idx_t i = 0; i < static_cast<idx_t>(global_particles.size()); ++i) {
+		const Vector3& pos = global_particles.pos[i];
+		const patch_t pid = find_patch_for_position(pos);
+		if (pid >= 0 && static_cast<size_t>(pid) < patches_.size()) {
+			++counts[static_cast<size_t>(pid)];
+		}
+	}
+
+	// Second pass: copy particles per patch (contiguous ranges in a scratch buffer
+	// would be better, but for now we do a simple per-patch copy)
+	for (size_t pid = 0; pid < patches_.size(); ++pid) {
+		auto& patch = *patches_[pid];
+		patch.set_particle_count(0);
+		patch_metadata_[pid].particle_count = 0;
+	}
+
+	for (idx_t i = 0; i < static_cast<idx_t>(global_particles.size()); ++i) {
+		const Vector3& pos = global_particles.pos[i];
+		const patch_t pid = find_patch_for_position(pos);
+		if (pid < 0 || static_cast<size_t>(pid) >= patches_.size())
+			continue;
+
+		auto& patch = *patches_[static_cast<size_t>(pid)];
+		idx_t current_count = patch.get_particle_count();
+		if (current_count >= patch.get_capacity()) {
+			LOGWARN("PatchManager: Patch {} capacity exceeded during distribution", pid);
+			continue;
+		}
+
+		patch.copy_particles_from_host(global_particles, i, 1);
+		patch.set_particle_count(current_count + 1);
+		patch_metadata_[static_cast<size_t>(pid)].particle_count = patch.get_particle_count();
+	}
+
+	LOGINFO("PatchManager: Distributed {} particles across {} patches",
+			global_particles.size(),
+			patches_.size());
+}
+
+void PatchManager::gather_particles_to_state(SystemState& state) {
+	state.clear_global_arrays();
+
+	if (patches_.empty()) {
+		LOGWARN("PatchManager: No patches available for particle gathering");
+		return;
+	}
+
+	HostParticleData all_particles;
+
+	// Pre-compute total particle count
+	size_t total = 0;
+	for (const auto& meta : patch_metadata_) {
+		total += static_cast<size_t>(meta.particle_count);
+	}
+	all_particles.reserve(total);
+
+	for (size_t pid = 0; pid < patches_.size(); ++pid) {
+		const auto& patch = *patches_[pid];
+		const idx_t count = patch.get_particle_count();
+		if (count == 0)
+			continue;
+
+		HostParticleData tmp;
+		tmp.reserve(count);
+		patch.copy_particles_to_host(tmp, 0, count);
+		all_particles.reserve(all_particles.size() + count);
+
+		all_particles.push_back(tmp, count);
+	}
+
+	state.set_from_host_particle_data(all_particles);
+	state.mark_synced();
+
+	LOGINFO("PatchManager: Gathered {} particles from {} patches",
+			all_particles.size(),
+			patches_.size());
+}
+
+//================================================================================
+// Patch Access and Management
+//================================================================================
+
+Patch& PatchManager::get_patch(patch_t patch_id) {
+	if (patch_id < 0 || static_cast<size_t>(patch_id) >= patches_.size()) {
+		throw Exception(ExceptionType::ValueError,
+						SourceLocation(),
+						"PatchManager::get_patch invalid patch id {}",
+						patch_id);
+	}
+	return *patches_[static_cast<size_t>(patch_id)];
+}
+
+const Patch& PatchManager::get_patch(patch_t patch_id) const {
+	if (patch_id < 0 || static_cast<size_t>(patch_id) >= patches_.size()) {
+		throw Exception(ExceptionType::ValueError,
+						SourceLocation(),
+						"PatchManager::get_patch (const) invalid patch id {}",
+						patch_id);
+	}
+	return *patches_[static_cast<size_t>(patch_id)];
+}
+
+Patch& PatchManager::get_local_patch(int rank) {
+#ifdef USE_MPI
+	const patch_t pid = static_cast<patch_t>(rank);
+	return get_patch(pid);
+#else
+	(void)rank;
+	return get_patch(0);
+#endif
+}
+
+const Patch& PatchManager::get_local_patch(int rank) const {
+#ifdef USE_MPI
+	const patch_t pid = static_cast<patch_t>(rank);
+	return get_patch(pid);
+#else
+	(void)rank;
+	return get_patch(0);
+#endif
+}
+
+//================================================================================
+// Spatial Bounds and Queries
+//================================================================================
+
+const Vector3& PatchManager::get_local_min_bounds() const {
+#ifdef USE_MPI
+	const patch_t pid = local_patch_id_;
+#else
+	const patch_t pid = 0;
+#endif
+	if (patch_metadata_.empty() || pid < 0 || static_cast<size_t>(pid) >= patch_metadata_.size()) {
+		static Vector3 zero(0.0f, 0.0f, 0.0f);
+		return zero;
+	}
+	return patch_metadata_[static_cast<size_t>(pid)].min_bounds;
+}
+
+const Vector3& PatchManager::get_local_max_bounds() const {
+#ifdef USE_MPI
+	const patch_t pid = local_patch_id_;
+#else
+	const patch_t pid = 0;
+#endif
+	if (patch_metadata_.empty() || pid < 0 || static_cast<size_t>(pid) >= patch_metadata_.size()) {
+		static Vector3 zero(0.0f, 0.0f, 0.0f);
+		return zero;
+	}
+	return patch_metadata_[static_cast<size_t>(pid)].max_bounds;
+}
+
+Vector3 PatchManager::get_global_min_bounds() const {
+	if (patch_metadata_.empty()) {
+		return Vector3(0.0f, 0.0f, 0.0f);
+	}
+
+	Vector3 global_min = patch_metadata_.front().min_bounds;
+	for (const auto& meta : patch_metadata_) {
+		global_min.x = std::min(global_min.x, meta.min_bounds.x);
+		global_min.y = std::min(global_min.y, meta.min_bounds.y);
+		global_min.z = std::min(global_min.z, meta.min_bounds.z);
+	}
+	return global_min;
+}
+
+Vector3 PatchManager::get_global_max_bounds() const {
+	if (patch_metadata_.empty()) {
+		return Vector3(0.0f, 0.0f, 0.0f);
+	}
+
+	Vector3 global_max = patch_metadata_.front().max_bounds;
+	for (const auto& meta : patch_metadata_) {
+		global_max.x = std::max(global_max.x, meta.max_bounds.x);
+		global_max.y = std::max(global_max.y, meta.max_bounds.y);
+		global_max.z = std::max(global_max.z, meta.max_bounds.z);
+	}
+	return global_max;
+}
+
+patch_t PatchManager::find_patch_for_position(const Vector3& position) const {
+	for (const auto& meta : patch_metadata_) {
+		if (position.x >= meta.min_bounds.x && position.x < meta.max_bounds.x &&
+			position.y >= meta.min_bounds.y && position.y < meta.max_bounds.y &&
+			position.z >= meta.min_bounds.z && position.z < meta.max_bounds.z) {
+			return meta.patch_id;
+		}
+	}
+	return static_cast<patch_t>(-1);
+}
+
+//================================================================================
+// Communication and Halo Exchange
+//================================================================================
+
+std::vector<Event> PatchManager::exchange_halo_particles(const Length& cutoff) {
+	(void)cutoff;
+
+	// TODO: Implement GPU/MPI halo exchange.
+	// For now we return an empty event list so that callers can proceed.
+	std::vector<Event> events;
+	return events;
+}
+
+std::vector<Event> PatchManager::migrate_particles() {
+	// TODO: Implement particle migration between patches.
+	std::vector<Event> events;
+	return events;
+}
+
+void PatchManager::synchronize_communication() {
+#ifdef USE_MPI
+	MPI_Barrier(MPI_COMM_WORLD);
+#endif
+}
+
+#ifdef USE_MPI
+void PatchManager::exchange_metadata_mpi() {
+	// Placeholder for future MPI metadata exchange. Currently handled via plan.
+}
+
+idx_t PatchManager::gather_global_particle_count(idx_t local_count) {
+	idx_t global_count = local_count;
+	MPI_Allreduce(&local_count, &global_count, 1, MPI_UNSIGNED_LONG, MPI_SUM, MPI_COMM_WORLD);
+	return global_count;
+}
+#endif
+
+//================================================================================
+// Force Computation and Integration
+//================================================================================
+
+std::vector<Event>
+PatchManager::compute_nonbonded_forces(const NonBondedInteractions& interactions,
+									   const DeviceParticleTypes& particle_types) {
+	std::vector<Event> events;
+	events.reserve(patches_.size());
+
+	for (auto& patch_ptr : patches_) {
+		if (!patch_ptr)
+			continue;
+		events.push_back(patch_ptr->calculate_nonbonded_forces(interactions, particle_types));
+	}
+	return events;
+}
+
+std::vector<Event> PatchManager::compute_bonded_forces(const BondedInteractions& interactions,
+													   const DeviceParticleTypes& particle_types) {
+	std::vector<Event> events;
+	events.reserve(patches_.size());
+
+	for (auto& patch_ptr : patches_) {
+		if (!patch_ptr)
+			continue;
+		events.push_back(patch_ptr->calculate_bonded_forces(interactions, particle_types));
+	}
+	return events;
+}
+
+std::vector<Event> PatchManager::integrate_motion(float dt,
+												  const Temperature& temperature,
+												  IntegratorType integrator_type) {
+	std::vector<Event> events;
+	events.reserve(patches_.size());
+
+	for (auto& patch_ptr : patches_) {
+		if (!patch_ptr)
+			continue;
+		events.push_back(patch_ptr->integrate_motion(dt, temperature, integrator_type));
+	}
+	return events;
+}
+
+//================================================================================
+// Load Balancing and Redecomposition
+//================================================================================
+
+bool PatchManager::needs_rebalancing(float imbalance_threshold) const {
+	const LoadStats stats = get_load_statistics();
+	return stats.imbalance_factor > imbalance_threshold;
+}
+
+PatchManager::LoadStats PatchManager::get_load_statistics() const {
+	LoadStats stats;
+	if (patch_metadata_.empty()) {
+		return stats;
+	}
+
+	stats.patch_loads.reserve(patch_metadata_.size());
+	for (const auto& meta : patch_metadata_) {
+		const float load = static_cast<float>(meta.particle_count);
+		stats.patch_loads.push_back(load);
+	}
+
+	stats.min_load = *std::min_element(stats.patch_loads.begin(), stats.patch_loads.end());
+	stats.max_load = *std::max_element(stats.patch_loads.begin(), stats.patch_loads.end());
+
+	float sum = 0.0f;
+	for (float v : stats.patch_loads) {
+		sum += v;
+	}
+	stats.avg_load = sum / static_cast<float>(stats.patch_loads.size());
+
+	if (stats.avg_load > 0.0f) {
+		stats.imbalance_factor = (stats.max_load - stats.avg_load) / stats.avg_load;
+	} else {
+		stats.imbalance_factor = 0.0f;
+	}
+
+	return stats;
+}
+
+void PatchManager::rebalance_patches(SystemState& state) {
+	LOGINFO("PatchManager: Rebalancing patches (delegated to SimSystem::rebalance_system)");
+	sim_system_.rebalance_system(state);
+}
+
+//================================================================================
+// Neighbor Management
+//================================================================================
+
+void PatchManager::discover_neighbors() {
+	const auto dims = grid_info_.dimensions;
+	const bool px = grid_info_.periodic[0];
+	const bool py = grid_info_.periodic[1];
+	const bool pz = grid_info_.periodic[2];
+
+	const size_t num_patches = patches_.size();
+	neighbor_comm_.clear();
+	neighbor_comm_.resize(num_patches);
+
+	for (size_t pid = 0; pid < num_patches; ++pid) {
+		auto& meta = patch_metadata_[pid];
+		std::vector<NeighborComm>& neighbors = neighbor_comm_[pid];
+		meta.neighbor_ranks.clear();
+
+		const int i = meta.grid_coords[0];
+		const int j = meta.grid_coords[1];
+		const int k = meta.grid_coords[2];
+
+		const int dirs[6][3] =
+			{{-1, 0, 0}, {1, 0, 0}, {0, -1, 0}, {0, 1, 0}, {0, 0, -1}, {0, 0, 1}};
+
+		for (int d = 0; d < 6; ++d) {
+			int ni = i + dirs[d][0];
+			int nj = j + dirs[d][1];
+			int nk = k + dirs[d][2];
+
+			if (dirs[d][0] != 0 && px) {
+				if (ni < 0)
+					ni = dims[0] - 1;
+				else if (ni >= dims[0])
+					ni = 0;
+			}
+			if (dirs[d][1] != 0 && py) {
+				if (nj < 0)
+					nj = dims[1] - 1;
+				else if (nj >= dims[1])
+					nj = 0;
+			}
+			if (dirs[d][2] != 0 && pz) {
+				if (nk < 0)
+					nk = dims[2] - 1;
+				else if (nk >= dims[2])
+					nk = 0;
+			}
+
+			if (ni < 0 || ni >= dims[0] || nj < 0 || nj >= dims[1] || nk < 0 || nk >= dims[2]) {
+				continue;
+			}
+
+			const patch_t neighbor_pid = grid_coords_to_patch_id(ni, nj, nk);
+			if (neighbor_pid < 0 || static_cast<size_t>(neighbor_pid) >= num_patches)
+				continue;
+
+			const Resource& res = patch_metadata_[pid].resource;
+			NeighborComm comm(res, 0); // buffer sizes will be set later
+			comm.neighbor_patch_id = neighbor_pid;
+			comm.direction = {dirs[d][0], dirs[d][1], dirs[d][2]};
+			comm.active = true;
+
+#ifdef USE_MPI
+			comm.neighbor_rank = patch_metadata_[static_cast<size_t>(neighbor_pid)].mpi_rank;
+			meta.neighbor_ranks.push_back(comm.neighbor_rank);
+#endif
+
+			neighbors.push_back(std::move(comm));
+		}
+	}
+}
+
+std::vector<patch_t> PatchManager::get_patch_neighbors(patch_t patch_id) const {
+	std::vector<patch_t> result;
+	if (patch_id < 0 || static_cast<size_t>(patch_id) >= neighbor_comm_.size()) {
+		return result;
+	}
+	for (const auto& comm : neighbor_comm_[static_cast<size_t>(patch_id)]) {
+		if (comm.active) {
+			result.push_back(static_cast<patch_t>(comm.neighbor_patch_id));
+		}
+	}
+	return result;
+}
+
+//================================================================================
+// Metadata and Information
+//================================================================================
+
+const PatchManager::PatchMetadata& PatchManager::get_patch_metadata(patch_t patch_id) const {
+	if (patch_id < 0 || static_cast<size_t>(patch_id) >= patch_metadata_.size()) {
+		throw Exception(ExceptionType::ValueError,
+						SourceLocation(),
+						"PatchManager::get_patch_metadata invalid patch id {}",
+						patch_id);
+	}
+	return patch_metadata_[static_cast<size_t>(patch_id)];
+}
+
+void PatchManager::populate_metadata() {
+	// In the new architecture, patch_metadata_ is maintained locally and does not
+	// require additional population here. This method is kept for API completeness.
+}
+
+void PatchManager::print_status() const {
+	LOGINFO("PatchManager: {} patches, grid {}x{}x{}",
+			patches_.size(),
+			grid_info_.dimensions[0],
+			grid_info_.dimensions[1],
+			grid_info_.dimensions[2]);
+	for (const auto& meta : patch_metadata_) {
+		LOGINFO("  Patch {}: bounds min=({}, {}, {}), max=({}, {}, {}), particles={}, capacity={}",
+				meta.patch_id,
+				meta.min_bounds.x,
+				meta.min_bounds.y,
+				meta.min_bounds.z,
+				meta.max_bounds.x,
+				meta.max_bounds.y,
+				meta.max_bounds.z,
+				meta.particle_count,
+				meta.capacity);
+	}
+}
+
+bool PatchManager::validate_patch_setup() const {
+	if (patches_.size() != patch_metadata_.size()) {
+		LOGERROR("PatchManager: mismatch between patches ({}) and metadata ({})",
+				 patches_.size(),
+				 patch_metadata_.size());
+		return false;
+	}
+	return true;
+}
+
+//================================================================================
+// Private Helper Methods
+//================================================================================
+
+void PatchManager::setup_spatial_grid(const DecompositionPlan& plan) {
 	setup_spatial_grid(plan.grid_dimensions[0],
 					   plan.grid_dimensions[1],
 					   plan.grid_dimensions[2],
 					   plan.periodicity[0],
 					   plan.periodicity[1],
 					   plan.periodicity[2]);
+}
 
-	// Initialize local patch using the decomposition plan
-	initialize_local_patch(estimated_particles_per_patch, cutoff);
+void PatchManager::initialize_communication_buffers() {
+	if (patches_.empty())
+		return;
 
-#ifdef USE_MPI
-	// Set local patch bounds from plan
-	int my_rank = mpi_manager_.get_rank();
-	if (my_rank >= 0 && static_cast<size_t>(my_rank) < plan.patch_min_bounds.size()) {
-		update_local_bounds(plan.patch_min_bounds[my_rank], plan.patch_max_bounds[my_rank]);
+	const Length cutoff = sim_system_.get_cutoff();
+	const idx_t max_halo = calculate_max_halo_particles(cutoff);
 
-		// Set resource for local patch from plan
-		if (static_cast<size_t>(my_rank) < plan.patch_resources.size()) {
-			local_metadata_.resource = plan.patch_resources[my_rank];
-			if (!patches_.empty()) {
-				patches_[0].set_resource(plan.patch_resources[my_rank]);
-			}
+	for (size_t pid = 0; pid < neighbor_comm_.size(); ++pid) {
+		for (auto& comm : neighbor_comm_[pid]) {
+			if (!comm.active)
+				continue;
+			const Resource& res = patch_metadata_[pid].resource;
+			comm.send_buffer = DeviceBuffer<float>(max_halo * 8, res);
+			comm.recv_buffer = DeviceBuffer<float>(max_halo * 8, res);
+			comm.max_halo_particles = max_halo;
 		}
 	}
-#else
-	// Non-MPI: initialize all patches from plan
-	patches_.clear();
-	patches_.reserve(plan.total_patches());
-
-	for (size_t idx = 0; idx < plan.total_patches(); ++idx) {
-		Patch patch(static_cast<patch_t>(idx), estimated_particles_per_patch);
-		patch.set_bounds(plan.patch_min_bounds[idx], plan.patch_max_bounds[idx]);
-		patch.set_resource(plan.patch_resources[idx]);
-		patches_.push_back(std::move(patch));
-	}
-
-	// For non-MPI, local metadata refers to first patch (if exists)
-	if (!patches_.empty()) {
-		local_metadata_.min = patches_[0].get_bounds_min();
-		local_metadata_.max = patches_[0].get_bounds_max();
-		local_metadata_.resource = patches_[0].get_resource();
-	}
-#endif
-
-	// Exchange metadata to populate all_metadata_
-	exchange_metadata();
 }
 
-// Initialize patch manager with MPI integration (deprecated)
-void PatchManager::initialize(int grid_nx,
-							  int grid_ny,
-							  int grid_nz,
-							  bool periodic_x,
-							  bool periodic_y,
-							  bool periodic_z) {
-#ifdef USE_MPI
-	if (!mpi_manager_.is_initialized()) {
-		throw std::runtime_error("MPI Manager must be initialized before PatchManager");
+idx_t PatchManager::calculate_max_halo_particles(const Length& cutoff) const {
+	if (patch_metadata_.empty()) {
+		return 0;
 	}
 
-	int mpi_size = mpi_manager_.get_size();
-	int grid_size = grid_nx * grid_ny * grid_nz;
+	// Use first patch as representative for volume estimate
+	const auto& meta = patch_metadata_.front();
+	const float cutoff_val = cutoff;
+	const float dx = meta.max_bounds.x - meta.min_bounds.x;
+	const float dy = meta.max_bounds.y - meta.min_bounds.y;
+	const float dz = meta.max_bounds.z - meta.min_bounds.z;
 
-	if (mpi_size != grid_size) {
-		throw std::runtime_error("MPI size (" + std::to_string(mpi_size) +
-								 ") must match grid size (" + std::to_string(grid_size) + ")");
+	const float volume = dx * dy * dz;
+	if (volume <= 0.0f) {
+		return meta.capacity / 10;
 	}
-#endif
 
-	setup_spatial_grid(grid_nx, grid_ny, grid_nz, periodic_x, periodic_y, periodic_z);
+	const float halo_volume =
+		2.0f * cutoff_val * (dx * dy + dx * dz + dy * dz); // slab approximation
+	const float density = static_cast<float>(meta.capacity) / volume;
+
+	const idx_t estimate = static_cast<idx_t>(halo_volume * density * 1.5f); // 1.5 safety factor
+	return std::max<idx_t>(estimate, 1);
 }
 
-// Setup spatial grid and determine neighbors
-void PatchManager::setup_spatial_grid(int nx, int ny, int nz, bool px, bool py, bool pz) {
-	grid_info_.dimensions = {nx, ny, nz};
-	grid_info_.periodic = {px, py, pz};
-
-#ifdef USE_MPI
-	int my_rank = mpi_manager_.get_rank();
-	auto my_coords = rank_to_grid_coords(my_rank);
-
-	local_metadata_.grid_coords = {my_coords[0], my_coords[1], my_coords[2]};
-	local_metadata_.mpi_rank = my_rank;
-#endif
-
-	discover_neighbors();
+patch_t PatchManager::grid_coords_to_patch_id(int i, int j, int k) const {
+	const auto dims = grid_info_.dimensions;
+	if (i < 0 || i >= dims[0] || j < 0 || j >= dims[1] || k < 0 || k >= dims[2]) {
+		return static_cast<patch_t>(-1);
+	}
+	const int id = k * dims[0] * dims[1] + j * dims[0] + i;
+	return static_cast<patch_t>(id);
 }
 
-// Initialize local patch for this MPI rank
-void PatchManager::initialize_local_patch(idx_t estimated_particles, const Length& cutoff) {
-#ifdef USE_MPI
-	// Create local patch
-	Patch local_patch(static_cast<patch_t>(mpi_manager_.get_rank()), estimated_particles);
-	local_patch.set_bounds(local_metadata_.min, local_metadata_.max);
-	local_patch.set_resource(local_metadata_.resource);
+std::array<int, 3> PatchManager::patch_id_to_grid_coords(patch_t patch_id) const {
+	const auto dims = grid_info_.dimensions;
+	const int id = static_cast<int>(patch_id);
+	const int nx = dims[0];
+	const int ny = dims[1];
 
-	patches_.clear();
-	patches_.push_back(std::move(local_patch));
+	const int k = id / (nx * ny);
+	const int rem = id % (nx * ny);
+	const int j = rem / nx;
+	const int i = rem % nx;
 
-	// Update metadata
-	local_metadata_.capacity = estimated_particles;
-	local_metadata_.num = 0;
-
-	// Estimate max ghost particles (worst case: all particles in boundary region)
-	// Assuming cutoff-based halo
-	float cutoff_val = cutoff;
-	float patch_volume = (local_metadata_.max.x - local_metadata_.min.x) *
-						 (local_metadata_.max.y - local_metadata_.min.y) *
-						 (local_metadata_.max.z - local_metadata_.min.z);
-	float halo_volume = 2.0f * cutoff_val *
-						((local_metadata_.max.x - local_metadata_.min.x) *
-							 (local_metadata_.max.y - local_metadata_.min.y) +
-						 (local_metadata_.max.x - local_metadata_.min.x) *
-							 (local_metadata_.max.z - local_metadata_.min.z) +
-						 (local_metadata_.max.y - local_metadata_.min.y) *
-							 (local_metadata_.max.z - local_metadata_.min.z));
-	float density = static_cast<float>(estimated_particles) / patch_volume;
-	max_ghost_particles_ = static_cast<idx_t>(halo_volume * density * 1.5f); // 1.5x safety factor
-#else
-	// Non-MPI case - create single patch
-	Patch local_patch(0, estimated_particles);
-	local_patch.set_bounds(local_metadata_.min, local_metadata_.max);
-	patches_.clear();
-	patches_.push_back(std::move(local_patch));
-	local_metadata_.capacity = estimated_particles;
-	local_metadata_.num = 0;
-	max_ghost_particles_ = estimated_particles / 10; // Conservative estimate
-#endif
+	return {i, j, k};
 }
 
-// Find and setup neighbor relationships
-void PatchManager::discover_neighbors() {
-#ifdef USE_MPI
-	int my_rank = mpi_manager_.get_rank();
-	auto my_coords = rank_to_grid_coords(my_rank);
+bool PatchManager::are_spatial_neighbors(patch_t patch_id1, patch_t patch_id2) const {
+	if (patch_id1 < 0 || patch_id2 < 0)
+		return false;
+	if (static_cast<size_t>(patch_id1) >= patch_metadata_.size() ||
+		static_cast<size_t>(patch_id2) >= patch_metadata_.size())
+		return false;
 
-	// Reset neighbors
-	for (auto& neighbor : neighbors_) {
-		neighbor.active = false;
-	}
+	const auto c1 = patch_metadata_[static_cast<size_t>(patch_id1)].grid_coords;
+	const auto c2 = patch_metadata_[static_cast<size_t>(patch_id2)].grid_coords;
 
-	// Only support 2D grid for now (as noted in header: just 2 neighbors in 2D grid)
-	// Check left and right neighbors (x-direction)
-	for (int dir = 0; dir < 2; ++dir) {
-		std::array<int, 3> neighbor_coords = my_coords;
-		neighbor_coords[0] += (dir == 0) ? -1 : +1;
+	const int di = std::abs(c1[0] - c2[0]);
+	const int dj = std::abs(c1[1] - c2[1]);
+	const int dk = std::abs(c1[2] - c2[2]);
 
-		// Handle periodic boundaries
-		if (grid_info_.periodic[0]) {
-			if (neighbor_coords[0] < 0) {
-				neighbor_coords[0] = grid_info_.dimensions[0] - 1;
-			} else if (neighbor_coords[0] >= grid_info_.dimensions[0]) {
-				neighbor_coords[0] = 0;
-			}
-		}
-
-		// Check if neighbor is valid
-		if (neighbor_coords[0] >= 0 && neighbor_coords[0] < grid_info_.dimensions[0]) {
-			int neighbor_rank =
-				grid_coords_to_rank(neighbor_coords[0], neighbor_coords[1], neighbor_coords[2]);
-			if (neighbor_rank >= 0 && neighbor_rank != my_rank) {
-				neighbors_[dir].neighbor_rank = neighbor_rank;
-				neighbors_[dir].direction = {(dir == 0) ? -1 : 1, 0, 0};
-				neighbors_[dir].active = true;
-			}
-		}
-	}
-
-	// Initialize neighbor communication buffers
-	const Resource& resource = local_metadata_.resource;
-	for (int dir = 0; dir < 2; ++dir) {
-		if (neighbors_[dir].active) {
-			int saved_rank = neighbors_[dir].neighbor_rank;
-			std::array<int, 3> saved_dir = neighbors_[dir].direction;
-			neighbors_[dir] = NeighborComm(resource, max_ghost_particles_);
-			neighbors_[dir].neighbor_rank = saved_rank;
-			neighbors_[dir].direction = saved_dir;
-			neighbors_[dir].active = true;
-		}
-	}
-#else
-	// Non-MPI: no neighbors
-	for (auto& neighbor : neighbors_) {
-		neighbor.active = false;
-	}
-#endif
-}
-
-// Exchange metadata with all ranks
-void PatchManager::exchange_metadata() {
-#ifdef USE_MPI
-	int mpi_size = mpi_manager_.get_size();
-	all_metadata_.resize(mpi_size);
-
-	// Serialize metadata for exchange
-	// Pack: mpi_rank, num, capacity, min (3 floats), max (3 floats)
-	constexpr int metadata_size = 1 + 1 + 1 + 3 + 3; // int + idx_t + idx_t + 3 floats + 3 floats
-	DeviceBuffer<float> send_buffer(metadata_size, local_metadata_.resource);
-	DeviceBuffer<float> recv_buffer(metadata_size * mpi_size, local_metadata_.resource);
-
-	// Pack local metadata
-	std::vector<float> send_host(metadata_size);
-	send_host[0] = static_cast<float>(local_metadata_.mpi_rank);
-	send_host[1] = static_cast<float>(local_metadata_.num);
-	send_host[2] = static_cast<float>(local_metadata_.capacity);
-	send_host[3] = local_metadata_.min.x;
-	send_host[4] = local_metadata_.min.y;
-	send_host[5] = local_metadata_.min.z;
-	send_host[6] = local_metadata_.max.x;
-	send_host[7] = local_metadata_.max.y;
-	send_host[8] = local_metadata_.max.z;
-
-	send_buffer.copy_from_host(send_host.data(), metadata_size);
-	mpi_manager_.allGather(send_buffer, recv_buffer, metadata_size, local_metadata_.resource);
-
-	// Unpack received metadata
-	std::vector<float> recv_host(metadata_size * mpi_size);
-	recv_buffer.copy_to_host(recv_host.data(), metadata_size * mpi_size);
-
-	for (int i = 0; i < mpi_size; ++i) {
-		int offset = i * metadata_size;
-		all_metadata_[i].mpi_rank = static_cast<int>(recv_host[offset]);
-		all_metadata_[i].num = static_cast<idx_t>(recv_host[offset + 1]);
-		all_metadata_[i].capacity = static_cast<idx_t>(recv_host[offset + 2]);
-		all_metadata_[i].min.x = recv_host[offset + 3];
-		all_metadata_[i].min.y = recv_host[offset + 4];
-		all_metadata_[i].min.z = recv_host[offset + 5];
-		all_metadata_[i].max.x = recv_host[offset + 6];
-		all_metadata_[i].max.y = recv_host[offset + 7];
-		all_metadata_[i].max.z = recv_host[offset + 8];
-	}
-#else
-	// Non-MPI: just store local metadata
-	all_metadata_.clear();
-	all_metadata_.push_back(local_metadata_);
-#endif
-}
-
-// Update local patch bounds
-void PatchManager::update_local_bounds(const Vector3& new_min, const Vector3& new_max) {
-	local_metadata_.min = new_min;
-	local_metadata_.max = new_max;
-
-	if (!patches_.empty()) {
-		patches_[0].set_bounds(new_min, new_max);
-	}
-}
-
-// Exchange halo particles with all neighbors
-std::vector<Event> PatchManager::exchange_halo_particles(DeviceBuffer<float>& positions,
-														 DeviceBuffer<float>& velocities,
-														 const Length& cutoff) {
-#ifdef USE_MPI
-	std::vector<Event> events;
-	const Resource& resource = local_metadata_.resource;
-
-	// Prepare send and receive lists
-	std::vector<std::pair<DeviceBuffer<float>*, int>> send_list;
-	std::vector<std::pair<DeviceBuffer<float>*, int>> recv_list;
-
-	std::vector<idx_t> send_counts(2, 0);
-
-	// For each active neighbor, pack and send boundary particles
-	for (int dir = 0; dir < 2; ++dir) {
-		if (!has_neighbor(dir)) {
-			continue;
-		}
-
-		int neighbor_rank = get_neighbor_rank(dir);
-
-		// Pack boundary particles for this direction from local patch
-		Patch& local_patch = get_local_patch();
-		idx_t packed_count =
-			local_patch.pack_boundary_particles(neighbors_[dir].send_buffer, dir, cutoff);
-		send_counts[dir] = packed_count;
-
-		if (packed_count > 0) {
-			// Send count first (using separate communication for metadata)
-			// Then send actual data
-			send_list.push_back({&neighbors_[dir].send_buffer, neighbor_rank});
-		}
-	}
-
-	// Post receives for all neighbors
-	for (int dir = 0; dir < 2; ++dir) {
-		if (!has_neighbor(dir)) {
-			continue;
-		}
-
-		int neighbor_rank = get_neighbor_rank(dir);
-		recv_list.push_back({&neighbors_[dir].recv_buffer, neighbor_rank});
-	}
-
-	// Exchange particle counts first (for proper buffer allocation)
-
-	// Exchange counts with neighbors using point-to-point communication
-	for (int dir = 0; dir < 2; ++dir) {
-		if (!has_neighbor(dir)) {
-			continue;
-		}
-
-		int neighbor_rank = get_neighbor_rank(dir);
-		int opposite_dir = (dir == 0) ? 1 : 0; // Opposite direction
-
-		// Send count
-		DeviceBuffer<int> send_single(1, resource);
-		DeviceBuffer<int> recv_single(1, resource);
-		std::vector<int> send_val = {static_cast<int>(send_counts[dir])};
-		send_single.copy_from_host(send_val.data(), 1);
-
-		events.push_back(mpi_manager_.send_boundary(send_single,
-													1,
-													neighbor_rank,
-													METADATA_TAG + dir,
-													resource));
-		events.push_back(mpi_manager_.recv_boundary(recv_single,
-													1,
-													neighbor_rank,
-													METADATA_TAG + opposite_dir,
-													resource));
-
-		// Wait for count exchange to complete
-		events.back().wait();
-
-		// Get received count
-		std::vector<int> recv_val(1);
-		recv_single.copy_to_host(recv_val.data(), 1);
-		neighbors_[opposite_dir].halo_size = static_cast<idx_t>(recv_val[0]);
-	}
-
-	// Exchange actual particle data using MPI Manager
-	if (!send_list.empty() || !recv_list.empty()) {
-		// For positions (6 floats per particle: 3 pos + 3 vel)
-		for (size_t i = 0; i < send_list.size(); ++i) {
-			int dir = static_cast<int>(i);
-			int neighbor_rank = get_neighbor_rank(dir);
-			idx_t count = send_counts[dir] * 6; // 6 floats per particle
-
-			if (count > 0) {
-				events.push_back(mpi_manager_.send_boundary(*send_list[i].first,
-															count,
-															neighbor_rank,
-															POSITIONS_TAG + dir,
-															resource));
-			}
-		}
-
-		for (size_t i = 0; i < recv_list.size(); ++i) {
-			int dir = static_cast<int>(i);
-			int opposite_dir = (dir == 0) ? 1 : 0; // Opposite direction
-			int neighbor_rank = get_neighbor_rank(dir);
-			idx_t count = neighbors_[dir].halo_size * 6; // 6 floats per particle
-
-			if (count > 0) {
-				events.push_back(mpi_manager_.recv_boundary(*recv_list[i].first,
-															count,
-															neighbor_rank,
-															POSITIONS_TAG + opposite_dir,
-															resource));
-			}
-		}
-	}
-
-	return events;
-#else
-	// Non-MPI: return empty events
-	return std::vector<Event>();
-#endif
-}
-
-// Send boundary particles to specific neighbor
-Event PatchManager::send_boundary_particles(DeviceBuffer<float>& particles,
-											idx_t count,
-											int neighbor_direction,
-											int tag) {
-#ifdef USE_MPI
-	if (!has_neighbor(neighbor_direction)) {
-		throw std::invalid_argument("No neighbor in specified direction");
-	}
-
-	int neighbor_rank = get_neighbor_rank(neighbor_direction);
-	const Resource& resource = local_metadata_.resource;
-
-	return mpi_manager_.send_boundary(particles, count, neighbor_rank, tag, resource);
-#else
-	return Event(nullptr, local_metadata_.resource);
-#endif
-}
-
-// Receive boundary particles from specific neighbor
-Event PatchManager::receive_boundary_particles(DeviceBuffer<float>& particles,
-											   idx_t max_count,
-											   int neighbor_direction,
-											   int tag) {
-#ifdef USE_MPI
-	if (!has_neighbor(neighbor_direction)) {
-		throw std::invalid_argument("No neighbor in specified direction");
-	}
-
-	int neighbor_rank = get_neighbor_rank(neighbor_direction);
-	const Resource& resource = local_metadata_.resource;
-
-	return mpi_manager_.recv_boundary(particles, max_count, neighbor_rank, tag, resource);
-#else
-	return Event(nullptr, local_metadata_.resource);
-#endif
-}
-
-// Reduce forces across overlapping regions (if needed)
-Event PatchManager::reduce_overlapping_forces(DeviceBuffer<float>& forces, idx_t particle_count) {
-#ifdef USE_MPI
-	const Resource& resource = local_metadata_.resource;
-	// This would typically use MPI_Allreduce for overlapping force regions
-	// For now, return empty event
-	return mpi_manager_.allReduce(forces, particle_count, resource, MPI_SUM);
-#else
-	return Event(nullptr, local_metadata_.resource);
-#endif
-}
-
-// Broadcast global data to all patches
-Event PatchManager::broadcast_global_data(DeviceBuffer<float>& data, idx_t count, int root_rank) {
-#ifdef USE_MPI
-	const Resource& resource = local_metadata_.resource;
-	return mpi_manager_.broadcast(data, count, root_rank, resource);
-#else
-	return Event(nullptr, local_metadata_.resource);
-#endif
+	// Direct face neighbors only
+	return (di + dj + dk == 1);
 }
 
 } // namespace ARBD

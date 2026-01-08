@@ -11,7 +11,7 @@
 
 #include "Backend/Buffer.h"
 #include "Backend/Resource.h"
-#include "Objects/ParticleProperties.h"
+#include "Objects/DeviceParticle.h"
 #include "SimParam.h"
 
 #include "Types/BaseGrid.h"
@@ -124,7 +124,7 @@ class LongRangeElectrostatics {
 /**
  * @brief Cutoff-AMR: Your novel adaptive approach
  */
-template<typename ParticleBuffer>
+template<typename DeviceParticle>
 class CutoffAMRElectrostatics : public LongRangeElectrostatics {
   private:
 	// AMR hierarchy using your BaseGrid system
@@ -217,7 +217,7 @@ class CutoffAMRElectrostatics : public LongRangeElectrostatics {
 		particle_count_grids_.push_back(std::move(count_grid));
 	}
 
-	void update_particle_density(const ParticleBuffer& particles) {
+	void update_particle_density(const DeviceParticle& particles) {
 		// Reset particle counts
 		for (auto& grid : particle_count_grids_) {
 			grid->zero();
@@ -259,23 +259,22 @@ class CutoffAMRElectrostatics : public LongRangeElectrostatics {
 				size_t iz = static_cast<size_t>(grid_pos.z);
 				size_t idx = grid->index(ix, iy, iz);
 				(*grid)[idx] += static_cast<int>(contribution);
-				break;
 			}
 		}
 	}
 
-	void build_amr_neighbor_lists(const ParticleBuffer& particles) {
+	void build_amr_neighbor_lists(const DeviceParticle& particles) {
 		// Use AMR structure to build efficient neighbor lists
 		// Implementation similar to your V1 cell decomposition but adaptive
 	}
 
-	void calculate_cutoff_forces(ParticleBuffer& particles,
+	void calculate_cutoff_forces(DeviceParticle& particles,
 								 const ParticleTypeManager& type_manager) {
 		// Cutoff electrostatics with chosen smoothing function
 		// Uses neighbor lists for O(N) scaling
 	}
 
-	void apply_long_range_correction(ParticleBuffer& particles,
+	void apply_long_range_correction(DeviceParticle& particles,
 									 const ParticleTypeManager& type_manager) {
 		// Reaction field or other long-range correction
 	}
@@ -292,7 +291,7 @@ class CutoffAMRElectrostatics : public LongRangeElectrostatics {
 /**
  * @brief PPPM/PME: Traditional mesh-based methods
  */
-template<typename ParticleBuffer>
+template<typename DeviceParticle>
 class PPPMElectrostatics : public LongRangeElectrostatics {
   private:
 	std::unique_ptr<BaseGrid<float>> charge_grid_;
@@ -314,7 +313,7 @@ class PPPMElectrostatics : public LongRangeElectrostatics {
 		calculate_optimal_parameters();
 	}
 
-	void solve_electrostatics(const ParticleBuffer& particles,
+	void solve_electrostatics(const DeviceParticle& particles,
 							  const ParticleTypeManager& type_manager) override {
 		auto start_time = std::chrono::high_resolution_clock::now();
 
@@ -397,13 +396,11 @@ class PPPMElectrostatics : public LongRangeElectrostatics {
 		real_cutoff_ = config_.parameters.at("real_cutoff");
 	}
 
-	void calculate_real_space_forces(ParticleBuffer& particles,
-									 const ParticleProperties& type_manager) {
+	void calculate_real_space_forces(DeviceParticle& particles, const ParticleTypeView& types) {
 		// Direct pairwise interactions with erfc(alpha*r)/r
 	}
 
-	void assign_charges_to_mesh(const ParticleBuffer& particles,
-								const ParticleProperties& type_manager) {
+	void assign_charges_to_mesh(const DeviceParticle& particles, const ParticleTypeView& types) {
 		// B-spline or other interpolation scheme
 	}
 
@@ -419,12 +416,12 @@ class PPPMElectrostatics : public LongRangeElectrostatics {
 		// Backend-specific inverse FFT
 	}
 
-	void interpolate_forces_from_mesh(ParticleBuffer& particles,
+	void interpolate_forces_from_mesh(DeviceParticle& particles,
 									  const ParticleTypeManager& type_manager) {
 		// Interpolate electric field to particle positions
 	}
 
-	void apply_self_energy_correction(ParticleBuffer& particles,
+	void apply_self_energy_correction(DeviceParticle& particles,
 									  const ParticleTypeManager& type_manager) {
 		// Remove self-interaction artifacts
 	}
@@ -437,7 +434,7 @@ class PPPMElectrostatics : public LongRangeElectrostatics {
 /**
  * @brief FMM: Fast Multipole Method
  */
-template<typename ParticleBuffer>
+template<typename DeviceParticle>
 class FMMElectrostatics : public LongRangeElectrostatics {
   private:
 	struct FMMNode {
@@ -467,24 +464,24 @@ class FMMElectrostatics : public LongRangeElectrostatics {
 		theta_ = config.parameters.at("theta");
 	}
 
-	void solve_electrostatics(const ParticleBuffer& particles,
-							  const ParticleManager& type_manager) override {
+	void solve_electrostatics(const DeviceParticle& particles,
+							  const ParticleTypeView& types) override {
 		auto start_time = std::chrono::high_resolution_clock::now();
 
 		// 1. Build adaptive octree
 		build_tree(particles);
 
 		// 2. Upward pass: compute multipole expansions
-		compute_multipole_expansions(particles, type_manager);
+		compute_multipole_expansions(particles, types);
 
 		// 3. Downward pass: compute local expansions
 		compute_local_expansions();
 
 		// 4. Direct interactions for nearby particles
-		compute_direct_interactions(particles, type_manager);
+		compute_direct_interactions(particles, types);
 
 		// 5. Apply forces from local expansions
-		evaluate_local_expansions(particles, type_manager);
+		evaluate_local_expansions(particles, types);
 
 		auto end_time = std::chrono::high_resolution_clock::now();
 		last_computation_time_ =
@@ -522,12 +519,12 @@ class FMMElectrostatics : public LongRangeElectrostatics {
 	}
 
   private:
-	void build_tree(const ParticleBuffer& particles) {
+	void build_tree(const DeviceParticle& particles) {
 		// Build adaptive octree based on particle distribution
 	}
 
-	void compute_multipole_expansions(const ParticleBuffer& particles,
-									  const ParticleTypeManager& type_manager) {
+	void compute_multipole_expansions(const DeviceParticle& particles,
+									  const ParticleTypeView& types) {
 		// Bottom-up pass: particles -> multipole moments
 	}
 
@@ -535,13 +532,11 @@ class FMMElectrostatics : public LongRangeElectrostatics {
 		// Top-down pass: far-field -> local Taylor expansions
 	}
 
-	void compute_direct_interactions(ParticleBuffer& particles,
-									 const ParticleTypeManager& type_manager) {
+	void compute_direct_interactions(DeviceParticle& particles, const ParticleTypeView& types) {
 		// Direct calculation for nearby particles
 	}
 
-	void evaluate_local_expansions(ParticleBuffer& particles,
-								   const ParticleTypeManager& type_manager) {
+	void evaluate_local_expansions(DeviceParticle& particles, const ParticleTypeView& types) {
 		// Apply local expansion forces to particles
 	}
 };
@@ -661,12 +656,12 @@ class UnifiedLongRangeExample {
 		auto manual_solver = LongRangeMethodFactory::create_method(manual_config);
 
 		// 4. Use in simulation
-		ParticleBuffer particles(100000, ParticleBuffer::Layout::SoA);
-		ParticleTypeManager type_manager;
+		DeviceParticle particles(100000);
+		ParticleTypeView types;
 
 		// Main simulation loop
 		for (int step = 0; step < 1000; ++step) {
-			solver->solve_electrostatics(particles, type_manager);
+			solver->solve_electrostatics(particles, types);
 
 			// Performance monitoring
 			if (step % 100 == 0) {
@@ -677,13 +672,13 @@ class UnifiedLongRangeExample {
 		}
 
 		// 5. Method comparison
-		compare_methods(criteria, particles, type_manager);
+		compare_methods(criteria, particles, types);
 	}
 
   private:
 	void compare_methods(const MethodSelectionCriteria& criteria,
-						 ParticleBuffer& particles,
-						 const ParticleTypeManager& type_manager) {
+						 DeviceParticle& particles,
+						 const ParticleTypeView& types) {
 
 		std::vector<LongRangeMethod> methods = {LongRangeMethod::CutoffAMR,
 												LongRangeMethod::PPPM,
@@ -698,7 +693,7 @@ class UnifiedLongRangeExample {
 
 				// Benchmark
 				auto start = std::chrono::high_resolution_clock::now();
-				solver->solve_electrostatics(particles, type_manager);
+				solver->solve_electrostatics(particles, types);
 				auto end = std::chrono::high_resolution_clock::now();
 
 				float time_ms = std::chrono::duration<float, std::milli>(end - start).count();

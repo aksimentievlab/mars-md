@@ -28,17 +28,15 @@ void declare_particle(py::module& m) {
 	py::class_<Particle>(m, "Particle")
 		.def(py::init<>())
 		.def_readwrite("id", &Particle::id)
-		.def_readwrite("type_id", &Particle::type_id)
+		.def_readwrite("type_name", &Particle::type_name)
 		.def_readwrite("position", &Particle::position)
 		.def_readwrite("momentum", &Particle::momentum)
 		.def_readwrite("force", &Particle::force)
 		.def_readwrite("orientation", &Particle::orientation)
 		.def_readwrite("energy", &Particle::energy)
-		.def_readwrite("has_orientation", &Particle::has_orientation)
 		.def_readwrite("group_id", &Particle::group_id)
 		.def("__repr__", [](const Particle& p) {
-			return "Particle(id=" + std::to_string(p.id) +
-				   ", type_id=" + std::to_string(p.type_id) +
+			return "Particle(id=" + std::to_string(p.id) + ", type_name=" + p.type_name +
 				   ", position=" + p.position.to_string() + ")";
 		});
 }
@@ -68,9 +66,9 @@ void declare_particle_type(py::module& m) {
 		.def_readwrite("pmf_scale", &ParticleType::pmf_scale)
 		.def_readwrite("pmf_scale_slope", &ParticleType::pmf_scale_slope)
 		.def_readwrite("pmf_smd_freq", &ParticleType::pmf_smd_freq)
-		.def_readwrite("pmfGrid", &ParticleType::pmfGrid)
-		.def_readwrite("diffusionGrid", &ParticleType::diffusionGrid)
-		.def_readwrite("forceGrid", &ParticleType::forceGrid)
+		.def_readwrite("pmf_grid_id", &ParticleType::pmf_grid_id)
+		.def_readwrite("diffusion_grid_id", &ParticleType::diffusion_grid_id)
+		.def_readwrite("force_grid_id", &ParticleType::force_grid_id)
 		.def("__repr__", [](const ParticleType& pt) {
 			return "ParticleType(name='" + pt.name + "', id=" + std::to_string(pt.id) +
 				   ", num=" + std::to_string(pt.num) + ")";

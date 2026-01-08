@@ -10,15 +10,16 @@
  * traditional cell-based approaches.
  *********************************************************************/
 
+#include "../ZOrderKernels/ZOrderKernels.h"
+#include "../ZOrderKernels/ZOrderSort.h"
 #include "PatchOperation/Pairlist.h"
-#include "PatchOperation/ZOrderKernels.h"
-#include "PatchOperation/ZOrderSort.h"
 #include "Types/Types.h"
 
 namespace ARBD {
 
 /**
  * @brief Z-order based pairlist implementation
+ * @todo Make it fused.
  *
  * Uses Morton code sorting to organize particles spatially, then leverages
  * the spatial locality property of Z-order curves to efficiently find

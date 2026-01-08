@@ -267,15 +267,18 @@ struct CellNeighborKernel {
 	int numReplicas;
 
 	DEVICE void operator()(idx_t idx) const {
-		if (idx >= num_particles * numReplicas) return;
+		if (idx >= num_particles * numReplicas)
+			return;
 
 		size_t particle_i = idx / numReplicas;
 		int rep_i = idx % numReplicas;
 
-		if (particle_i >= num_particles) return;
+		if (particle_i >= num_particles)
+			return;
 
 		const DecomposeKernel::cell_t& cell_i = cells[idx];
-		if (cell_i.particle != particle_i) return; // Safety check
+		if (cell_i.particle != particle_i)
+			return; // Safety check
 
 		Vector3 pos_i = positions[particle_i];
 		Vector3_t<int> cell_coord = cell_i.pos;
@@ -293,10 +296,12 @@ struct CellNeighborKernel {
 
 					// Check all replicas in the neighbor cell
 					for (int rep_j = 0; rep_j < numReplicas; rep_j++) {
-						int cell_range_idx = neighbor_cell_id + rep_j * (nCells.x * nCells.y * nCells.z);
+						int cell_range_idx =
+							neighbor_cell_id + rep_j * (nCells.x * nCells.y * nCells.z);
 
 						const BindRangesKernel::range_t& range = cell_ranges[cell_range_idx];
-						if (range.first < 0 || range.last < 0) continue;
+						if (range.first < 0 || range.last < 0)
+							continue;
 
 						// Check all particles in this cell range
 						for (int j_idx = range.first; j_idx < range.last; j_idx++) {
@@ -305,7 +310,8 @@ struct CellNeighborKernel {
 							int rep_j_actual = cell_j.repID;
 
 							// Avoid double counting and self-interaction
-							if (particle_i >= particle_j && rep_i >= rep_j_actual) continue;
+							if (particle_i >= particle_j && rep_i >= rep_j_actual)
+								continue;
 
 							Vector3 pos_j = positions[particle_j];
 							Vector3 dr = pos_j - pos_i;
@@ -331,3 +337,28 @@ struct CellNeighborKernel {
 };
 
 } // namespace ARBD
+
+#ifdef USE_SYCL
+#include <sycl/sycl.hpp>
+// SYCL device copyable specializations for kernel functors
+template<>
+struct sycl::is_device_copyable<ARBD::DecomposeKernel> : std::true_type {};
+
+template<>
+struct sycl::is_device_copyable<ARBD::MakeRangesKernel> : std::true_type {};
+
+template<>
+struct sycl::is_device_copyable<ARBD::BindRangesKernel> : std::true_type {};
+
+template<>
+struct sycl::is_device_copyable<ARBD::ValidateDecompositionKernel> : std::true_type {};
+
+template<>
+struct sycl::is_device_copyable<ARBD::CountParticlesKernel> : std::true_type {};
+
+template<>
+struct sycl::is_device_copyable<ARBD::ParticleAssignmentFunctor> : std::true_type {};
+
+template<>
+struct sycl::is_device_copyable<ARBD::CellNeighborKernel> : std::true_type {};
+#endif

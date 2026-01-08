@@ -16,7 +16,7 @@ struct AngleGeometry {
 	float cos_angle;	// Cosine of angle
 	float sin_angle;	// Sine of angle
 
-	DEVICE static AngleGeometry
+	KERNEL_FUNC static AngleGeometry
 	compute(const Vector3* positions, const int4& particle_indices, const PeriodicBox* pbox) {
 		AngleGeometry geom;
 		geom.ab = pbox->wrapDiff(positions[particle_indices.y] - positions[particle_indices.x]);
@@ -49,7 +49,7 @@ struct DihedralGeometry {
 	float dihedral_angle; // Computed dihedral angle
 	Vector3 f1, f2, f3;	  // force directions
 
-	DEVICE static DihedralGeometry
+	KERNEL_FUNC static DihedralGeometry
 	compute(const Vector3* positions, const int4& particle_indices, const PeriodicBox* pbox) {
 		DihedralGeometry geom;
 		geom.ab = pbox->wrapDiff(positions[particle_indices.y] - positions[particle_indices.x]);
@@ -107,9 +107,9 @@ struct ProductPotentialGeometry {
 	 * @param pbox Periodic boundary conditions
 	 * @return BondAngle geometry
 	 */
-	DEVICE static ProductPotentialGeometry compute_bond_angle(DEVICE_PTR(Vector3) positions,
-															  int4 indices, // i, j, k, l
-															  const PeriodicBox* pbox) {
+	KERNEL_FUNC static ProductPotentialGeometry compute_bond_angle(DEVICE_PTR(Vector3) positions,
+																   int4 indices, // i, j, k, l
+																   const PeriodicBox* pbox) {
 		ProductPotentialGeometry geom;
 
 		// Compute angle 1 (i-j-k)
@@ -140,9 +140,9 @@ struct ProductPotentialGeometry {
 	 * @param pbox Periodic boundary conditions
 	 * @return AngleAngle geometry
 	 */
-	DEVICE static ProductPotentialGeometry compute_angle_angle(DEVICE_PTR(Vector3) positions,
-															   int4 indices, // i, j, k, l
-															   const PeriodicBox* pbox) {
+	KERNEL_FUNC static ProductPotentialGeometry compute_angle_angle(DEVICE_PTR(Vector3) positions,
+																	int4 indices, // i, j, k, l
+																	const PeriodicBox* pbox) {
 		ProductPotentialGeometry geom;
 
 		// Compute angle 1 (i-j-k)
@@ -166,9 +166,9 @@ struct ProductPotentialGeometry {
 	 * @param pbox Periodic boundary conditions
 	 * @return BondBond geometry
 	 */
-	DEVICE static ProductPotentialGeometry compute_bond_bond(DEVICE_PTR(Vector3) positions,
-															 int3 indices, // i, j, k
-															 const PeriodicBox* pbox) {
+	KERNEL_FUNC static ProductPotentialGeometry compute_bond_bond(DEVICE_PTR(Vector3) positions,
+																  int3 indices, // i, j, k
+																  const PeriodicBox* pbox) {
 		ProductPotentialGeometry geom;
 
 		// Compute bond 1 (i-j)

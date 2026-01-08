@@ -7,9 +7,9 @@ namespace ARBD {
 template<typename T>
 HOST void Vector3_t<T>::print() const {
 	LOGINFO("%0.3f %0.3f %0.3f",
-			static_cast<double>(x),
-			static_cast<double>(y),
-			static_cast<double>(z));
+			static_cast<float>(x),
+			static_cast<float>(y),
+			static_cast<float>(z));
 }
 
 template<typename T>

@@ -93,11 +93,6 @@ void init_pysystem(py::module_& m) {
 		.value("Direct", LongRangeMethod::Direct)
 		.value("None", LongRangeMethod::None);
 
-	py::enum_<DynamicType>(m, "DynamicType")
-		.value("Brownian", DynamicType::Brownian)
-		.value("Langevin", DynamicType::Langevin)
-		.value("DPD", DynamicType::DPD);
-
 	py::enum_<OutputFormat>(m, "OutputFormat")
 		.value("DCD", OutputFormat::DCD)
 		.value("PDB", OutputFormat::PDB)
@@ -262,15 +257,15 @@ void init_pysystem(py::module_& m) {
 		.def("get_long_range_method",
 			 &SimSystem::get_long_range_method,
 			 "Get long-range interaction method")
-		.def("set_particle_dynamic_type",
-			 &SimSystem::set_particle_dynamic_type,
+		.def("set_particle_integrator_type",
+			 &SimSystem::set_particle_integrator_type,
 			 py::arg("type"),
 			 "Set particle dynamics algorithm")
 		.def("get_particle_algorithm",
 			 &SimSystem::get_particle_algorithm,
 			 "Get particle dynamics algorithm")
-		.def("set_rigid_body_dynamic_type",
-			 &SimSystem::set_rigid_body_dynamic_type,
+		.def("set_rigid_body_integrator_type",
+			 &SimSystem::set_rigid_body_integrator_type,
 			 py::arg("type"),
 			 "Set rigid body dynamics algorithm")
 		.def("get_rigid_body_algorithm",

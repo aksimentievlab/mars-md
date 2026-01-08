@@ -23,6 +23,38 @@
 #endif
 namespace ARBD {
 
+namespace {
+// Helper function to check for parameter with both camelCase and snake_case variants
+std::string
+findParameterVariant(const Reader& reader, std::string_view camelCase, std::string_view snakeCase) {
+	if (reader.hasParameter(std::string(camelCase))) {
+		return std::string(camelCase);
+	}
+	if (reader.hasParameter(std::string(snakeCase))) {
+		return std::string(snakeCase);
+	}
+	return {};
+}
+
+// Helper function to get value for parameter with both camelCase and snake_case variants
+std::string
+findValueVariant(const Reader& reader, std::string_view camelCase, std::string_view snakeCase) {
+	std::string key = findParameterVariant(reader, camelCase, snakeCase);
+	if (!key.empty()) {
+		return reader.findValue(key);
+	}
+	return {};
+}
+
+// Helper function to check if parameter exists in either camelCase or snake_case
+bool hasParameterVariant(const Reader& reader,
+						 std::string_view camelCase,
+						 std::string_view snakeCase) {
+	return reader.hasParameter(std::string(camelCase)) ||
+		   reader.hasParameter(std::string(snakeCase));
+}
+} // namespace
+
 ConfigParser::ConfigParser(SimSystem& sim_system, std::string_view file_name)
 	: sim_system_ref_(&sim_system), file_name_(file_name),
 	  bond_config_reader_(init_bonded_interactions_, sim_system_ref_->get_tables_registry()) {
@@ -92,10 +124,10 @@ void ConfigParser::parse_parameters(const Reader& reader) {
 		{"direct", LongRangeMethod::Direct},
 		{"none", LongRangeMethod::None}};
 
-	static const std::unordered_map<std::string, DynamicType> dynamic_type_map = {
-		{"brownian", DynamicType::Brownian},
-		{"langevin", DynamicType::Langevin},
-		{"dpd", DynamicType::DPD}};
+	static const std::unordered_map<std::string, IntegratorType> integrator_type_map = {
+		{"brownian", IntegratorType::Brownian},
+		{"langevin", IntegratorType::Langevin},
+		{"velocityverlet", IntegratorType::VelocityVerlet}};
 
 	static const std::unordered_map<std::string, OutputFormat> output_format_map = {
 		{"dcd", OutputFormat::DCD},
@@ -110,51 +142,64 @@ void ConfigParser::parse_parameters(const Reader& reader) {
 	};
 
 	// Parse basic parameters
-	if (reader.hasParameter("temperature_grid")) {
-		std::string grid_file = reader.findValue("temperature_grid");
+	if (hasParameterVariant(reader, "temperature_grid", "temperature_grid")) {
+		std::string key = findParameterVariant(reader, "temperature_grid", "temperature_grid");
+		std::string grid_file = reader.findValue(key);
 		BaseGrid<float> grid = DXReader::read_from_file<float>(grid_file);
 		sim_system_ref_->set_temperature(grid);
-	} else if (reader.hasParameter("temperature")) {
-		sim_system_ref_->set_temperature(reader.parseValue<float>("temperature"));
+	} else if (hasParameterVariant(reader, "temperature", "temperature")) {
+		std::string key = findParameterVariant(reader, "temperature", "temperature");
+		sim_system_ref_->set_temperature(reader.parseValue<float>(key));
 	}
 
-	if (reader.hasParameter("cutoff")) {
-		sim_system_ref_->set_cutoff(Length(reader.parseValue<float>("cutoff")));
+	if (hasParameterVariant(reader, "cutoff", "cutoff")) {
+		std::string key = findParameterVariant(reader, "cutoff", "cutoff");
+		sim_system_ref_->set_cutoff(Length(reader.parseValue<float>(key)));
 	}
 
-	if (reader.hasParameter("timestep")) {
-		sim_system_ref_->set_timestep(reader.parseValue<float>("timestep"));
+	if (hasParameterVariant(reader, "timestep", "timestep")) {
+		std::string key = findParameterVariant(reader, "timestep", "timestep");
+		sim_system_ref_->set_timestep(reader.parseValue<float>(key));
 	}
 
-	if (reader.hasParameter("steps")) {
-		sim_system_ref_->set_num_steps(reader.parseValue<int>("steps"));
+	if (hasParameterVariant(reader, "steps", "steps")) {
+		std::string key = findParameterVariant(reader, "steps", "steps");
+		sim_system_ref_->set_num_steps(reader.parseValue<int>(key));
 	}
 
-	if (reader.hasParameter("neighborListRebuildPeriod")) {
-		sim_system_ref_->set_neighbor_list_rebuild_period(
-			reader.parseValue<float>("neighborListRebuildPeriod"));
+	if (hasParameterVariant(reader, "neighborListRebuildPeriod", "neighbor_list_rebuild_period")) {
+		std::string key = findParameterVariant(reader,
+											   "neighborListRebuildPeriod",
+											   "neighbor_list_rebuild_period");
+		sim_system_ref_->set_neighbor_list_rebuild_period(reader.parseValue<float>(key));
 	}
 
-	if (reader.hasParameter("outputPeriod")) {
-		sim_system_ref_->set_output_period(reader.parseValue<float>("outputPeriod"));
+	if (hasParameterVariant(reader, "outputPeriod", "output_period")) {
+		std::string key = findParameterVariant(reader, "outputPeriod", "output_period");
+		sim_system_ref_->set_output_period(reader.parseValue<float>(key));
 	}
 
-	if (reader.hasParameter("outputEnergyPeriod")) {
-		sim_system_ref_->set_energy_output_period(reader.parseValue<float>("outputEnergyPeriod"));
+	if (hasParameterVariant(reader, "outputEnergyPeriod", "output_energy_period")) {
+		std::string key =
+			findParameterVariant(reader, "outputEnergyPeriod", "output_energy_period");
+		sim_system_ref_->set_energy_output_period(reader.parseValue<float>(key));
 	}
 
-	if (reader.hasParameter("outputName")) {
-		sim_system_ref_->set_output_name(reader.findValue("outputName"));
+	if (hasParameterVariant(reader, "outputName", "output_name")) {
+		std::string key = findParameterVariant(reader, "outputName", "output_name");
+		sim_system_ref_->set_output_name(reader.findValue(key));
 	}
 
 	// Parse box dimensions
-	if (reader.hasParameter("systemSize")) {
-		Vector3 size = reader.parseVector3("systemSize");
+	if (hasParameterVariant(reader, "systemSize", "system_size")) {
+		std::string key = findParameterVariant(reader, "systemSize", "system_size");
+		Vector3 size = reader.parseVector3(key);
 		sim_system_ref_->set_box_size(size.x, size.y, size.z);
 	}
 
-	if (reader.hasParameter("decomposer")) {
-		std::string val = to_lower(reader.findValue("decomposer"));
+	if (hasParameterVariant(reader, "decomposer", "decomposer")) {
+		std::string key = findParameterVariant(reader, "decomposer", "decomposer");
+		std::string val = to_lower(reader.findValue(key));
 		auto it = decomposer_map.find(val);
 		if (it != decomposer_map.end()) {
 			sim_system_ref_->set_decomposer_type(it->second);
@@ -163,8 +208,9 @@ void ConfigParser::parse_parameters(const Reader& reader) {
 		}
 	}
 
-	if (reader.hasParameter("longRangeMethod")) {
-		std::string val = to_lower(reader.findValue("longRangeMethod"));
+	if (hasParameterVariant(reader, "longRangeMethod", "long_range_method")) {
+		std::string key = findParameterVariant(reader, "longRangeMethod", "long_range_method");
+		std::string val = to_lower(reader.findValue(key));
 		auto it = longrange_map.find(val);
 		if (it != longrange_map.end()) {
 			sim_system_ref_->set_long_range_method(it->second);
@@ -173,18 +219,51 @@ void ConfigParser::parse_parameters(const Reader& reader) {
 		}
 	}
 
-	if (reader.hasParameter("algorithm")) {
-		std::string val = to_lower(reader.findValue("algorithm"));
-		auto it = dynamic_type_map.find(val);
-		if (it != dynamic_type_map.end()) {
-			sim_system_ref_->set_particle_dynamic_type(it->second);
+	// Handle algorithm/particleDynamicType/ParticleDynamicType variants
+	if (reader.hasParameter("ParticleDynamicType") ||
+		hasParameterVariant(reader, "particleDynamicType", "particle_dynamic_type") ||
+		hasParameterVariant(reader, "algorithm", "particle_dynamic_type")) {
+		std::string key;
+		if (reader.hasParameter("ParticleDynamicType")) {
+			key = "ParticleDynamicType";
+		} else if (reader.hasParameter("particleDynamicType")) {
+			key = "particleDynamicType";
 		} else {
-			LOGWARN("Unknown algorithm '{}', using default", val);
+			key = findParameterVariant(reader, "algorithm", "particle_dynamic_type");
+		}
+		std::string val = to_lower(reader.findValue(key));
+		auto it = integrator_type_map.find(val);
+		if (it != integrator_type_map.end()) {
+			sim_system_ref_->set_particle_integrator_type(it->second);
+		} else {
+			LOGWARN("Unknown algorithm/particle dynamic type '{}', using default", val);
 		}
 	}
 
-	if (reader.hasParameter("outputFormat")) {
-		std::string val = to_lower(reader.findValue("outputFormat"));
+	// Handle rigidBodyAlgorithm/RigidBodyDynamicType variants
+	if (reader.hasParameter("RigidBodyDynamicType") ||
+		hasParameterVariant(reader, "rigidBodyDynamicType", "rigid_body_dynamic_type") ||
+		hasParameterVariant(reader, "rigidBodyAlgorithm", "rigid_body_algorithm")) {
+		std::string key;
+		if (reader.hasParameter("RigidBodyDynamicType")) {
+			key = "RigidBodyDynamicType";
+		} else if (reader.hasParameter("rigidBodyDynamicType")) {
+			key = "rigidBodyDynamicType";
+		} else {
+			key = findParameterVariant(reader, "rigidBodyAlgorithm", "rigid_body_algorithm");
+		}
+		std::string val = to_lower(reader.findValue(key));
+		auto it = integrator_type_map.find(val);
+		if (it != integrator_type_map.end()) {
+			sim_system_ref_->set_rigid_body_integrator_type(it->second);
+		} else {
+			LOGWARN("Unknown rigid body algorithm '{}', using default", val);
+		}
+	}
+
+	if (hasParameterVariant(reader, "outputFormat", "output_format")) {
+		std::string key = findParameterVariant(reader, "outputFormat", "output_format");
+		std::string val = to_lower(reader.findValue(key));
 		auto it = output_format_map.find(val);
 		if (it != output_format_map.end()) {
 			sim_system_ref_->set_output_format(it->second);
@@ -202,40 +281,6 @@ namespace {
 static bool is_comment_or_blank(const std::string& s) {
 	auto it = std::find_if_not(s.begin(), s.end(), [](unsigned char c) { return std::isspace(c); });
 	return it == s.end() || *it == '#';
-}
-
-/**
- * @brief Resolve file path relative to the configuration file directory
- * @param file_path The file path from the config file
- * @param config_file_path The path to the configuration file
- * @return Resolved absolute path
- */
-static std::string resolve_file_path(const std::string& file_path,
-									 const std::string& config_file_path) {
-	// If path is already absolute, return as-is
-	if (file_path[0] == '/') {
-		return file_path;
-	}
-
-	// If path starts with ~, expand home directory
-	if (file_path[0] == '~') {
-		const char* home = getenv("HOME");
-		if (home) {
-			return std::string(home) + file_path.substr(1);
-		}
-		return file_path; // Fallback if HOME not set
-	}
-
-	// For relative paths, resolve relative to config file directory
-	std::string config_dir = config_file_path;
-	size_t last_slash = config_dir.find_last_of('/');
-	if (last_slash != std::string::npos) {
-		config_dir = config_dir.substr(0, last_slash + 1);
-	} else {
-		config_dir = "./"; // Current directory if no path separators
-	}
-
-	return config_dir + file_path;
 }
 
 static std::vector<std::string> tokenize(const std::string& s) {
@@ -270,12 +315,65 @@ static void load_particles_file(const std::string& path,
 			p.position.x = std::stof(toks[3]);
 			p.position.y = std::stof(toks[4]);
 			p.position.z = std::stof(toks[5]);
+			p.momentum.x = std::stof(toks[6]);
+			p.momentum.y = std::stof(toks[7]);
+			p.momentum.z = std::stof(toks[8]);
 			out.push_back(p);
 		}
 		if (line)
 			free(line);
 	} catch (const std::exception& e) {
 		LOGWARN("get_elements: Failed to read particles from '{}': {}", path, e.what());
+	}
+}
+
+static void load_restart_file(const std::string& path,
+							  std::vector<ParticleRead>& out,
+							  const std::string& config_file_path,
+							  const std::vector<ParticleType>& particle_types) {
+	// Format: type_id coord_x coord_y coord_z
+	// particle_id is the line order (0-based index)
+	std::string resolved_path = resolve_file_path(path, config_file_path);
+	try {
+		ARBD::FileHandle fh(resolved_path.c_str(), "r");
+		FILE* fp = fh.get();
+		char* line = nullptr;
+		size_t len = 0;
+		ssize_t rd;
+		int line_number = 0;
+		while ((rd = getline(&line, &len, fp)) != -1) {
+			std::string s(line, static_cast<size_t>(rd));
+			if (is_comment_or_blank(s))
+				continue;
+			auto toks = tokenize(s);
+			if (toks.size() < 4) {
+				LOGWARN("load_restart_file: Invalid line (expected 4 tokens): {}", s);
+				continue;
+			}
+			ParticleRead p{};
+			p.id = line_number; // particle_id is the line order
+			int type_id = std::stoi(toks[0]);
+			p.position.x = std::stof(toks[1]);
+			p.position.y = std::stof(toks[2]);
+			p.position.z = std::stof(toks[3]);
+
+			// Map type_id to type_name using particle_types vector
+			if (type_id >= 0 && static_cast<size_t>(type_id) < particle_types.size()) {
+				p.type_name = particle_types[type_id].name;
+			} else {
+				LOGWARN("load_restart_file: Invalid particle type_id {} (max: {})",
+						type_id,
+						particle_types.size() - 1);
+				continue;
+			}
+			out.push_back(p);
+			line_number++;
+		}
+		if (line)
+			free(line);
+		LOGINFO("load_restart_file: Loaded {} particles from '{}'", out.size(), resolved_path);
+	} catch (const std::exception& e) {
+		LOGWARN("load_restart_file: Failed to read restart file from '{}': {}", path, e.what());
 	}
 }
 } // namespace
@@ -302,14 +400,19 @@ void ConfigParser::get_elements(const Reader& reader) {
 				const auto& [k, v] = params[i];
 				if (is_block_header(k))
 					break;
+				// Helper lambda to check for variant keys
+				auto check_key = [&k](const std::string& camel, const std::string& snake) {
+					return k == camel || k == snake;
+				};
+
 				if (k == "num") {
 					LOGDEBUG("num: {}", v);
 					ptype.num = std::stoi(v);
 				} else if (k == "diffusion") {
 					ptype.diffusion = std::stof(v);
 					LOGDEBUG("diffusion: {}", v);
-				} else if (k == "transDamping") {
-					LOGDEBUG("transDamping: {}", v);
+				} else if (check_key("transDamping", "trans_damping")) {
+					LOGDEBUG("transDamping/trans_damping: {}", v);
 					auto toks = tokenize(v);
 					if (toks.size() == 3) {
 						ptype.transDamping.x = std::stof(toks[0]);
@@ -320,7 +423,7 @@ void ConfigParser::get_elements(const Reader& reader) {
 						ptype.transDamping.y = std::stof(toks[0]);
 						ptype.transDamping.z = std::stof(toks[0]);
 					} else {
-						LOGWARN("Invalid transDamping format: {}", v);
+						LOGWARN("Invalid transDamping/trans_damping format: {}", v);
 						ptype.transDamping.x = 0.0f;
 						ptype.transDamping.y = 0.0f;
 						ptype.transDamping.z = 0.0f;
@@ -328,24 +431,70 @@ void ConfigParser::get_elements(const Reader& reader) {
 				} else if (k == "mass") {
 					LOGDEBUG("mass: {}", v);
 					ptype.mass = std::stof(v);
-				} else if (k == "gridFile") {
-					LOGDEBUG("gridFile: {}", v);
+				} else if (check_key("gridFile", "grid_file")) {
+					LOGDEBUG("gridFile/grid_file: {}", v);
 					// Load grid using GridManager and store grid_id in ParticleType
 					GridKey grid_key = sim_system_ref_->get_grid_manager().add_dense_grid(v);
 					if (grid_key.is_valid()) {
 						ptype.pmf_grid_id = grid_key.grid_id;
+						ptype.pmf_grid_name = v;
 						LOGDEBUG("Assigned PMF grid '{}' with grid_id={}", v, grid_key.grid_id);
 					} else {
 						LOGWARN("Failed to load grid file '{}'", v);
 					}
-				} else if (k == "gridFileScale") {
-					LOGDEBUG("gridFileScale: {}", v);
+				} else if (check_key("diffusionGridFile", "diffusion_grid_file")) {
+					LOGDEBUG("diffusionGridFile/diffusion_grid_file: {}", v);
+					GridKey grid_key = sim_system_ref_->get_grid_manager().add_dense_grid(v);
+					if (grid_key.is_valid()) {
+						ptype.diffusion_grid_id = grid_key.grid_id;
+						ptype.diffusion_grid_name = v;
+						LOGDEBUG("Assigned diffusion grid '{}' with grid_id={}",
+								 v,
+								 grid_key.grid_id);
+					} else {
+						LOGWARN("Failed to load grid file '{}'", v);
+					}
+				} else if (check_key("forceGridFiles", "force_grid_files")) {
+					LOGDEBUG("forceGridFiles/force_grid_files: {}", v);
+					auto toks = tokenize(v);
+					if (toks.size() == 3) {
+						ptype.force_grid_names[0] = toks[0];
+						ptype.force_grid_names[1] = toks[1];
+						ptype.force_grid_names[2] = toks[2];
+						GridKey grid_key_x =
+							sim_system_ref_->get_grid_manager().add_dense_grid(toks[0]);
+						if (grid_key_x.is_valid()) {
+							ptype.force_grid_id[0] = grid_key_x.grid_id;
+						} else {
+							LOGWARN("Failed to load grid file '{}'", toks[0]);
+						}
+						GridKey grid_key_y =
+							sim_system_ref_->get_grid_manager().add_dense_grid(toks[1]);
+						if (grid_key_y.is_valid()) {
+							ptype.force_grid_id[1] = grid_key_y.grid_id;
+						} else {
+							LOGWARN("Failed to load grid file '{}'", toks[1]);
+						}
+						GridKey grid_key_z =
+							sim_system_ref_->get_grid_manager().add_dense_grid(toks[2]);
+						if (grid_key_z.is_valid()) {
+							ptype.force_grid_id[2] = grid_key_z.grid_id;
+						} else {
+							LOGWARN("Failed to load grid file '{}'", toks[2]);
+						}
+					} else {
+						LOGWARN("Invalid force grid file format: {}", v);
+						ptype.force_grid_names = {"", "", ""};
+						ptype.force_grid_id = {-1, -1, -1};
+					}
+				} else if (check_key("gridFileScale", "grid_file_scale")) {
+					LOGDEBUG("gridFileScale/grid_file_scale: {}", v);
 					ptype.pmf_scale = std::stof(v);
-				} else if (k == "gridFileScaleSlope") {
-					LOGDEBUG("gridFileScaleSlope: {}", v);
+				} else if (check_key("gridFileScaleSlope", "grid_file_scale_slope")) {
+					LOGDEBUG("gridFileScaleSlope/grid_file_scale_slope: {}", v);
 					ptype.pmf_scale_slope = std::stof(v);
-				} else if (k == "gridFileSMD") {
-					LOGDEBUG("gridFileSMD: {}", v);
+				} else if (check_key("gridFileSMD", "grid_file_smd")) {
+					LOGDEBUG("gridFileSMD/grid_file_smd: {}", v);
 					ptype.pmf_smd_freq = std::stoi(v);
 				} else {
 					// Recognized but not yet wired into ParticleType storage in this branch
@@ -364,12 +513,57 @@ void ConfigParser::get_elements(const Reader& reader) {
 			continue; // i already at next header or end
 		}
 
+		// Parse tabulated nonbonded interactions: format is i@j@file
+		if (key == "tabulatedFile" || key == "tabulated_file") {
+			// Parse the format: type_id_1@type_id_2@file_path
+			size_t at_pos1 = value.find('@');
+			if (at_pos1 == std::string::npos) {
+				LOGWARN("Invalid tabulatedFile format (missing first @): {}", value);
+				++i;
+				continue;
+			}
+			size_t at_pos2 = value.find('@', at_pos1 + 1);
+			if (at_pos2 == std::string::npos) {
+				LOGWARN("Invalid tabulatedFile format (missing second @): {}", value);
+				++i;
+				continue;
+			}
+
+			try {
+				int type_id_1 = std::stoi(value.substr(0, at_pos1));
+				int type_id_2 = std::stoi(value.substr(at_pos1 + 1, at_pos2 - at_pos1 - 1));
+				std::string file_path = value.substr(at_pos2 + 1);
+
+				// Resolve file path relative to config file
+				std::string resolved_path = resolve_file_path(file_path, file_name_);
+
+				// Load the pair nonbonded interaction
+				sim_system_ref_->get_tables_registry().load_pair_nonbonded(type_id_1,
+																		   type_id_2,
+																		   resolved_path);
+				LOGDEBUG("Loaded tabulatedFile: type {}@{} from '{}'",
+						 type_id_1,
+						 type_id_2,
+						 resolved_path);
+			} catch (const std::exception& e) {
+				LOGWARN("Failed to parse tabulatedFile '{}': {}", value, e.what());
+			}
+		}
 		// External lists - load into temporary storage
-		if (key == "inputBonds" || key == "inputAngles" || key == "inputDihedrals" ||
-			key == "inputExcludes" || key == "inputRestraints" || key == "inputProductPotentials") {
-			bond_config_reader_.read_file(value);
-		} else if (key == "inputParticles") {
+		else if (key == "inputBonds" || key == "input_bonds" || key == "inputAngles" ||
+				 key == "input_angles" || key == "inputDihedrals" || key == "input_dihedrals" ||
+				 key == "inputExcludes" || key == "input_excludes" || key == "inputRestraints" ||
+				 key == "input_restraints" || key == "inputProductPotentials" ||
+				 key == "input_product_potentials") {
+			bond_config_reader_.read_file(value, file_name_);
+		} else if (key == "inputParticles" || key == "input_particles") {
 			load_particles_file(value, init_particles_, file_name_);
+		} else if (key == "restartCoordinates" || key == "restart_coordinates") {
+			// Load restart coordinates: format is particle_id type_id coord_x coord_y coord_z
+			load_restart_file(value,
+							  init_particles_,
+							  file_name_,
+							  sim_system_ref_->get_particle_types());
 		}
 
 		++i;
@@ -450,11 +644,11 @@ void ConfigParser::parse_dictionary(const std::map<std::string, pybind11::object
 			} else if (key == "particle_dynamic_type") {
 				std::string dynamic_str = pybind11::cast<std::string>(value);
 				if (dynamic_str == "Brownian") {
-					sim_system_ref_->set_particle_dynamic_type(DynamicType::Brownian);
+					sim_system_ref_->set_particle_integrator_type(IntegratorType::Brownian);
 				} else if (dynamic_str == "Langevin") {
-					sim_system_ref_->set_particle_dynamic_type(DynamicType::Langevin);
-				} else if (dynamic_str == "DPD") {
-					sim_system_ref_->set_particle_dynamic_type(DynamicType::DPD);
+					sim_system_ref_->set_particle_integrator_type(IntegratorType::Langevin);
+				} else if (dynamic_str == "VelocityVerlet") {
+					sim_system_ref_->set_particle_integrator_type(IntegratorType::VelocityVerlet);
 				} else {
 					throw Exception(ExceptionType::ValueError,
 									SourceLocation(),
@@ -464,11 +658,11 @@ void ConfigParser::parse_dictionary(const std::map<std::string, pybind11::object
 			} else if (key == "rigid_body_dynamic_type") {
 				std::string dynamic_str = pybind11::cast<std::string>(value);
 				if (dynamic_str == "Brownian") {
-					sim_system_ref_->set_rigid_body_dynamic_type(DynamicType::Brownian);
+					sim_system_ref_->set_rigid_body_integrator_type(IntegratorType::Brownian);
 				} else if (dynamic_str == "Langevin") {
-					sim_system_ref_->set_rigid_body_dynamic_type(DynamicType::Langevin);
-				} else if (dynamic_str == "DPD") {
-					sim_system_ref_->set_rigid_body_dynamic_type(DynamicType::DPD);
+					sim_system_ref_->set_rigid_body_integrator_type(IntegratorType::Langevin);
+				} else if (dynamic_str == "VelocityVerlet") {
+					sim_system_ref_->set_rigid_body_integrator_type(IntegratorType::VelocityVerlet);
 				} else {
 					throw Exception(ExceptionType::ValueError,
 									SourceLocation(),
@@ -504,4 +698,63 @@ void ConfigParser::parse_dictionary(const std::map<std::string, pybind11::object
 	LOGINFO("ConfigParser: Successfully parsed configuration from Python dictionary");
 }
 #endif
+
+void ConfigParser::validate() const {
+	// Basic validation checks
+	if (!sim_system_ref_) {
+		throw Exception(ExceptionType::RuntimeError,
+						SourceLocation(),
+						"ConfigParser: SimSystem reference is null");
+	}
+
+	// Validate temperature
+	float temp = sim_system_ref_->get_temperature();
+	if (temp <= 0.0f) {
+		throw Exception(ExceptionType::ValueError,
+						SourceLocation(),
+						"ConfigParser: Temperature must be positive, got {}",
+						temp);
+	}
+
+	// Validate timestep
+	float dt = sim_system_ref_->get_timestep();
+	if (dt <= 0.0f) {
+		throw Exception(ExceptionType::ValueError,
+						SourceLocation(),
+						"ConfigParser: Timestep must be positive, got {}",
+						dt);
+	}
+
+	// Validate cutoff
+	float cutoff = sim_system_ref_->get_cutoff();
+	if (cutoff <= 0.0f) {
+		throw Exception(ExceptionType::ValueError,
+						SourceLocation(),
+						"ConfigParser: Cutoff must be positive, got {}",
+						cutoff);
+	}
+
+	// Validate box size
+	Vector3 box_size = sim_system_ref_->get_box_size();
+	if (box_size.x <= 0.0f || box_size.y <= 0.0f || box_size.z <= 0.0f) {
+		throw Exception(
+			ExceptionType::ValueError,
+			SourceLocation(),
+			"ConfigParser: Box size must be positive in all dimensions, got ({}, {}, {})",
+			box_size.x,
+			box_size.y,
+			box_size.z);
+	}
+
+	// Validate output period
+	float output_period = sim_system_ref_->get_output_period();
+	if (output_period <= 0.0f) {
+		throw Exception(ExceptionType::ValueError,
+						SourceLocation(),
+						"ConfigParser: Output period must be positive, got {}",
+						output_period);
+	}
+
+	LOGINFO("ConfigParser: Configuration validation passed");
+}
 } // namespace ARBD

@@ -1,8 +1,9 @@
-#include "System/ZOrderDecomposer.h"
+#include "ZOrder.h"
 #include "ARBDException.h"
 #include "ARBDLogger.h"
-#include "SimSystem.h"
 #include "System/PeriodicBox.h"
+#include "System/SimSystem.h"
+#include "System/SystemState.h"
 #include <algorithm>
 #include <chrono>
 #include <limits>
@@ -18,7 +19,7 @@ ZOrderDecomposer::ZOrderDecomposer() : PatchDecomposer() {
 	LOGINFO("Created ZOrderDecomposer with default configuration");
 }
 
-DecompositionPlan ZOrderDecomposer::decompose(SimSystem& sys) {
+DecompositionPlan ZOrderDecomposer::decompose(SimSystem& sys, SystemState& state) {
 	auto start_time = std::chrono::high_resolution_clock::now();
 
 	const auto& resources = sys.get_resources();
@@ -27,7 +28,7 @@ DecompositionPlan ZOrderDecomposer::decompose(SimSystem& sys) {
 	LOGINFO("Starting Z-order decomposition for {} resources", resources.size());
 
 	// Step 1: Get particle positions from SimSystem (not from patches!)
-	std::vector<Vector3> particle_positions = sys.get_particle_positions();
+	std::vector<Vector3> particle_positions = state.get_global_positions();
 	size_t total_particles = particle_positions.size();
 
 	if (total_particles == 0) {

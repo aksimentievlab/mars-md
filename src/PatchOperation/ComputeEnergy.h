@@ -1,19 +1,11 @@
 #pragma once
 
 #include "Header.h"
+#include "Objects/DeviceParticle.h"
 #include "Types/Types.h"
 #include "Types/Vector3.h"
 
 namespace ARBD {
-
-/**
- * @brief Forward declaration of BrownianParticleType structure
- * This structure should have at least a 'mass' member
- */
-struct BrownianParticleType {
-	float mass;
-	// Add other members as needed
-};
 
 /**
  * @brief WorkGroup-based reduction kernel for computing Brownian particles kinetic energy
@@ -25,14 +17,14 @@ struct BrownianParticleType {
  * performance.
  */
 
-struct BrownParticlesKineticEnergyKernel {
+struct BrownEnergyKernel {
+	ParticleTypeView& particle_type_view;
 
 	template<typename WorkItem>
 	DEVICE void operator()(size_t i,
 						   WorkItem& item,
 						   const Vector3* __restrict__ P_n,
 						   const int* __restrict__ type,
-						   const BrownianParticleType* __restrict__ part[],
 						   float* __restrict__ vec_red,
 						   unsigned int n,
 						   unsigned int num,
@@ -47,7 +39,6 @@ struct BrownParticlesKineticEnergyKernel {
 		unsigned int tid = static_cast<unsigned int>(item.local_id());
 
 		Vector3 p1, p2;
-		float mass1, mass2;
 
 		// Initialize shared memory
 		sdata[tid] = 0.0f;
@@ -59,20 +50,18 @@ struct BrownParticlesKineticEnergyKernel {
 		while (idx < n) {
 			const unsigned int i1 = (idx % num) + (idx / num) * (num + num_rb_attached_particles);
 			const int t1 = type[i1];
-			const BrownianParticleType& pt1 = *part[t1];
+			const float mass1 = particle_type_view.mass[t1];
 
 			p1 = P_n[idx];
-			mass1 = pt1.mass;
 
 			if (idx + block_size < n) {
 				const unsigned int i2 =
 					((idx + block_size) % num) +
 					((idx + block_size) / num) * (num + num_rb_attached_particles);
 				const int t2 = type[i2];
-				const BrownianParticleType& pt2 = *part[t2];
+				const float mass2 = particle_type_view.mass[t2];
 
 				p2 = P_n[idx + block_size];
-				mass2 = pt2.mass;
 
 				sdata[tid] += (p1.length2() / mass1 + p2.length2() / mass2);
 			} else {

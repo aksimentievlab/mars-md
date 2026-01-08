@@ -20,8 +20,14 @@ class BondConfigReader {
 							  TablesRegistry& tables_registry)
 		: bonded_interactions_(bonded_interactions), tables_registry_(tables_registry) {}
 
-	void read_file(std::string_view fileName) {
-		Reader reader(fileName);
+	HOST void read_file(std::string_view fileName, std::string_view config_file_path = "") {
+#ifdef HOST_GUARD
+		config_file_path_ = config_file_path;
+		std::string resolved_path =
+			config_file_path.empty()
+				? std::string(fileName)
+				: resolve_file_path(std::string(fileName), std::string(config_file_path));
+		Reader reader(resolved_path);
 		for (auto [key, value] : reader) {
 			std::string line = value;
 			if (key == "ANGLE") {
@@ -34,11 +40,13 @@ class BondConfigReader {
 				parse_exclude_line(value);
 			}
 		}
+#endif
 	}
 
   private:
 	BondedInteractions& bonded_interactions_;
 	TablesRegistry& tables_registry_;
+	std::string config_file_path_;
 
 	void parse_angle_line(const std::string& line) {
 		std::istringstream iss(line);
@@ -53,7 +61,8 @@ class BondConfigReader {
 				angle.function_index = std::distance(AnalyticalNameList::angle_types.begin(), it);
 			} else {
 				angle.form = InteractionForm::Tabulated;
-				angle.function_index = tables_registry_.get_or_load_angle(angle.function_name);
+				angle.function_index =
+					tables_registry_.get_or_load_angle(angle.function_name, config_file_path_);
 			}
 			bonded_interactions_.add_angle(angle);
 		} else {
@@ -77,7 +86,8 @@ class BondConfigReader {
 			} else {
 				dihedral.form = InteractionForm::Tabulated;
 				dihedral.function_index =
-					tables_registry_.get_or_load_angle(dihedral.function_name);
+					tables_registry_.get_or_load_dihedral(dihedral.function_name,
+														  config_file_path_);
 			}
 			bonded_interactions_.add_dihedral(dihedral);
 		} else {
@@ -98,7 +108,8 @@ class BondConfigReader {
 				bond.function_index = std::distance(AnalyticalNameList::bond_types.begin(), it);
 			} else {
 				bond.form = InteractionForm::Tabulated;
-				bond.function_index = tables_registry_.get_or_load_bond(bond.function_name);
+				bond.function_index =
+					tables_registry_.get_or_load_bond(bond.function_name, config_file_path_);
 			}
 			bond.flag = BondFlag::DEFAULT;
 			bonded_interactions_.add_bond(bond);

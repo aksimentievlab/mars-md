@@ -19,6 +19,8 @@ namespace ARBD {
 typedef float Length;
 /**
  * @brief Temperature configuration - supports both constant values and spatial grids
+ * @tparam TemperatureType Temperature value type (float/double)
+
  */
 struct Temperature {
 	enum class Format { Value, Grid };
@@ -35,9 +37,12 @@ struct Temperature {
 		format = Format::Grid;
 		value = 0.0f; // No scalar value defined for grid.
 		kT = 0.0f;	  // No global kT, but for compatibility we set it to zero.
+#ifdef HOST_GUARD
 		if (temperature_grid.config().is_valid()) {
+			// Scale temperature grid by Boltzmann constant on host
 			temperature_grid.scale(constants::BOLTZMANN);
 		}
+#endif
 	}
 
 	float get_kT(Vector3 position) {
@@ -51,10 +56,12 @@ struct Temperature {
 	 * @brief Transfer temperature data to device for GPU access
 	 * @param resource Target computational resource
 	 */
-	void sync_to_device(const Resource& resource) {
+	HOST void sync_to_device(const Resource& resource) {
+#ifdef HOST_GUARD
 		if (format == Format::Grid) {
 			temperature_grid.sync_to_device(resource);
 		}
+#endif
 	}
 
 	/**
@@ -62,11 +69,15 @@ struct Temperature {
 	 * @param resource Target computational resource
 	 * @return Device pointer (null for constant temperature)
 	 */
-	float* get_device_pointer(const Resource& resource) {
+	HOST float* get_device_pointer(const Resource& resource) {
+#ifdef HOST_GUARD
 		if (format == Format::Grid) {
 			return temperature_grid.get_device_pointer(resource);
 		}
 		return nullptr; // Constant temperature doesn't need device pointer
+#else
+		return nullptr;
+#endif
 	}
 
 	/**
@@ -135,6 +146,7 @@ enum class DecomposerType {
 	RecursiveBisection, // For non-uniform systems (load balancing)
 	Geometric			// For systems with specific shapes (e.g., membranes)
 };
+
 enum class DecomposeDirection { X, Y, Z }; // default is Z
 
 enum class LongRangeMethod {
@@ -145,11 +157,20 @@ enum class LongRangeMethod {
 	Direct,	   ///< Direct O(N²) calculation (for small systems)
 	None	   ///< No long-range interactions
 };
+enum class IntegratorType { Langevin, Brownian, VelocityVerlet };
 
-enum class DynamicType { Brownian, Langevin, NoseHooverLangevin, DPD };
+enum class LangevinSplitting {
+	BBK,   // Standard implementations (GROMACS/NAMD legacy)
+	BAOAB, // Leimkuhler-Matthews (Better sampling at high dt)
+	OBABO  // Bussi-Parrinello style
+};
+
 enum class OutputFormat { DCD, PDB, HDF5 };
-enum class ThermostatType { NVE, NoseHooverLangevin };
-enum class BarostatType { Isobaric, Isochoric };
+enum class BarostatType {
+	None,
+	MonteCarlo,
+	LangevinPiston // The "Standard" for membrane kinetics (NAMD style)
+};
 enum class InteractionForm { Grid, Tabulated, Analytical };
 
 } // namespace ARBD

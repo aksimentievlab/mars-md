@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../MortonCode.h"
 #include "Header.h"
+#include "MortonCode.h"
 #include "Types/Types.h"
 #include "Types/Vector3.h"
 

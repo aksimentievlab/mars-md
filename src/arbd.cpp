@@ -154,7 +154,8 @@ int main(int argc, char* argv[]) {
 		if (!options.gpuIds.empty()) {
 			for (int gpuId : options.gpuIds) {
 				if (gpuId >= 0 && gpuId < deviceCount) {
-					resource_collection.resources.push_back(ARBD::Resource::CUDA(gpuId));
+					resource_collection.push_back(
+						ARBD::Resource::create_cuda_device(static_cast<short>(gpuId)));
 				} else {
 					std::cout << "Warning: GPU ID " << gpuId << " is invalid (available: 0-"
 							  << (deviceCount - 1) << ")" << std::endl;
@@ -165,13 +166,15 @@ int main(int argc, char* argv[]) {
 		else if (options.numGpus > 0) {
 			int gpusToUse = std::min(options.numGpus, deviceCount);
 			for (int i = 0; i < gpusToUse; ++i) {
-				resource_collection.resources.push_back(ARBD::Resource::CUDA(i));
+				resource_collection.push_back(
+					ARBD::Resource::create_cuda_device(static_cast<short>(i)));
 			}
 		}
 		// Default: use all available GPUs
 		else {
 			for (int i = 0; i < deviceCount; ++i) {
-				resource_collection.resources.push_back(ARBD::Resource::CUDA(i));
+				resource_collection.push_back(
+					ARBD::Resource::create_cuda_device(static_cast<short>(i)));
 			}
 		}
 	}
@@ -179,7 +182,7 @@ int main(int argc, char* argv[]) {
 	// Fallback to CPU if no GPUs available or selected
 	if (resource_collection.empty()) {
 		std::cout << "No GPUs available. Falling back to CPU." << std::endl;
-		resource_collection.push_back(ARBD::Resource::CPU());
+		resource_collection.push_back(ARBD::Resource(ARBD::ResourceType::CPU));
 	}
 
 #elif defined(USE_SYCL)

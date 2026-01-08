@@ -28,7 +28,7 @@
 #include "Objects/Grid.h"
 #include "Objects/RigidBodyProperties.h"
 #include "Objects/Tables.h"
-#include "System/Decomposer.h"
+#include "System/Decomposers.h"
 #include "System/PatchManager.h"
 #include "System/PeriodicBox.h"
 #include "Types/IndexList.h"
@@ -37,6 +37,8 @@
 #include <vector>
 
 namespace ARBD {
+
+class SystemState;
 
 class SimSystem {
 
@@ -53,6 +55,15 @@ class SimSystem {
 	void set_temperature(float temp) {
 		temperature_.format = Temperature::Format::Value;
 		temperature_.value = temp;
+	}
+	void set_base_seed(size_t seed) {
+		LOGINFO("SimSystem: Setting base seed to {}", seed);
+		global_seed_ = seed;
+		LOGINFO("SimSystem: Base seed set to {}", global_seed_);
+	}
+
+	size_t get_base_seed() const {
+		return global_seed_;
 	}
 
 	void set_temperature(const BaseGrid<float>& grid) {
@@ -109,12 +120,12 @@ class SimSystem {
 		long_range_method_ = method;
 	}
 
-	void set_particle_dynamic_type(DynamicType type) {
-		ParticleDynamicType_ = type;
+	void set_particle_integrator_type(IntegratorType type) {
+		particle_integrator_type_ = type;
 	}
 
-	void set_rigid_body_dynamic_type(DynamicType type) {
-		RigidBodyDynamicType_ = type;
+	void set_rigid_body_integrator_type(IntegratorType type) {
+		rigid_body_integrator_type_ = type;
 	}
 	void add_particle_type(const ParticleType& type) {
 		particle_types_.push_back(type);
@@ -165,33 +176,41 @@ class SimSystem {
 	 * 2. Creates and initializes PatchManager from the plan
 	 * 3. Stores the PatchManager for runtime use
 	 */
-	void decompose_system() {
-		if (!decomposer_) {
-			throw Exception(ExceptionType::ValueError,
-							SourceLocation(),
-							"No decomposer has been set");
-		}
-
+	void decompose_system(SystemState& state) {
 		if (patch_manager_) {
 			LOGWARN("SimSystem: Decomposition already performed. Use rebalance_system() to "
 					"re-decompose.");
 			return;
 		}
 
-		LOGINFO("SimSystem: Starting patch decomposition");
+		// Single resource optimization - skip decomposer for single GPU/CPU
+		if (resources_.size() == 1) {
+			LOGINFO(
+				"SimSystem: Creating single patch for single resource (no decomposition needed)");
+			create_single_patch_manager(state);
+			return;
+		}
+
+		// Multi-resource decomposition path
+		if (!decomposer_) {
+			throw Exception(ExceptionType::ValueError,
+							SourceLocation(),
+							"No decomposer has been set for multi-resource system");
+		}
+
+		LOGINFO("SimSystem: Starting patch decomposition for {} resources", resources_.size());
 
 		// Step 1: Compute decomposition plan (Decomposer responsibility)
-		DecompositionPlan plan = decomposer_->decompose(*this);
+		DecompositionPlan plan = decomposer_->decompose(*this, state);
 
 		// Step 2: Create PatchManager from plan (PatchManager responsibility)
 		auto patch_manager = std::make_unique<PatchManager>(*this);
 
 		// Get estimated particles per patch (could be refined based on actual particle
 		// distribution)
-		const Length cutoff = get_cutoff();
 
 		// Initialize PatchManager with the decomposition plan
-		patch_manager->initialize_from_plan(plan, estimated_particles_, cutoff);
+		patch_manager->initialize_from_plan(plan, estimated_particles_);
 
 		// Step 3: Store PatchManager (SimSystem ownership)
 		patch_manager_ = std::move(patch_manager);
@@ -203,9 +222,9 @@ class SimSystem {
 	/**
 	 * @brief Rebalances the system after a change in the number of resources
 	 */
-	void rebalance_system() {
+	void rebalance_system(SystemState& state) {
 		LOGINFO("SimSystem: Rebalancing system");
-		decompose_system(); // For now, just re-decompose
+		decompose_system(state); // For now, just re-decompose
 	}
 
 	/**
@@ -358,8 +377,8 @@ class SimSystem {
 	/**
 	 * @brief Get algorithm type (from configuration)
 	 */
-	DynamicType get_particle_algorithm() const {
-		return ParticleDynamicType_;
+	IntegratorType get_particle_algorithm() const {
+		return particle_integrator_type_;
 	}
 
 	// Type definitions (time-invariant configuration)
@@ -382,8 +401,8 @@ class SimSystem {
 	/**
 	 * @brief Get rigid body algorithm type (from configuration)
 	 */
-	DynamicType get_rigid_body_algorithm() const {
-		return RigidBodyDynamicType_;
+	IntegratorType get_rigid_body_algorithm() const {
+		return rigid_body_integrator_type_;
 	}
 
 	//================================================================================
@@ -480,6 +499,12 @@ class SimSystem {
 		return decomposer_.get();
 	}
 
+	/**
+	 * @brief Get pairlist cutoff distance for interactions (GPU-compatible)
+	 */
+	Length get_pairlist_cutoff() const {
+		return pairlist_cutoff_;
+	}
 	//================================================================================
 	// Grid and Tabulated Function Accessors
 	//================================================================================
@@ -527,7 +552,67 @@ class SimSystem {
 	void validate_method_parameters() const;
 	void validate_output_parameters() const;
 
+	void assign_particle_type_ids() {
+		LOGINFO("SimSystem: Assigning particle type IDs");
+		particle_type_names_.resize(particle_types_.size());
+		int particle_type_id_counter = 0;
+		for (auto& particle_type : particle_types_) {
+			particle_type.id = particle_type_id_counter;
+			particle_type_names_[particle_type_id_counter] = particle_type.name;
+			particle_type.pmf_grid_id =
+				get_grid_manager().get_grid_key(particle_type.pmf_grid_name).grid_id;
+			particle_type.diffusion_grid_id =
+				get_grid_manager().get_grid_key(particle_type.diffusion_grid_name).grid_id;
+			particle_type.force_grid_id = {
+				get_grid_manager().get_grid_key(particle_type.force_grid_names[0]).grid_id,
+				get_grid_manager().get_grid_key(particle_type.force_grid_names[1]).grid_id,
+				get_grid_manager().get_grid_key(particle_type.force_grid_names[2]).grid_id};
+			particle_type_id_counter++;
+		}
+		LOGINFO("SimSystem: Particle type IDs assigned: total {} types",
+				particle_type_names_.size());
+	}
+
+	void assign_rigid_body_type_ids() {
+		LOGINFO("SimSystem: Assigning rigid body type IDs");
+		rigid_body_type_names_.resize(rigid_body_types_.size());
+		int rigid_body_id_counter = 0;
+		for (auto& rigid_body_type : rigid_body_types_) {
+			rigid_body_type.id = rigid_body_id_counter;
+			rigid_body_type_names_[rigid_body_id_counter] = rigid_body_type.name;
+			rigid_body_id_counter++;
+		}
+		LOGINFO("SimSystem: Rigid body type IDs assigned: total {} types",
+				rigid_body_type_names_.size());
+	}
+
+	int get_particle_type_id(const std::string& name) const {
+		return particle_type_name_to_id_.find(name)->second;
+	}
+
+	int get_rigid_body_type_id(const std::string& name) const {
+		return rigid_body_type_name_to_id_.find(name)->second;
+	}
+
+	/**
+	 * @brief Build name to ID maps for particle and rigid body types
+	 */
+	void build_name_to_id_maps() {
+		for (const auto& particle_type : particle_types_) {
+			particle_type_name_to_id_[particle_type.name] = particle_type.id;
+		}
+		for (const auto& rigid_body_type : rigid_body_types_) {
+			rigid_body_type_name_to_id_[rigid_body_type.name] = rigid_body_type.id;
+		}
+	}
+
   private:
+	/**
+	 * @brief Create simplified patch manager for single resource systems
+	 * @param state System state containing particles
+	 */
+	void create_single_patch_manager(SystemState& state);
+
 	// Configuration management (host-only)
 	Temperature temperature_{298.15f};
 	int replicas_{1};
@@ -537,8 +622,8 @@ class SimSystem {
 	float dielectric_constant_{80.0f}; // Dielectric constant for solvent
 	PeriodicBox sim_box_{Vector3(100.0f, 100.0f, 200.0f), true, true, true};
 	idx_t estimated_particles_{1024000};
-	DynamicType ParticleDynamicType_{DynamicType::Langevin};
-	DynamicType RigidBodyDynamicType_{DynamicType::Langevin};
+	IntegratorType particle_integrator_type_{IntegratorType::Langevin};
+	IntegratorType rigid_body_integrator_type_{IntegratorType::Langevin};
 	// Simulation control
 	SimSteps steps_{1e-5f, 1000}; // timestep in ns.
 
@@ -552,11 +637,9 @@ class SimSystem {
 	OutputFormat output_format_{OutputFormat::DCD};
 
 	LongRangeMethod long_range_method_{LongRangeMethod::PPPM};
-	ThermostatType thermostat_{ThermostatType::NVE};
 	Pressure pressure_{1.0f};
-
-	BarostatType barostat_{BarostatType::Isobaric};
-	bool calculate_pressure_{false};
+	BarostatType barostat_{BarostatType::None};
+	// bool calculate_pressure_{false};
 	float pressure_output_period_{100.0f};
 
 	bool enable_smd{false};
@@ -573,6 +656,10 @@ class SimSystem {
 	std::vector<RigidBodyType> rigid_body_types_{};
 	std::vector<ParticleType> particle_types_{};
 	std::vector<Reservoir> reservoirs_{};
+	std::vector<std::string> particle_type_names_{};
+	std::vector<std::string> rigid_body_type_names_{};
+	std::unordered_map<std::string, int> particle_type_name_to_id_{};
+	std::unordered_map<std::string, int> rigid_body_type_name_to_id_{};
 
 	DecomposerType decomposer_type_{DecomposerType::Spatial};
 	DecomposeDirection decompose_direction_{DecomposeDirection::Z};

@@ -7,6 +7,7 @@
  *
  * This file contains utilities for encoding 3D coordinates into
  * Morton codes for spatial sorting and neighbor finding optimizations.
+ * @todo make the 32-bit be able to reorganized with different axis resolution.
  *********************************************************************/
 
 #include "Header.h"
@@ -29,10 +30,13 @@ struct MortonConfig {
 class MortonCode {
   public:
 	// Runtime-configurable bits per dimension (set during initialization)
-	static int max_coord_bits; // Will be 9, 10, or 11
+	static int max_coord_bits; // will be 10
 	static coord_t max_coord;  // Will be (1 << max_coord_bits) - 1
 	static float actual_spacing;
 	static morton_t morton_threshold;
+
+	// Device-safe constant for SYCL kernels (use max possible value)
+	static constexpr coord_t max_coord_device = (1u << 10) - 1; // 1023 for 10 bits
 
 	/**
 	 * @brief Initialize Morton code precision based on system parameters
@@ -94,20 +98,23 @@ class MortonCode {
 		Vector3 offset = pos - box_min;
 		Vector3 normalized = Vector3(offset.x / range.x, offset.y / range.y, offset.z / range.z);
 
+		// Use device-safe constant in device code
+		constexpr coord_t max_c = max_coord_device;
+
 #ifdef USE_SYCL
 		coord_t x = static_cast<coord_t>(
-			sycl::fmin(sycl::fmax(normalized.x * max_coord, 0.0f), static_cast<float>(max_coord)));
+			sycl::fmin(sycl::fmax(normalized.x * max_c, 0.0f), static_cast<float>(max_c)));
 		coord_t y = static_cast<coord_t>(
-			sycl::fmin(sycl::fmax(normalized.y * max_coord, 0.0f), static_cast<float>(max_coord)));
+			sycl::fmin(sycl::fmax(normalized.y * max_c, 0.0f), static_cast<float>(max_c)));
 		coord_t z = static_cast<coord_t>(
-			sycl::fmin(sycl::fmax(normalized.z * max_coord, 0.0f), static_cast<float>(max_coord)));
+			sycl::fmin(sycl::fmax(normalized.z * max_c, 0.0f), static_cast<float>(max_c)));
 #else
 		coord_t x = static_cast<coord_t>(
-			fminf(fmaxf(normalized.x * max_coord, 0.0f), static_cast<float>(max_coord)));
+			fminf(fmaxf(normalized.x * max_c, 0.0f), static_cast<float>(max_c)));
 		coord_t y = static_cast<coord_t>(
-			fminf(fmaxf(normalized.y * max_coord, 0.0f), static_cast<float>(max_coord)));
+			fminf(fmaxf(normalized.y * max_c, 0.0f), static_cast<float>(max_c)));
 		coord_t z = static_cast<coord_t>(
-			fminf(fmaxf(normalized.z * max_coord, 0.0f), static_cast<float>(max_coord)));
+			fminf(fmaxf(normalized.z * max_c, 0.0f), static_cast<float>(max_c)));
 #endif
 
 		return encode(x, y, z);
@@ -124,9 +131,10 @@ class MortonCode {
 		coord_t x, y, z;
 		decode(code, x, y, z);
 
-		Vector3 normalized(static_cast<float>(x) / max_coord,
-						   static_cast<float>(y) / max_coord,
-						   static_cast<float>(z) / max_coord);
+		constexpr coord_t max_c = max_coord_device;
+		Vector3 normalized(static_cast<float>(x) / max_c,
+						   static_cast<float>(y) / max_c,
+						   static_cast<float>(z) / max_c);
 
 		return box_min + normalized.element_mult(box_max - box_min);
 	}
@@ -137,8 +145,9 @@ class MortonCode {
 	 * Works for 9, 10, or 11 bit inputs
 	 */
 	HOST DEVICE static morton_t splitBy3(coord_t a) {
-		// Mask based on max_coord_bits
-		morton_t x = a & max_coord; // Keep only valid bits
+		// Mask based on max_coord_bits (use device-safe constant)
+		constexpr coord_t max_c = max_coord_device;
+		morton_t x = a & max_c; // Keep only valid bits
 
 		// Generic bit-splitting that works for 9-11 bits
 		x = (x | x << 16) & 0x30000ff;
@@ -150,11 +159,12 @@ class MortonCode {
 	}
 
 	HOST DEVICE static coord_t compactBy3(morton_t x) {
+		constexpr coord_t max_c = max_coord_device;
 		x &= 0x9249249;
 		x = (x ^ (x >> 2)) & 0x30c30c3;
 		x = (x ^ (x >> 4)) & 0x300f00f;
 		x = (x ^ (x >> 8)) & 0x30000ff;
-		x = (x ^ (x >> 16)) & max_coord;
+		x = (x ^ (x >> 16)) & max_c;
 
 		return static_cast<coord_t>(x);
 	}

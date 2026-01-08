@@ -13,25 +13,13 @@
 #include "Backend/Buffer.h"
 #include "Backend/Kernels.h"
 #include "Backend/Resource.h"
+#include "DeviceRadix.h"
 #include "MortonCode.h"
 #include "Types/Types.h"
 #include "Types/Vector3.h"
 #include "ZOrderKernels.h"
 
-// Forward declarations for CUDA/SYCL specific functions
-#ifdef USE_CUDA
-namespace ARBD {
-void sort_morton_codes_cuda(size_t num_particles,
-							DeviceBuffer<morton_t>& morton_codes_in,
-							DeviceBuffer<uint32_t>& indices_in,
-							DeviceBuffer<morton_t>& morton_codes_out,
-							DeviceBuffer<uint32_t>& indices_out,
-							DeviceBuffer<uint8_t>& temp_storage,
-							const Resource& resource);
-}
-#elif defined(USE_SYCL)
-#include "ZOrderKernels/SYCLSort.h"
-#endif
+// DeviceRadix.h provides both CUDA and SYCL radix sort implementations
 
 namespace ARBD {
 
@@ -71,6 +59,7 @@ class ZOrderSort {
 	 */
 	~ZOrderSort() = default;
 
+	void allocate_storage(size_t max_particles);
 	/**
 	 * @brief Sort particles by Morton code
 	 * @param positions Input particle positions
@@ -191,8 +180,13 @@ class ZOrderSort {
 	DeviceBuffer<morton_t> temp_morton_codes_;
 	DeviceBuffer<uint32_t> temp_indices_;
 
-	// CUB temporary storage for device-side sorting
-	DeviceBuffer<uint8_t> cub_temp_storage_;
+	// Backend-specific sorting buffers
+#ifdef USE_CUDA
+	DeviceBuffer<uint8_t> cub_temp_storage_; ///< CUB temporary storage
+#elif defined(USE_SYCL)
+	DeviceBuffer<uint32_t> global_histogram_; ///< Size: DRS_RADIX * 4 = 1024
+	DeviceBuffer<uint32_t> pass_histogram_;	  ///< Size: DRS_RADIX * threadBlocks (dynamic)
+#endif
 
 	// Bounding box computation
 	DeviceBuffer<Vector3> bbox_min_;
@@ -237,29 +231,45 @@ class ZOrderSort {
 							 const Vector3& box_max);
 
 	/**
-	 * @brief Sort Morton codes and indices
+	 * @brief Sort Morton codes and indices using backend-specific radix sort
 	 */
 	void sort_morton_codes() {
 #ifdef USE_CUDA
-		sort_morton_codes_cuda(morton_codes_,
-							   sorted_indices_,
-							   temp_morton_codes_,
-							   temp_indices_,
-							   cub_temp_storage_,
-							   num_particles_);
-// #elif defined(USE_SYCL_ICPX)
-//	sort_morton_codes_oneapi(morton_codes_, sorted_indices_, num_particles_, resource_);
+		// Call CUDA radix sort directly
+		device_radix_sort_pairs_cub(resource_.get_device_id(),
+									morton_codes_.data(),
+									sorted_indices_.data(),
+									temp_morton_codes_.data(),
+									temp_indices_.data(),
+									static_cast<uint32_t>(num_particles_));
+
 #elif defined(USE_SYCL)
-		sort_morton_codes_sycl(num_particles_,
-							   morton_codes_,
-							   sorted_indices_,
-							   temp_morton_codes_,
-							   temp_indices_,
-							   cub_temp_storage_,
-							   resource_);
+		// Calculate thread blocks for SYCL sort
+		const uint32_t threadBlocks = (num_particles_ + DRS_PART_SIZE - 1) / DRS_PART_SIZE;
+
+		// Resize pass histogram if needed
+		const size_t pass_hist_size = DRS_RADIX * threadBlocks;
+		if (pass_histogram_.size() < pass_hist_size) {
+			pass_histogram_.resize(pass_hist_size);
+		}
+
+		// Initialize histograms (first pass only - kernel handles subsequent passes)
+		global_histogram_.fill(0);
+		pass_histogram_.fill(0);
+
+		// Call SYCL radix sort directly
+		device_radix_sort_pairs_usm(resource_,
+									morton_codes_.data(),
+									sorted_indices_.data(),
+									temp_morton_codes_.data(),
+									temp_indices_.data(),
+									global_histogram_.data(),
+									pass_histogram_.data(),
+									static_cast<uint32_t>(num_particles_));
+
 #else
 		ARBD_Exception(ExceptionType::NotImplementedError,
-					   "Z-order sorting not implemented for non-CUDA or SYCL backends");
+					   "Z-order sorting requires USE_CUDA or USE_SYCL");
 #endif
 	};
 

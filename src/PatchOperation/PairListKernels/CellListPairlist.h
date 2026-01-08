@@ -10,7 +10,7 @@
  * performance with uniform particle distributions.
  *********************************************************************/
 
-#include "PatchOperation/DecomposeKernels.h"
+#include "DecomposeKernels.h"
 #include "PatchOperation/Pairlist.h"
 #include "Types/Types.h"
 

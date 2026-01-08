@@ -313,10 +313,12 @@ class Reader {
 				static_assert(!std::is_same_v<T, T>, "Unsupported type for parseValue");
 			}
 		} catch (const std::exception& e) {
+#ifdef HOST_GUARD
 			LOGWARN("Reader: Failed to parse '{}' as {} for parameter '{}', using default",
 					valueStr,
 					type_name<T>(),
 					param);
+#endif
 			return defaultValue;
 		}
 	}

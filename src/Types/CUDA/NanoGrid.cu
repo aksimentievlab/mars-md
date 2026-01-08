@@ -1,6 +1,4 @@
-#include "Backend/CUDA/KernelHelper.cuh"
-#include "Math/NanoGridKernels.h"
-#include "Math/Types.h"
+#include "../Types.h"
 
 #include "nanovdb/GridHandle.h"
 #include "nanovdb/NanoVDB.h"
