@@ -212,7 +212,11 @@ class SimManager {
 	 * @param types Output vector for particle types
 	 */
 	void generate_initial_particles(std::vector<Vector3>& positions, std::vector<int>& types);
-
+	/**
+	 * @brief Generate initial particle momentum and types according to Boltzmann distribution
+	 * @param momentum Output vector for particle momentum
+	 */
+	void generate_initial_momentum(const Vector3& v_com);
 	/**
 	 * @brief Write final restart file
 	 */

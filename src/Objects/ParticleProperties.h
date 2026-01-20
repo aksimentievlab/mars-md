@@ -40,8 +40,7 @@ class ParticleType {
 	float charge = 0.0f;
 	float radius = 0.0;
 	float eps = 0.0f;
-	float diffusion = 0.0f;
-	Vector3 transDamping = {0.0f, 0.0f, 0.0f};
+	Vector3 diffusion = {0.0f, 0.0f, 0.0f};
 	float mu = 0.0f;
 
 	// --- PMF / SMD Control ---
@@ -64,19 +63,17 @@ class ParticleType {
 	ParticleType(const std::string& name) : name(name) {}
 	ParticleType(const ParticleType& src)
 		: name(src.name), id(src.id), num(src.num), mass(src.mass), charge(src.charge),
-		  radius(src.radius), eps(src.eps), diffusion(src.diffusion),
-		  transDamping(src.transDamping), mu(src.mu), pmf_scale(src.pmf_scale),
-		  pmf_scale_slope(src.pmf_scale_slope), pmf_smd_freq(src.pmf_smd_freq),
-		  pmf_grid_id(src.pmf_grid_id), diffusion_grid_id(src.diffusion_grid_id),
-		  force_grid_id(src.force_grid_id), reservoir(std::make_unique<Reservoir>(*src.reservoir)) {
-	}
+		  radius(src.radius), eps(src.eps), diffusion(src.diffusion), mu(src.mu),
+		  pmf_scale(src.pmf_scale), pmf_scale_slope(src.pmf_scale_slope),
+		  pmf_smd_freq(src.pmf_smd_freq), pmf_grid_id(src.pmf_grid_id),
+		  diffusion_grid_id(src.diffusion_grid_id), force_grid_id(src.force_grid_id),
+		  reservoir(src.reservoir ? std::make_unique<Reservoir>(*src.reservoir) : nullptr) {}
 	ParticleType(const std::string& name,
 				 float mass,
 				 float charge,
 				 float radius,
 				 float eps,
 				 float diffusion,
-				 Vector3 transDamping,
 				 float mu,
 				 float pmf_scale,
 				 float pmf_scale_slope,
@@ -86,10 +83,10 @@ class ParticleType {
 				 int3 force_grid_ids,
 				 std::unique_ptr<Reservoir> reservoir)
 		: name(name), mass(mass), charge(charge), radius(radius), eps(eps), diffusion(diffusion),
-		  transDamping(transDamping), mu(mu), pmf_scale(pmf_scale),
-		  pmf_scale_slope(pmf_scale_slope), pmf_smd_freq(pmf_smd_freq), pmf_grid_id(pmf_grid_id),
+		  mu(mu), pmf_scale(pmf_scale), pmf_scale_slope(pmf_scale_slope),
+		  pmf_smd_freq(pmf_smd_freq), pmf_grid_id(pmf_grid_id),
 		  diffusion_grid_id(diffusion_grid_id), force_grid_id(force_grid_ids),
-		  reservoir(std::make_unique<Reservoir>(*reservoir)) {}
+		  reservoir(reservoir ? std::make_unique<Reservoir>(*reservoir) : nullptr) {}
 };
 // ============================================================================
 // 4. HOST STORAGE (For IO / Init)

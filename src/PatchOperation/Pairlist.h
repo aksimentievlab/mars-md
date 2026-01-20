@@ -47,7 +47,10 @@ class Pairlist {
 		: resource_(resource), max_particles_(max_particles), max_pairs_(max_pairs),
 		  num_particles_(0), num_pairs_(0), cutoff_(0.0f), cutoff_squared_(0.0f),
 		  neighbor_pairs_(max_pairs, resource), pair_distances_(max_pairs, resource),
-		  pair_count_(1, resource) {}
+		  pair_count_(1, resource) {
+		uint32_t zero = 0;
+		pair_count_.copy_from_host(&zero, 1, true);
+	}
 
 	/**
 	 * @brief Virtual destructor

@@ -1,5 +1,6 @@
 #pragma once
 #include "../Random/philox.h"
+#include "Constants.h"
 #include "Header.h"
 #include "Objects/DeviceParticle.h"
 #include "Types/BaseGrid.h"
@@ -11,27 +12,123 @@ namespace ARBD {
 template<typename TemperatureType = float>
 struct BAOABIntegrate {
 	ParticleView particle_view;
-	const ParticleTypeView* particle_types;
+	const ParticleTypeView particle_types;
 	Vector3 box_size;
 	float timestep;
 	TemperatureType kT;
-	size_t num_particles;
+	idx_t num_particles;
 	uint64_t base_seed;
 	uint32_t base_ctr;
+	size_t current_step;
 
-	// Constructor for proper initialization
 	BAOABIntegrate(ParticleView pv,
-				   const ParticleTypeView* pt,
+				   const ParticleTypeView pt,
 				   const Vector3& box,
 				   float dt,
+				   size_t current_step,
 				   TemperatureType temp,
-				   size_t n,
+				   idx_t n,
 				   uint64_t seed,
 				   uint32_t ctr)
-		: particle_view(pv), particle_types(pt), box_size(box), timestep(dt), kT(temp),
-		  num_particles(n), base_seed(seed), base_ctr(ctr) {}
+		: particle_view(pv), particle_types(pt), box_size(box), timestep(dt),
+		  current_step(current_step), kT(temp), num_particles(n), base_seed(seed), base_ctr(ctr) {}
 
-	DEVICE void operator()(idx_t idx) const {
+	KERNEL_FUNC void operator()(idx_t idx) const {
+		if (idx >= num_particles)
+			return;
+
+		// 1. Load Particle State
+		Vector3 pos = particle_view.pos[idx];
+		Vector3 mom = particle_view.mom[idx];
+		Vector3 force = particle_view.ForceEnergy[idx];
+		int type = particle_view.type_id[idx];
+
+		// 2. Physical Constants & Properties
+		float mass = particle_types.mass[type];
+
+		// Anisotropic Diffusion -> Anisotropic Gamma (Damping)
+		// Uses Einstein relation: gamma = kT / (m * D)
+		// Strictly matches old kernel logic: gamma = Vector3(kTlocal / (mass * diff.e))
+		Vector3 diffusion = particle_types.diffusion[type];
+		Vector3 gamma(kT / (mass * diffusion.x),
+					  kT / (mass * diffusion.y),
+					  kT / (mass * diffusion.z));
+
+		// --- B: Momentum Update (Half Step) ---
+		// p = p + 0.5 * dt * F * Unit1
+		mom += 0.5f * timestep * force * constants::FORCE_CONVERSION_FACTOR;
+
+		// --- A: Position Update (Half Step) ---
+		// r = r + 0.5 * dt * (p/m) * 1e4
+		// 1e4 accounts for the ns -> internal velocity scaling
+		pos += 0.5f * timestep * mom / mass * 10000.0f;
+
+		// --- O: Ornstein-Uhlenbeck Process (Vectorized) ---
+		// Calculate decay factors (c) and noise scales component-wise
+		// c = exp(-gamma * dt)
+		Vector3 c(expf(-gamma.x * timestep), expf(-gamma.y * timestep), expf(-gamma.z * timestep));
+
+		// noise_scale = sqrt(kT * m * (1 - c^2)) * Unit2
+		Vector3 noise_scale(sqrtf(kT * mass * (1.0f - c.x * c.x)) * constants::SQRT_CAL_TO_JOULE,
+							sqrtf(kT * mass * (1.0f - c.y * c.y)) * constants::SQRT_CAL_TO_JOULE,
+							sqrtf(kT * mass * (1.0f - c.z * c.z)) * constants::SQRT_CAL_TO_JOULE);
+
+		// Generate Random Numbers (Box-Muller)
+		openrand::Philox rng(base_seed, base_ctr + static_cast<uint32_t>(idx));
+		openrand::float4 uniform = rng.draw_float4();
+
+		float r1 = sqrtf(-2.0f * logf(uniform.x));
+		float theta1 = 2.0f * 3.1415926535f * uniform.y;
+		float r2 = sqrtf(-2.0f * logf(uniform.z));
+		float theta2 = 2.0f * 3.1415926535f * uniform.w;
+
+		Vector3 random_force(r1 * cosf(theta1), r1 * sinf(theta1), r2 * cosf(theta2));
+
+		// Update Momentum
+		mom.x = c.x * mom.x + noise_scale.x * random_force.x;
+		mom.y = c.y * mom.y + noise_scale.y * random_force.y;
+		mom.z = c.z * mom.z + noise_scale.z * random_force.z;
+
+		// --- A: Position Update (Second Half Step) ---
+		// r = r + 0.5 * dt * (p/m) * 1e4
+		// Added 1e4 to match Old Kernel line: r0 = r0 + 0.5f * timestep * p0 * 1e4 / mass;
+		pos += 0.5f * timestep * mom / mass * 10000.0f;
+
+		// Apply Periodic Boundary Conditions
+		pos.x = pos.x - box_size.x * floorf(pos.x / box_size.x);
+		pos.y = pos.y - box_size.y * floorf(pos.y / box_size.y);
+		pos.z = pos.z - box_size.z * floorf(pos.z / box_size.z);
+
+		// Write Back
+		particle_view.pos[idx] = pos;
+		particle_view.mom[idx] = mom;
+	}
+};
+template<typename TemperatureType = float>
+struct BAOAB_LastUpdate {
+	ParticleView particle_view;
+	const ParticleTypeView particle_types;
+	Vector3 box_size;
+	float timestep;
+	TemperatureType kT;
+	idx_t num_particles;
+	uint64_t base_seed;
+	uint32_t base_ctr;
+	size_t current_step;
+
+	BAOAB_LastUpdate(ParticleView pv,
+					 const ParticleTypeView pt,
+					 const Vector3& box,
+					 float dt,
+					 size_t current_step,
+					 TemperatureType temp,
+					 idx_t n,
+					 uint64_t seed,
+					 uint32_t ctr)
+		: particle_view(pv), particle_types(pt), box_size(box), timestep(dt),
+		  current_step(current_step), kT(temp), num_particles(n), base_seed(seed), base_ctr(ctr) {}
+
+	KERNEL_FUNC void operator()(idx_t idx) const {
 		if (idx >= num_particles)
 			return;
 
@@ -40,52 +137,7 @@ struct BAOABIntegrate {
 		Vector3 force = particle_view.ForceEnergy[idx];
 		int type = particle_view.type_id[idx];
 
-		const ParticleTypeView& pt = particle_types[type];
-		float mass = pt.mass[type];
-		Vector3 gamma3 = pt.transDamping[type];
-		float gamma = gamma3.length();
-		// BAOAB integration scheme
-		// B: momentum update (half step)
-		mom += 0.5f * timestep * force;
-
-		// A: position update (half step)
-		pos += 0.5f * timestep * mom / mass;
-
-		// O: Ornstein-Uhlenbeck process
-		float c = exp(-gamma * timestep);
-		float noise_scale = sqrt(kT * mass * (1.0f - c * c));
-
-		// Initialize RNG for this thread with unique counter
-		openrand::Philox rng(base_seed, base_ctr + static_cast<uint32_t>(idx));
-
-		// Generate Gaussian random vector using Box-Muller transform
-		// Get 4 uniform random numbers
-		openrand::float4 uniform = rng.draw_float4();
-
-		// Box-Muller transform for generating pairs of Gaussian values
-		float r1 = sqrtf(-2.0f * logf(uniform.x));
-		float theta1 = 2.0f * 3.1415926535f * uniform.y;
-		float r2 = sqrtf(-2.0f * logf(uniform.z));
-		float theta2 = 2.0f * 3.1415926535f * uniform.w;
-
-		// Generate three independent Gaussian values
-		Vector3 random(noise_scale * r1 * cosf(theta1),
-					   noise_scale * r1 * sinf(theta1),
-					   noise_scale * r2 * cosf(theta2));
-		Vector3 random_force = random;
-		mom = c * mom + random_force;
-
-		// A: position update (half step)
-		pos += 0.5f * timestep * mom / mass;
-
-		// Apply periodic boundary conditions
-		pos.x = pos.x - box_size.x * floorf(pos.x / box_size.x);
-		pos.y = pos.y - box_size.y * floorf(pos.y / box_size.y);
-		pos.z = pos.z - box_size.z * floorf(pos.z / box_size.z);
-
-		// B: momentum update (half step) - done in next step
-
-		particle_view.pos[idx] = pos;
+		mom += 0.5f * timestep * force * constants::FORCE_CONVERSION_FACTOR;
 		particle_view.mom[idx] = mom;
 	}
 };

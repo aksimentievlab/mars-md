@@ -13,7 +13,7 @@
 #include "Types/Types.h"
 
 namespace ARBD {
-enum class Periodicity { AllPeriodic=3, TwoDimensional=2, OneDimensional=1, Open=0 };
+enum class Periodicity { AllPeriodic = 3, TwoDimensional = 2, OneDimensional = 1, Open = 0 };
 
 /**
  * @brief Lightweight device-safe periodic box for boundary calculations
@@ -179,6 +179,7 @@ class PeriodicBox {
 	HOST DEVICE int get_periodic_num() const {
 		return static_cast<int>(periodicity_);
 	}
+
   private:
 	/**
 	 * @brief Wrap scalar distance for minimum image convention
@@ -213,3 +214,8 @@ class PeriodicBox {
 };
 
 } // namespace ARBD
+#ifdef USE_SYCL
+#include <sycl/sycl.hpp>
+template<>
+struct sycl::is_device_copyable<ARBD::PeriodicBox> : std::true_type {};
+#endif

@@ -61,20 +61,20 @@ class NonBondedInteractions {
 	~NonBondedInteractions() = default;
 
 	// Host-side data management
-	void addPairNonBonded(const PairNonBonded& pair_nonbonded) {
+	void add_pair_nonbonded(const PairNonBonded& pair_nonbonded) {
 		pair_nonbonded_.push_back(pair_nonbonded);
 	}
-	void addLongRangeNonBonded(const LongRangeNonBonded& long_range_nonbonded) {
+	void add_long_range_nonbonded(const LongRangeNonBonded& long_range_nonbonded) {
 		long_range_nonbonded_.push_back(long_range_nonbonded);
 	}
 	// Device data preparation
-	void prepareDeviceData();
-	void cleanupDeviceData();
+	void prepare_device_data();
+	void cleanup_device_data();
 
-	size_t getNumPairNonBonded() const {
+	size_t get_num_pair_nonbonded() const {
 		return pair_nonbonded_.size();
 	}
-	size_t getNumLongRangeNonBonded() const {
+	size_t get_num_long_range_nonbonded() const {
 		return long_range_nonbonded_.size();
 	}
 	// Assign ids to pair and long range nonbonded interactions

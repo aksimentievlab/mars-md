@@ -272,7 +272,21 @@ class BondedInteractions {
 	size_t get_num_dihedrals() const {
 		return dihedrals_.size();
 	}
-
+	const std::vector<Bond>& get_bonds() const {
+		return bonds_;
+	}
+	const std::vector<Angle>& get_angles() const {
+		return angles_;
+	}
+	const std::vector<Dihedral>& get_dihedrals() const {
+		return dihedrals_;
+	}
+	const std::vector<Exclude>& get_exclusions() const {
+		return exclusions_;
+	}
+	const std::vector<Restraint>& get_restraints() const {
+		return restraints_;
+	}
 	void make_exclusions(int num_particles, int exclusion_depth);
 	void clear() {
 		bonds_.clear();

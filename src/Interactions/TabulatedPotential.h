@@ -9,19 +9,20 @@
 namespace ARBD {
 
 struct TabulatedPotential {
-	DEVICE_PTR(float) pot; // Device pointer to potential table
-	float step_inv;		   // 1/step_size for interpolation
-	unsigned int size;	   // Table size
-	float start;		   // Starting value (e.g., 0 for bonds, -PI for dihedrals)
-	bool is_periodic;	   // Whether to wrap around (dihedrals)
+	DEVICE_PTR(arbd_real) __restrict__ pot; // Device pointer to potential table
+	arbd_real step_inv;						// 1/step_size for interpolation
+	unsigned int size;						// Table size
+	arbd_real start;						// Starting value (e.g., 0 for bonds, -PI for dihedrals)
+	bool is_periodic;						// Whether to wrap around (dihedrals)
 
 	/**
 	 * @usage:
 	 * const ScalarForceEnergy fe = TabulatedPotential::compute(geom.distance, &tables[i]);
 	 */
-	KERNEL_FUNC static inline ScalarForceEnergy compute(float dx, const TabulatedPotential* table) {
+	KERNEL_FUNC static inline ScalarForceEnergy compute(arbd_real dx,
+														const TabulatedPotential* table) {
 		// Table lookup with linear interpolation
-		float w = (dx - table->start) * table->step_inv;
+		arbd_real w = (dx - table->start) * table->step_inv;
 		int home = static_cast<int>(floorf(w));
 		w = w - home;
 
@@ -43,11 +44,11 @@ struct TabulatedPotential {
 			home1 = table->size - 1;
 		}
 
-		float U0 = table->pot[home];
-		float dU = table->pot[home1] - U0;
+		arbd_real U0 = table->pot[home];
+		arbd_real dU = table->pot[home1] - U0;
 
 		return ScalarForceEnergy{
-			float2{dU * table->step_inv, dU * w + U0}}; // Force magnitude, energy
+			Vec2<arbd_real>{dU * table->step_inv, dU * w + U0}}; // Force magnitude, energy
 	}
 };
 } // namespace ARBD

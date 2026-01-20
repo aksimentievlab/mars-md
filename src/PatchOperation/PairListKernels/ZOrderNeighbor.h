@@ -1,10 +1,19 @@
+/**
+ * @file ZOrderNeighbor_ProperFix.h
+ * @brief PROPERLY FIXED Z-order neighbor kernel
+ * @date 2025-01-19
+ */
+
+#pragma once
 #include "../ZOrderKernels/MortonCode.h"
 #include "Header.h"
 #include "Types/Types.h"
 #include "Types/Vector3.h"
+
 namespace ARBD {
+
 /**
- * @brief Kernel for Z-order based neighbor finding
+ * @brief Kernel for Z-order based neighbor finding (FIXED)
  * Uses the spatial locality of Morton codes to efficiently find neighbors
  */
 struct ZOrderNeighborKernel {
@@ -47,14 +56,23 @@ struct ZOrderNeighborKernel {
 				uint32_t original_i = sorted_to_original[i];
 				uint32_t original_j = sorted_to_original[j];
 
-#ifdef __CUDA_ARCH__
-				uint32_t pair_idx = atomicAdd(pair_count, 1);
+				// ✅ FIX: Proper atomic increment that returns OLD value
+				uint32_t pair_idx;
+#ifdef USE_CUDA
+				pair_idx = atomicAdd(pair_count, 1);
+#elif defined(USE_SYCL)
+				// SYCL requires atomic_ref and fetch_add
+				sycl::atomic_ref<uint32_t, sycl::memory_order::relaxed, sycl::memory_scope::device>
+					atomic_ref(*pair_count);
+				pair_idx = atomic_ref.fetch_add(1);
 #else
-				uint32_t pair_idx = (*pair_count)++;
+				// Host fallback (should not be used on device)
+				pair_idx = (*pair_count)++;
 #endif
 
 				if (pair_idx < max_pairs) {
-					neighbor_pairs[pair_idx] = int2(original_i, original_j);
+					neighbor_pairs[pair_idx] =
+						int2{static_cast<int>(original_i), static_cast<int>(original_j)};
 				}
 			}
 
@@ -68,6 +86,7 @@ struct ZOrderNeighborKernel {
 		}
 	}
 };
+
 } // namespace ARBD
 
 #ifdef USE_SYCL

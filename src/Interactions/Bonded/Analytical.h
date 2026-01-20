@@ -12,10 +12,10 @@ namespace ARBD {
 // ============================================================================
 
 template<int TypeId>
-struct AnalyticalBondComputer;
+struct AnalyticalForceComputer;
 
 template<>
-struct AnalyticalBondComputer<0> {
+struct AnalyticalForceComputer<0> {
 	static constexpr int NUM_PARAMS = 2;
 
 	DEVICE static inline ScalarForceEnergy compute(float distance, const float* params) {
@@ -27,10 +27,10 @@ struct AnalyticalBondComputer<0> {
 	}
 };
 
-// Morse Bond: F = 2*D0*a*exp(-a(r-r0))*[1-exp(-a(r-r0))]
+// Morse Force: F = 2*D0*a*exp(-a(r-r0))*[1-exp(-a(r-r0))]
 // Parameters: [D0, a, r0]
 template<>
-struct AnalyticalBondComputer<1> {
+struct AnalyticalForceComputer<1> {
 	static constexpr int NUM_PARAMS = 3;
 
 	DEVICE static inline ScalarForceEnergy compute(float distance, const float* params) {
@@ -44,9 +44,9 @@ struct AnalyticalBondComputer<1> {
 	}
 };
 
-// FENE Bond: F = -k*r*(1-r/r0)
+// FENE Force: F = -k*r*(1-r/r0)
 template<>
-struct AnalyticalBondComputer<2> {
+struct AnalyticalForceComputer<2> {
 	static constexpr int NUM_PARAMS = 2;
 
 	DEVICE static inline ScalarForceEnergy compute(float distance, const float* params) {
@@ -59,9 +59,9 @@ struct AnalyticalBondComputer<2> {
 	}
 };
 
-// Half Harmonic Bond: F = -k*(r-r0) for r > r0, 0 for r <= r0
+// Half Harmonic Force: F = -k*(r-r0) for r > r0, 0 for r <= r0
 template<>
-struct AnalyticalBondComputer<3> {
+struct AnalyticalForceComputer<3> {
 	static constexpr int NUM_PARAMS = 2;
 
 	DEVICE static inline ScalarForceEnergy compute(float distance, const float* params) {
@@ -72,10 +72,10 @@ struct AnalyticalBondComputer<3> {
 		return ScalarForceEnergy{float2(force, energy)};
 	}
 };
-// WLCSK Bond (Worm-Like Chain with Shear and Kink)
+// WLCSK Force (Worm-Like Chain with Shear and Kink)
 // Parameters: [d, lp, kT]
 template<>
-struct AnalyticalBondComputer<4> {
+struct AnalyticalForceComputer<4> {
 	static constexpr int NUM_PARAMS = 3;
 
 	DEVICE static inline ScalarForceEnergy compute(float distance, const float* params) {
@@ -103,3 +103,8 @@ struct AnalyticalBondComputer<4> {
 	}
 };
 } // namespace ARBD
+#ifdef USE_SYCL
+#include <sycl/sycl.hpp>
+template<int T>
+struct sycl::is_device_copyable<ARBD::AnalyticalForceComputer<T>> : std::true_type {};
+#endif

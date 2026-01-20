@@ -9,36 +9,59 @@
 namespace ARBD {
 
 // ============================================================================
-// DEVICE BOND COMPUTER - Uses 2-step approach with BondGeometry
+// BOND COMPUTERS - Functor pattern for launch_kernel
 // ============================================================================
-// Analytical bond computer
-template<int BondTypeId>
-struct BondComputer {
-	DEVICE static inline void compute(idx_t i,
-									  DEVICE_PTR(const int2) particle_indices,
-									  DEVICE_PTR(Vector3) positions,
-									  DEVICE_PTR(Vector3) force_energy,
-									  DEVICE_PTR(const float) params,
-									  const PeriodicBox* pbox,
-									  bool get_energy,
-									  int offset = 0) {
-		const int2& indices = particle_indices[i + offset];
-		// Phase 1: Compute geometry using the excellent BondGeometry approach
-		BondGeometry geom = BondGeometry::compute(positions, indices, pbox);
 
+/**
+ * @brief Analytical bond force computer (Harmonic, Morse, FENE, etc.)
+ * Template parameter specifies which analytical bond type
+ */
+template<int BondTypeId>
+struct AnalyticalBondComputer {
+	// Members - stored by value for device compatibility
+	DEVICE_PTR(const int2) particle_indices;
+	DEVICE_PTR(Vector3) positions;
+	DEVICE_PTR(Vector3) force_energy;
+	DEVICE_PTR(const float) params;
+	const PeriodicBox* pbox;
+	bool get_energy;
+	idx_t num_bonds;
+
+	// Constructor for initialization
+	AnalyticalBondComputer(DEVICE_PTR(const int2) indices,
+						   DEVICE_PTR(Vector3) pos,
+						   DEVICE_PTR(Vector3) fe,
+						   DEVICE_PTR(const float) p,
+						   const PeriodicBox* box,
+						   bool energy,
+						   idx_t n)
+		: particle_indices(indices), positions(pos), force_energy(fe), params(p), pbox(box),
+		  get_energy(energy), num_bonds(n) {}
+
+	// Kernel operator - called by launch_kernel
+	DEVICE void operator()(idx_t i) const {
+		if (i >= num_bonds)
+			return;
+
+		const int2& indices = particle_indices[i];
+
+		// Phase 1: Compute geometry
+		BondGeometry geom = BondGeometry::compute(positions, indices, pbox);
 		if (geom.distance < 1e-6f)
 			return;
 
-		// Phase 2: Compute force and energy using analytical bond computer
-		constexpr int num_params = AnalyticalBondComputer<BondTypeId>::NUM_PARAMS;
-		const float* bond_params = params + (i * num_params);
-		const ScalarForceEnergy fe =
-			AnalyticalBondComputer<BondTypeId>::compute(geom.distance, bond_params);
-		// Phase 3: Apply forces using precomputed geometry
+		// Phase 2: Compute force using analytical formula
+		const ScalarForceEnergy fe = AnalyticalForceComputer<BondTypeId>::compute(
+			geom.distance,
+			params + (i * AnalyticalForceComputer<BondTypeId>::NUM_PARAMS));
+
+		// Phase 3: Apply forces
 		const Vector3 force = geom.unit_vector * fe.force_magnitude;
 		const float energy = fe.energy * 0.5f;
+
 		atomic_add(&force_energy[indices.x], -force);
 		atomic_add(&force_energy[indices.y], force);
+
 		if (get_energy) {
 			atomic_add(&force_energy[indices.x].t, energy);
 			atomic_add(&force_energy[indices.y].t, energy);
@@ -46,300 +69,278 @@ struct BondComputer {
 	}
 };
 
-// Tabulated bond computer using same 2-step approach
+/**
+ * @brief Tabulated bond force computer
+ */
 struct TabulatedBondComputer {
-	DEVICE static inline void compute(idx_t i,
-									  DEVICE_PTR(const int2) particle_indices,
-									  DEVICE_PTR(Vector3) positions,
-									  DEVICE_PTR(Vector3) forces_energy,
-									  DEVICE_PTR(const TabulatedPotential) tables,
-									  const PeriodicBox* pbox,
-									  bool get_energy,
-									  int offset = 0) {
-		// Phase 1: Compute geometry
-		const int2& indices = particle_indices[i + offset];
-		BondGeometry geom = BondGeometry::compute(positions, indices, pbox);
+	// Members
+	DEVICE_PTR(const int2) particle_indices;
+	DEVICE_PTR(Vector3) positions;
+	DEVICE_PTR(Vector3) force_energy;
+	DEVICE_PTR(const TabulatedPotential) tables;
+	const PeriodicBox* pbox;
+	bool get_energy;
+	idx_t num_bonds;
 
+	// Constructor
+	TabulatedBondComputer(DEVICE_PTR(const int2) indices,
+						  DEVICE_PTR(Vector3) pos,
+						  DEVICE_PTR(Vector3) fe,
+						  DEVICE_PTR(const TabulatedPotential) tabs,
+						  const PeriodicBox* box,
+						  bool energy,
+						  idx_t n)
+		: particle_indices(indices), positions(pos), force_energy(fe), tables(tabs), pbox(box),
+		  get_energy(energy), num_bonds(n) {}
+
+	// Kernel operator
+	DEVICE void operator()(idx_t i) const {
+		if (i >= num_bonds)
+			return;
+
+		const int2& indices = particle_indices[i];
+
+		// Phase 1: Compute geometry
+		BondGeometry geom = BondGeometry::compute(positions, indices, pbox);
 		if (geom.distance < 1e-6f)
 			return;
 
-		// Phase 2: Compute force and energy using tabulated potential
+		// Phase 2: Lookup force from tabulated potential
 		const ScalarForceEnergy fe = TabulatedPotential::compute(geom.distance, &tables[i]);
 
-		// Phase 3: Apply forces using precomputed geometry
+		// Phase 3: Apply forces
 		const Vector3 force = geom.unit_vector * fe.force_magnitude;
 		const float energy = fe.energy * 0.5f;
-		atomic_add(&forces_energy[indices.x], -force);
-		atomic_add(&forces_energy[indices.y], force);
+
+		atomic_add(&force_energy[indices.x], -force);
+		atomic_add(&force_energy[indices.y], force);
+
 		if (get_energy) {
-			atomic_add(&forces_energy[indices.x].t, energy);
-			atomic_add(&forces_energy[indices.y].t, energy);
+			atomic_add(&force_energy[indices.x].t, energy);
+			atomic_add(&force_energy[indices.y].t, energy);
 		}
 	}
 };
 
 // ============================================================================
-// DEVICE ANGLE COMPUTER - Uses 2-step approach with AngleGeometry
-// ============================================================================
-
-struct TabulatedAngleComputer {
-	DEVICE static inline void compute(idx_t i,
-									  DEVICE_PTR(const int3) particle_indices,
-									  DEVICE_PTR(Vector3) positions,
-									  DEVICE_PTR(Vector3) forces_energy,
-									  DEVICE_PTR(const TabulatedPotential) tables,
-									  const PeriodicBox* pbox,
-									  bool get_energy,
-									  int offset = 0) {
-
-		// Get particle indices
-		const int3 indices = particle_indices[i + offset];
-
-		// Phase 1: Compute geometry using the excellent AngleGeometry approach
-		AngleGeometry geom = AngleGeometry::compute(positions, indices, pbox);
-
-		// Phase 2: Compute force and energy (placeholder - implement angle potentials)
-		const ScalarForceEnergy fe = TabulatedPotential::compute(geom.angle, &tables[i]);
-
-		// Phase 3: Apply forces using precomputed geometry
-		const Vector3 force1 = geom.ab.cross(geom.bc) * fe.force_magnitude;
-		const Vector3 force3 = geom.bc.cross(geom.ab) * fe.force_magnitude;
-		const float energy = fe.energy * 0.3333333333f;
-		atomic_add(&forces_energy[indices.x], -force1);
-		atomic_add(&forces_energy[indices.y], force1 + force3);
-		atomic_add(&forces_energy[indices.z], -force3);
-
-		if (get_energy) {
-			atomic_add(&forces_energy[indices.x].t, energy);
-			atomic_add(&forces_energy[indices.y].t, energy);
-			atomic_add(&forces_energy[indices.z].t, energy);
-		}
-	}
-};
-
-// ============================================================================
-// DEVICE DIHEDRAL COMPUTER - Uses 2-step approach with DihedralGeometry
-// ============================================================================
-
-struct TabulatedDihedralComputer {
-	DEVICE static inline void compute(idx_t i,
-									  DEVICE_PTR(const int4) particle_indices,
-									  DEVICE_PTR(Vector3) positions,
-									  DEVICE_PTR(Vector3) forces_energy,
-									  DEVICE_PTR(const TabulatedPotential) tables,
-									  const PeriodicBox* pbox,
-									  bool get_energy,
-									  int offset = 0) {
-
-		// Get particle indices
-		const int4 indices = particle_indices[i + offset];
-
-		// Phase 1: Compute geometry using the excellent DihedralGeometry approach
-		DihedralGeometry geom = DihedralGeometry::compute(positions, indices, pbox);
-		// Phase 2: Compute force and energy (placeholder - implement angle potentials)
-		const ScalarForceEnergy fe =
-			TabulatedPotential::compute(geom.dihedral_angle + BD_PI, &tables[i]);
-
-		// Phase 3: Apply forces using precomputed geometry
-		// f1, f2-f1 , f3-f2, -f3 );
-		const Vector3 f1 = geom.f1 * fe.force_magnitude;
-		const Vector3 f2 = geom.f2 * fe.force_magnitude;
-		const Vector3 f3 = geom.f3 * fe.force_magnitude;
-
-		const float energy = fe.energy * 0.25f;
-		atomic_add(&forces_energy[indices.x], -f1);
-		atomic_add(&forces_energy[indices.y], f2 - f1);
-		atomic_add(&forces_energy[indices.z], f3 - f2);
-		atomic_add(&forces_energy[indices.t], -f3);
-
-		if (get_energy) {
-			atomic_add(&forces_energy[indices.x].t, energy);
-			atomic_add(&forces_energy[indices.y].t, energy);
-			atomic_add(&forces_energy[indices.z].t, energy);
-			atomic_add(&forces_energy[indices.t].t, energy);
-		}
-	}
-};
-
-// ============================================================================
-// PRODUCT POTENTIAL COMPUTER
+// ANGLE COMPUTERS
 // ============================================================================
 
 /**
- * @brief Computer for product potentials (coupled bonded interactions)
- *
- * This template handles various types of product potentials:
- * - BondAngle: 2 angles + 1 bond (4 particles)
- * - AngleAngle: 2 angles sharing a bond (4 particles)
- * - BondBond: 2 bonds sharing an atom (3 particles)
+ * @brief Tabulated angle force computer
  */
-// template<int ProductTypeId>
-// struct ProductPotentialComputer {
-// 	DEVICE static inline void compute(idx_t i,
-// 									  DEVICE_PTR(const int4) particle_indices,
-// 									  DEVICE_PTR(Vector3) positions,
-// 									  DEVICE_PTR(Vector3) forces,
-// 									  DEVICE_PTR(float) energies,
-// 									  DEVICE_PTR(const TabulatedPotential) angle_tables_1,
-// 									  DEVICE_PTR(const TabulatedPotential) bond_tables,
-// 									  DEVICE_PTR(const TabulatedPotential) angle_tables_2,
-// 									  DEVICE_PTR(const int)
-// 										  potential_indices, // 3 indices per product
-// 									  const PeriodicBox* pbox,
-// 									  bool get_energy,
-// 									  int offset = 0) {
-// 		// Get particle indices
-// 		int4 indices = particle_indices[i + offset];
-// 		int3 pot_idx = int3(potential_indices[i * 3 + 0],
-// 							potential_indices[i * 3 + 1],
-// 							potential_indices[i * 3 + 2]);
+struct TabulatedAngleComputer {
+	// Members
+	DEVICE_PTR(const int3) particle_indices;
+	DEVICE_PTR(Vector3) positions;
+	DEVICE_PTR(Vector3) force_energy;
+	DEVICE_PTR(const TabulatedPotential) tables;
+	const PeriodicBox* pbox;
+	bool get_energy;
+	idx_t num_angles;
 
-// 		// Compute geometry based on product type
-// 		ProductPotentialGeometry geom;
-// 		if constexpr (ProductTypeId == 0) { // BondAngle
-// 			geom = ProductPotentialGeometry::compute_bond_angle(positions, indices, pbox);
-// 		} else if constexpr (ProductTypeId == 1) { // AngleAngle
-// 			geom = ProductPotentialGeometry::compute_angle_angle(positions, indices, pbox);
-// 		} else if constexpr (ProductTypeId == 2) { // BondBond
-// 			// For BondBond, we only need 3 particles
-// 			int3 indices_3 = int3(indices.x, indices.y, indices.z);
-// 			geom = ProductPotentialGeometry::compute_bond_bond(positions, indices_3, pbox);
-// 		}
+	// Constructor
+	TabulatedAngleComputer(DEVICE_PTR(const int3) indices,
+						   DEVICE_PTR(Vector3) pos,
+						   DEVICE_PTR(Vector3) fe,
+						   DEVICE_PTR(const TabulatedPotential) tabs,
+						   const PeriodicBox* box,
+						   bool energy,
+						   idx_t n)
+		: particle_indices(indices), positions(pos), force_energy(fe), tables(tabs), pbox(box),
+		  get_energy(energy), num_angles(n) {}
 
-// 		// Early exit if singular
-// 		if (geom.is_singular)
-// 			return;
+	// Kernel operator
+	DEVICE void operator()(idx_t i) const {
+		if (i >= num_angles)
+			return;
 
-// 		// Compute forces from tabulated potentials
-// 		// This matches your legacy computeBondAngle logic
-// 		ForceEnergy fe1, fe_bond, fe2;
+		const int3& indices = particle_indices[i];
 
-// 		if constexpr (ProductTypeId == 0) { // BondAngle
-// 			fe1 = angle_tables_1[pot_idx.x].compute(geom.angle1.angle, &angle_tables_1[pot_idx.x]);
-// 			fe_bond = bond_tables[pot_idx.y].compute(geom.bond.distance, &bond_tables[pot_idx.y]);
-// 			fe2 = angle_tables_2[pot_idx.z].compute(geom.angle2.angle, &angle_tables_2[pot_idx.z]);
-// 		} else if constexpr (ProductTypeId == 1) { // AngleAngle
-// 			fe1 = angle_tables_1[pot_idx.x].compute(geom.angle_a.angle, &angle_tables_1[pot_idx.x]);
-// 			fe2 = angle_tables_2[pot_idx.z].compute(geom.angle_b.angle, &angle_tables_2[pot_idx.z]);
-// 			fe_bond = {0.0f, 0.0f};				   // No bond term for AngleAngle
-// 		} else if constexpr (ProductTypeId == 2) { // BondBond
-// 			fe1 = bond_tables[pot_idx.x].compute(geom.bond_a.distance, &bond_tables[pot_idx.x]);
-// 			fe2 = bond_tables[pot_idx.y].compute(geom.bond_b.distance, &bond_tables[pot_idx.y]);
-// 			fe_bond = {0.0f, 0.0f}; // No third term for BondBond
-// 		}
+		// Phase 1: Compute geometry
+		AngleGeometry geom = AngleGeometry::compute(positions, indices, pbox);
 
-// 		// Apply forces using geometry basis vectors
-// 		apply_product_forces(indices, geom, fe1, fe_bond, fe2, forces);
+		// Phase 2: Lookup force from tabulated potential
+		const ScalarForceEnergy fe = TabulatedPotential::compute(geom.angle, &tables[i]);
 
-// 		if (get_energy) {
-// 			float total_energy = fe1.energy + fe_bond.energy + fe2.energy;
-// 			float energy_per_particle = total_energy / 4.0f;
-// 			atomic_add(&energies[indices.x], energy_per_particle);
-// 			atomic_add(&energies[indices.y], energy_per_particle);
-// 			atomic_add(&energies[indices.z], energy_per_particle);
-// 			atomic_add(&energies[indices.w], energy_per_particle);
-// 		}
-// 	}
+		// Phase 3: Apply forces
+		const Vector3 force1 = geom.ab.cross(geom.bc) * fe.force_magnitude;
+		const Vector3 force3 = geom.bc.cross(geom.ab) * fe.force_magnitude;
+		const float energy = fe.energy * 0.3333333333f;
 
-//   private:
-// 	/**
-// 	 * @brief Apply forces for BondAngle product potential
-// 	 */
-// 	DEVICE static inline void apply_bond_angle_forces(int4 indices,
-// 													  const ProductPotentialGeometry& geom,
-// 													  const ForceEnergy& fe1,	  // angle 1 force
-// 													  const ForceEnergy& fe_bond, // bond force
-// 													  const ForceEnergy& fe2,	  // angle 2 force
-// 													  DEVICE_PTR(Vector3) forces) {
-// 		// Apply angle 1 forces (i-j-k)
-// 		Vector3 f1_angle1 = geom.angle1.f1_basis * fe1.force_magnitude;
-// 		Vector3 f2_angle1 = geom.angle1.f2_basis * fe1.force_magnitude;
-// 		Vector3 f3_angle1 = geom.angle1.f3_basis * fe1.force_magnitude;
+		atomic_add(&force_energy[indices.x], -force1);
+		atomic_add(&force_energy[indices.y], force1 + force3);
+		atomic_add(&force_energy[indices.z], -force3);
 
-// 		// Apply bond forces (j-k)
-// 		Vector3 f1_bond = -geom.bond.unit_vector * fe_bond.force_magnitude;
-// 		Vector3 f2_bond = geom.bond.unit_vector * fe_bond.force_magnitude;
+		if (get_energy) {
+			atomic_add(&force_energy[indices.x].t, energy);
+			atomic_add(&force_energy[indices.y].t, energy);
+			atomic_add(&force_energy[indices.z].t, energy);
+		}
+	}
+};
 
-// 		// Apply angle 2 forces (j-k-l)
-// 		Vector3 f1_angle2 = geom.angle2.f1_basis * fe2.force_magnitude;
-// 		Vector3 f2_angle2 = geom.angle2.f2_basis * fe2.force_magnitude;
-// 		Vector3 f3_angle2 = geom.angle2.f3_basis * fe2.force_magnitude;
+// ============================================================================
+// DIHEDRAL COMPUTERS
+// ============================================================================
 
-// 		// Combine forces (particles j and k get forces from multiple terms)
-// 		atomic_add(&forces[indices.x], f1_angle1); // i: angle1 only
-// 		atomic_add(&forces[indices.y],
-// 				   f2_angle1 + f1_bond + f1_angle2); // j: angle1 + bond + angle2
-// 		atomic_add(&forces[indices.z],
-// 				   f3_angle1 + f2_bond + f2_angle2); // k: angle1 + bond + angle2
-// 		atomic_add(&forces[indices.w], f3_angle2);	 // l: angle2 only
-// 	}
+/**
+ * @brief Tabulated dihedral force computer
+ */
+struct TabulatedDihedralComputer {
+	// Members
+	DEVICE_PTR(const int4) particle_indices;
+	DEVICE_PTR(Vector3) positions;
+	DEVICE_PTR(Vector3) force_energy;
+	DEVICE_PTR(const TabulatedPotential) tables;
+	const PeriodicBox* pbox;
+	bool get_energy;
+	idx_t num_dihedrals;
 
-// 	/**
-// 	 * @brief Apply forces for AngleAngle product potential
-// 	 */
-// 	DEVICE static inline void apply_angle_angle_forces(int4 indices,
-// 													   const ProductPotentialGeometry& geom,
-// 													   const ForceEnergy& fe1, // angle 1 force
-// 													   const ForceEnergy&,	   // unused
-// 													   const ForceEnergy& fe2, // angle 2 force
-// 													   DEVICE_PTR(Vector3) forces) {
-// 		// Apply angle 1 forces (i-j-k)
-// 		Vector3 f1_angle1 = geom.angle_a.f1_basis * fe1.force_magnitude;
-// 		Vector3 f2_angle1 = geom.angle_a.f2_basis * fe1.force_magnitude;
-// 		Vector3 f3_angle1 = geom.angle_a.f3_basis * fe1.force_magnitude;
+	// Constructor
+	TabulatedDihedralComputer(DEVICE_PTR(const int4) indices,
+							  DEVICE_PTR(Vector3) pos,
+							  DEVICE_PTR(Vector3) fe,
+							  DEVICE_PTR(const TabulatedPotential) tabs,
+							  const PeriodicBox* box,
+							  bool energy,
+							  idx_t n)
+		: particle_indices(indices), positions(pos), force_energy(fe), tables(tabs), pbox(box),
+		  get_energy(energy), num_dihedrals(n) {}
 
-// 		// Apply angle 2 forces (j-k-l)
-// 		Vector3 f1_angle2 = geom.angle_b.f1_basis * fe2.force_magnitude;
-// 		Vector3 f2_angle2 = geom.angle_b.f2_basis * fe2.force_magnitude;
-// 		Vector3 f3_angle2 = geom.angle_b.f3_basis * fe2.force_magnitude;
+	// Kernel operator
+	DEVICE void operator()(idx_t i) const {
+		if (i >= num_dihedrals)
+			return;
 
-// 		// Combine forces
-// 		atomic_add(&forces[indices.x], f1_angle1);			   // i: angle1 only
-// 		atomic_add(&forces[indices.y], f2_angle1 + f1_angle2); // j: angle1 + angle2
-// 		atomic_add(&forces[indices.z], f3_angle1 + f2_angle2); // k: angle1 + angle2
-// 		atomic_add(&forces[indices.w], f3_angle2);			   // l: angle2 only
-// 	}
+		const int4& indices = particle_indices[i];
 
-// 	/**
-// 	 * @brief Apply forces for BondBond product potential
-// 	 */
-// 	DEVICE static inline void apply_bond_bond_forces(int4 indices,
-// 													 const ProductPotentialGeometry& geom,
-// 													 const ForceEnergy& fe1, // bond 1 force
-// 													 const ForceEnergy&,	 // unused
-// 													 const ForceEnergy& fe2, // bond 2 force
-// 													 DEVICE_PTR(Vector3) forces) {
-// 		// Apply bond 1 forces (i-j)
-// 		Vector3 f1_bond1 = -geom.bond_a.unit_vector * fe1.force_magnitude;
-// 		Vector3 f2_bond1 = geom.bond_a.unit_vector * fe1.force_magnitude;
+		// Phase 1: Compute geometry
+		DihedralGeometry geom = DihedralGeometry::compute(positions, indices, pbox);
 
-// 		// Apply bond 2 forces (j-k)
-// 		Vector3 f1_bond2 = -geom.bond_b.unit_vector * fe2.force_magnitude;
-// 		Vector3 f2_bond2 = geom.bond_b.unit_vector * fe2.force_magnitude;
+		// Phase 2: Lookup force from tabulated potential
+		const ScalarForceEnergy fe =
+			TabulatedPotential::compute(geom.dihedral_angle + BD_PI, &tables[i]);
 
-// 		// Combine forces
-// 		atomic_add(&forces[indices.x], f1_bond1);			 // i: bond1 only
-// 		atomic_add(&forces[indices.y], f2_bond1 + f1_bond2); // j: bond1 + bond2
-// 		atomic_add(&forces[indices.z], f2_bond2);			 // k: bond2 only
-// 	}
+		// Phase 3: Apply forces
+		const Vector3 f1 = geom.f1 * fe.force_magnitude;
+		const Vector3 f2 = geom.f2 * fe.force_magnitude;
+		const Vector3 f3 = geom.f3 * fe.force_magnitude;
+		const float energy = fe.energy * 0.25f;
 
-// 	/**
-// 	 * @brief Dispatch to appropriate force application method
-// 	 */
-// 	DEVICE static inline void apply_product_forces(int4 indices,
-// 												   const ProductPotentialGeometry& geom,
-// 												   const ForceEnergy& fe1,
-// 												   const ForceEnergy& fe_bond,
-// 												   const ForceEnergy& fe2,
-// 												   DEVICE_PTR(Vector3) forces) {
-// 		if constexpr (ProductTypeId == 0) { // BondAngle
-// 			apply_bond_angle_forces(indices, geom, fe1, fe_bond, fe2, forces);
-// 		} else if constexpr (ProductTypeId == 1) { // AngleAngle
-// 			apply_angle_angle_forces(indices, geom, fe1, fe_bond, fe2, forces);
-// 		} else if constexpr (ProductTypeId == 2) { // BondBond
-// 			apply_bond_bond_forces(indices, geom, fe1, fe_bond, fe2, forces);
-// 		}
-// 	}
-// };
+		atomic_add(&force_energy[indices.x], -f1);
+		atomic_add(&force_energy[indices.y], f2 - f1);
+		atomic_add(&force_energy[indices.z], f3 - f2);
+		atomic_add(&force_energy[indices.t], -f3);
+
+		if (get_energy) {
+			atomic_add(&force_energy[indices.x].t, energy);
+			atomic_add(&force_energy[indices.y].t, energy);
+			atomic_add(&force_energy[indices.z].t, energy);
+			atomic_add(&force_energy[indices.t].t, energy);
+		}
+	}
+};
+
+// ============================================================================
+// LAUNCH HELPER FUNCTIONS (similar to launch_BD, launch_BAOAB)
+// ============================================================================
+
+/**
+ * @brief Launch tabulated bond force computation
+ */
+inline Event launch_tabulated_bonds(const Resource& resource,
+									DEVICE_PTR(const int2) particle_indices,
+									DEVICE_PTR(Vector3) positions,
+									DEVICE_PTR(Vector3) force_energy,
+									DEVICE_PTR(const TabulatedPotential) tables,
+									const PeriodicBox* pbox,
+									bool get_energy,
+									idx_t num_bonds) {
+	KernelConfig config = KernelConfig::for_1d(num_bonds, resource);
+
+	TabulatedBondComputer
+		computer(particle_indices, positions, force_energy, tables, pbox, get_energy, num_bonds);
+
+	return launch_kernel(resource, config, computer);
+}
+
+/**
+ * @brief Launch tabulated angle force computation
+ */
+inline Event launch_tabulated_angles(const Resource& resource,
+									 DEVICE_PTR(const int3) particle_indices,
+									 DEVICE_PTR(Vector3) positions,
+									 DEVICE_PTR(Vector3) force_energy,
+									 DEVICE_PTR(const TabulatedPotential) tables,
+									 const PeriodicBox* pbox,
+									 bool get_energy,
+									 idx_t num_angles) {
+	KernelConfig config = KernelConfig::for_1d(num_angles, resource);
+
+	TabulatedAngleComputer
+		computer(particle_indices, positions, force_energy, tables, pbox, get_energy, num_angles);
+
+	return launch_kernel(resource, config, computer);
+}
+
+/**
+ * @brief Launch tabulated dihedral force computation
+ */
+inline Event launch_tabulated_dihedrals(const Resource& resource,
+										DEVICE_PTR(const int4) particle_indices,
+										DEVICE_PTR(Vector3) positions,
+										DEVICE_PTR(Vector3) force_energy,
+										DEVICE_PTR(const TabulatedPotential) tables,
+										const PeriodicBox* pbox,
+										bool get_energy,
+										idx_t num_dihedrals) {
+	KernelConfig config = KernelConfig::for_1d(num_dihedrals, resource);
+
+	TabulatedDihedralComputer computer(particle_indices,
+									   positions,
+									   force_energy,
+									   tables,
+									   pbox,
+									   get_energy,
+									   num_dihedrals);
+
+	return launch_kernel(resource, config, computer);
+}
+
+/**
+ * @brief Launch analytical bond force computation (templated by bond type)
+ */
+template<int BondTypeId>
+inline Event launch_analytical_bonds(const Resource& resource,
+									 DEVICE_PTR(const int2) particle_indices,
+									 DEVICE_PTR(Vector3) positions,
+									 DEVICE_PTR(Vector3) force_energy,
+									 DEVICE_PTR(const float) params,
+									 const PeriodicBox* pbox,
+									 bool get_energy,
+									 idx_t num_bonds) {
+	KernelConfig config = KernelConfig::for_1d(num_bonds, resource);
+
+	AnalyticalBondComputer<BondTypeId>
+		computer(particle_indices, positions, force_energy, params, pbox, get_energy, num_bonds);
+
+	return launch_kernel(resource, config, computer);
+}
 
 } // namespace ARBD
+
+#ifdef USE_SYCL
+#include <sycl/sycl.hpp>
+template<int T>
+struct sycl::is_device_copyable<ARBD::AnalyticalBondComputer<T>> : std::true_type {};
+
+template<>
+struct sycl::is_device_copyable<ARBD::TabulatedBondComputer> : std::true_type {};
+
+template<>
+struct sycl::is_device_copyable<ARBD::TabulatedAngleComputer> : std::true_type {};
+
+template<>
+struct sycl::is_device_copyable<ARBD::TabulatedDihedralComputer> : std::true_type {};
+#endif

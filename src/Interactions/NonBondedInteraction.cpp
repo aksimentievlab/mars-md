@@ -3,11 +3,11 @@
 
 namespace ARBD {
 
-void NonBondedInteractions::prepareDeviceData() {
+void NonBondedInteractions::prepare_device_data() {
 	// TODO: Implement device data preparation for nonbonded interactions
 	// This should transfer interaction parameters to device buffers
 	// For now, this is a placeholder implementation
-	LOGINFO("NonBondedInteractions: prepareDeviceData() called (placeholder implementation)");
+	LOGINFO("NonBondedInteractions: prepare_device_data() called (placeholder implementation)");
 }
 
 } // namespace ARBD

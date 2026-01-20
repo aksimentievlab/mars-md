@@ -18,11 +18,11 @@ namespace ARBD {
 template<typename T>
 struct BaseGridView {
 	// POD members only - safe for kernel parameters
-	const T* data;				 ///< Raw pointer to device grid data
-	Vector3_t<T> origin;		 ///< Grid origin in world space
-	Matrix3_t<T> basis;			 ///< Basis vectors (grid spacing)
-	Matrix3_t<T> basis_inv;		 ///< Cached inverse basis
-	Vector3_t<idx_t> dimensions; ///< Grid dimensions (nx, ny, nz)
+	CONSTANT_PTR(T) __restrict__ data; ///< Raw pointer to device grid data
+	Vector3_t<T> origin;			   ///< Grid origin in world space
+	Matrix3_t<T> basis;				   ///< Basis vectors (grid spacing)
+	Matrix3_t<T> basis_inv;			   ///< Cached inverse basis
+	Vector3_t<idx_t> dimensions;	   ///< Grid dimensions (nx, ny, nz)
 	int grid_id;
 	int boundary_condition;
 	// 1- Dirichlet, 2- Neumann, 3- Periodic
@@ -190,7 +190,7 @@ struct ScaleGrid {
  */
 template<typename T>
 struct InterpolateGridPoint {
-	T operator()(const T* grid_values,
+	T operator()(CONSTANT_PTR(T) __restrict__ grid_values,
 				 const Vector3_t<T>& world_pos,
 				 const Vector3_t<T>& origin,
 				 const Matrix3_t<T>& basis_inv,
@@ -258,7 +258,7 @@ struct InterpolateGridPoint {
  * @brief Device-safe interpolation function (CUDA/SYCL compatible)
  */
 template<typename T>
-HOST DEVICE T interpolate_grid_point(const T* grid_values,
+HOST DEVICE T interpolate_grid_point(CONSTANT_PTR(T) __restrict__ grid_values,
 									 const Vector3_t<T>& world_pos,
 									 const Vector3_t<T>& origin,
 									 const Matrix3_t<T>& basis_inv,
@@ -325,7 +325,7 @@ HOST DEVICE T interpolate_grid_point(const T* grid_values,
  * @brief Get value at nearest grid point (device-safe)
  */
 template<typename T>
-HOST DEVICE T get_value_nearest(const T* grid_values,
+HOST DEVICE T get_value_nearest(CONSTANT_PTR(T) __restrict__ grid_values,
 								const Vector3_t<T>& world_pos,
 								const Vector3_t<T>& origin,
 								const Matrix3_t<T>& basis_inv,
@@ -353,7 +353,7 @@ HOST DEVICE T get_value_nearest(const T* grid_values,
  * @brief Compute gradient at a point using finite differences (device-safe)
  */
 template<typename T>
-HOST DEVICE Vector3_t<T> compute_gradient(const T* grid_values,
+HOST DEVICE Vector3_t<T> compute_gradient(CONSTANT_PTR(T) __restrict__ grid_values,
 										  const Vector3_t<T>& world_pos,
 										  const Vector3_t<T>& origin,
 										  const Matrix3_t<T>& basis,
@@ -407,7 +407,7 @@ HOST DEVICE inline idx_t wrap_index(int index, idx_t size) {
  * @brief Device-safe neighbor list extraction (works with raw pointers)
  */
 template<typename T>
-HOST DEVICE void get_neighbor_list_from_grid(const T* grid_values,
+HOST DEVICE void get_neighbor_list_from_grid(CONSTANT_PTR(T) __restrict__ grid_values,
 											 idx_t ix,
 											 idx_t iy,
 											 idx_t iz,
@@ -466,7 +466,7 @@ HOST DEVICE void get_neighbor_list_from_grid(const T* grid_values,
  * @brief Device-safe single neighbor access (works with raw pointers)
  */
 template<typename T>
-HOST DEVICE T get_neighbor_from_grid(const T* grid_values,
+HOST DEVICE T get_neighbor_from_grid(CONSTANT_PTR(T) __restrict__ grid_values,
 									 idx_t ix,
 									 idx_t iy,
 									 idx_t iz,

@@ -2,41 +2,40 @@
 #include "Header.h"
 #include "Types/Types.h"
 #include "Types/Vector3.h"
-
 namespace ARBD {
 struct ParticleView {
-	int* id;
-	int* type_id;
-	Vector3* pos;
-	Vector3* mom;
-	Vector3* ForceEnergy;
-	Vector3* orient;
-	uint32_t* flags; // Combined flags
+	DEVICE_PTR(int) __restrict__ id;
+	DEVICE_PTR(int) __restrict__ type_id;
+	DEVICE_PTR(Vector3) __restrict__ pos;
+	DEVICE_PTR(Vector3) __restrict__ mom;
+	DEVICE_PTR(Vector3) __restrict__ ForceEnergy;
+	DEVICE_PTR(Vector3) __restrict__ orient;
+	DEVICE_PTR(uint32_t) __restrict__ flags; // Combined flags
 };
 
 struct ConstParticleView {
-	const int* id;
-	const int* type_id;
-	const Vector3* pos;
-	const Vector3* mom;
-	const Vector3* ForceEnergy;
-	const Vector3* orient;
-	const uint32_t* flags;
+	CONSTANT_PTR(int) __restrict__ id;
+	CONSTANT_PTR(int) __restrict__ type_id;
+	CONSTANT_PTR(Vector3) __restrict__ pos;
+	CONSTANT_PTR(Vector3) __restrict__ mom;
+	CONSTANT_PTR(Vector3) __restrict__ ForceEnergy;
+	CONSTANT_PTR(Vector3) __restrict__ orient;
+	CONSTANT_PTR(uint32_t) __restrict__ flags;
 };
 
 struct alignas(16) ParticleTypeView {
-	float* mass;
-	float* charge;
-	float* radius;
-	float* eps;
-	Vector3* transDamping;
-	float* mu;
-	float* pmf_scale;
-	float* pmf_scale_slope;
-	float* pmf_smd_freq;
-	int* pmf_grid_id;
-	int* diffusion_grid_id;
-	int3* force_grid_id;
+	CONSTANT_PTR(float) __restrict__ mass;
+	CONSTANT_PTR(float) __restrict__ charge;
+	CONSTANT_PTR(float) __restrict__ radius;
+	CONSTANT_PTR(float) __restrict__ eps;
+	CONSTANT_PTR(Vector3) __restrict__ diffusion;
+	CONSTANT_PTR(float) __restrict__ mu;
+	CONSTANT_PTR(float) __restrict__ pmf_scale;
+	CONSTANT_PTR(float) __restrict__ pmf_scale_slope;
+	CONSTANT_PTR(float) __restrict__ pmf_smd_freq;
+	CONSTANT_PTR(int) __restrict__ pmf_grid_id;
+	CONSTANT_PTR(int) __restrict__ diffusion_grid_id;
+	CONSTANT_PTR(int3) __restrict__ force_grid_id;
 };
 } // namespace ARBD
 

@@ -23,21 +23,23 @@ namespace ARBD {
 
 template<typename T>
 Event launch_BD(const Resource& resource,
-				ParticleView& particle_view,
-				const ParticleTypeView* particle_types,
+				ParticleView particle_view,
+				const ParticleTypeView particle_types,
 				float timestep,
+				size_t current_step,
 				float kT,
-				size_t num_particles,
+				idx_t num_particles,
 				const Vector3& box_size,
 				uint64_t base_seed,
 				uint32_t base_ctr) {
 	KernelConfig config = KernelConfig::for_1d(num_particles, resource);
 	BDIntegrate<T> bd_integrate(particle_view,
 								particle_types,
+								box_size,
 								timestep,
+								current_step,
 								kT,
 								num_particles,
-								box_size,
 								base_seed,
 								base_ctr);
 	Event evt = launch_kernel(resource, config, bd_integrate);
@@ -46,12 +48,13 @@ Event launch_BD(const Resource& resource,
 // Launch function for different backends
 template<typename T>
 Event launch_BAOAB(const Resource& resource,
-				   ParticleView& particle_view,
-				   const ParticleTypeView* particle_types,
-				   const Vector3& box_size,
+				   ParticleView particle_view,
+				   const ParticleTypeView particle_types,
+				   const Vector3 box_size,
 				   float timestep,
+				   size_t current_step,
 				   float kT,
-				   size_t num_particles,
+				   idx_t num_particles,
 				   uint64_t base_seed,
 				   uint32_t base_ctr) {
 	KernelConfig config = KernelConfig::for_1d(num_particles, resource);
@@ -59,6 +62,7 @@ Event launch_BAOAB(const Resource& resource,
 									  particle_types,
 									  box_size,
 									  timestep,
+									  current_step,
 									  kT,
 									  num_particles,
 									  base_seed,

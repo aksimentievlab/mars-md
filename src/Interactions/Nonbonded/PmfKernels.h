@@ -68,3 +68,8 @@ struct ComputePMFKernel {
 	}
 };
 } // namespace ARBD
+#ifdef USE_SYCL
+#include <sycl/sycl.hpp>
+template<>
+struct sycl::is_device_copyable<ARBD::ComputePMFKernel> : std::true_type {};
+#endif

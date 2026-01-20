@@ -20,7 +20,7 @@ struct CalcDistance {
 	float distance;		 // distance between two particles
 	Vector3 unit_vector; // unit vector in the direction of the vector
 
-	KERNEL_FUNC static CalcDistance
+	DEVICE static CalcDistance
 	compute(const Vector3* positions, const int2& particle_indices, const PeriodicBox* pbox) {
 		CalcDistance dist;
 		dist.r_ij = pbox->wrapDiff(positions[particle_indices.y] - positions[particle_indices.x]);
@@ -58,3 +58,10 @@ class Register_Potential {
 };
 
 } // namespace ARBD
+#ifdef USE_SYCL
+#include <sycl/sycl.hpp>
+template<>
+struct sycl::is_device_copyable<ARBD::ScalarForceEnergy> : std::true_type {};
+template<>
+struct sycl::is_device_copyable<ARBD::CalcDistance> : std::true_type {};
+#endif

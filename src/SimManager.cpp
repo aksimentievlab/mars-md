@@ -1,5 +1,6 @@
 #include "SimManager.h"
 #include "System/PatchManager.h"
+#include <random>
 
 namespace ARBD {
 
@@ -79,7 +80,7 @@ void SimManager::init() {
 	LOGINFO("SimManager: Grids transferred to all resources");
 	sys_.get_tables_registry().build_device_arrays();
 	LOGINFO("SimManager: Tables transferred to all resources");
-	sys_.get_nonbonded_interactions().prepareDeviceData();
+	sys_.get_nonbonded_interactions().prepare_device_data();
 	LOGINFO("SimManager: Nonbonded interactions transferred to all resources");
 	sys_.assign_particle_type_ids();
 	LOGINFO("SimManager: Particle type IDs assigned");
@@ -362,7 +363,7 @@ void SimManager::generate_initial_particles(std::vector<Vector3>& positions,
 	const Vector3 box_size = sys_.get_box_size();
 
 	// TODO: Get number of particles from configuration
-	const size_t num_particles = 1000; // Placeholder
+	const size_t num_particles = sys_state_.get_num_particles();
 
 	positions.reserve(num_particles);
 	types.reserve(num_particles);
@@ -370,15 +371,72 @@ void SimManager::generate_initial_particles(std::vector<Vector3>& positions,
 	// Simple random placement for testing
 	// TODO: Replace with proper initial condition generation
 	for (size_t i = 0; i < num_particles; ++i) {
-		positions.emplace_back(box_size.x * (float)rand() / RAND_MAX,
-							   box_size.y * (float)rand() / RAND_MAX,
-							   box_size.z * (float)rand() / RAND_MAX);
+		positions.emplace_back(box_size.x * (float)rand() / float(RAND_MAX),
+							   box_size.y * (float)rand() / float(RAND_MAX),
+							   box_size.z * (float)rand() / float(RAND_MAX));
 		types.push_back(0); // All type 0 for now
 	}
 
 	LOGINFO("SimManager: Generated {} particles", num_particles);
 }
 
+/**
+ * @brief Generate initial particle momentum and types according to Boltzmann distribution
+ * @todo Make sure this is correct
+ * @param v_com
+ * @note V1 Configuration::Boltzmann(const Vector3& v_com, int N)
+ */
+void SimManager::generate_initial_momentum(const Vector3& v_com) {
+	const Temperature& temperature = sys_.get_temperature_struct();
+	float kT = 1.0f;
+	if (temperature.format == Temperature::Format::Grid) {
+		throw Exception(ExceptionType::RuntimeError,
+						SourceLocation(),
+						"Grid temperature not supported for initial momentum generation");
+	} else {
+		kT = temperature.kT; // Fix: don't redeclare, just assign
+	}
+
+	const size_t num_particles = sys_state_.get_num_particles();
+	const auto& particle_types = sys_.get_particle_types();
+	std::vector<Vector3> momentum(num_particles);
+
+	// Constants for unit conversion
+	// SQRT_CAL_TO_JOULE = 2.046167337e4 (from Constants.h)
+
+	// Initialize random number generator for host-side generation
+	static std::random_device rd;
+	static std::mt19937 gen(rd());
+	std::normal_distribution<double> gaussian(0.0, 1.0);
+
+	// Generate momenta from Maxwell-Boltzmann distribution
+	// p = sqrt(kT * m) * random_gaussian
+	Vector3 total_momentum(0.0, 0.0, 0.0);
+
+	for (size_t i = 0; i < num_particles; ++i) {
+		int typ = particle_types[i].id;
+		double M = particle_types[typ].mass;
+		double sigma = sqrt(kT * M) * constants::SQRT_CAL_TO_JOULE;
+
+		// Generate 3D Gaussian random vector
+		Vector3 tmp(gaussian(gen) * sigma, gaussian(gen) * sigma, gaussian(gen) * sigma);
+
+		momentum[i] = tmp;
+		total_momentum += tmp;
+	}
+
+	// Remove center of mass momentum to ensure zero net momentum
+	if (num_particles > 1) {
+		Vector3 p_com = total_momentum / static_cast<double>(num_particles);
+		for (size_t i = 0; i < num_particles; ++i) {
+			int typ = particle_types[i].id;
+			double M = particle_types[typ].mass;
+			momentum[i] = momentum[i] - p_com + M * v_com;
+		}
+	}
+
+	LOGINFO("SimManager: Generated initial momenta for {} particles at kT={}", num_particles, kT);
+}
 void SimManager::load_restart_data(const std::string& filename) {
 	// TODO: Implement restart file loading
 	LOGINFO("SimManager: Restart file loading not yet implemented");

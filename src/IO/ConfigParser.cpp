@@ -409,25 +409,23 @@ void ConfigParser::get_elements(const Reader& reader) {
 					LOGDEBUG("num: {}", v);
 					ptype.num = std::stoi(v);
 				} else if (k == "diffusion") {
-					ptype.diffusion = std::stof(v);
-					LOGDEBUG("diffusion: {}", v);
-				} else if (check_key("transDamping", "trans_damping")) {
-					LOGDEBUG("transDamping/trans_damping: {}", v);
 					auto toks = tokenize(v);
 					if (toks.size() == 3) {
-						ptype.transDamping.x = std::stof(toks[0]);
-						ptype.transDamping.y = std::stof(toks[1]);
-						ptype.transDamping.z = std::stof(toks[2]);
+						ptype.diffusion.x = std::stof(toks[0]);
+						ptype.diffusion.y = std::stof(toks[1]);
+						ptype.diffusion.z = std::stof(toks[2]);
 					} else if (toks.size() == 1) {
-						ptype.transDamping.x = std::stof(toks[0]);
-						ptype.transDamping.y = std::stof(toks[0]);
-						ptype.transDamping.z = std::stof(toks[0]);
+						ptype.diffusion.x = std::stof(toks[0]);
+						ptype.diffusion.y = std::stof(toks[0]);
+						ptype.diffusion.z = std::stof(toks[0]);
 					} else {
-						LOGWARN("Invalid transDamping/trans_damping format: {}", v);
-						ptype.transDamping.x = 0.0f;
-						ptype.transDamping.y = 0.0f;
-						ptype.transDamping.z = 0.0f;
+						LOGWARN("Invalid diffusion format: {}", v);
+						ptype.diffusion = Vector3(0.0f, 0.0f, 0.0f);
 					}
+					LOGDEBUG("diffusion: {}, {}, {}",
+							 ptype.diffusion.x,
+							 ptype.diffusion.y,
+							 ptype.diffusion.z);
 				} else if (k == "mass") {
 					LOGDEBUG("mass: {}", v);
 					ptype.mass = std::stof(v);

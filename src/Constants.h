@@ -26,6 +26,14 @@ constexpr float COULOMB = 332.0636f;
 constexpr float BOLTZMANN = 0.001987191f;
 constexpr float PRESSUREFACTOR = 6.95E4f;
 
+// 1 kcal_IT = 4.1868 Joules.
+// Scaling for ns timestep and amu mass units.
+constexpr float FORCE_CONVERSION_FACTOR = 4.18679994e4;
+
+// Square root of the Joule-Calorie conversion (sqrt(4.1868))
+// Required for scaling sqrt(kT/m) noise terms.
+constexpr float SQRT_CAL_TO_JOULE = 2.046167337;
+
 // Simulation constants
 constexpr float PDBVELFACTOR = 20.45482706f;
 constexpr float PDBVELINVFACTOR = 1.0f / PDBVELFACTOR;

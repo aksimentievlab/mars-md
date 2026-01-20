@@ -161,7 +161,7 @@ class DeviceParticleTypes {
 		charge_ = DeviceBuffer<float>(types.size(), res);
 		radius_ = DeviceBuffer<float>(types.size(), res);
 		eps_ = DeviceBuffer<float>(types.size(), res);
-		transDamping_ = DeviceBuffer<Vector3>(types.size(), res);
+		diffusion_ = DeviceBuffer<Vector3>(types.size(), res);
 		mu_ = DeviceBuffer<float>(types.size(), res);
 		pmf_scale_ = DeviceBuffer<float>(types.size(), res);
 		pmf_scale_slope_ = DeviceBuffer<float>(types.size(), res);
@@ -169,14 +169,15 @@ class DeviceParticleTypes {
 		pmf_grid_id_ = DeviceBuffer<int>(types.size(), res);
 		diffusion_grid_id_ = DeviceBuffer<int>(types.size(), res);
 		force_grid_id_ = DeviceBuffer<int3>(types.size(), res);
-	};
+		copy_from_host(types);
+	}
 
 	void copy_from_host(const std::vector<ParticleType>& types) {
 		std::vector<float> mass(types.size());
 		std::vector<float> charge(types.size());
 		std::vector<float> radius(types.size());
 		std::vector<float> eps(types.size());
-		std::vector<Vector3> transDamping(types.size());
+		std::vector<Vector3> diffusion(types.size());
 		std::vector<float> mu(types.size());
 		std::vector<float> pmf_scale(types.size());
 		std::vector<float> pmf_scale_slope(types.size());
@@ -189,7 +190,7 @@ class DeviceParticleTypes {
 			charge[i] = types[i].charge;
 			radius[i] = types[i].radius;
 			eps[i] = types[i].eps;
-			transDamping[i] = types[i].transDamping;
+			diffusion[i] = types[i].diffusion;
 			mu[i] = types[i].mu;
 			pmf_scale[i] = types[i].pmf_scale;
 			pmf_scale_slope[i] = types[i].pmf_scale_slope;
@@ -202,7 +203,7 @@ class DeviceParticleTypes {
 		charge_.copy_from_host(charge.data(), types.size());
 		radius_.copy_from_host(radius.data(), types.size());
 		eps_.copy_from_host(eps.data(), types.size());
-		transDamping_.copy_from_host(transDamping.data(), types.size());
+		diffusion_.copy_from_host(diffusion.data(), types.size());
 		mu_.copy_from_host(mu.data(), types.size());
 		pmf_scale_.copy_from_host(pmf_scale.data(), types.size());
 		pmf_scale_slope_.copy_from_host(pmf_scale_slope.data(), types.size());
@@ -220,8 +221,8 @@ class DeviceParticleTypes {
 	DeviceBuffer<float>& radius() {
 		return radius_;
 	}
-	DeviceBuffer<Vector3>& transDamping() {
-		return transDamping_;
+	DeviceBuffer<Vector3>& diffusion() {
+		return diffusion_;
 	}
 	DeviceBuffer<float>& mu() {
 		return mu_;
@@ -251,7 +252,7 @@ class DeviceParticleTypes {
 				charge_.data(),
 				radius_.data(),
 				eps_.data(),
-				transDamping_.data(),
+				diffusion_.data(),
 				mu_.data(),
 				pmf_scale_.data(),
 				pmf_scale_slope_.data(),
@@ -266,7 +267,7 @@ class DeviceParticleTypes {
 				const_cast<float*>(charge_.data()),
 				const_cast<float*>(radius_.data()),
 				const_cast<float*>(eps_.data()),
-				const_cast<Vector3*>(transDamping_.data()),
+				const_cast<Vector3*>(diffusion_.data()),
 				const_cast<float*>(mu_.data()),
 				const_cast<float*>(pmf_scale_.data()),
 				const_cast<float*>(pmf_scale_slope_.data()),
@@ -281,7 +282,7 @@ class DeviceParticleTypes {
 	DeviceBuffer<float> charge_;
 	DeviceBuffer<float> radius_;
 	DeviceBuffer<float> eps_;
-	DeviceBuffer<Vector3> transDamping_;
+	DeviceBuffer<Vector3> diffusion_;
 	DeviceBuffer<float> mu_;
 	DeviceBuffer<float> pmf_scale_;
 	DeviceBuffer<float> pmf_scale_slope_;

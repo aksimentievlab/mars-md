@@ -10,12 +10,10 @@ list(APPEND HOST_DEVICE_HEADERS
     Interactions/Bonded/BondGeometry.h
     Interactions/Bonded/BondComputer.h
     Interactions/Bonded/Analytical.h
-    Interactions/Bonded/SMDBond.h
     Interactions/Bonded/ProductPotentialMigration.h
     Interactions/Nonbonded/PmfKernels.h
     Interactions/Nonbonded/Pairwise.h
     Interactions/Nonbonded/Columb.h
-    Interactions/Nonbonded/AnalyticalLongRange.h
     Interactions/TabulatedPotential.h
     Interactions/Interactions.h
     Interactions/Exclusion.h

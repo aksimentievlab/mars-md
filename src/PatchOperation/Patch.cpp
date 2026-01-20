@@ -13,8 +13,6 @@
 #include "Interactions/Nonbonded/PmfKernels.h"
 #include "PatchOperation/Integrator.h"
 #include "PatchOperation/Pairlist.h"
-#include "Random/philox.h"
-
 namespace ARBD {
 
 //================================================================================
@@ -118,12 +116,10 @@ Event Patch::integrate_motion(float dt,
 	// Assuming max 1M particles per patch, we use step * 1000000
 	uint32_t base_ctr = static_cast<uint32_t>(step * 1000000ULL);
 
-	// Get particle type view if available (create before switch to avoid temporary address issue)
-	ParticleTypeView particle_type_view_storage;
-	const ParticleTypeView* particle_type_view = nullptr;
+	// Get particle type view if available
+	ParticleTypeView particle_type_view;
 	if (particle_types_) {
-		particle_type_view_storage = particle_types_->view();
-		particle_type_view = &particle_type_view_storage;
+		particle_type_view = particle_types_->view();
 	}
 	Event evt;
 
@@ -140,6 +136,7 @@ Event Patch::integrate_motion(float dt,
 							   particle_view,
 							   particle_type_view,
 							   dt,
+							   step,
 							   kT,
 							   particle_count_,
 							   box_size,
@@ -159,6 +156,7 @@ Event Patch::integrate_motion(float dt,
 								  particle_type_view,
 								  box_size,
 								  dt,
+								  step,
 								  kT,
 								  particle_count_,
 								  base_seed,

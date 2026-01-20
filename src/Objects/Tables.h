@@ -89,6 +89,7 @@ struct Table {
 };
 
 class TablesRegistry {
+
   public:
 	TablesRegistry() = default;
 
@@ -220,6 +221,37 @@ class TablesRegistry {
 		}
 		build_device_arrays_impl(*resources_);
 	}
+	const DeviceBuffer<arbd_real>& get_device_bond_buffer(size_t resource_idx,
+														  size_t table_idx) const {
+		return device_tabulated_bond_y_buffers_[resource_idx][table_idx];
+	}
+
+	const DeviceBuffer<arbd_real>& get_device_angle_buffer(size_t resource_idx,
+														   size_t table_idx) const {
+		return device_tabulated_angle_y_buffers_[resource_idx][table_idx];
+	}
+
+	const DeviceBuffer<arbd_real>& get_device_dihedral_buffer(size_t resource_idx,
+															  size_t table_idx) const {
+		return device_tabulated_dihedral_y_buffers_[resource_idx][table_idx];
+	}
+	const DeviceBuffer<arbd_real>& get_device_nonbonded_buffer(size_t resource_idx,
+															   size_t table_idx) const {
+		return device_tabulated_nonbonded_y_buffers_[resource_idx][table_idx];
+	}
+
+	const std::vector<Table>& get_bond_functions() const {
+		return bond_functions_;
+	}
+	const std::vector<Table>& get_angle_functions() const {
+		return angle_functions_;
+	}
+	const std::vector<Table>& get_dihedral_functions() const {
+		return dihedral_functions_;
+	}
+	const std::vector<Table>& get_nonbonded_functions() const {
+		return nonbonded_functions_;
+	}
 
   private:
 	void build_device_arrays_impl(const std::vector<Resource>& resources) {
@@ -229,16 +261,16 @@ class TablesRegistry {
 				resources.size());
 
 		// Clear existing device data
-		device_bond_y_buffers_.clear();
-		device_angle_y_buffers_.clear();
-		device_dihedral_y_buffers_.clear();
-		device_nonbonded_y_buffers_.clear();
+		device_tabulated_bond_y_buffers_.clear();
+		device_tabulated_angle_y_buffers_.clear();
+		device_tabulated_dihedral_y_buffers_.clear();
+		device_tabulated_nonbonded_y_buffers_.clear();
 
 		// Resize per-resource vectors
-		device_bond_y_buffers_.resize(resources.size());
-		device_angle_y_buffers_.resize(resources.size());
-		device_dihedral_y_buffers_.resize(resources.size());
-		device_nonbonded_y_buffers_.resize(resources.size());
+		device_tabulated_bond_y_buffers_.resize(resources.size());
+		device_tabulated_angle_y_buffers_.resize(resources.size());
+		device_tabulated_dihedral_y_buffers_.resize(resources.size());
+		device_tabulated_nonbonded_y_buffers_.resize(resources.size());
 
 		// Build device arrays for each resource
 		for (size_t res_idx = 0; res_idx < resources.size(); ++res_idx) {
@@ -252,9 +284,10 @@ class TablesRegistry {
 				if (!table.X.empty() && !table.Y.empty()) {
 					// Only transfer Y values for uniform step tables (X can be calculated
 					// on-device)
-					device_bond_y_buffers_[res_idx].emplace_back(table.Y.size(), resource);
-					device_bond_y_buffers_[res_idx][i].copy_from_host(table.Y.data(),
-																	  table.Y.size());
+					device_tabulated_bond_y_buffers_[res_idx].emplace_back(table.Y.size(),
+																		   resource);
+					device_tabulated_bond_y_buffers_[res_idx][i].copy_from_host(table.Y.data(),
+																				table.Y.size());
 
 					// X values not needed on device for uniform step tables
 					// TabulatedPotential uses step_inv and start to calculate X on-the-fly
@@ -266,9 +299,10 @@ class TablesRegistry {
 				const auto& table = angle_functions_[i];
 				if (!table.X.empty() && !table.Y.empty()) {
 					// Only transfer Y values for uniform step tables
-					device_angle_y_buffers_[res_idx].emplace_back(table.Y.size(), resource);
-					device_angle_y_buffers_[res_idx][i].copy_from_host(table.Y.data(),
-																	   table.Y.size());
+					device_tabulated_angle_y_buffers_[res_idx].emplace_back(table.Y.size(),
+																			resource);
+					device_tabulated_angle_y_buffers_[res_idx][i].copy_from_host(table.Y.data(),
+																				 table.Y.size());
 				}
 			}
 
@@ -277,9 +311,10 @@ class TablesRegistry {
 				const auto& table = dihedral_functions_[i];
 				if (!table.X.empty() && !table.Y.empty()) {
 					// Only transfer Y values for uniform step tables
-					device_dihedral_y_buffers_[res_idx].emplace_back(table.Y.size(), resource);
-					device_dihedral_y_buffers_[res_idx][i].copy_from_host(table.Y.data(),
-																		  table.Y.size());
+					device_tabulated_dihedral_y_buffers_[res_idx].emplace_back(table.Y.size(),
+																			   resource);
+					device_tabulated_dihedral_y_buffers_[res_idx][i].copy_from_host(table.Y.data(),
+																					table.Y.size());
 				}
 			}
 
@@ -288,9 +323,11 @@ class TablesRegistry {
 				const auto& table = nonbonded_functions_[i];
 				if (!table.X.empty() && !table.Y.empty()) {
 					// Only transfer Y values for uniform step tables
-					device_nonbonded_y_buffers_[res_idx].emplace_back(table.Y.size(), resource);
-					device_nonbonded_y_buffers_[res_idx][i].copy_from_host(table.Y.data(),
-																		   table.Y.size());
+					device_tabulated_nonbonded_y_buffers_[res_idx].emplace_back(table.Y.size(),
+																				resource);
+					device_tabulated_nonbonded_y_buffers_[res_idx][i].copy_from_host(
+						table.Y.data(),
+						table.Y.size());
 				}
 			}
 		}
@@ -310,9 +347,9 @@ class TablesRegistry {
 
 	// Device buffers per resource: [resource_idx][table_idx] = buffer
 	// Only Y values stored on device - X values calculated from step_inv and start
-	std::vector<std::vector<DeviceBuffer<arbd_real>>> device_bond_y_buffers_;
-	std::vector<std::vector<DeviceBuffer<arbd_real>>> device_angle_y_buffers_;
-	std::vector<std::vector<DeviceBuffer<arbd_real>>> device_dihedral_y_buffers_;
-	std::vector<std::vector<DeviceBuffer<arbd_real>>> device_nonbonded_y_buffers_;
+	std::vector<std::vector<DeviceBuffer<arbd_real>>> device_tabulated_bond_y_buffers_;
+	std::vector<std::vector<DeviceBuffer<arbd_real>>> device_tabulated_angle_y_buffers_;
+	std::vector<std::vector<DeviceBuffer<arbd_real>>> device_tabulated_dihedral_y_buffers_;
+	std::vector<std::vector<DeviceBuffer<arbd_real>>> device_tabulated_nonbonded_y_buffers_;
 };
 } // namespace ARBD

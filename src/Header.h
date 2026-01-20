@@ -185,6 +185,14 @@ using threadgroup_ptr = threadgroup T*;
 #endif
 #endif
 
+#if defined(__METAL_VERSION__)
+#ifndef __restrict__
+#define __restrict__ __restrict
+#endif
+#elif !defined(__restrict__)
+#define __restrict__
+#endif
+
 constexpr inline short NUM_QUEUES = 4;
 
 /**

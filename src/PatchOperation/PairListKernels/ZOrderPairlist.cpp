@@ -55,14 +55,16 @@ void ZOrderPairlist::build_pairlist(const DeviceBuffer<Vector3>& positions,
 	// Step 2: Sort particles by Morton code
 	sorter_.sort_particles(positions, num_particles, box_min, box_max);
 	LOGTRACE("Sorted particles by Morton code");
-
+	resource_.synchronize_streams();
 	// Step 3: Reorder positions for cache-friendly access
 	sorter_.reorder_data(positions, sorted_positions_, num_particles);
 	LOGTRACE("Reordered positions for cache-friendly access");
+	resource_.synchronize_streams();
 	// Step 4: Find neighbors using sorted order
 	reset_pair_count();
 	find_neighbors_zorder(num_particles);
 	LOGTRACE("Found neighbors using sorted order");
+	resource_.synchronize_streams();
 	// Step 5: Update internal state
 	update_state(num_particles, cutoff);
 	LOGTRACE("Updated internal state");
@@ -122,7 +124,8 @@ void ZOrderPairlist::find_neighbors_zorder(size_t num_particles) {
 	// For now, the kernel uses a fixed range of 64
 
 	KernelConfig config = KernelConfig::for_1d(num_particles, resource_);
-	launch_kernel(resource_, config, kernel);
+	Event launch_event = launch_kernel(resource_, config, kernel);
+	launch_event.wait();
 }
 
 void ZOrderPairlist::get_bounding_box(const DeviceBuffer<Vector3>& positions,

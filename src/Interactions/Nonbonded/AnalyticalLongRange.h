@@ -14,7 +14,7 @@
 #include "Objects/DeviceParticle.h"
 #include "SimParam.h"
 
-#include "Types/BaseGrid.h"
+#include "Types/BaseGridDevice.h"
 #include <complex>
 #include <memory>
 #include <string>
@@ -252,12 +252,9 @@ class CutoffAMRElectrostatics : public LongRangeElectrostatics {
 	void deposit_particle_to_amr(const Vector3& position, float contribution) {
 		// Find appropriate AMR level and deposit particle
 		for (auto& grid : particle_count_grids_) {
-			if (grid->is_in_bounds(position)) {
-				Vector3 grid_pos = grid->transform_to_grid(position);
-				size_t ix = static_cast<size_t>(grid_pos.x);
-				size_t iy = static_cast<size_t>(grid_pos.y);
-				size_t iz = static_cast<size_t>(grid_pos.z);
-				size_t idx = grid->index(ix, iy, iz);
+			if (grid->in_bounds(position)) {
+				Vector3 grid_pos = grid->to_grid(position);
+				idx_t idx = grid->index(grid_pos);
 				(*grid)[idx] += static_cast<int>(contribution);
 			}
 		}

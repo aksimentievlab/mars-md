@@ -184,3 +184,12 @@ struct ProductPotentialGeometry {
 	}
 };
 } // namespace ARBD
+#ifdef USE_SYCL
+#include <sycl/sycl.hpp>
+template<>
+struct sycl::is_device_copyable<ARBD::ProductPotentialGeometry> : std::true_type {};
+template<>
+struct sycl::is_device_copyable<ARBD::AngleGeometry> : std::true_type {};
+template<>
+struct sycl::is_device_copyable<ARBD::DihedralGeometry> : std::true_type {};
+#endif
