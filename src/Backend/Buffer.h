@@ -1,15 +1,5 @@
 #pragma once
 
-#if defined(__METAL_VERSION__)
-// Metal Shading Language uses the standard C99 'restrict'
-#define __restrict__ restrict
-#elif defined(__CUDACC__) || defined(__GNUC__) || defined(__clang__) || defined(_MSC_VER)
-#define __restrict__ __restrict__
-#else
-// Fallback for other compilers: define it as nothing to ensure compilation
-#define __restrict__
-#endif
-
 #ifndef __METAL_VERSION__
 #include <algorithm>
 #include <cstring>

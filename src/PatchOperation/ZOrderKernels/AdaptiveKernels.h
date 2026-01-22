@@ -41,7 +41,7 @@ struct DisplacementKernel {
 	float* max_displacement; // Single value reduction result
 	size_t num_particles;
 
-	HOST DEVICE void operator()(idx_t i) const {
+	KERNEL_FUNC void operator()(idx_t i) const {
 		if (i >= num_particles)
 			return;
 
@@ -90,7 +90,7 @@ struct MortonValidationKernel {
 	uint32_t* invalid_count;
 	size_t num_particles;
 
-	HOST DEVICE void operator()(idx_t i) const {
+	KERNEL_FUNC void operator()(idx_t i) const {
 		if (i >= num_particles)
 			return;
 
@@ -140,7 +140,7 @@ struct ComputeSearchRangeKernel {
 	size_t default_search_range;
 	float density_factor; // Scales search range based on density
 
-	HOST DEVICE void operator()(idx_t i) const {
+	KERNEL_FUNC void operator()(idx_t i) const {
 		if (i >= num_particles)
 			return;
 

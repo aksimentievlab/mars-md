@@ -24,7 +24,7 @@
 
 namespace ARBD {
 
-enum class LogLevel { TRACE = 0, DEBUG = 1, INFO = 2, WARN = 3, ERROR = 4, CRITICAL = 5 };
+enum class LogLevel { TRACE = 0, DEBUG = 1, INFO = 2, WARN = 3, ERROR = 4, CRITICAL = 5, TEST = 6 };
 
 class Logger {
   public:
@@ -77,6 +77,8 @@ class Logger {
 			return "ERROR";
 		case LogLevel::CRITICAL:
 			return "CRITICAL";
+		case LogLevel::TEST:
+			return "TEST";
 		default:
 			return "UNKNOWN";
 		}
@@ -97,7 +99,7 @@ inline LogLevel Logger::current_level = LogLevel::INFO;
 #define LOGERROR(...) ARBD::Logger::log(ARBD::LogLevel::ERROR, ARBD::SourceLocation(), __VA_ARGS__)
 #define LOGCRITICAL(...) \
 	ARBD::Logger::log(ARBD::LogLevel::CRITICAL, ARBD::SourceLocation(), __VA_ARGS__)
-
+#define LOGTEST(...) ARBD::Logger::log(ARBD::LogLevel::TEST, ARBD::SourceLocation(), __VA_ARGS__)
 // ============================================================================
 // DEVICE-ONLY LOGGING MACROS (for .cu files and device kernels)
 // ============================================================================

@@ -1,10 +1,16 @@
+#pragma once
 /**
- * @file ZOrderNeighbor_ProperFix.h
- * @brief PROPERLY FIXED Z-order neighbor kernel
- * @date 2025-01-19
+ * @file ZOrderNeighbor_FINAL_FIX.h
+ * @brief FULLY FIXED version of ZOrderNeighborKernel
+ *
+ * BUGS FIXED:
+ * 1. Changed `if (i >= j) continue` to `if (i == j) continue`
+ * 2. Added `if (original_i >= original_j) continue` BEFORE distance check
+ * 3. Moved original_i extraction before loop (optimization)
+ *
+ * KEY INSIGHT: Check original indices BEFORE expensive distance calculation!
  */
 
-#pragma once
 #include "../ZOrderKernels/MortonCode.h"
 #include "Header.h"
 #include "Types/Types.h"
@@ -13,15 +19,15 @@
 namespace ARBD {
 
 /**
- * @brief Kernel for Z-order based neighbor finding (FIXED)
+ * @brief Kernel for Z-order based neighbor finding
  * Uses the spatial locality of Morton codes to efficiently find neighbors
  */
 struct ZOrderNeighborKernel {
-	const Vector3* sorted_positions;
-	const morton_t* sorted_morton_codes;
-	const uint32_t* sorted_to_original;
-	int2* neighbor_pairs;
-	uint32_t* pair_count;
+	const Vector3* sorted_positions;	 // Positions in Morton-sorted order
+	const morton_t* sorted_morton_codes; // Morton codes in sorted order
+	const uint32_t* sorted_to_original;	 // Maps sorted index -> original particle ID
+	int2* neighbor_pairs;				 // Output: (original_i, original_j) pairs
+	uint32_t* pair_count;				 // Atomic counter for pairs
 	float cutoff_squared;
 	size_t num_particles;
 	size_t max_pairs;
@@ -32,6 +38,7 @@ struct ZOrderNeighborKernel {
 
 		Vector3 pos_i = sorted_positions[i];
 		morton_t code_i = sorted_morton_codes[i];
+		uint32_t original_i = sorted_to_original[i]; // Get ONCE before loop
 
 		// Search backward and forward in Morton order for neighbors
 		// Due to Z-order properties, nearby particles in 3D space
@@ -44,35 +51,42 @@ struct ZOrderNeighborKernel {
 		size_t end = (i + search_range < num_particles) ? i + search_range : num_particles;
 
 		for (size_t j = start; j < end; ++j) {
-			if (i >= j)
-				continue; // Avoid double counting and self-interaction
+			// FIX #1: Only skip self-interaction, not all backward neighbors
+			if (i == j)
+				continue; // Avoid self-interaction in sorted space
 
+			// FIX #2: Get original indices EARLY
+			uint32_t original_j = sorted_to_original[j];
+
+			// FIX #3: Only store each pair once (i < j in ORIGINAL indices)
+			// CRITICAL: Do this BEFORE the expensive distance check!
+			// This prevents storing both (i,j) and (j,i)
+			if (original_i >= original_j)
+				continue;
+
+			// Now do expensive distance calculation
 			Vector3 pos_j = sorted_positions[j];
 			Vector3 dr = pos_j - pos_i;
 			float dist_squared = dr.length2();
 
 			if (dist_squared <= cutoff_squared) {
-				// Found a neighbor pair
-				uint32_t original_i = sorted_to_original[i];
-				uint32_t original_j = sorted_to_original[j];
+				// Found a neighbor pair - store it!
 
-				// ✅ FIX: Proper atomic increment that returns OLD value
-				uint32_t pair_idx;
 #ifdef USE_CUDA
-				pair_idx = atomicAdd(pair_count, 1);
+				uint32_t pair_idx = atomicAdd(pair_count, 1);
 #elif defined(USE_SYCL)
-				// SYCL requires atomic_ref and fetch_add
-				sycl::atomic_ref<uint32_t, sycl::memory_order::relaxed, sycl::memory_scope::device>
+				sycl::atomic_ref<uint32_t,
+								 sycl::memory_order::relaxed,
+								 sycl::memory_scope::device,
+								 sycl::access::address_space::global_space>
 					atomic_ref(*pair_count);
-				pair_idx = atomic_ref.fetch_add(1);
+				uint32_t pair_idx = atomic_ref.fetch_add(1);
 #else
-				// Host fallback (should not be used on device)
-				pair_idx = (*pair_count)++;
+				uint32_t pair_idx = (*pair_count)++;
 #endif
 
 				if (pair_idx < max_pairs) {
-					neighbor_pairs[pair_idx] =
-						int2{static_cast<int>(original_i), static_cast<int>(original_j)};
+					neighbor_pairs[pair_idx] = int2(original_i, original_j);
 				}
 			}
 
@@ -80,6 +94,8 @@ struct ZOrderNeighborKernel {
 			// If Morton codes are too far apart, subsequent particles
 			// in the sorted order are unlikely to be spatial neighbors
 			morton_t code_j = sorted_morton_codes[j];
+
+			// Only check early termination when moving forward in sorted order
 			if (j > i && (code_j - code_i) > 0x1000000) { // Heuristic threshold
 				break;
 			}

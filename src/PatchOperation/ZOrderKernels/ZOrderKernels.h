@@ -58,7 +58,9 @@ struct ReorderDataKernel {
 		if (idx >= num_elements)
 			return;
 
-		output_data[idx] = input_data[sorted_indices[idx]];
+		// sorted[idx] should get input[sorted_indices[idx]]
+		uint32_t original_idx = sorted_indices[idx];
+		output_data[idx] = input_data[original_idx];
 	}
 };
 
@@ -129,21 +131,21 @@ struct BoundingBoxKernel {
 		atomicMax(&max_bounds->x, pos.x);
 		atomicMax(&max_bounds->y, pos.y);
 		atomicMax(&max_bounds->z, pos.z);
-#elif defined(__SYCL_KERNEL_FUNC_ONLY__)
+#elif defined(__SYCL_DEVICE_ONLY__)
 		// Create separate atomic refs for each component
 		sycl::atomic_ref<float,
 						 sycl::memory_order::relaxed,
-						 sycl::memory_scope::KERNEL_FUNC,
+						 sycl::memory_scope::device,
 						 sycl::access::address_space::global_space>
 			atomic_min_x(min_bounds->x);
 		sycl::atomic_ref<float,
 						 sycl::memory_order::relaxed,
-						 sycl::memory_scope::KERNEL_FUNC,
+						 sycl::memory_scope::device,
 						 sycl::access::address_space::global_space>
 			atomic_min_y(min_bounds->y);
 		sycl::atomic_ref<float,
 						 sycl::memory_order::relaxed,
-						 sycl::memory_scope::KERNEL_FUNC,
+						 sycl::memory_scope::device,
 						 sycl::access::address_space::global_space>
 			atomic_min_z(min_bounds->z);
 
@@ -153,17 +155,17 @@ struct BoundingBoxKernel {
 
 		sycl::atomic_ref<float,
 						 sycl::memory_order::relaxed,
-						 sycl::memory_scope::KERNEL_FUNC,
+						 sycl::memory_scope::device,
 						 sycl::access::address_space::global_space>
 			atomic_max_x(max_bounds->x);
 		sycl::atomic_ref<float,
 						 sycl::memory_order::relaxed,
-						 sycl::memory_scope::KERNEL_FUNC,
+						 sycl::memory_scope::device,
 						 sycl::access::address_space::global_space>
 			atomic_max_y(max_bounds->y);
 		sycl::atomic_ref<float,
 						 sycl::memory_order::relaxed,
-						 sycl::memory_scope::KERNEL_FUNC,
+						 sycl::memory_scope::device,
 						 sycl::access::address_space::global_space>
 			atomic_max_z(max_bounds->z);
 

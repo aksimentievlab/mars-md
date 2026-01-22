@@ -266,6 +266,7 @@ class ZOrderSort {
 									global_histogram_.data(),
 									pass_histogram_.data(),
 									static_cast<uint32_t>(num_particles_));
+		resource_.synchronize_streams();
 
 #else
 		ARBD_Exception(ExceptionType::NotImplementedError,
@@ -322,6 +323,7 @@ void ZOrderSort::reorder_data(const DeviceBuffer<T>& input_data,
 
 	KernelConfig config = KernelConfig::for_1d(num_elements, resource_);
 	launch_kernel(resource_, config, kernel);
+	resource_.synchronize_streams();
 }
 
 } // namespace ARBD
