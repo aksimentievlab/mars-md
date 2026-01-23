@@ -1,6 +1,7 @@
 #include "../catch_boiler.h"
 #include "PatchOperation/Random/Random.h"
 #include "PatchOperation/ZOrderKernels/DeviceRadix.h"
+#include <numeric>
 #include <vector>
 
 short single_resource_id = Global::single_resource_id;
@@ -32,11 +33,13 @@ void generate_random_data_drs(const Resource& device,
 }
 
 TEST_CASE("DeviceRadixSort Key-Value Pairs - Small", "[deviceradix][sort][pairs][small]") {
+
 	initialize_backend_once();
 	Resource device = single_resource;
 	const uint32_t size = 1024;
 
 	SECTION("Sort 1K elements") {
+
 		std::vector<uint32_t> h_keys(size);
 		std::vector<uint32_t> h_payloads(size);
 		generate_random_data_drs(device, h_keys, 12345);
@@ -49,6 +52,14 @@ TEST_CASE("DeviceRadixSort Key-Value Pairs - Small", "[deviceradix][sort][pairs]
 
 		DeviceBuffer<uint32_t> d_alt_keys(size, device.id());
 		DeviceBuffer<uint32_t> d_alt_payloads(size, device.id());
+#ifdef USE_CUDA
+		device_radix_sort_pairs_cub(device.id(),
+									d_keys.data(),
+									d_payloads.data(),
+									d_alt_keys.data(),
+									d_alt_payloads.data(),
+									size);
+#elif defined(USE_SYCL)
 		DeviceBuffer<uint32_t> d_globalHistogram(DRS_RADIX * 4, device.id());
 		const uint32_t threadBlocks = (size + DRS_PART_SIZE - 1) / DRS_PART_SIZE;
 		DeviceBuffer<uint32_t> d_passHistogram(DRS_RADIX * threadBlocks, device.id());
@@ -62,6 +73,9 @@ TEST_CASE("DeviceRadixSort Key-Value Pairs - Small", "[deviceradix][sort][pairs]
 									d_globalHistogram.data(),
 									d_passHistogram.data(),
 									size);
+#else
+		REQUIRE(false && "No backend available for radix sort test");
+#endif
 
 		std::vector<uint32_t> h_sorted_keys(size);
 		std::vector<uint32_t> h_sorted_payloads(size);
@@ -107,12 +121,20 @@ TEST_CASE("DeviceRadixSort Key-Value Pairs - Medium", "[deviceradix][sort][pairs
 
 		DeviceBuffer<uint32_t> d_alt_keys(size, device.id());
 		DeviceBuffer<uint32_t> d_alt_payloads(size, device.id());
+		auto start = std::chrono::high_resolution_clock::now();
+#ifdef USE_CUDA
+		device_radix_sort_pairs_cub(device.id(),
+									d_keys.data(),
+									d_payloads.data(),
+									d_alt_keys.data(),
+									d_alt_payloads.data(),
+									size);
+#elif defined(USE_SYCL)
 		DeviceBuffer<uint32_t> d_globalHistogram(DRS_RADIX * 4, device.id());
 		const uint32_t threadBlocks = (size + DRS_PART_SIZE - 1) / DRS_PART_SIZE;
 		DeviceBuffer<uint32_t> d_passHistogram(DRS_RADIX * threadBlocks, device.id());
 		d_globalHistogram.fill(0, true);
 		d_passHistogram.fill(0, true);
-		auto start = std::chrono::high_resolution_clock::now();
 		device_radix_sort_pairs_usm(device,
 									d_keys.data(),
 									d_payloads.data(),
@@ -121,6 +143,9 @@ TEST_CASE("DeviceRadixSort Key-Value Pairs - Medium", "[deviceradix][sort][pairs
 									d_globalHistogram.data(),
 									d_passHistogram.data(),
 									size);
+#else
+		REQUIRE(false && "No backend available for radix sort test");
+#endif
 		auto end = std::chrono::high_resolution_clock::now();
 		auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
 

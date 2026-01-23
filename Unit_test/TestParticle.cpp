@@ -72,7 +72,7 @@ std::vector<ParticleType> create_test_particle_types(int type_count, int particl
 		type.num = particles_per_type;
 
 		// Set damping coefficients (example values)
-		type.transDamping = Vector3_t<float>{100.0f, 100.0f, 100.0f};
+		type.diffusion = Vector3(100.0f, 100.0f, 100.0f);
 
 		particle_types.push_back(type);
 	}

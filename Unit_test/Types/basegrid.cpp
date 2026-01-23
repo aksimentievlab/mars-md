@@ -7,6 +7,7 @@
  * @author Test code for arbd2/cpp20 branch
  *********************************************************************/
 
+#include "Types/BaseGrid.h"
 #include "../catch_boiler.h"
 #include "Backend/Buffer.h"
 #include "Backend/Events.h"
@@ -14,12 +15,8 @@
 #include "Backend/Resource.h"
 #include "Backend/SYCL/SYCLManager.h"
 #include "IO/FileHandle.h"
-#include "Math/BaseGrid.h"
-#include "Math/IndexList.h"
 
 #include <cmath>
-#include <filesystem>
-#include <fstream>
 
 using namespace ARBD;
 using Catch::Approx;
@@ -526,10 +523,10 @@ TEST_CASE("BaseGrid Utility Operations", "[BaseGrid][utilities]") {
 
 TEST_CASE("BaseGrid I/O Operations", "[BaseGrid][io]") {
 	auto grid = create_test_grid();
-	
+
 	// Create test output directory
 	std::filesystem::create_directories("test_output");
-	
+
 	const std::string test_file = "test_output/test_grid.dx";
 
 	SECTION("Write and read DX format") {
