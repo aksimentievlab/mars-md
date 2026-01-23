@@ -15,6 +15,7 @@ endif()
 
 
 # --- Project Options ---
+enable_testing()
 option(USE_CUDA "Use CUDA" OFF)
 option(USE_SYCL_ACPP "Use SYCL with AdaptiveCpp (acpp)" OFF)
 option(USE_SYCL_ICPX "Use SYCL with Intel DPC++ (icpx)" OFF)
@@ -23,6 +24,7 @@ option(USE_NCCL "Use NCCL for single node GPU peer communication" OFF)
 option(USE_NVTX "Build with NVTX profiling ranges" OFF)
 option(USE_PYBIND "Build Python bindings" OFF)
 option(USE_METAL "Use Apple Silicon Metal" OFF)
+option(USE_MPI "Use MPI for distributed computing" OFF)
 
 # --- Backend Selection Validation ---
 # Ensure only one backend is selected
@@ -76,9 +78,9 @@ if(USE_CUDA)
     set(CMAKE_CUDA_STANDARD 20)
     set(CMAKE_CUDA_STANDARD_REQUIRED ON)
     set(CMAKE_CUDA_EXTENSIONS OFF)
-    set(CMAKE_CUDA_ARCHITECTURES "75;80;86;89;90") #100, 120 are not supported by all GPUs and compilers
+    set(CMAKE_CUDA_ARCHITECTURES "80;86;89;90") #100, 120 are not supported by all GPUs and compilers
     # Add CUDA compiler flags for compatibility and force older GCC
-    set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --allow-unsupported-compiler")
+    set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --extended-lambda --allow-unsupported-compiler")
     message(STATUS "CUDA architectures set to: ${CMAKE_CUDA_ARCHITECTURES}")
     message(STATUS "CUDA flags: ${CMAKE_CUDA_FLAGS}")
 endif()
@@ -186,17 +188,6 @@ if(USE_CUDA)
     message(STATUS "CUDA Release flags: ${CMAKE_CUDA_FLAGS_RELEASE}")
 endif()
 
-# Metal specific setup
-if(USE_METAL AND APPLE)
-    # Enable Objective-C++ for .mm files
-    set(CMAKE_OBJCXX_STANDARD 20)
-    set(CMAKE_OBJCXX_STANDARD_REQUIRED ON)
-    set(CMAKE_OBJCXX_EXTENSIONS OFF)
-
-    # Enable ARC (Automatic Reference Counting) for Objective-C++
-    set(CMAKE_OBJCXX_FLAGS "${CMAKE_OBJCXX_FLAGS} -fobjc-arc")
-endif()
-
 # --- SYCL Configuration (Explicit ACPP or ICPX) ---
 
 if(USE_SYCL_ACPP OR USE_SYCL_ICPX)
@@ -275,20 +266,28 @@ Ensure CMAKE_CXX_COMPILER is set to your AdaptiveCpp executable path (e.g., /opt
                                   ERROR_QUIET)
                     if(GPU_COUNT AND GPU_COUNT GREATER 0)
                         message(STATUS "Found ${GPU_COUNT} NVIDIA GPU(s), configuring SYCL for CUDA backend")
-                        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsycl -fsycl-targets=nvptx64-nvidia-cuda -O3")
-                        # Additional CUDA-specific optimizations for SYCL
-                        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Xsycl-target-backend=nvptx64-nvidia-cuda --cuda-gpu-arch=sm_80")
+                        # Set -fsycl globally (needed for SYCL headers), but NOT -fsycl-targets
+                        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsycl -O3")
+                        # Store additional flags for device sources only
+                        set(SYCL_DEVICE_EXTRA_FLAGS "-fsycl-targets=nvptx64-nvidia-cuda -Xsycl-target-backend=nvptx64-nvidia-cuda --cuda-gpu-arch=sm_80")
+                        set(SYCL_LINK_FLAGS "-fsycl -fsycl-targets=nvptx64-nvidia-cuda -Xsycl-target-backend=nvptx64-nvidia-cuda --cuda-gpu-arch=sm_80")
                     else()
                         message(STATUS "No NVIDIA GPUs found, using default SYCL targets")
                         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsycl -O3")
+                        set(SYCL_DEVICE_EXTRA_FLAGS "")
+                        set(SYCL_LINK_FLAGS "-fsycl")
                     endif()
                 else()
                     message(STATUS "nvidia-smi not found, using default SYCL targets")
                     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsycl -O3")
+                    set(SYCL_DEVICE_EXTRA_FLAGS "")
+                    set(SYCL_LINK_FLAGS "-fsycl")
                 endif()
             else()
                 # For non-Linux systems, use default targets
                 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsycl -O3")
+                set(SYCL_DEVICE_EXTRA_FLAGS "")
+                set(SYCL_LINK_FLAGS "-fsycl")
             endif()
 
             set(SYCL_COMPILER_CONFIGURED_CORRECTLY TRUE)
@@ -431,6 +430,82 @@ if(USE_METAL)
 endif()
 # --- End Metal Shader Compilation ---
 
+# --- MPI Configuration ---
+if(USE_MPI)
+    message(STATUS "MPI support is enabled.")
+
+    # Find MPI package
+    find_package(MPI REQUIRED COMPONENTS CXX)
+
+    if(MPI_CXX_FOUND)
+        message(STATUS "Found MPI:")
+        message(STATUS "  MPI_CXX_COMPILER: ${MPI_CXX_COMPILER}")
+        message(STATUS "  MPI_CXX_INCLUDE_DIRS: ${MPI_CXX_INCLUDE_DIRS}")
+        message(STATUS "  MPI_CXX_LIBRARIES: ${MPI_CXX_LIBRARIES}")
+        message(STATUS "  MPI version: ${MPI_CXX_VERSION}")
+    else()
+        message(FATAL_ERROR "MPI C++ support not found")
+    endif()
+
+    # Add MPI definitions
+    add_definitions(-DUSE_MPI)
+
+    # For OpenMPI RHEL 5.0.7 with GCC 14 - specific optimizations
+    if(MPI_CXX_COMPILER MATCHES "mpi")
+        # Detect OpenMPI version and configure accordingly
+        execute_process(
+            COMMAND ${MPI_CXX_COMPILER} --showme:version
+            OUTPUT_VARIABLE MPI_VERSION_OUTPUT
+            ERROR_QUIET
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+        )
+
+        if(MPI_VERSION_OUTPUT MATCHES "Open MPI")
+            message(STATUS "Detected OpenMPI: ${MPI_VERSION_OUTPUT}")
+
+            # Enable OpenMPI specific optimizations
+            set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DOMPI_SKIP_MPICXX")
+
+            # For RHEL systems with OpenMPI 5.0.7
+            if(MPI_VERSION_OUTPUT MATCHES "5\\.0\\.")
+                message(STATUS "Configuring for OpenMPI 5.0.x")
+                # Add any specific flags for OpenMPI 5.0.x
+            endif()
+        endif()
+    endif()
+
+    # Configure MPI with SYCL if both are enabled
+    if(USE_SYCL_ACPP OR USE_SYCL_ICPX)
+        message(STATUS "Configuring MPI with SYCL backend")
+
+        # For Intel DPC++ with MPI
+        if(USE_SYCL_ICPX)
+            # Ensure MPI works with Intel DPC++ compiler
+            set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DMPI_NO_CPPBIND")
+            message(STATUS "Added MPI_NO_CPPBIND for Intel DPC++ compatibility")
+        endif()
+
+        # For AdaptiveCpp with MPI
+        if(USE_SYCL_ACPP)
+            # Ensure MPI works with AdaptiveCpp compiler
+            set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DMPI_NO_CPPBIND")
+            message(STATUS "Added MPI_NO_CPPBIND for AdaptiveCpp compatibility")
+        endif()
+    endif()
+
+    # Set MPI compiler wrapper detection
+    if(CMAKE_CXX_COMPILER MATCHES "mpi")
+        message(STATUS "Using MPI compiler wrapper: ${CMAKE_CXX_COMPILER}")
+        # MPI flags are automatically handled by compiler wrapper
+    else()
+        message(STATUS "Using standard compiler with MPI libraries")
+        # Manual MPI linking will be handled in target_link_libraries
+    endif()
+else()
+    message(STATUS "MPI support is disabled.")
+endif()
+# --- End MPI Configuration ---
+
 ## Set flags and definitions after project()
 if(USE_CUDA)
   add_definitions(-DUSE_CUDA) # Kept for CUDA-specific sections in C++
@@ -463,7 +538,7 @@ if(USE_CUDA)
 endif()
 
 add_subdirectory(src)
-add_subdirectory(test_unit)
+add_subdirectory(Unit_test)
 
 add_executable("${PROJECT_NAME}" src/arbd.cpp)
 
@@ -482,7 +557,7 @@ endif()
 if(USE_PYBIND)
   if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/extern/pybind11/CMakeLists.txt")
     add_subdirectory(extern/pybind11)
-    add_subdirectory(src/pybindings)
+    add_subdirectory(src/Python)
   else()
     message(WARNING "pybind11 directory or CMakeLists.txt not found at extern/pybind11.")
   endif()
@@ -530,3 +605,23 @@ if(USE_METAL)
 
     message(STATUS "Linked Metal frameworks, Metal-cpp library, and headers")
 endif()
+
+if(USE_MPI)
+    # Link MPI to main executable
+    if(CMAKE_CXX_COMPILER MATCHES "mpi")
+        # When using MPI compiler wrapper, linking is automatic
+        message(STATUS "MPI linking handled automatically by compiler wrapper")
+    else()
+        # Manual MPI linking when not using wrapper (e.g., icpx + MPI libraries)
+        target_link_libraries("${PROJECT_NAME}"
+            PRIVATE
+            MPI::MPI_CXX
+        )
+        target_include_directories("${PROJECT_NAME}"
+            PRIVATE
+            ${MPI_CXX_INCLUDE_DIRS}
+        )
+        message(STATUS "Manually linked MPI libraries to main executable")
+    endif()
+endif()
+

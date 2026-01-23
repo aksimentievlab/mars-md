@@ -1,5 +1,4 @@
 #include "../catch_boiler.h"
-
 #include "Backend/Buffer.h"
 #include "Backend/KernelConfig.h"
 #include "Backend/Kernels.h"

@@ -88,7 +88,7 @@ void test_parse_circovirus_config() {
 		std::vector<int> type_counts(3, 0);
 		for (const auto& particle : particles) {
 			assert(particle.type_id >= 0 && particle.type_id < 3);
-			type_counts[particle.type_id]++;
+			type_counts[particle.type_name]++;
 		}
 
 		assert(type_counts[0] == 530); // D000
@@ -117,7 +117,7 @@ void test_parse_circovirus_config() {
 		// Check that bonds were loaded (exact count depends on input files)
 		if (!bonds.empty()) {
 			std::cout << "Sample bond: " << bonds[0].ind1 << " - " << bonds[0].ind2 << " ("
-					  << bonds[0].name << ")" << std::endl;
+					  << bonds[0].type_id << ")" << std::endl;
 			assert(bonds[0].ind1 >= 0);
 			assert(bonds[0].ind2 >= 0);
 			assert(!bonds[0].name.empty());
@@ -139,7 +139,7 @@ void test_parse_circovirus_config() {
 		// Test tabulated potentials
 		std::cout << "\n--- Tabulated Potentials ---" << std::endl;
 		const TablesRegistry& tables = sim_system.get_tables_registry();
-		std::cout << "Number of potential tables: " << tables.get_num_tables() << std::endl;
+		std::cout << "Number of potential tables: " << tables.num_tables() << std::endl;
 
 		// Test boundary conditions creation
 		std::cout << "\n--- Boundary Conditions ---" << std::endl;
@@ -327,15 +327,15 @@ void test_config_validation() {
 	}
 
 	// Test valid configuration
-	SimSystem sim_system(std::vector<Resource>({Resource(single_resource_id)}));
-	sim_system.set_temperature(300.0f);
-	sim_system.set_cutoff(10.0f);
-	sim_system.set_timestep(1e-5f);
-	sim_system.set_num_steps(1000);
-	sim_system.set_box_size(100.0f, 100.0f, 100.0f);
+	SimSystem sim_system2(std::vector<Resource>({Resource(single_resource_id)}));
+	sim_system2.set_temperature(300.0f);
+	sim_system2.set_cutoff(10.0f);
+	sim_system2.set_timestep(1e-5f);
+	sim_system2.set_num_steps(1000);
+	sim_system2.set_box_size(100.0f, 100.0f, 100.0f);
 
 	try {
-		ConfigParser config_parser(sim_system, "test_file");
+		ConfigParser config_parser(sim_system2, "test_file");
 		std::cout << "✓ Valid configuration accepted" << std::endl;
 	} catch (const std::exception& e) {
 		std::cerr << "Unexpected error with valid config: " << e.what() << std::endl;
