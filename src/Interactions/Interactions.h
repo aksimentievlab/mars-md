@@ -3,6 +3,14 @@
 #include "System/PeriodicBox.h"
 #include "Types/Types.h"
 
+// Include STL headers for host-only class (before namespace to avoid conflicts)
+#if (!defined(__CUDACC__) || \
+	 (!defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__) && !defined(__METAL_VERSION__)))
+#include <string>
+#include <unordered_map>
+#include <vector>
+#endif
+
 namespace ARBD {
 
 struct ScalarForceEnergy {
@@ -37,6 +45,9 @@ struct CalcDistance {
 // ============================================================================
 // POTENTIAL REGISTRATION
 // ============================================================================
+// Host-only class - only define in host compilation
+#if (!defined(__CUDACC__) || \
+	 (!defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__) && !defined(__METAL_VERSION__)))
 class Register_Potential {
   public:
 	int register_potential(const std::string& name) {
@@ -56,6 +67,7 @@ class Register_Potential {
 	int bodies_{2};				// 2 for pairwise, 3 for triplet, 4 for quadruplet
 	std::vector<float> params_; // Parameters for the potential
 };
+#endif
 
 } // namespace ARBD
 #ifdef USE_SYCL

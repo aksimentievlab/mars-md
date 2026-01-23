@@ -73,6 +73,16 @@ struct BDIntegrate {
 
 } // namespace ARBD
 
+// Explicit template instantiation declarations to prevent host instantiation
+#ifdef USE_CUDA
+namespace ARBD {
+extern template struct BDIntegrate<float>;
+extern template Event launch_cuda_kernel(const Resource& resource,
+										 const KernelConfig& config,
+										 BDIntegrate<float> kernel_func);
+} // namespace ARBD
+#endif
+
 // SYCL device copyable trait
 #ifdef USE_SYCL
 #include <sycl/sycl.hpp>

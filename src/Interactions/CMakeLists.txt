@@ -34,8 +34,19 @@ endif()
 
 # Conditionally add CUDA specific source files (.cpp or .cu) to the library
 if(USE_CUDA)
+    list(APPEND LIB_SOURCES
+        Interactions/Bonded/BondedInstantiations.cu
+    )
+
+    # Set CUDA properties for .cu files
+    set_source_files_properties(
+        Interactions/Bonded/BondedInstantiations.cu
+        PROPERTIES
+        LANGUAGE CUDA
+        CUDA_SEPARABLE_COMPILATION ON
+    )
+
     message(STATUS "Interactions: Adding CUDA specific sources to lib${PROJECT_NAME}")
-    # Add CUDA-specific interaction sources here if needed
 endif()
 
 # Conditionally add Metal specific source files to the library

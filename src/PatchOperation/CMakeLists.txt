@@ -51,6 +51,7 @@ if(USE_CUDA)
         PatchOperation/ZOrderKernels/ZOrderKernels.cu
         PatchOperation/PairListKernels/ZOrderPairlist.cu
         PatchOperation/Random/Random.cu
+        PatchOperation/Integrator/IntegratorInstantiations.cu
         #PatchOperation/PairListKernels/VerletCompute.cu
         #PatchOperation/PairListKernels/ClusterCompute.cu
     )
@@ -60,6 +61,7 @@ if(USE_CUDA)
         PatchOperation/ZOrderKernels/ZOrderKernels.cu
         PatchOperation/PairListKernels/ZOrderPairlist.cu
         PatchOperation/Random/Random.cu
+        PatchOperation/Integrator/IntegratorInstantiations.cu
         PROPERTIES
         LANGUAGE CUDA
         CUDA_SEPARABLE_COMPILATION ON

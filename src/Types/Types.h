@@ -76,17 +76,31 @@ HOST DEVICE inline void atomic_add(T* ptr, T value) {
 #endif
 };
 
-// Specialized atomic_add for Vector3_t - SYCL doesn't support atomic operations on structs directly
-// So we do component-wise atomic operations
-#ifdef USE_SYCL
+// Specialized atomic_add for Vector3_t - do component-wise atomics
 template<typename T>
 HOST DEVICE inline void atomic_add(Vector3_t<T>* ptr, const Vector3_t<T>& value) {
-	// Component-wise atomic operations for SYCL
+#ifdef USE_CUDA
+#ifdef __CUDA_ARCH__
+	atomicAdd(&(ptr->x), value.x);
+	atomicAdd(&(ptr->y), value.y);
+	atomicAdd(&(ptr->z), value.z);
+	atomicAdd(&(ptr->t), value.t);
+#else
+	*ptr += value;
+#endif
+#elif defined(USE_SYCL)
 	atomic_add(&(ptr->x), value.x);
 	atomic_add(&(ptr->y), value.y);
 	atomic_add(&(ptr->z), value.z);
 	atomic_add(&(ptr->t), value.t);
-}
+#elif defined(USE_METAL)
+	atomic_add(&(ptr->x), value.x);
+	atomic_add(&(ptr->y), value.y);
+	atomic_add(&(ptr->z), value.z);
+	atomic_add(&(ptr->t), value.t);
+#else
+	*ptr += value;
 #endif
+}
 
 } // namespace ARBD

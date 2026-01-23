@@ -330,6 +330,22 @@ inline Event launch_analytical_bonds(const Resource& resource,
 
 } // namespace ARBD
 
+// Explicit template instantiation declarations to prevent host instantiation
+#ifdef USE_CUDA
+#include "Backend/CUDA/KernelHelper.cuh"
+namespace ARBD {
+extern template struct AnalyticalBondComputer<0>;
+extern template struct AnalyticalBondComputer<1>;
+// Also declare launch_cuda_kernel instantiations to prevent host stub instantiation
+extern template Event launch_cuda_kernel(const Resource& resource,
+										 const KernelConfig& config,
+										 AnalyticalBondComputer<0> kernel_func);
+extern template Event launch_cuda_kernel(const Resource& resource,
+										 const KernelConfig& config,
+										 AnalyticalBondComputer<1> kernel_func);
+} // namespace ARBD
+#endif
+
 #ifdef USE_SYCL
 #include <sycl/sycl.hpp>
 template<int T>

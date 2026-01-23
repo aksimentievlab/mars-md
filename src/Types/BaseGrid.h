@@ -659,13 +659,13 @@ class BaseGrid {
 	 * @return Gradient vector
 	 */
 	Vector3 compute_gradient(const Vector3& world_pos) const {
-		return compute_gradient<T>(values_.data(),
-								   world_pos,
-								   config_.origin,
-								   config_.basis,
-								   basis_inv_,
-								   config_.dimensions,
-								   config_.boundary_as_int());
+		return ARBD::compute_gradient<T>(values_.data(),
+										 world_pos,
+										 config_.origin,
+										 config_.basis,
+										 basis_inv_,
+										 config_.dimensions,
+										 config_.boundary_as_int());
 	}
 
 	/**
@@ -675,13 +675,13 @@ class BaseGrid {
 	 * @return Gradient vector
 	 */
 	Vector3 compute_gradient(const T* data_ptr, const Vector3& world_pos) const {
-		return compute_gradient<T>(data_ptr,
-								   world_pos,
-								   config_.origin,
-								   config_.basis,
-								   basis_inv_,
-								   config_.dimensions,
-								   config_.boundary_as_int());
+		return ARBD::compute_gradient<T>(data_ptr,
+										 world_pos,
+										 config_.origin,
+										 config_.basis,
+										 basis_inv_,
+										 config_.dimensions,
+										 config_.boundary_as_int());
 	}
 
 	/*====================*\
