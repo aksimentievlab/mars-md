@@ -6,7 +6,9 @@
 
 #ifdef USE_CUDA
 #include <thrust/device_ptr.h>
+#include <thrust/execution_policy.h>
 #include <thrust/sort.h>
+#include <thrust/system/cuda/execution_policy.h>
 #endif
 
 namespace ARBD {
@@ -136,14 +138,18 @@ void CellListPairlist::decompose_particles(const DeviceBuffer<Vector3>& position
 void CellListPairlist::sort_particles_by_cell() {
 #ifdef USE_CUDA
 	// Use Thrust to sort particles by cell ID
-	thrust::device_ptr<DecomposeKernel::cell_t> cells_ptr(cells_.data());
-	thrust::sort(cells_ptr,
-				 cells_ptr + num_particles_ * num_replicas_,
-				 [](const DecomposeKernel::cell_t& a, const DecomposeKernel::cell_t& b) {
-					 if (a.id != b.id)
-						 return a.id < b.id;
-					 return a.repID < b.repID;
-				 });
+	// Use raw pointer instead of device_ptr to avoid compatibility issues
+	DecomposeKernel::cell_t* cells_raw = cells_.data();
+	size_t total_elements = num_particles_ * num_replicas_;
+	cudaStream_t stream = resource_.get_cuda_stream();
+	thrust::cuda::par.on(stream).sort(
+		cells_raw,
+		cells_raw + total_elements,
+		[](const DecomposeKernel::cell_t& a, const DecomposeKernel::cell_t& b) {
+			if (a.id != b.id)
+				return a.id < b.id;
+			return a.repID < b.repID;
+		});
 #else
 	ARBD_Exception(ExceptionType::NotImplementedError,
 				   "Cell sorting not implemented for non-CUDA backends");

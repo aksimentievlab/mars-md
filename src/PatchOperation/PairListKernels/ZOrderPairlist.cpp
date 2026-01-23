@@ -44,13 +44,13 @@ void ZOrderPairlist::build_pairlist(const DeviceBuffer<Vector3>& positions,
 	// Step 1: Determine bounding box
 	Vector3 box_min, box_max;
 	get_bounding_box(positions, num_particles, box_min, box_max);
-	LOGTRACE("Bounding box: [{:.3f}, {:.3f}, {:.3f}] to [{:.3f}, {:.3f}, {:.3f}]",
-			 box_min.x,
-			 box_min.y,
-			 box_min.z,
-			 box_max.x,
-			 box_max.y,
-			 box_max.z);
+	LOGINFO("Bounding box: [{:.6f}, {:.6f}, {:.6f}] to [{:.6f}, {:.6f}, {:.6f}]",
+			box_min.x,
+			box_min.y,
+			box_min.z,
+			box_max.x,
+			box_max.y,
+			box_max.z);
 	// Step 5: Update internal state
 	update_state(num_particles, cutoff);
 	// Step 2: Sort particles by Morton code
@@ -142,9 +142,10 @@ void ZOrderPairlist::find_neighbors_zorder(size_t num_particles) {
 	launch_event.wait();
 
 	// Check pair_count after kernel
-	uint32_t count_after;
-	pair_count_.copy_to_host(&count_after, 1, true);
-	std::cout << "[DEBUG] pair_count AFTER kernel: " << count_after << std::endl;
+	uint32_t num_pairs;
+	pair_count_.copy_to_host(&num_pairs, 1, true);
+	num_pairs_ = num_pairs;
+	LOGDEBUG("pair_count AFTER kernel: {}", num_pairs);
 }
 
 void ZOrderPairlist::get_bounding_box(const DeviceBuffer<Vector3>& positions,
@@ -174,6 +175,24 @@ void ZOrderPairlist::get_bounding_box(const DeviceBuffer<Vector3>& positions,
 		Vector3 margin = (box_max - box_min) * 0.01f;
 		box_min -= margin;
 		box_max += margin;
+		constexpr arbd_real MIN_EXTENT = 1e-4;
+		Vector3 range = box_max - box_min;
+
+		if (range.x < MIN_EXTENT) {
+			arbd_real center = box_min.x + range.x * 0.5;
+			box_min.x = center - MIN_EXTENT * 0.5;
+			box_max.x = center + MIN_EXTENT * 0.5;
+		}
+		if (range.y < MIN_EXTENT) {
+			arbd_real center = box_min.y + range.y * 0.5;
+			box_min.y = center - MIN_EXTENT * 0.5;
+			box_max.y = center + MIN_EXTENT * 0.5;
+		}
+		if (range.z < MIN_EXTENT) {
+			arbd_real center = box_min.z + range.z * 0.5;
+			box_min.z = center - MIN_EXTENT * 0.5;
+			box_max.z = center + MIN_EXTENT * 0.5;
+		}
 	} else {
 		// Use manually specified bounds
 		box_min = manual_box_min_;

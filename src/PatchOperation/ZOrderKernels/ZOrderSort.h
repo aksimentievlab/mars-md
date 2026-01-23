@@ -236,7 +236,7 @@ class ZOrderSort {
 	void sort_morton_codes() {
 #ifdef USE_CUDA
 		// Call CUDA radix sort directly
-		device_radix_sort_pairs_cub(resource_.get_device_id(),
+		device_radix_sort_pairs_cub(resource_.id(),
 									morton_codes_.data(),
 									sorted_indices_.data(),
 									temp_morton_codes_.data(),

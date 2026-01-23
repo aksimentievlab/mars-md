@@ -28,7 +28,7 @@ list(APPEND HOST_ONLY_HEADERS
 # Conditionally add CUDA specific source files
 if(USE_CUDA)
     list(APPEND LIB_SOURCES
-        Types/CUDA/NanoGrid.cu
+        #Types/CUDA/NanoGrid.cu
     )
     message(STATUS "Types: Adding CUDA specific sources to lib${PROJECT_NAME}")
 endif()

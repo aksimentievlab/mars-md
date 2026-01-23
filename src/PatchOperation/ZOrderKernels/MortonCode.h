@@ -95,6 +95,16 @@ class MortonCode {
 	HOST DEVICE static morton_t
 	encode(const Vector3& pos, const Vector3& box_min, const Vector3& box_max) {
 		Vector3 range = box_max - box_min;
+		constexpr float MIN_EXTENT = 1e-6f;
+#ifdef USE_SYCL
+		range.x = sycl::fmax(range.x, MIN_EXTENT);
+		range.y = sycl::fmax(range.y, MIN_EXTENT);
+		range.z = sycl::fmax(range.z, MIN_EXTENT);
+#else
+		range.x = fmaxf(range.x, MIN_EXTENT);
+		range.y = fmaxf(range.y, MIN_EXTENT);
+		range.z = fmaxf(range.z, MIN_EXTENT);
+#endif
 		Vector3 offset = pos - box_min;
 		Vector3 normalized = Vector3(offset.x / range.x, offset.y / range.y, offset.z / range.z);
 

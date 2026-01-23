@@ -172,10 +172,10 @@ class Pairlist {
 
   protected:
 	Resource resource_;
-	size_t max_particles_;
-	size_t max_pairs_;
-	size_t num_particles_;
-	size_t num_pairs_;
+	uint32_t max_particles_;
+	uint32_t max_pairs_;
+	uint32_t num_particles_;
+	uint32_t num_pairs_;
 	float cutoff_;
 	float cutoff_squared_;
 

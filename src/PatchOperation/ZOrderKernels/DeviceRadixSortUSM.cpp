@@ -1,8 +1,8 @@
 
 #ifdef USE_SYCL
+#include "ARBDLogger.h"
 #include "Backend/Resource.h"
 #include "DeviceRadix.h"
-#include <iostream>
 #include <sycl/sycl.hpp>
 
 namespace ARBD {
@@ -15,29 +15,34 @@ void device_radix_sort_pairs_usm(const Resource& device,
 								 uint32_t* globalHistogram,
 								 uint32_t* passHistogram,
 								 uint32_t size) {
-	// Get SYCL queue from resource
 	sycl::queue& q = *static_cast<sycl::queue*>(device.get_stream());
 
 	const uint32_t threadBlocks = (size + DRS_PART_SIZE - 1) / DRS_PART_SIZE;
 	if (threadBlocks > 10000000) {
 		LOGWARN("Launching {} blocks. Input size may be too large.", threadBlocks);
 	}
-	LOGWARN(
-		"SYCL Radix Sort should be performed on empty GPU. If not this won't sort. This function "
-		"did not check racing conditions.");
 
 	LOGINFO("DeviceRadixSortUSM: size={}, threadBlocks={} on device {}",
 			size,
 			threadBlocks,
 			device.id());
 
+	auto start_event = q.submit([&](sycl::handler& h) {
+		h.single_task([]() {}); // Empty marker kernel
+	});
+	auto E_global_clear = q.submit([&](sycl::handler& h) {
+		h.depends_on(start_event);
+		h.memset(globalHistogram, 0, DRS_RADIX * 4 * sizeof(uint32_t));
+	});
+	sycl::event E_last = E_global_clear;
 	// Four radix passes
 	for (uint32_t pass = 0; pass < 4; ++pass) {
 		const uint32_t radixShift = pass * 8;
 		// Reset histograms
-		auto E_last = q.memset(globalHistogram, 0, DRS_RADIX * 4 * sizeof(uint32_t));
-		auto E_pass = q.memset(passHistogram, 0, DRS_RADIX * threadBlocks * sizeof(uint32_t));
-		// q.wait();
+		auto E_pass = q.submit([&](sycl::handler& h) {
+			h.depends_on(E_last);
+			h.memset(passHistogram, 0, DRS_RADIX * threadBlocks * sizeof(uint32_t));
+		});
 
 		uint32_t* input_keys = (pass % 2 == 0) ? keys : alt_keys;
 		uint32_t* input_payloads = (pass % 2 == 0) ? payloads : alt_payloads;
@@ -48,12 +53,12 @@ void device_radix_sort_pairs_usm(const Resource& device,
 		// Upsweep: Compute histograms per work-group
 		// ========================================================================
 		E_last = q.submit([&](sycl::handler& h) {
-			h.depends_on({E_last, E_pass});
+			h.depends_on({E_pass});
 			sycl::local_accessor<uint32_t, 1> s_globalHist(DRS_RADIX * 2, h);
 
 			h.parallel_for(
 				sycl::nd_range<1>(threadBlocks * DRS_UPSWEEP_THREADS, DRS_UPSWEEP_THREADS),
-				[=](sycl::nd_item<1> item) [[sycl::reqd_sub_group_size(32)]] {
+				[=](sycl::nd_item<1> item) [[sycl::reqd_sub_group_size(SG_SIZE)]] {
 					const uint32_t local_id = item.get_local_id(0);
 					const uint32_t group_id = item.get_group(0);
 					const uint32_t block_dim = item.get_local_range(0);
@@ -79,19 +84,23 @@ void device_radix_sort_pairs_usm(const Resource& device,
 
 								sycl::atomic_ref<uint32_t,
 												 sycl::memory_order::relaxed,
-												 sycl::memory_scope::work_group>
+												 sycl::memory_scope::work_group,
+												 sycl::access::address_space::local_space>
 									a0(s_wavesHist[(k0 >> radixShift) & DRS_RADIX_MASK]);
 								sycl::atomic_ref<uint32_t,
 												 sycl::memory_order::relaxed,
-												 sycl::memory_scope::work_group>
+												 sycl::memory_scope::work_group,
+												 sycl::access::address_space::local_space>
 									a1(s_wavesHist[(k1 >> radixShift) & DRS_RADIX_MASK]);
 								sycl::atomic_ref<uint32_t,
 												 sycl::memory_order::relaxed,
-												 sycl::memory_scope::work_group>
+												 sycl::memory_scope::work_group,
+												 sycl::access::address_space::local_space>
 									a2(s_wavesHist[(k2 >> radixShift) & DRS_RADIX_MASK]);
 								sycl::atomic_ref<uint32_t,
 												 sycl::memory_order::relaxed,
-												 sycl::memory_scope::work_group>
+												 sycl::memory_scope::work_group,
+												 sycl::access::address_space::local_space>
 									a3(s_wavesHist[(k3 >> radixShift) & DRS_RADIX_MASK]);
 
 								a0.fetch_add(1);
@@ -108,7 +117,8 @@ void device_radix_sort_pairs_usm(const Resource& device,
 							const uint32_t t = input_keys[i];
 							sycl::atomic_ref<uint32_t,
 											 sycl::memory_order::relaxed,
-											 sycl::memory_scope::work_group>
+											 sycl::memory_scope::work_group,
+											 sycl::access::address_space::local_space>
 								a(s_wavesHist[(t >> radixShift) & DRS_RADIX_MASK]);
 							a.fetch_add(1);
 						}
@@ -136,14 +146,15 @@ void device_radix_sort_pairs_usm(const Resource& device,
 						uint32_t original = passHistogram[i * threadBlocks + group_id];
 						sycl::atomic_ref<uint32_t,
 										 sycl::memory_order::relaxed,
-										 sycl::memory_scope::device>
+										 sycl::memory_scope::device,
+										 sycl::access::address_space::global_space>
 							a(globalHistogram[i + (radixShift << 5)]);
 						a.fetch_add(original);
 					}
 				});
 		});
 		// q.wait();
-		std::cout << "Pass " << pass << " upsweep completed" << std::endl;
+		LOGDEBUG("Pass {} upsweep completed", pass);
 
 		// ========================================================================
 		// Scan: Compute prefix sums across work-groups
@@ -153,7 +164,7 @@ void device_radix_sort_pairs_usm(const Resource& device,
 			sycl::local_accessor<uint32_t, 1> s_scan(DRS_SCAN_THREADS, h);
 
 			h.parallel_for(sycl::nd_range<1>(DRS_RADIX * DRS_SCAN_THREADS, DRS_SCAN_THREADS),
-						   [=](sycl::nd_item<1> item) [[sycl::reqd_sub_group_size(32)]] {
+						   [=](sycl::nd_item<1> item) [[sycl::reqd_sub_group_size(SG_SIZE)]] {
 							   const uint32_t local_id = item.get_local_id(0);
 							   const uint32_t group_id = item.get_group(0);
 							   const uint32_t block_dim = item.get_local_range(0);
@@ -206,7 +217,7 @@ void device_radix_sort_pairs_usm(const Resource& device,
 						   });
 		});
 		// q.wait();
-		std::cout << "Pass " << pass << " scan completed" << std::endl;
+		LOGDEBUG("Pass {} scan completed", pass);
 
 		// Compute exclusive prefix sum of global histogram on device
 		// This is needed because globalHistogram is used as base offset in
@@ -216,7 +227,7 @@ void device_radix_sort_pairs_usm(const Resource& device,
 			sycl::local_accessor<uint32_t, 1> s_counts(DRS_RADIX, h);
 
 			h.parallel_for(sycl::nd_range<1>(DRS_RADIX, DRS_RADIX),
-						   [=](sycl::nd_item<1> item) [[sycl::reqd_sub_group_size(32)]] {
+						   [=](sycl::nd_item<1> item) [[sycl::reqd_sub_group_size(SG_SIZE)]] {
 							   const uint32_t local_id = item.get_local_id(0);
 							   const uint32_t global_offset = radixShift << 5;
 
@@ -251,11 +262,11 @@ void device_radix_sort_pairs_usm(const Resource& device,
 
 			h.parallel_for(
 				sycl::nd_range<1>(threadBlocks * DRS_BIN_THREADS, DRS_BIN_THREADS),
-				[=](sycl::nd_item<1> item) [[sycl::reqd_sub_group_size(32)]] {
+				[=](sycl::nd_item<1> item) [[sycl::reqd_sub_group_size(SG_SIZE)]] {
 					const uint32_t local_id = item.get_local_id(0);
 					const uint32_t group_id = item.get_group(0);
 					auto sg = item.get_sub_group();
-					const uint32_t warp_index = local_id / 32;
+					const uint32_t warp_index = local_id / SG_SIZE;
 					const uint32_t lane_id = sg.get_local_linear_id();
 
 					uint32_t* s_warpHist = &s_warpHistograms[warp_index * DRS_RADIX];
@@ -274,7 +285,7 @@ void device_radix_sort_pairs_usm(const Resource& device,
 #pragma unroll
 						for (uint32_t i = 0, t = lane_id + bin_sub_part_start + bin_part_start;
 							 i < DRS_BIN_KEYS_PER_THREAD;
-							 ++i, t += 32)
+							 ++i, t += SG_SIZE)
 							keys[i] = input_keys[t];
 					}
 
@@ -282,7 +293,7 @@ void device_radix_sort_pairs_usm(const Resource& device,
 #pragma unroll
 						for (uint32_t i = 0, t = lane_id + bin_sub_part_start + bin_part_start;
 							 i < DRS_BIN_KEYS_PER_THREAD;
-							 ++i, t += 32)
+							 ++i, t += SG_SIZE)
 							keys[i] = t < size ? input_keys[t] : 0xffffffff;
 					}
 					item.barrier(sycl::access::fence_space::local_space);
@@ -292,13 +303,14 @@ void device_radix_sort_pairs_usm(const Resource& device,
 					uint16_t offsets[DRS_BIN_KEYS_PER_THREAD];
 #pragma unroll
 					for (uint32_t i = 0; i < DRS_BIN_KEYS_PER_THREAD; ++i) {
-						uint32_t t = lane_id + bin_sub_part_start + bin_part_start + (i * 32);
+						uint32_t t = lane_id + bin_sub_part_start + bin_part_start + (i * SG_SIZE);
 						is_valid[i] = (t < size);
 						if (is_valid[i]) {
 							const uint32_t digit = (keys[i] >> radixShift) & DRS_RADIX_MASK;
 							sycl::atomic_ref<uint32_t,
 											 sycl::memory_order::relaxed,
-											 sycl::memory_scope::work_group>
+											 sycl::memory_scope::work_group,
+											 sycl::access::address_space::local_space>
 								a(s_warpHist[digit]);
 							offsets[i] = a.fetch_add(1);
 						} else {
@@ -384,7 +396,7 @@ void device_radix_sort_pairs_usm(const Resource& device,
 #pragma unroll
 						for (uint32_t i = 0, t = lane_id + bin_sub_part_start + bin_part_start;
 							 i < DRS_BIN_KEYS_PER_THREAD;
-							 ++i, t += 32) {
+							 ++i, t += SG_SIZE) {
 							keys[i] = input_payloads[t];
 						}
 
@@ -420,7 +432,7 @@ void device_radix_sort_pairs_usm(const Resource& device,
 #pragma unroll
 						for (uint32_t i = 0, t = lane_id + bin_sub_part_start + bin_part_start;
 							 i < DRS_BIN_KEYS_PER_THREAD;
-							 ++i, t += 32) {
+							 ++i, t += SG_SIZE) {
 							if (t < size)
 								keys[i] = input_payloads[t];
 						}
@@ -444,14 +456,23 @@ void device_radix_sort_pairs_usm(const Resource& device,
 					}
 				});
 		});
-		E_last.wait();
-		std::cout << "Pass " << pass << " downsweep completed" << std::endl;
+		// E_last.wait();
+		LOGDEBUG("Pass {} downsweep completed", pass);
 	}
+	auto end_event = q.submit([&](sycl::handler& h) {
+		h.depends_on(E_last);
+		h.single_task([]() {});
+	});
+	end_event.wait();
 
-	// Determine final output location (after 4 passes: pass 0->alt, 1->keys,
-	// 2->alt, 3->keys) So after pass 3, output is in keys
+	// Calculate elapsed time
+	auto start_time = start_event.get_profiling_info<sycl::info::event_profiling::command_start>();
+	auto end_time = end_event.get_profiling_info<sycl::info::event_profiling::command_end>();
+
+	double milliseconds = (end_time - start_time) / 1e6;
 	uint32_t* final_keys = keys;
 	uint32_t* final_payloads = payloads;
+	return;
 }
 
 } // namespace ARBD

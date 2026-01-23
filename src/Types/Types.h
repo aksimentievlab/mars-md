@@ -59,7 +59,12 @@ using arbd_real = float;
 template<typename T>
 HOST DEVICE inline void atomic_add(T* ptr, T value) {
 #ifdef USE_CUDA
+#ifdef __CUDA_ARCH__
 	atomicAdd(ptr, value);
+#else
+	// Host code fallback - not thread-safe but allows template instantiation
+	*ptr += value;
+#endif
 #elif defined(USE_SYCL)
 	sycl::atomic_ref<T, sycl::memory_order::relaxed, sycl::memory_scope::device>(*(ptr)) += value;
 #elif defined(USE_METAL)

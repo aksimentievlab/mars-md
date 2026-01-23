@@ -125,12 +125,12 @@ struct BoundingBoxKernel {
 		// Use atomic operations to find global min/max
 		// Note: This is a simplified version - production code might use reduction
 #ifdef __CUDA_ARCH__
-		atomicMin(&min_bounds->x, pos.x);
-		atomicMin(&min_bounds->y, pos.y);
-		atomicMin(&min_bounds->z, pos.z);
-		atomicMax(&max_bounds->x, pos.x);
-		atomicMax(&max_bounds->y, pos.y);
-		atomicMax(&max_bounds->z, pos.z);
+		atomicMinFloat(&min_bounds->x, pos.x);
+		atomicMinFloat(&min_bounds->y, pos.y);
+		atomicMinFloat(&min_bounds->z, pos.z);
+		atomicMaxFloat(&max_bounds->x, pos.x);
+		atomicMaxFloat(&max_bounds->y, pos.y);
+		atomicMaxFloat(&max_bounds->z, pos.z);
 #elif defined(__SYCL_DEVICE_ONLY__)
 		// Create separate atomic refs for each component
 		sycl::atomic_ref<float,
@@ -182,6 +182,30 @@ struct BoundingBoxKernel {
 #endif
 	}
 };
+
+#ifdef USE_CUDA
+extern template Event launch_cuda_kernel(const Resource& resource,
+										 const KernelConfig& config,
+										 BoundingBoxKernel kernel_func);
+extern template Event launch_cuda_kernel(const Resource& resource,
+										 const KernelConfig& config,
+										 MortonEncodeKernel kernel_func);
+extern template Event launch_cuda_kernel(const Resource& resource,
+										 const KernelConfig& config,
+										 InverseIndexKernel kernel_func);
+extern template Event launch_cuda_kernel(const Resource& resource,
+										 const KernelConfig& config,
+										 ValidateZOrderKernel kernel_func);
+extern template Event launch_cuda_kernel(const Resource& resource,
+										 const KernelConfig& config,
+										 ReorderDataKernel<Vector3_t<float>> kernel_func);
+extern template Event launch_cuda_kernel(const Resource& resource,
+										 const KernelConfig& config,
+										 DisplacementKernel kernel_func);
+extern template Event launch_cuda_kernel(const Resource& resource,
+										 const KernelConfig& config,
+										 MortonValidationKernel kernel_func);
+#endif
 
 } // namespace ARBD
 

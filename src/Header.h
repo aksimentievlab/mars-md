@@ -89,12 +89,18 @@ inline std::string resolve_file_path(const std::string& file_path,
 
 } // namespace ARBD
 
-#else
-// Device compilation: provide stub declaration
+#elif defined(__CUDACC__) && !defined(__CUDA_ARCH__)
+// Host code in CUDA files - need to include string for host-side usage
+#include <string>
 namespace ARBD {
 inline std::string resolve_file_path(const std::string&, const std::string&) {
-	return "";
+	return ""; // Stub for host code in .cu files
 }
+} // namespace ARBD
+#else
+// Device compilation: no declaration needed
+namespace ARBD {
+// resolve_file_path not available in device code
 } // namespace ARBD
 #endif
 

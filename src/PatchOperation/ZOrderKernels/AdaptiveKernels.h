@@ -26,6 +26,17 @@ __device__ inline void atomicMaxFloat(float* address, float val) {
 			atomicCAS(address_as_int, assumed, __float_as_int(fmaxf(val, __int_as_float(assumed))));
 	} while (assumed != old);
 }
+
+// Helper function for atomic min with float
+__device__ inline void atomicMinFloat(float* address, float val) {
+	int* address_as_int = (int*)address;
+	int old = *address_as_int, assumed;
+	do {
+		assumed = old;
+		old =
+			atomicCAS(address_as_int, assumed, __float_as_int(fminf(val, __int_as_float(assumed))));
+	} while (assumed != old);
+}
 #endif
 
 /**

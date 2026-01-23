@@ -5,7 +5,7 @@
 list(APPEND LIB_SOURCES
     PatchOperation/Patch.cpp
     PatchOperation/Pairlist.cpp
-    PatchOperation/PairListKernels/CellListPairlist.cpp
+    #PatchOperation/PairListKernels/CellListPairlist.cpp
     PatchOperation/PairListKernels/ZOrderPairlist.cpp
     PatchOperation/ZOrderKernels/ZOrderSort.cpp
 )
@@ -48,10 +48,23 @@ list(APPEND HOST_DEVICE_HEADERS
 if(USE_CUDA)
     list(APPEND LIB_SOURCES
         PatchOperation/ZOrderKernels/CUDASort.cu
+        PatchOperation/ZOrderKernels/ZOrderKernels.cu
+        PatchOperation/PairListKernels/ZOrderPairlist.cu
+        PatchOperation/Random/Random.cu
         #PatchOperation/PairListKernels/VerletCompute.cu
         #PatchOperation/PairListKernels/ClusterCompute.cu
-        PatchOperation/Random/Random.cu
     )
+
+    # Set CUDA properties for .cu files
+    set_source_files_properties(
+        PatchOperation/ZOrderKernels/ZOrderKernels.cu
+        PatchOperation/PairListKernels/ZOrderPairlist.cu
+        PatchOperation/Random/Random.cu
+        PROPERTIES
+        LANGUAGE CUDA
+        CUDA_SEPARABLE_COMPILATION ON
+    )
+
     message(STATUS "PatchOperation: Adding CUDA specific sources to lib${PROJECT_NAME}")
 endif()
 

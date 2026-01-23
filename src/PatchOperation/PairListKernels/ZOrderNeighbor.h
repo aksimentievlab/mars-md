@@ -73,7 +73,7 @@ struct ZOrderNeighborKernel {
 				// Found a neighbor pair - store it!
 
 #ifdef USE_CUDA
-				uint32_t pair_idx = atomicAdd(pair_count, 1);
+				uint32_t pair_idx = ATOMIC_ADD(pair_count, 1U);
 #elif defined(USE_SYCL)
 				sycl::atomic_ref<uint32_t,
 								 sycl::memory_order::relaxed,
@@ -96,12 +96,18 @@ struct ZOrderNeighborKernel {
 			morton_t code_j = sorted_morton_codes[j];
 
 			// Only check early termination when moving forward in sorted order
-			if (j > i && (code_j - code_i) > 0x1000000) { // Heuristic threshold
-				break;
-			}
+			// if (j > i && (code_j - code_i) > 0x1000000) { // Heuristic threshold
+			//	break;
+			//}
 		}
 	}
 };
+
+#ifdef USE_CUDA
+extern template Event launch_cuda_kernel(const Resource& resource,
+										 const KernelConfig& config,
+										 ZOrderNeighborKernel kernel_func);
+#endif
 
 } // namespace ARBD
 

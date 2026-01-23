@@ -123,6 +123,29 @@ class Random {
 	}
 };
 
+#ifdef USE_CUDA
+extern template Event launch_cuda_kernel(const Resource& resource,
+										 const KernelConfig& config,
+										 UniformFunctor<float> kernel_func,
+										 float* output);
+extern template Event launch_cuda_kernel(const Resource& resource,
+										 const KernelConfig& config,
+										 UniformFunctor<uint32_t> kernel_func,
+										 uint32_t* output);
+extern template Event launch_cuda_kernel(const Resource& resource,
+										 const KernelConfig& config,
+										 UniformFunctor<int> kernel_func,
+										 int* output);
+extern template Event launch_cuda_kernel(const Resource& resource,
+										 const KernelConfig& config,
+										 GaussianFunctor<float> kernel_func,
+										 float* output);
+extern template Event launch_cuda_kernel(const Resource& resource,
+										 const KernelConfig& config,
+										 GaussianFunctor<Vector3_t<float>> kernel_func,
+										 Vector3_t<float>* output);
+#endif
+
 } // namespace ARBD
 #ifdef USE_SYCL
 #include <sycl/sycl.hpp>
