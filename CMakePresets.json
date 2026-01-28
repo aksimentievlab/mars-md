@@ -99,6 +99,20 @@
             }
         },
         {
+            "name": "frontier-icpx-release",
+            "displayName": "Frontier SYCL (Release)",
+            "description": "Targets Frontier with icpx SYCL for GPU development (Release build).",
+            "binaryDir": "${sourceDir}/build/frontier-icpx-release",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "CMAKE_CXX_COMPILER": "/autofs/nccs-svm1_sw/frontier/ums/ums015/oneapi/2024.2.0/compiler/2024.2/bin/icpx",
+                "CMAKE_C_COMPILER": "/autofs/nccs-svm1_sw/frontier/ums/ums015/oneapi/2024.2.0/compiler/2024.2/bin/icp",
+                "USE_SYCL_ICPX": "ON",
+                "CMAKE_CXX_EXTENSIONS": "OFF",
+                "CMAKE_CXX_FLAGS": "-fsycl -fsycl-targets=amdgcn-amd-amdhsa -Xsycl-target-backend --offload-arch=gfx90a -O3"
+            }
+        },
+        {
             "name": "macos-acpp-sycl-debug",
             "displayName": "macOS ACPP SYCL (Debug)",
             "description": "Targets macOS with acpp for SYCL development (Debug build).",
@@ -389,6 +403,11 @@
             "name": "delta-acpp-release-build",
             "configurePreset": "delta-acpp-release",
             "displayName": "Build Delta ACPP Release"
+        },
+        {
+            "name": "frontier-sycl-release-build",
+            "configurePreset": "frontier-sycl-release",
+            "displayName": "Build Frontier SYCL Release"
         },
         {
             "name": "tbgl-icpx-mpi",
