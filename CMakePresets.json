@@ -106,10 +106,12 @@
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Release",
                 "CMAKE_CXX_COMPILER": "/autofs/nccs-svm1_sw/frontier/ums/ums015/oneapi/2024.2.0/compiler/2024.2/bin/icpx",
-                "CMAKE_C_COMPILER": "/autofs/nccs-svm1_sw/frontier/ums/ums015/oneapi/2024.2.0/compiler/2024.2/bin/icp",
+                "CMAKE_C_COMPILER": "/autofs/nccs-svm1_sw/frontier/ums/ums015/oneapi/2024.2.0/compiler/2024.2/bin/icx",
                 "USE_SYCL_ICPX": "ON",
+                "SYCL_DEVICE_TYPE": "1",
+                "SYCL_AMD_ARCH": "gfx90a",
                 "CMAKE_CXX_EXTENSIONS": "OFF",
-                "CMAKE_CXX_FLAGS": "-fsycl -fsycl-targets=amdgcn-amd-amdhsa -Xsycl-target-backend --offload-arch=gfx90a -O3"
+                "CMAKE_CXX_FLAGS": "-I/opt/rh/gcc-toolset-12/root/usr/include/c++/12 -O3"
             }
         },
         {
@@ -181,10 +183,10 @@
         },
         {
             "name": "tbgl-icpx-sycl-mpi-debug",
-            "displayName": "tbgl Intel DPC++ SYCL (Release)",
-            "description": "Targets tbgl with Intel DPC++ (icpx) for SYCL development (Release build).",
+            "displayName": "tbgl Intel DPC++ SYCL with MPI (Debug)",
+            "description": "Targets tbgl with Intel DPC++ (icpx) for SYCL development with MPI (Debug build).",
             "generator": "Ninja",
-            "binaryDir": "${sourceDir}/build/tbgl-icpx-mpi-release",
+            "binaryDir": "${sourceDir}/build/tbgl-icpx-mpi-debug",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Debug",
                 "CMAKE_CXX_COMPILER": "/software/intel-oneapi-base-toolkit-2025.1.3.7/2025.1/bin/icpx",
@@ -237,7 +239,7 @@
         {
             "name": "tbgl-cuda-mpi",
             "displayName": "CUDA with MPI (OpenMPI 5.0.7 + GCC 12.3)",
-            "description": "Intel DPC++ SYCL build with MPI support using OpenMPI 5.0.7 and GCC 14 for RHEL systems.",
+            "description": "CUDA build with MPI support using OpenMPI 5.0.8 and GCC 12.3 for RHEL systems.",
             "generator": "Ninja",
             "binaryDir": "${sourceDir}/build/cuda-mpi-openmpi507-gcc12",
             "cacheVariables": {
@@ -326,15 +328,14 @@
             }
         },
         {
-            "name": "Configure preset using toolchain file",
+            "name": "toolchain-file",
             "displayName": "Configure preset using toolchain file",
-            "description": "Sets Ninja generator, build and install directory",
+            "description": "Sets Ninja generator, build and install directory. Set CMAKE_TOOLCHAIN_FILE to your toolchain file path.",
             "generator": "Ninja",
-            "binaryDir": "${sourceDir}/out/build/${presetName}",
+            "binaryDir": "${sourceDir}/out/build/toolchain-file",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Debug",
-                "CMAKE_TOOLCHAIN_FILE": "",
-                "CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install/${presetName}"
+                "CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install/toolchain-file"
             }
         }
     ],
@@ -406,7 +407,7 @@
         },
         {
             "name": "frontier-sycl-release-build",
-            "configurePreset": "frontier-sycl-release",
+            "configurePreset": "frontier-icpx-release",
             "displayName": "Build Frontier SYCL Release"
         },
         {

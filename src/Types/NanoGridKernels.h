@@ -1,6 +1,5 @@
 #pragma once
 #include "Header.h"
-#include "Vector3.h"
 #include "nanovdb/GridHandle.h"
 #include "nanovdb/NanoVDB.h"
 #include "nanovdb/math/Stencils.h"

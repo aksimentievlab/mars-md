@@ -26,6 +26,12 @@ option(USE_PYBIND "Build Python bindings" OFF)
 option(USE_METAL "Use Apple Silicon Metal" OFF)
 option(USE_MPI "Use MPI for distributed computing" OFF)
 
+option(SYCL_DEVICE_TYPE "Device type for SYCL builds, can be Nvidia (0), AMD (1) or Intel (2). Default is 0 (Nvidia)." 0)
+# Optional: override GPU arch for icpx SYCL targets (used when SYCL_DEVICE_TYPE is set)
+set(SYCL_NVIDIA_GPU_ARCH "sm_80" CACHE STRING "NVIDIA GPU architecture for icpx SYCL (e.g. sm_80, sm_86, sm_89, sm_90). Used when SYCL_DEVICE_TYPE=0.")
+set(SYCL_AMD_ARCH "gfx906" CACHE STRING "AMD GPU architecture for icpx SYCL (e.g. gfx906, gfx908, gfx90a). Used when SYCL_DEVICE_TYPE=1.")
+set(SYCL_INTEL_GPU_DEVICE "pvc" CACHE STRING "Intel GPU device for icpx SYCL AOT (e.g. pvc, mtl-h, skl). Used when SYCL_DEVICE_TYPE=2. Empty = spir64_gen generic.")
+
 # --- Backend Selection Validation ---
 # Ensure only one backend is selected
 set(BACKEND_COUNT 0)
@@ -54,6 +60,20 @@ endif()
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+set(BUILD_NANOVDB OFF)
+if(USE_CUDA OR USE_SYCL_ACPP OR USE_SYCL_ICPX)
+    set(BUILD_NANOVDB ON)
+endif()
+
+if(BUILD_NANOVDB)
+set(NANOVDB_BUILD_TOOLS OFF CACHE BOOL "Disable NanoVDB tools")
+set(NANOVDB_BUILD_UNITTESTS OFF CACHE BOOL "Disable NanoVDB tests")
+set(NANOVDB_BUILD_EXAMPLES OFF CACHE BOOL "Disable NanoVDB examples")
+set(NANOVDB_BUILD_PYTHON_MODULE OFF CACHE BOOL "Disable NanoVDB python module")
+set(NANOVDB_USE_CUDA OFF CACHE BOOL "Disable NanoVDB CUDA support")
+set(NANOVDB_USE_OPENVDB OFF CACHE BOOL "Disable NanoVDB OpenVDB support")
+add_subdirectory(extern/openvdb/nanovdb/nanovdb)
+endif()
 
 # Define C++23 macros as empty to avoid compatibility issues
 add_compile_definitions(_GLIBCXX23_CONSTEXPR=)
@@ -65,21 +85,13 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 find_package(Threads REQUIRED)
 include_directories(${CMAKE_SOURCE_DIR}/extern)
 
-# NanoVDB
-set(NANOVDB_BUILD_TOOLS OFF CACHE BOOL "Disable NanoVDB tools")
-set(NANOVDB_BUILD_UNITTESTS OFF CACHE BOOL "Disable NanoVDB tests")
-set(NANOVDB_BUILD_EXAMPLES OFF CACHE BOOL "Disable NanoVDB examples")
-set(NANOVDB_BUILD_PYTHON_MODULE OFF CACHE BOOL "Disable NanoVDB python module")
-set(NANOVDB_USE_CUDA OFF CACHE BOOL "Disable NanoVDB CUDA support")
-set(NANOVDB_USE_OPENVDB OFF CACHE BOOL "Disable NanoVDB OpenVDB support")
-add_subdirectory(extern/openvdb/nanovdb/nanovdb)
+
 
 if(USE_CUDA)
     set(CMAKE_CUDA_STANDARD 20)
     set(CMAKE_CUDA_STANDARD_REQUIRED ON)
     set(CMAKE_CUDA_EXTENSIONS OFF)
     set(CMAKE_CUDA_ARCHITECTURES "80;86;89;90") #100, 120 are not supported by all GPUs and compilers
-    # Add CUDA compiler flags for compatibility and force older GCC
     set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --extended-lambda --allow-unsupported-compiler")
     message(STATUS "CUDA architectures set to: ${CMAKE_CUDA_ARCHITECTURES}")
     message(STATUS "CUDA flags: ${CMAKE_CUDA_FLAGS}")
@@ -221,17 +233,17 @@ Example for USE_SYCL_ACPP on macOS:    cmake -D CMAKE_CXX_COMPILER=/opt/homebrew
                 message(WARNING "Could not find AdaptiveCpp library path at ${ACPP_LIB_DIR}. Linking may fail.")
             endif()
 
+            # AdaptiveCpp backends from SYCL_DEVICE_TYPE (0=Nvidia, 1=AMD, 2=Intel); same as icpx
             set(ACPP_TARGET_FLAGS "-O2")
-            if(CMAKE_SYSTEM_NAME STREQUAL "Darwin") # macOS
-                message(STATUS "Setting AdaptiveCpp default target flags for macOS (CPU via OpenMP).")
-                set(ACPP_TARGET_FLAGS "--acpp-targets=omp")
-            elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-                message(STATUS "Setting AdaptiveCpp default target flags for Linux (CUDA and OpenMP ).")
-                set(ACPP_TARGET_FLAGS "--acpp-targets=omp") #--acpp-targets=cuda:sm_80
-
-            else() # Other OS
-                message(WARNING "AdaptiveCpp on unknown OS ${CMAKE_SYSTEM_NAME}. Defaulting to OpenMP target.")
-                set(ACPP_TARGET_FLAGS "--acpp-targets=omp")
+            if(SYCL_DEVICE_TYPE EQUAL 1)
+                message(STATUS "AdaptiveCpp: backend AMD HIP, arch=${SYCL_AMD_ARCH}")
+                set(ACPP_TARGET_FLAGS "${ACPP_TARGET_FLAGS} --acpp-targets=hip:${SYCL_AMD_ARCH}")
+            elseif(SYCL_DEVICE_TYPE EQUAL 2)
+                message(STATUS "AdaptiveCpp: backend Intel Level Zero")
+                set(ACPP_TARGET_FLAGS "${ACPP_TARGET_FLAGS} --acpp-targets=level_zero")
+            else()
+                message(STATUS "AdaptiveCpp: backend NVIDIA CUDA, arch=${SYCL_NVIDIA_GPU_ARCH}")
+                set(ACPP_TARGET_FLAGS "${ACPP_TARGET_FLAGS} --acpp-targets=cuda:${SYCL_NVIDIA_GPU_ARCH}")
             endif()
 
             if(NOT ACPP_TARGET_FLAGS STREQUAL "")
@@ -255,39 +267,30 @@ Ensure CMAKE_CXX_COMPILER is set to your AdaptiveCpp executable path (e.g., /opt
             set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-c99-designator")
             message(STATUS "Suppressed -Wc99-designator warning for Intel DPC++")
 
-            # Configure SYCL targets based on available hardware
-            if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-                # On Linux, check for CUDA and configure accordingly
-                find_program(NVIDIA_SMI nvidia-smi)
-                if(NVIDIA_SMI)
-                    execute_process(COMMAND ${NVIDIA_SMI} --query-gpu=count --format=csv,noheader,nounits
-                                  OUTPUT_VARIABLE GPU_COUNT
-                                  OUTPUT_STRIP_TRAILING_WHITESPACE
-                                  ERROR_QUIET)
-                    if(GPU_COUNT AND GPU_COUNT GREATER 0)
-                        message(STATUS "Found ${GPU_COUNT} NVIDIA GPU(s), configuring SYCL for CUDA backend")
-                        # Set -fsycl globally (needed for SYCL headers), but NOT -fsycl-targets
-                        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsycl -O3")
-                        # Store additional flags for device sources only
-                        set(SYCL_DEVICE_EXTRA_FLAGS "-fsycl-targets=nvptx64-nvidia-cuda -Xsycl-target-backend=nvptx64-nvidia-cuda --cuda-gpu-arch=sm_80")
-                        set(SYCL_LINK_FLAGS "-fsycl -fsycl-targets=nvptx64-nvidia-cuda -Xsycl-target-backend=nvptx64-nvidia-cuda --cuda-gpu-arch=sm_80")
-                    else()
-                        message(STATUS "No NVIDIA GPUs found, using default SYCL targets")
-                        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsycl -O3")
-                        set(SYCL_DEVICE_EXTRA_FLAGS "")
-                        set(SYCL_LINK_FLAGS "-fsycl")
-                    endif()
+            # Configure SYCL targets based on SYCL_DEVICE_TYPE (0=Nvidia, 1=AMD, 2=Intel)
+            set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsycl -O3")
+            if(SYCL_DEVICE_TYPE EQUAL 1)
+                # AMD GPU: amdgcn-amd-amdhsa target (requires icpx built with --hip)
+                message(STATUS "icpx: Configuring SYCL for AMD GPU (SYCL_DEVICE_TYPE=1), arch=${SYCL_AMD_ARCH}")
+                set(SYCL_DEVICE_EXTRA_FLAGS "-fsycl-targets=amdgcn-amd-amdhsa -Xsycl-target-backend=amdgcn-amd-amdhsa --offload-arch=${SYCL_AMD_ARCH}")
+                set(SYCL_LINK_FLAGS "-fsycl -fsycl-targets=amdgcn-amd-amdhsa -Xsycl-target-backend=amdgcn-amd-amdhsa --offload-arch=${SYCL_AMD_ARCH}")
+            elseif(SYCL_DEVICE_TYPE EQUAL 2)
+                # Intel GPU: spir64_gen AOT (Level Zero / Intel GPU)
+                if(SYCL_INTEL_GPU_DEVICE)
+                    message(STATUS "icpx: Configuring SYCL for Intel GPU (SYCL_DEVICE_TYPE=2), device=${SYCL_INTEL_GPU_DEVICE}")
+                    # -Xsycl-target-backend passes -device <name> to the spir64_gen backend (ocloc)
+                    set(SYCL_DEVICE_EXTRA_FLAGS "-fsycl-targets=spir64_gen -Xsycl-target-backend=spir64_gen -device ${SYCL_INTEL_GPU_DEVICE}")
+                    set(SYCL_LINK_FLAGS "-fsycl -fsycl-targets=spir64_gen -Xsycl-target-backend=spir64_gen -device ${SYCL_INTEL_GPU_DEVICE}")
                 else()
-                    message(STATUS "nvidia-smi not found, using default SYCL targets")
-                    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsycl -O3")
-                    set(SYCL_DEVICE_EXTRA_FLAGS "")
-                    set(SYCL_LINK_FLAGS "-fsycl")
+                    message(STATUS "icpx: Configuring SYCL for Intel GPU (SYCL_DEVICE_TYPE=2), generic spir64_gen")
+                    set(SYCL_DEVICE_EXTRA_FLAGS "-fsycl-targets=spir64_gen")
+                    set(SYCL_LINK_FLAGS "-fsycl -fsycl-targets=spir64_gen")
                 endif()
             else()
-                # For non-Linux systems, use default targets
-                set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsycl -O3")
-                set(SYCL_DEVICE_EXTRA_FLAGS "")
-                set(SYCL_LINK_FLAGS "-fsycl")
+                # Nvidia (0): use user-selected SYCL_DEVICE_TYPE and SYCL_NVIDIA_GPU_ARCH
+                message(STATUS "icpx: Configuring SYCL for NVIDIA GPU (SYCL_DEVICE_TYPE=0), arch=${SYCL_NVIDIA_GPU_ARCH}")
+                set(SYCL_DEVICE_EXTRA_FLAGS "-fsycl-targets=nvptx64-nvidia-cuda -Xsycl-target-backend=nvptx64-nvidia-cuda --cuda-gpu-arch=${SYCL_NVIDIA_GPU_ARCH}")
+                set(SYCL_LINK_FLAGS "-fsycl -fsycl-targets=nvptx64-nvidia-cuda -Xsycl-target-backend=nvptx64-nvidia-cuda --cuda-gpu-arch=${SYCL_NVIDIA_GPU_ARCH}")
             endif()
 
             set(SYCL_COMPILER_CONFIGURED_CORRECTLY TRUE)

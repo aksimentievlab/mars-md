@@ -3,7 +3,7 @@
 #include "Backend/Buffer.h"
 #include "Backend/Resource.h"
 #include "Types/BaseGrid.h"
-#include "Types/NanoGridHandle.h"
+// #include "Types/NanoGridHandle.h"
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -14,7 +14,6 @@ namespace ARBD {
 enum class GridType { Potential, Diffusion, PMF, Force, Density };
 enum class GridFormat { Dense, Sparse };
 enum class InterpolationOrder : int { Linear = 1, Cubic = 3 };
-
 /**
  * @brief Lightweight grid identifier with metadata
  * @details Used for configuration and lookup. Does NOT own grid data.
@@ -117,8 +116,12 @@ class GridManager {
 	 * @return GridKey with assigned grid_id
 	 * @note Sparse grids will be replicated to all resources during build_device_arrays()
 	 */
+
 	GridKey add_sparse_grid(const std::string& filename) {
-		// Check if already loaded
+		throw_not_implemented("Sparse grids are not supported yet");
+
+		return GridKey(filename, GridFormat::Sparse);
+		/*
 		auto it = fname_to_gridkey_.find(filename);
 		if (it != fname_to_gridkey_.end()) {
 			LOGINFO("GridManager: Grid '{}' already loaded (grid_id={})",
@@ -127,29 +130,21 @@ class GridManager {
 			return it->second;
 		}
 
-		// Load sparse grid on first resource (will be replicated later)
+		// Load sparse grid on first resource(will be replicated later)
 		Resource first_resource =
 			(resources_ && !resources_->empty()) ? (*resources_)[0] : Resource{};
 		auto adapter = NanoGridAdapter<>::from_file(filename, first_resource);
 
 		// Assign unified grid_id
 		int grid_id = next_grid_id_++;
-		sparse_grids_.push_back(std::move(adapter));
+		sparse_grids_.push_back(NanoGridAdapter<float>(std::move(adapter), first_resource));
 		int sparse_idx = sparse_grids_.size() - 1;
-
-		// Create GridKey
-		GridKey key(filename, GridFormat::Sparse);
-		key.grid_id = grid_id;
-
-		// Store mappings
-		fname_to_gridkey_[filename] = key;
-		grid_keys_.push_back(key);
 		grid_id_to_sparse_idx_[grid_id] = sparse_idx;
 
 		LOGINFO("GridManager: Loaded sparse grid '{}' → grid_id={}", filename, grid_id);
-		return key;
+		return GridKey(filename, GridFormat::Sparse);
+		*/
 	}
-
 	/**
 	 * @brief Get GridKey by filename
 	 */
@@ -172,7 +167,7 @@ class GridManager {
 	 * @brief Get total number of grids
 	 */
 	size_t num_grids() const {
-		return dense_grids_.size() + sparse_grids_.size();
+		return dense_grids_.size(); // + sparse_grids_.size();
 	}
 
 	/**
@@ -219,7 +214,7 @@ class GridManager {
 				grid_configs[grid_id] = grid.config();
 			}
 
-			// Transfer sparse grids to this resource
+			/** Transfer sparse grids to this resource
 			for (const auto& [grid_id, sparse_idx] : grid_id_to_sparse_idx_) {
 				// TODO: Replicate sparse grids to multiple resources
 				// For now, use the first resource's sparse grid
@@ -228,6 +223,7 @@ class GridManager {
 				// TODO: Extract config from NanoVDB grid
 				grid_configs[grid_id] = BaseGrid<float>::Config{};
 			}
+			*/
 
 			// Store device arrays for this resource
 			device_grid_ptrs_per_resource_.push_back(std::move(grid_ptrs));
@@ -284,7 +280,7 @@ class GridManager {
 
 	/**
 	 * @brief Access sparse grid by grid_id
-	 */
+
 	NanoGridAdapter<>& get_sparse_grid(int grid_id) {
 		auto it = grid_id_to_sparse_idx_.find(grid_id);
 		if (it == grid_id_to_sparse_idx_.end()) {
@@ -293,11 +289,11 @@ class GridManager {
 		}
 		return sparse_grids_[it->second];
 	}
-
+	 */
   private:
 	// Host-side storage (separate by format, single copy)
 	std::vector<BaseGrid<float>> dense_grids_;
-	std::vector<NanoGridAdapter<>> sparse_grids_;
+	// std::vector<NanoGridAdapter<float>> sparse_grids_;
 
 	// Metadata and lookup
 	std::vector<GridKey> grid_keys_;

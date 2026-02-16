@@ -1,5 +1,6 @@
 #pragma once
 #include "Analytical.h"
+#include "Backend/Kernels.h"
 #include "BondGeometry.h"
 #include "Interactions/BondedInteraction.h"
 #include "Interactions/TabulatedPotential.h"

@@ -864,11 +864,6 @@ class BaseGrid {
 									const Vector3_t<idx_t>& dimensions);
 
 	/**
-	 * @brief Device-safe index wrapping for periodic boundaries
-	 */
-	friend idx_t wrap_index(int index, idx_t size);
-
-	/**
 	 * @brief Friend declarations for DXReader I/O functions
 	 */
 	template<typename U>
@@ -890,11 +885,5 @@ class BaseGrid {
 // Type aliases for common usage
 using BaseGridf = BaseGrid<float>;
 using BaseGridd = BaseGrid<double>;
-
-/*==========================*\
-|  DEVICE-SAFE FUNCTIONS     |
-\*==========================*/
-
-// Implementations moved to BaseGridKernels.h to keep BaseGrid Host only.
 
 } // namespace ARBD

@@ -59,6 +59,23 @@ class Patch {
 		initialize_spatial_structures();
 	}
 
+	//================================================================================
+	// Communication Buffers for Particle Exchange
+	//================================================================================
+	struct HaloBuffers {
+		DeviceBuffer<DeviceParticle> send_particles; ///< Outgoing halo particle data
+		DeviceBuffer<DeviceParticle> recv_particles; ///< Incoming halo particle data
+		DeviceBuffer<int> migration_flags;			 ///< Per-particle migration direction flags
+		DeviceBuffer<int> migration_count; ///< Number of migrating particles per direction
+
+		HaloBuffers(const Resource& resource, idx_t capacity)
+			: send_particles(capacity, resource), // 8 floats per particle (pos+vel+type+flags)
+			  recv_particles(capacity, resource), migration_flags(capacity, resource),
+			  migration_count(6, resource) {} // 6 directions
+	};
+
+	std::unique_ptr<HaloBuffers> halo_buffers_{nullptr};
+
 	/**
 	 * @brief Set reference to system-wide periodic boundary conditions
 	 * @param sim_box Pointer to system boundary conditions (not owned)
@@ -447,22 +464,6 @@ class Patch {
 	// System References (not owned)
 	//================================================================================
 	const PeriodicBox* periodic_box_{nullptr}; ///< System boundary conditions
-	//================================================================================
-	// Communication Buffers for Particle Exchange
-	//================================================================================
-	struct HaloBuffers {
-		DeviceBuffer<DeviceParticle> send_particles; ///< Outgoing halo particle data
-		DeviceBuffer<DeviceParticle> recv_particles; ///< Incoming halo particle data
-		DeviceBuffer<int> migration_flags;			 ///< Per-particle migration direction flags
-		DeviceBuffer<int> migration_count; ///< Number of migrating particles per direction
-
-		HaloBuffers(const Resource& resource, idx_t capacity)
-			: send_particles(capacity, resource), // 8 floats per particle (pos+vel+type+flags)
-			  recv_particles(capacity, resource), migration_flags(capacity, resource),
-			  migration_count(6, resource) {} // 6 directions
-	};
-
-	std::unique_ptr<HaloBuffers> halo_buffers_{nullptr};
 };
 
 /**

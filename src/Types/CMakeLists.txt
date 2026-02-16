@@ -14,11 +14,17 @@ list(APPEND HOST_DEVICE_HEADERS
     Types/BaseGridDevice.h
     Types/Bitmask.h
     Types/Grid.h
-    Types/NanoGridHandle.h
-    Types/NanoGridKernels.h
+
     Types/Types.h
     Types/Math.h
 )
+
+if(BUILD_NANOVDB)
+    list(APPEND HOST_DEVICE_HEADERS
+        Types/NanoGridHandle.h
+        Types/NanoGridKernels.h
+    )
+endif()
 
 list(APPEND HOST_ONLY_HEADERS
     Types/Array.h

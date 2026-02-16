@@ -10,7 +10,6 @@
  * traditional cell-based approaches.
  *********************************************************************/
 
-#include "../ZOrderKernels/ZOrderKernels.h"
 #include "../ZOrderKernels/ZOrderSort.h"
 #include "PatchOperation/Pairlist.h"
 #include "Types/Types.h"

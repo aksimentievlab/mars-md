@@ -510,7 +510,7 @@ class SimSystem {
 	//================================================================================
 
 	/**
-	 * @brief Get tabulated function ID by filename
+	 * @brief Get tabulated function ID by filename for python interface.
 	 * @param filename Tabulated function filename
 	 * @return Function ID, or -1 if not found
 	 */

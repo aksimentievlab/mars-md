@@ -97,8 +97,17 @@ struct ProductPotentialGeometry {
 	// Combined metrics (for coupled potentials)
 	float combined_metric;
 	bool is_singular;
-
-	ProductPotentialGeometry() : combined_metric(0.0f), is_singular(false) {}
+	ProductPotentialGeometry() = default;
+	ProductPotentialGeometry(const AngleGeometry& angle1,
+							 const BondGeometry& bond,
+							 const AngleGeometry& angle2)
+		: angle1(angle1), bond(bond), angle2(angle2) {}
+	ProductPotentialGeometry(const AngleGeometry& angle_a, const AngleGeometry& angle_b)
+		: angle_a(angle_a), angle_b(angle_b) {}
+	ProductPotentialGeometry(const BondGeometry& bond_a, const BondGeometry& bond_b)
+		: bond_a(bond_a), bond_b(bond_b) {}
+	ProductPotentialGeometry(const float combined_metric, const bool is_singular)
+		: combined_metric(combined_metric), is_singular(is_singular) {}
 
 	/**
 	 * @brief Compute geometry for BondAngle product potential
@@ -183,6 +192,7 @@ struct ProductPotentialGeometry {
 		return geom;
 	}
 };
+
 } // namespace ARBD
 #ifdef USE_SYCL
 #include <sycl/sycl.hpp>

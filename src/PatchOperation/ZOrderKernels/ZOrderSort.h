@@ -14,9 +14,7 @@
 #include "Backend/Kernels.h"
 #include "Backend/Resource.h"
 #include "DeviceRadix.h"
-#include "MortonCode.h"
 #include "Types/Types.h"
-#include "Types/Vector3.h"
 #include "ZOrderKernels.h"
 
 // DeviceRadix.h provides both CUDA and SYCL radix sort implementations

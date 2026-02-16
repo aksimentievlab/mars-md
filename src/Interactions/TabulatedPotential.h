@@ -1,9 +1,6 @@
 #pragma once
-#include "Backend/Resource.h"
-#include "Constants.h"
 #include "Header.h"
 #include "Interactions.h"
-#include "Objects/ParticleProperties.h"
 #include "Types/Types.h"
 
 namespace ARBD {
