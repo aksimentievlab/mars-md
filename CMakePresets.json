@@ -18,31 +18,18 @@
             }
         },
         {
-            "name": "delta-cuda-release",
-            "displayName": "Delta CUDA (Release)",
-            "description": "Targets Delta with CUDA for GPU development (Release build).",
-            "binaryDir": "${sourceDir}/build/delta-cuda-release",
+            "name": "stampede-icpx-release",
+            "displayName": "stampede SYCL (Release)",
+            "description": "Targets stampede with icpx SYCL for GPU development (Release build).",
+            "binaryDir": "${sourceDir}/build/stampede-icpx-release",
+            "generator": "Ninja",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Release",
-                "CMAKE_CUDA_COMPILER": "/sw/external/cudatoolkits/cuda-12.6.3/bin/nvcc",
-                "CMAKE_CXX_COMPILER": "/sw/external/llvm/16.0.6/bin/clang++",
-                "CMAKE_C_COMPILER": "/sw/external/llvm/16.0.6/bin/clang",
-                "USE_CUDA": "ON",
-                "CMAKE_CXX_EXTENSIONS": "OFF",
-                "CMAKE_CXX_FLAGS": "-I/opt/rh/gcc-toolset-12/root/usr/include/c++/12"
-            }
-        },
-        {
-            "name": "delta-icpx-release",
-            "displayName": "Delta SYCL (Release)",
-            "description": "Targets Delta with icpx SYCL for GPU development (Release build).",
-            "binaryDir": "${sourceDir}/build/delta-icpx-release",
-            "cacheVariables": {
-                "CMAKE_BUILD_TYPE": "Release",
-                "CMAKE_CXX_COMPILER": "/sw/spack/deltas11-2023-03/apps/linux-rhel8-zen/gcc-8.5.0/intel-oneapi-compilers-2024.0.0-r5a4jwi/compiler/2024.0/bin/icpx",
+                "CMAKE_CXX_COMPILER": "/scratch/projects/compilers/intel26.0/compiler/2026.0/bin/icpx",
                 "USE_SYCL_ICPX": "ON",
                 "CMAKE_CXX_EXTENSIONS": "OFF",
-                "CMAKE_CXX_FLAGS": "-I/opt/rh/gcc-toolset-12/root/usr/include/c++/12"
+                "CMAKE_CXX_FLAGS": "-I/opt/apps/gcc/16.1.0/include/c++/16.1.0 -O3",
+                "SYCL_DEVICE_TYPE": "2"
             }
         },
         {
@@ -361,6 +348,11 @@
             "displayName": "Build Release (Metal)"
         },
         {
+            "name": "default-stampede-release",
+            "configurePreset": "stampede-icpx-release",
+            "displayName": "Build Release (Metal)"
+        },
+        {
             "name": "tbgl-icpx-sycl-debug",
             "configurePreset": "tbgl-icpx-sycl-debug",
             "displayName": "Build tbgl SYCL Debug"
@@ -394,11 +386,6 @@
             "name": "delta-cuda-debug-build",
             "configurePreset": "delta-cuda-debug",
             "displayName": "Build Delta CUDA Debug"
-        },
-        {
-            "name": "delta-cuda-release-build",
-            "configurePreset": "delta-cuda-release",
-            "displayName": "Build Delta CUDA Release"
         },
         {
             "name": "delta-acpp-release-build",

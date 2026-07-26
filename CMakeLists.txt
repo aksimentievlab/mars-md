@@ -91,7 +91,7 @@ if(USE_CUDA)
     set(CMAKE_CUDA_STANDARD 20)
     set(CMAKE_CUDA_STANDARD_REQUIRED ON)
     set(CMAKE_CUDA_EXTENSIONS OFF)
-    set(CMAKE_CUDA_ARCHITECTURES "80;86;89;90") #100, 120 are not supported by all GPUs and compilers
+    set(CMAKE_CUDA_ARCHITECTURES "80;86;89;90;100;120") #100, 120 are not supported by all GPUs and compilers
     set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --extended-lambda --allow-unsupported-compiler")
     message(STATUS "CUDA architectures set to: ${CMAKE_CUDA_ARCHITECTURES}")
     message(STATUS "CUDA flags: ${CMAKE_CUDA_FLAGS}")
@@ -278,9 +278,9 @@ Ensure CMAKE_CXX_COMPILER is set to your AdaptiveCpp executable path (e.g., /opt
                 # Intel GPU: spir64_gen AOT (Level Zero / Intel GPU)
                 if(SYCL_INTEL_GPU_DEVICE)
                     message(STATUS "icpx: Configuring SYCL for Intel GPU (SYCL_DEVICE_TYPE=2), device=${SYCL_INTEL_GPU_DEVICE}")
-                    # -Xsycl-target-backend passes -device <name> to the spir64_gen backend (ocloc)
-                    set(SYCL_DEVICE_EXTRA_FLAGS "-fsycl-targets=spir64_gen -Xsycl-target-backend=spir64_gen -device ${SYCL_INTEL_GPU_DEVICE}")
-                    set(SYCL_LINK_FLAGS "-fsycl -fsycl-targets=spir64_gen -Xsycl-target-backend=spir64_gen -device ${SYCL_INTEL_GPU_DEVICE}")
+                    # -Xsycl-target-backend takes one backend arg; "-device <name>" must be quoted together
+                    set(SYCL_DEVICE_EXTRA_FLAGS "-fsycl-targets=spir64_gen -Xsycl-target-backend=spir64_gen \"-device ${SYCL_INTEL_GPU_DEVICE}\"")
+                    set(SYCL_LINK_FLAGS "-fsycl -fsycl-targets=spir64_gen -Xsycl-target-backend=spir64_gen \"-device ${SYCL_INTEL_GPU_DEVICE}\"")
                 else()
                     message(STATUS "icpx: Configuring SYCL for Intel GPU (SYCL_DEVICE_TYPE=2), generic spir64_gen")
                     set(SYCL_DEVICE_EXTRA_FLAGS "-fsycl-targets=spir64_gen")
