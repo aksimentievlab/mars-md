@@ -20,7 +20,7 @@
         {
             "name": "stampede-icpx-release",
             "displayName": "stampede SYCL (Release)",
-            "description": "Targets stampede with icpx SYCL for GPU development (Release build).",
+            "description": "Targets stampede with icpx SYCL for Intel PVC GPU AOT (Release build). Requires intel-ocloc on the system.",
             "binaryDir": "${sourceDir}/build/stampede-icpx-release",
             "generator": "Ninja",
             "cacheVariables": {
@@ -30,6 +30,9 @@
                 "CMAKE_CXX_EXTENSIONS": "OFF",
                 "CMAKE_CXX_FLAGS": "-I/opt/apps/gcc/16.1.0/include/c++/16.1.0 -O3",
                 "SYCL_DEVICE_TYPE": "2"
+            },
+            "environment": {
+                "PATH": "${sourceDir}/cmake/stampede-sycl-tools:/scratch/projects/compilers/intel26.0/compiler/2026.0/bin/compiler:$penv{PATH}"
             }
         },
         {
@@ -350,7 +353,10 @@
         {
             "name": "default-stampede-release",
             "configurePreset": "stampede-icpx-release",
-            "displayName": "Build Release (Metal)"
+            "displayName": "Build Stampede SYCL Release",
+            "environment": {
+                "PATH": "${sourceDir}/cmake/stampede-sycl-tools:/scratch/projects/compilers/intel26.0/compiler/2026.0/bin/compiler:$penv{PATH}"
+            }
         },
         {
             "name": "tbgl-icpx-sycl-debug",

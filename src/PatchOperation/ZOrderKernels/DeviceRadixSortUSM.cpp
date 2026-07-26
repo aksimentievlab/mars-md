@@ -161,7 +161,6 @@ void device_radix_sort_pairs_usm(const Resource& device,
 		// ========================================================================
 		E_last = q.submit([&](sycl::handler& h) {
 			h.depends_on(E_last);
-			sycl::local_accessor<uint32_t, 1> s_scan(DRS_SCAN_THREADS, h);
 
 			h.parallel_for(sycl::nd_range<1>(DRS_RADIX * DRS_SCAN_THREADS, DRS_SCAN_THREADS),
 						   [=](sycl::nd_item<1> item) [[sycl::reqd_sub_group_size(SG_SIZE)]] {
@@ -171,48 +170,28 @@ void device_radix_sort_pairs_usm(const Resource& device,
 							   auto group = item.get_group(); // ← Use work-group, not sub-group!
 
 							   uint32_t reduction = 0;
-							   const uint32_t partitionsEnd = threadBlocks / block_dim * block_dim;
 							   const uint32_t digitOffset = group_id * threadBlocks;
 
-							   uint32_t i = local_id;
-							   for (; i < partitionsEnd; i += block_dim) {
-								   uint32_t original = passHistogram[i + digitOffset];
-
-								   // Exclusive scan over the ENTIRE work-group (all 128 threads)
+							   for (uint32_t block_offset = 0; block_offset < threadBlocks;
+									block_offset += block_dim) {
+								   const uint32_t index = block_offset + local_id;
+								   const bool is_valid = index < threadBlocks;
+								   const uint32_t original =
+									   is_valid ? passHistogram[index + digitOffset] : 0;
 								   uint32_t exclusive =
 									   sycl::exclusive_scan_over_group(group,
 																	   original,
 																	   sycl::plus<uint32_t>());
-
-								   // Also get the total sum (for reduction)
 								   uint32_t inclusive =
 									   sycl::inclusive_scan_over_group(group,
 																	   original,
 																	   sycl::plus<uint32_t>());
 
-								   passHistogram[i + digitOffset] = exclusive + reduction;
-
-								   // Use the last thread's inclusive value as the total
+								   if (is_valid)
+									   passHistogram[index + digitOffset] = exclusive + reduction;
 								   uint32_t total =
 									   sycl::group_broadcast(group, inclusive, block_dim - 1);
 								   reduction += total;
-							   }
-
-							   // Handle remaining elements
-							   if (i < threadBlocks) {
-								   uint32_t original = passHistogram[i + digitOffset];
-
-								   uint32_t exclusive =
-									   sycl::exclusive_scan_over_group(group,
-																	   original,
-																	   sycl::plus<uint32_t>());
-
-								   uint32_t inclusive =
-									   sycl::inclusive_scan_over_group(group,
-																	   original,
-																	   sycl::plus<uint32_t>());
-
-								   passHistogram[i + digitOffset] = exclusive + reduction;
 							   }
 						   });
 		});

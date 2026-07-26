@@ -20,7 +20,8 @@ private:
   bool initialized_{false};
   void initialize_queues() {
     try {
-      sycl::property_list props{sycl::property::queue::enable_profiling{}};
+      sycl::property_list props{sycl::property::queue::in_order{},
+                                sycl::property::queue::enable_profiling{}};
 
       // Initialize each queue in the array
       for (size_t i = 0; i < NUM_QUEUES; ++i) {

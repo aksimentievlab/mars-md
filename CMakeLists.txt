@@ -278,9 +278,16 @@ Ensure CMAKE_CXX_COMPILER is set to your AdaptiveCpp executable path (e.g., /opt
                 # Intel GPU: spir64_gen AOT (Level Zero / Intel GPU)
                 if(SYCL_INTEL_GPU_DEVICE)
                     message(STATUS "icpx: Configuring SYCL for Intel GPU (SYCL_DEVICE_TYPE=2), device=${SYCL_INTEL_GPU_DEVICE}")
-                    # -Xsycl-target-backend takes one backend arg; "-device <name>" must be quoted together
-                    set(SYCL_DEVICE_EXTRA_FLAGS "-fsycl-targets=spir64_gen -Xsycl-target-backend=spir64_gen \"-device ${SYCL_INTEL_GPU_DEVICE}\"")
-                    set(SYCL_LINK_FLAGS "-fsycl -fsycl-targets=spir64_gen -Xsycl-target-backend=spir64_gen \"-device ${SYCL_INTEL_GPU_DEVICE}\"")
+                    if(SYCL_INTEL_GPU_DEVICE STREQUAL "pvc")
+                        # PVC does not support SYCL/OpenCL image operations.
+                        add_definitions(-DARBD_SYCL_DISABLE_TEXTURES)
+                        set(SYCL_DEVICE_EXTRA_FLAGS "-fsycl-targets=intel_gpu_pvc")
+                        set(SYCL_LINK_FLAGS "-fsycl -fsycl-targets=intel_gpu_pvc")
+                    else()
+                        # -Xsycl-target-backend takes one backend arg; "-device <name>" must be quoted together.
+                        set(SYCL_DEVICE_EXTRA_FLAGS "-fsycl-targets=spir64_gen -Xsycl-target-backend=spir64_gen \"-device ${SYCL_INTEL_GPU_DEVICE}\"")
+                        set(SYCL_LINK_FLAGS "-fsycl -fsycl-targets=spir64_gen -Xsycl-target-backend=spir64_gen \"-device ${SYCL_INTEL_GPU_DEVICE}\"")
+                    endif()
                 else()
                     message(STATUS "icpx: Configuring SYCL for Intel GPU (SYCL_DEVICE_TYPE=2), generic spir64_gen")
                     set(SYCL_DEVICE_EXTRA_FLAGS "-fsycl-targets=spir64_gen")

@@ -106,9 +106,9 @@ TEST_CASE("DeviceRadixSort Key-Value Pairs - Small", "[deviceradix][sort][pairs]
 TEST_CASE("DeviceRadixSort Key-Value Pairs - Medium", "[deviceradix][sort][pairs][medium]") {
 	initialize_backend_once();
 	Resource device = single_resource;
-	const size_t size = 1024 * 1024; // 1M elements
+	const size_t size = 1024 * 1024*1024; // 1G elements
 
-	SECTION("Sort 1M elements") {
+	SECTION("Sort 1G elements") {
 		std::vector<uint32_t> h_keys(size);
 		std::vector<uint32_t> h_payloads(size);
 		generate_random_data_drs(device, h_keys, 54321);
@@ -149,7 +149,7 @@ TEST_CASE("DeviceRadixSort Key-Value Pairs - Medium", "[deviceradix][sort][pairs
 		auto end = std::chrono::high_resolution_clock::now();
 		auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
 
-		std::cout << "Sorted " << size << " elements in " << duration.count() << " ms" << std::endl;
+		std::cout << "Sorted " << size / (1024 * 1024 * 1024) << "G elements in " << duration.count() << " ms" << std::endl;
 
 		std::vector<uint32_t> h_sorted_keys(size);
 		d_keys.copy_to_host(h_sorted_keys.data(), size);

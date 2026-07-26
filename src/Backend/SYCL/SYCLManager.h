@@ -5,7 +5,6 @@
 #include "ARBDLogger.h"
 #include "Header.h"
 #include <mutex>
-#include <omp.h>
 #include <string_view>
 #include <sycl/sycl.hpp>
 #include <vector>

@@ -3,6 +3,9 @@
 #include "ARBDLogger.h"
 #include <sstream>
 #include <mutex>
+#ifdef _OPENMP
+#include <omp.h>
+#endif
 
 namespace ARBD {
 namespace SYCL {

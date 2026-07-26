@@ -273,6 +273,31 @@ struct UnifiedPolicy {
 	}
 };
 
+#if defined(ARBD_SYCL_DISABLE_TEXTURES)
+struct TexturePolicy {
+	static void* allocate(const Resource&,
+						  size_t,
+						  size_t,
+						  size_t,
+						  sycl::image_channel_order,
+						  sycl::image_channel_type) {
+		ARBD_Exception(ExceptionType::RuntimeError,
+					   "SYCL textures are unavailable on this Intel GPU target");
+		return nullptr;
+	}
+
+	static void deallocate(void*, void* = nullptr, bool = true) {}
+
+	static void copy_from_buffer(void*,
+								 const void*,
+								 size_t,
+								 const Resource&,
+								 StreamType) {
+		ARBD_Exception(ExceptionType::RuntimeError,
+					   "SYCL textures are unavailable on this Intel GPU target");
+	}
+};
+#else
 struct TexturePolicy {
 	struct Texture {
 		void* image{nullptr};
@@ -394,6 +419,7 @@ struct TexturePolicy {
 		 }).wait_and_throw();
 	}
 };
+#endif
 
 } // namespace SYCL
 } // namespace ARBD
