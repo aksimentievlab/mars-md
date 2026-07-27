@@ -27,7 +27,10 @@ struct AnalyticalForceComputer<0> {
 	}
 };
 
-// Morse Force: F = 2*D0*a*exp(-a(r-r0))*[1-exp(-a(r-r0))]
+// Morse potential: V(r) = D0*[1-exp(-a(r-r0))]^2
+// Force: F = -dV/dr = -2*D0*a*exp(-a(r-r0))*[1-exp(-a(r-r0))]
+// (negative for r>r0: attractive, pulling the stretched bond back together -
+// same sign convention as AnalyticalForceComputer<0>'s -k*(distance-r0))
 // Parameters: [D0, a, r0]
 template<>
 struct AnalyticalForceComputer<1> {
@@ -38,8 +41,9 @@ struct AnalyticalForceComputer<1> {
 		const float a = params[1];	// Width parameter
 		const float r0 = params[2]; // Equilibrium distance
 		const float exp_term = expf(-a * (distance - r0));
-		float force = 2.0f * D0 * a * exp_term * (1.0f - exp_term);
-		float energy = D0 * (1.0f - exp_term);
+		const float one_minus_exp = 1.0f - exp_term;
+		float force = -2.0f * D0 * a * exp_term * one_minus_exp;
+		float energy = D0 * one_minus_exp * one_minus_exp;
 		return ScalarForceEnergy{float2(force, energy)};
 	}
 };

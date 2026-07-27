@@ -22,7 +22,7 @@
 #include "System/SimSystem.h"
 // Define this if not provided by CMake/build system for version info
 #ifndef VERSION
-#define VERSION "Development Build - Oct 2025"
+#define VERSION "Development Build - July 2026"
 #endif
 
 // Consider moving constants to a dedicated configuration header or class
@@ -301,6 +301,7 @@ int main(int argc, char* argv[]) {
 	}
 	ARBD::SimManager manager(sys);
 	manager.set_initial_particles(parser.get_init_particles());
+	manager.set_bonded_interactions(parser.get_init_bonded_interactions());
 	manager.init();
 	manager.run();
 

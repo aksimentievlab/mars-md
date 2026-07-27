@@ -85,6 +85,16 @@ struct Table {
 		if (line) {
 			free(line);
 		}
+
+		// The constructor's check_same_step_size() call ran on an empty
+		// table (X/Y not populated yet), so it always took the "not enough
+		// values" early-return and left step_size/start at their 0.0
+		// defaults. Recompute now that the data has actually been loaded -
+		// otherwise every TabulatedPotential built from this table gets
+		// step_inv=0, which silently zeroes every force (force_magnitude =
+		// dU * step_inv in TabulatedPotential::compute), while still
+		// reporting a plausible-looking (but wrong, always-at-x=start) energy.
+		check_same_step_size();
 	}
 };
 

@@ -72,6 +72,13 @@ struct AnalyticalBondComputer {
 
 /**
  * @brief Tabulated bond force computer
+ *
+ * `tables` holds one entry per distinct bond *type* (as loaded by
+ * TablesRegistry), not one per bond instance - table_indices[i] says which
+ * entry bond i uses (see DeviceBondedInteractions::bond_table_indices()).
+ * forms[i] is an InteractionForm (Grid=0, Tabulated=1, Analytical=2); this
+ * computer only processes Tabulated entries and skips the rest (Analytical
+ * bonds are handled by AnalyticalBondComputer instead, via a separate launch).
  */
 struct TabulatedBondComputer {
 	// Members
@@ -79,6 +86,8 @@ struct TabulatedBondComputer {
 	DEVICE_PTR(Vector3) positions;
 	DEVICE_PTR(Vector3) force_energy;
 	DEVICE_PTR(const TabulatedPotential) tables;
+	DEVICE_PTR(const int) table_indices;
+	DEVICE_PTR(const int) forms;
 	const PeriodicBox* pbox;
 	bool get_energy;
 	idx_t num_bonds;
@@ -88,15 +97,20 @@ struct TabulatedBondComputer {
 						  DEVICE_PTR(Vector3) pos,
 						  DEVICE_PTR(Vector3) fe,
 						  DEVICE_PTR(const TabulatedPotential) tabs,
+						  DEVICE_PTR(const int) tab_indices,
+						  DEVICE_PTR(const int) bond_forms,
 						  const PeriodicBox* box,
 						  bool energy,
 						  idx_t n)
-		: particle_indices(indices), positions(pos), force_energy(fe), tables(tabs), pbox(box),
-		  get_energy(energy), num_bonds(n) {}
+		: particle_indices(indices), positions(pos), force_energy(fe), tables(tabs),
+		  table_indices(tab_indices), forms(bond_forms), pbox(box), get_energy(energy),
+		  num_bonds(n) {}
 
 	// Kernel operator
 	DEVICE void operator()(idx_t i) const {
 		if (i >= num_bonds)
+			return;
+		if (static_cast<InteractionForm>(forms[i]) != InteractionForm::Tabulated)
 			return;
 
 		const int2& indices = particle_indices[i];
@@ -107,7 +121,8 @@ struct TabulatedBondComputer {
 			return;
 
 		// Phase 2: Lookup force from tabulated potential
-		const ScalarForceEnergy fe = TabulatedPotential::compute(geom.distance, &tables[i]);
+		const ScalarForceEnergy fe =
+			TabulatedPotential::compute(geom.distance, &tables[table_indices[i]]);
 
 		// Phase 3: Apply forces
 		const Vector3 force = geom.unit_vector * fe.force_magnitude;
@@ -129,6 +144,9 @@ struct TabulatedBondComputer {
 
 /**
  * @brief Tabulated angle force computer
+ *
+ * Same table-sharing/form-filtering scheme as TabulatedBondComputer: see its
+ * comment for what table_indices/forms mean.
  */
 struct TabulatedAngleComputer {
 	// Members
@@ -136,6 +154,8 @@ struct TabulatedAngleComputer {
 	DEVICE_PTR(Vector3) positions;
 	DEVICE_PTR(Vector3) force_energy;
 	DEVICE_PTR(const TabulatedPotential) tables;
+	DEVICE_PTR(const int) table_indices;
+	DEVICE_PTR(const int) forms;
 	const PeriodicBox* pbox;
 	bool get_energy;
 	idx_t num_angles;
@@ -145,15 +165,20 @@ struct TabulatedAngleComputer {
 						   DEVICE_PTR(Vector3) pos,
 						   DEVICE_PTR(Vector3) fe,
 						   DEVICE_PTR(const TabulatedPotential) tabs,
+						   DEVICE_PTR(const int) tab_indices,
+						   DEVICE_PTR(const int) angle_forms,
 						   const PeriodicBox* box,
 						   bool energy,
 						   idx_t n)
-		: particle_indices(indices), positions(pos), force_energy(fe), tables(tabs), pbox(box),
-		  get_energy(energy), num_angles(n) {}
+		: particle_indices(indices), positions(pos), force_energy(fe), tables(tabs),
+		  table_indices(tab_indices), forms(angle_forms), pbox(box), get_energy(energy),
+		  num_angles(n) {}
 
 	// Kernel operator
 	DEVICE void operator()(idx_t i) const {
 		if (i >= num_angles)
+			return;
+		if (static_cast<InteractionForm>(forms[i]) != InteractionForm::Tabulated)
 			return;
 
 		const int3& indices = particle_indices[i];
@@ -162,7 +187,8 @@ struct TabulatedAngleComputer {
 		AngleGeometry geom = AngleGeometry::compute(positions, indices, pbox);
 
 		// Phase 2: Lookup force from tabulated potential
-		const ScalarForceEnergy fe = TabulatedPotential::compute(geom.angle, &tables[i]);
+		const ScalarForceEnergy fe =
+			TabulatedPotential::compute(geom.angle, &tables[table_indices[i]]);
 
 		// Phase 3: Apply forces
 		const Vector3 force1 = geom.ab.cross(geom.bc) * fe.force_magnitude;
@@ -187,6 +213,9 @@ struct TabulatedAngleComputer {
 
 /**
  * @brief Tabulated dihedral force computer
+ *
+ * Same table-sharing/form-filtering scheme as TabulatedBondComputer: see its
+ * comment for what table_indices/forms mean.
  */
 struct TabulatedDihedralComputer {
 	// Members
@@ -194,6 +223,8 @@ struct TabulatedDihedralComputer {
 	DEVICE_PTR(Vector3) positions;
 	DEVICE_PTR(Vector3) force_energy;
 	DEVICE_PTR(const TabulatedPotential) tables;
+	DEVICE_PTR(const int) table_indices;
+	DEVICE_PTR(const int) forms;
 	const PeriodicBox* pbox;
 	bool get_energy;
 	idx_t num_dihedrals;
@@ -203,15 +234,20 @@ struct TabulatedDihedralComputer {
 							  DEVICE_PTR(Vector3) pos,
 							  DEVICE_PTR(Vector3) fe,
 							  DEVICE_PTR(const TabulatedPotential) tabs,
+							  DEVICE_PTR(const int) tab_indices,
+							  DEVICE_PTR(const int) dihedral_forms,
 							  const PeriodicBox* box,
 							  bool energy,
 							  idx_t n)
-		: particle_indices(indices), positions(pos), force_energy(fe), tables(tabs), pbox(box),
-		  get_energy(energy), num_dihedrals(n) {}
+		: particle_indices(indices), positions(pos), force_energy(fe), tables(tabs),
+		  table_indices(tab_indices), forms(dihedral_forms), pbox(box), get_energy(energy),
+		  num_dihedrals(n) {}
 
 	// Kernel operator
 	DEVICE void operator()(idx_t i) const {
 		if (i >= num_dihedrals)
+			return;
+		if (static_cast<InteractionForm>(forms[i]) != InteractionForm::Tabulated)
 			return;
 
 		const int4& indices = particle_indices[i];
@@ -221,7 +257,7 @@ struct TabulatedDihedralComputer {
 
 		// Phase 2: Lookup force from tabulated potential
 		const ScalarForceEnergy fe =
-			TabulatedPotential::compute(geom.dihedral_angle + BD_PI, &tables[i]);
+			TabulatedPotential::compute(geom.dihedral_angle + BD_PI, &tables[table_indices[i]]);
 
 		// Phase 3: Apply forces
 		const Vector3 f1 = geom.f1 * fe.force_magnitude;
@@ -255,13 +291,22 @@ inline Event launch_tabulated_bonds(const Resource& resource,
 									DEVICE_PTR(Vector3) positions,
 									DEVICE_PTR(Vector3) force_energy,
 									DEVICE_PTR(const TabulatedPotential) tables,
+									DEVICE_PTR(const int) table_indices,
+									DEVICE_PTR(const int) forms,
 									const PeriodicBox* pbox,
 									bool get_energy,
 									idx_t num_bonds) {
 	KernelConfig config = KernelConfig::for_1d(num_bonds, resource);
 
-	TabulatedBondComputer
-		computer(particle_indices, positions, force_energy, tables, pbox, get_energy, num_bonds);
+	TabulatedBondComputer computer(particle_indices,
+								   positions,
+								   force_energy,
+								   tables,
+								   table_indices,
+								   forms,
+								   pbox,
+								   get_energy,
+								   num_bonds);
 
 	return launch_kernel(resource, config, computer);
 }
@@ -274,13 +319,22 @@ inline Event launch_tabulated_angles(const Resource& resource,
 									 DEVICE_PTR(Vector3) positions,
 									 DEVICE_PTR(Vector3) force_energy,
 									 DEVICE_PTR(const TabulatedPotential) tables,
+									 DEVICE_PTR(const int) table_indices,
+									 DEVICE_PTR(const int) forms,
 									 const PeriodicBox* pbox,
 									 bool get_energy,
 									 idx_t num_angles) {
 	KernelConfig config = KernelConfig::for_1d(num_angles, resource);
 
-	TabulatedAngleComputer
-		computer(particle_indices, positions, force_energy, tables, pbox, get_energy, num_angles);
+	TabulatedAngleComputer computer(particle_indices,
+									positions,
+									force_energy,
+									tables,
+									table_indices,
+									forms,
+									pbox,
+									get_energy,
+									num_angles);
 
 	return launch_kernel(resource, config, computer);
 }
@@ -293,6 +347,8 @@ inline Event launch_tabulated_dihedrals(const Resource& resource,
 										DEVICE_PTR(Vector3) positions,
 										DEVICE_PTR(Vector3) force_energy,
 										DEVICE_PTR(const TabulatedPotential) tables,
+										DEVICE_PTR(const int) table_indices,
+										DEVICE_PTR(const int) forms,
 										const PeriodicBox* pbox,
 										bool get_energy,
 										idx_t num_dihedrals) {
@@ -302,6 +358,8 @@ inline Event launch_tabulated_dihedrals(const Resource& resource,
 									   positions,
 									   force_energy,
 									   tables,
+									   table_indices,
+									   forms,
 									   pbox,
 									   get_energy,
 									   num_dihedrals);

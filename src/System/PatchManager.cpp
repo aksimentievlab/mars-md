@@ -479,14 +479,28 @@ PatchManager::compute_nonbonded_forces(const NonBondedInteractions& interactions
 }
 
 std::vector<Event> PatchManager::compute_bonded_forces(const BondedInteractions& interactions,
-													   const DeviceParticleTypes& particle_types) {
+													   const DeviceParticleTypes& particle_types,
+													   const TablesRegistry& tables_registry) {
 	std::vector<Event> events;
 	events.reserve(patches_.size());
+	const auto& resources = sim_system_.get_resources();
 
 	for (auto& patch_ptr : patches_) {
 		if (!patch_ptr)
 			continue;
-		events.push_back(patch_ptr->calculate_bonded_forces(interactions, particle_types));
+
+		size_t resource_idx = 0;
+		for (size_t i = 0; i < resources.size(); ++i) {
+			if (resources[i] == patch_ptr->get_resource()) {
+				resource_idx = i;
+				break;
+			}
+		}
+
+		events.push_back(patch_ptr->calculate_bonded_forces(interactions,
+															particle_types,
+															tables_registry,
+															resource_idx));
 	}
 	return events;
 }

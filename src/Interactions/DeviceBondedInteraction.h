@@ -46,8 +46,11 @@ class DeviceBondedInteractions {
 				bond_form[i] = static_cast<int>(bonds[i].form);
 			}
 
+			bond_indices_ = DeviceBuffer<int2>(num_bonds_, resource_);
 			bond_indices_.copy_from_host(bond_idx.data(), num_bonds_);
+			bond_table_indices_ = DeviceBuffer<int>(num_bonds_, resource_);
 			bond_table_indices_.copy_from_host(bond_fn_idx.data(), num_bonds_);
+			bond_forms_ = DeviceBuffer<int>(num_bonds_, resource_);
 			bond_forms_.copy_from_host(bond_form.data(), num_bonds_);
 		}
 
@@ -66,8 +69,11 @@ class DeviceBondedInteractions {
 				angle_form[i] = static_cast<int>(angles[i].form);
 			}
 
+			angle_indices_ = DeviceBuffer<int3>(num_angles_, resource_);
 			angle_indices_.copy_from_host(angle_idx.data(), num_angles_);
+			angle_table_indices_ = DeviceBuffer<int>(num_angles_, resource_);
 			angle_table_indices_.copy_from_host(angle_fn_idx.data(), num_angles_);
+			angle_forms_ = DeviceBuffer<int>(num_angles_, resource_);
 			angle_forms_.copy_from_host(angle_form.data(), num_angles_);
 		}
 
@@ -87,43 +93,50 @@ class DeviceBondedInteractions {
 									   dihedrals[i].ind4};
 				dihedral_fn_idx[i] = dihedrals[i].function_index;
 				dihedral_form[i] = static_cast<int>(dihedrals[i].form);
-
-				dihedral_indices_.copy_from_host(dihedral_idx.data(), num_dihedrals_);
-				dihedral_table_indices_.copy_from_host(dihedral_fn_idx.data(), num_dihedrals_);
-				dihedral_forms_.copy_from_host(dihedral_form.data(), num_dihedrals_);
 			}
 
-			// === EXCLUSIONS ===
-			const auto& exclusions = host_bonded.get_exclusions();
-			num_exclusions_ = exclusions.size();
+			dihedral_indices_ = DeviceBuffer<int4>(num_dihedrals_, resource_);
+			dihedral_indices_.copy_from_host(dihedral_idx.data(), num_dihedrals_);
+			dihedral_table_indices_ = DeviceBuffer<int>(num_dihedrals_, resource_);
+			dihedral_table_indices_.copy_from_host(dihedral_fn_idx.data(), num_dihedrals_);
+			dihedral_forms_ = DeviceBuffer<int>(num_dihedrals_, resource_);
+			dihedral_forms_.copy_from_host(dihedral_form.data(), num_dihedrals_);
+		}
 
-			if (num_exclusions_ > 0) {
-				std::vector<int2> excl_pairs(num_exclusions_);
-				for (size_t i = 0; i < num_exclusions_; ++i) {
-					excl_pairs[i] = int2{exclusions[i].ind1, exclusions[i].ind2};
-				}
-				exclusion_pairs_.copy_from_host(excl_pairs.data(), num_exclusions_);
+		// === EXCLUSIONS ===
+		const auto& exclusions = host_bonded.get_exclusions();
+		num_exclusions_ = exclusions.size();
+
+		if (num_exclusions_ > 0) {
+			std::vector<int2> excl_pairs(num_exclusions_);
+			for (size_t i = 0; i < num_exclusions_; ++i) {
+				excl_pairs[i] = int2{exclusions[i].ind1, exclusions[i].ind2};
+			}
+			exclusion_pairs_ = DeviceBuffer<int2>(num_exclusions_, resource_);
+			exclusion_pairs_.copy_from_host(excl_pairs.data(), num_exclusions_);
+		}
+
+		// === RESTRAINTS ===
+		const auto& restraints = host_bonded.get_restraints();
+		num_restraints_ = restraints.size();
+
+		if (num_restraints_ > 0) {
+			std::vector<int> rest_ids(num_restraints_);
+			std::vector<Vector3> rest_pos(num_restraints_);
+			std::vector<float> rest_k(num_restraints_);
+
+			for (size_t i = 0; i < num_restraints_; ++i) {
+				rest_ids[i] = restraints[i].ind;
+				rest_pos[i] = restraints[i].r0;
+				rest_k[i] = restraints[i].k;
 			}
 
-			// === RESTRAINTS ===
-			const auto& restraints = host_bonded.get_restraints();
-			num_restraints_ = restraints.size();
-
-			if (num_restraints_ > 0) {
-				std::vector<int> rest_ids(num_restraints_);
-				std::vector<Vector3> rest_pos(num_restraints_);
-				std::vector<float> rest_k(num_restraints_);
-
-				for (size_t i = 0; i < num_restraints_; ++i) {
-					rest_ids[i] = restraints[i].ind;
-					rest_pos[i] = restraints[i].r0;
-					rest_k[i] = restraints[i].k;
-				}
-
-				restraint_particle_ids_.copy_from_host(rest_ids.data(), num_restraints_);
-				restraint_positions_.copy_from_host(rest_pos.data(), num_restraints_);
-				restraint_spring_constants_.copy_from_host(rest_k.data(), num_restraints_);
-			}
+			restraint_particle_ids_ = DeviceBuffer<int>(num_restraints_, resource_);
+			restraint_particle_ids_.copy_from_host(rest_ids.data(), num_restraints_);
+			restraint_positions_ = DeviceBuffer<Vector3>(num_restraints_, resource_);
+			restraint_positions_.copy_from_host(rest_pos.data(), num_restraints_);
+			restraint_spring_constants_ = DeviceBuffer<float>(num_restraints_, resource_);
+			restraint_spring_constants_.copy_from_host(rest_k.data(), num_restraints_);
 		}
 	}
 	/**
@@ -147,7 +160,8 @@ class DeviceBondedInteractions {
 
 			TabulatedPotential pot;
 			pot.pot = const_cast<arbd_real*>(device_buffer.data()); // Device pointer
-			pot.step_inv = 1.0 / table.step_size;
+			pot.step_inv = table.step_size > 0.0 ? static_cast<arbd_real>(1.0 / table.step_size)
+												 : arbd_real(0);
 			pot.size = static_cast<unsigned int>(table.Y.size());
 			pot.start = table.start;
 			pot.is_periodic = false; // Bonds are not periodic
@@ -163,7 +177,8 @@ class DeviceBondedInteractions {
 
 			TabulatedPotential pot;
 			pot.pot = const_cast<arbd_real*>(device_buffer.data());
-			pot.step_inv = 1.0 / table.step_size;
+			pot.step_inv = table.step_size > 0.0 ? static_cast<arbd_real>(1.0 / table.step_size)
+												 : arbd_real(0);
 			pot.size = static_cast<unsigned int>(table.Y.size());
 			pot.start = table.start;
 			pot.is_periodic = false;
@@ -178,7 +193,8 @@ class DeviceBondedInteractions {
 
 			TabulatedPotential pot;
 			pot.pot = const_cast<arbd_real*>(device_buffer.data());
-			pot.step_inv = 1.0 / table.step_size;
+			pot.step_inv = table.step_size > 0.0 ? static_cast<arbd_real>(1.0 / table.step_size)
+												 : arbd_real(0);
 			pot.size = static_cast<unsigned int>(table.Y.size());
 			pot.start = table.start;
 			pot.is_periodic = true; // Dihedrals ARE periodic
@@ -287,33 +303,33 @@ class DeviceBondedInteractions {
 	// === BONDS ===
 	DeviceBuffer<int2> bond_indices_;	   // Particle pairs (i, j)
 	DeviceBuffer<int> bond_table_indices_; // Which table to use (index into bond_potentials_)
-	DeviceBuffer<int> bond_forms_;		   // Tabulated=0, Analytical=1
+	DeviceBuffer<int> bond_forms_;		   // InteractionForm: Grid=0, Tabulated=1, Analytical=2
 	DeviceBuffer<TabulatedPotential> bond_potentials_; // Array of potential structs
-	idx_t num_bonds_;
+	idx_t num_bonds_{0};
 
 	// === ANGLES ===
 	DeviceBuffer<int3> angle_indices_; // Particle triplets (i, j, k)
 	DeviceBuffer<int> angle_table_indices_;
 	DeviceBuffer<int> angle_forms_;
 	DeviceBuffer<TabulatedPotential> angle_potentials_;
-	idx_t num_angles_;
+	idx_t num_angles_{0};
 
 	// === DIHEDRALS ===
 	DeviceBuffer<int4> dihedral_indices_; // Particle quartets (i, j, k, l)
 	DeviceBuffer<int> dihedral_table_indices_;
 	DeviceBuffer<int> dihedral_forms_;
 	DeviceBuffer<TabulatedPotential> dihedral_potentials_;
-	idx_t num_dihedrals_;
+	idx_t num_dihedrals_{0};
 
 	// === EXCLUSIONS ===
 	DeviceBuffer<int2> exclusion_pairs_; // Pairs to exclude from nonbonded
-	idx_t num_exclusions_;
+	idx_t num_exclusions_{0};
 
 	// === RESTRAINTS ===
 	DeviceBuffer<int> restraint_particle_ids_;
 	DeviceBuffer<Vector3> restraint_positions_;
 	DeviceBuffer<float> restraint_spring_constants_;
-	idx_t num_restraints_;
+	idx_t num_restraints_{0};
 };
 
 } // namespace ARBD

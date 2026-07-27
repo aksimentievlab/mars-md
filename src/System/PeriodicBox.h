@@ -87,6 +87,36 @@ class PeriodicBox {
 	}
 
 	/**
+	 * @brief Wrap an absolute position into the primary image
+	 *
+	 * Matches the legacy BaseGrid::wrap() semantics: the wrap is applied to
+	 * the origin-relative coordinate, so the result lies in
+	 * [origin, origin + box_size) rather than [0, box_size). A box centered
+	 * on zero has origin = -box_size/2, so assuming an origin of zero would
+	 * shift every particle by half a box.
+	 *
+	 * Non-periodic axes (and degenerate/zero extents) are left untouched.
+	 *
+	 * @param r Absolute position
+	 * @return Position wrapped into the primary image
+	 */
+	HOST DEVICE Vector3 wrap(const Vector3& r) const {
+		Vector3 wrapped = r;
+
+		if (periodic_[0]) {
+			wrapped.x = wrapScalar(r.x, origin_.x, box_size_.x);
+		}
+		if (periodic_[1]) {
+			wrapped.y = wrapScalar(r.y, origin_.y, box_size_.y);
+		}
+		if (periodic_[2]) {
+			wrapped.z = wrapScalar(r.z, origin_.z, box_size_.z);
+		}
+
+		return wrapped;
+	}
+
+	/**
 	 * @brief Get box size
 	 */
 	HOST DEVICE const Vector3& get_box_size() const {
@@ -131,9 +161,17 @@ class PeriodicBox {
 
 	/**
 	 * @brief Set box size (device-safe)
+	 *
+	 * Keeps basis_ in sync: consumers such as the spatial decomposer derive
+	 * the system bounds from the basis vectors, so leaving them at their
+	 * default here would make the decomposition disagree with the box the
+	 * integrator actually wraps into.
 	 */
 	HOST DEVICE void set_box_size(const Vector3& box_size) {
 		box_size_ = box_size;
+		basis_[0] = Vector3(box_size.x, 0, 0);
+		basis_[1] = Vector3(0, box_size.y, 0);
+		basis_[2] = Vector3(0, 0, box_size.z);
 	}
 
 	/**
@@ -181,6 +219,25 @@ class PeriodicBox {
 	}
 
   private:
+	/**
+	 * @brief Wrap an absolute scalar coordinate into [o, o + l)
+	 * @param x Coordinate component
+	 * @param o Origin component for this axis
+	 * @param l Box length in that dimension
+	 */
+	HOST DEVICE static inline float wrapScalar(float x, float o, float l) {
+		if (l <= 0.0f)
+			return x; // Non-periodic or invalid box size
+
+		const float rel = x - o;
+#ifdef USE_CUDA
+		int image = int(floorf(rel / l));
+#else
+		int image = int(floor(rel / l));
+#endif
+		return x - image * l;
+	}
+
 	/**
 	 * @brief Wrap scalar distance for minimum image convention
 	 * @param x Distance component

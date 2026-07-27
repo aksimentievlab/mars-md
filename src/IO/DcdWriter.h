@@ -178,7 +178,13 @@ class DcdWriter {
 	/**
 	 * @brief Write a timestep of coordinates
 	 * @param positions Vector of atom positions (ARBD::Vector3)
-	 * @param unitcell Unit cell parameters [a, b, c, alpha, beta, gamma] (optional)
+	 * @param unitcell Unit cell in CHARMM on-disk order (optional):
+	 *        [A, cos(gamma), B, cos(beta), cos(alpha), C].
+	 *        This array is written to the file verbatim, so it must use the
+	 *        CHARMM ordering that VMD/MDAnalysis expect - not [a,b,c,alpha,beta,gamma].
+	 *        Must be supplied whenever the header was written with
+	 *        with_unitcell=true, otherwise every frame is missing its extra
+	 *        block and the file misparses.
 	 * @return 0 on success
 	 * @throws ARBD::Exception on write failure
 	 */

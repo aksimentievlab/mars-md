@@ -3,6 +3,7 @@
 #include "Constants.h"
 #include "Header.h"
 #include "Objects/DeviceParticle.h"
+#include "System/PeriodicBox.h"
 #include "Types/BaseGrid.h"
 #include "Types/IndexList.h"
 #include "Types/Types.h"
@@ -13,7 +14,7 @@ template<typename TemperatureType = float>
 struct BAOABIntegrate {
 	ParticleView particle_view;
 	const ParticleTypeView particle_types;
-	Vector3 box_size;
+	PeriodicBox sim_box;
 	float timestep;
 	TemperatureType kT;
 	idx_t num_particles;
@@ -23,14 +24,14 @@ struct BAOABIntegrate {
 
 	BAOABIntegrate(ParticleView pv,
 				   const ParticleTypeView pt,
-				   const Vector3& box,
+				   const PeriodicBox& box,
 				   float dt,
 				   size_t current_step,
 				   TemperatureType temp,
 				   idx_t n,
 				   uint64_t seed,
 				   uint32_t ctr)
-		: particle_view(pv), particle_types(pt), box_size(box), timestep(dt),
+		: particle_view(pv), particle_types(pt), sim_box(box), timestep(dt),
 		  current_step(current_step), kT(temp), num_particles(n), base_seed(seed), base_ctr(ctr) {}
 
 	KERNEL_FUNC void operator()(idx_t idx) const {
@@ -94,10 +95,11 @@ struct BAOABIntegrate {
 		// Added 1e4 to match Old Kernel line: r0 = r0 + 0.5f * timestep * p0 * 1e4 / mass;
 		pos += 0.5f * timestep * mom / mass * 10000.0f;
 
-		// Apply Periodic Boundary Conditions
-		pos.x = pos.x - box_size.x * floorf(pos.x / box_size.x);
-		pos.y = pos.y - box_size.y * floorf(pos.y / box_size.y);
-		pos.z = pos.z - box_size.z * floorf(pos.z / box_size.z);
+		// Apply Periodic Boundary Conditions.
+		// Matches legacy "r0 = sys->wrap(r0)": wrapping is relative to the box
+		// origin, so a box centered on zero stays centered instead of being
+		// shifted into [0, L).
+		pos = sim_box.wrap(pos);
 
 		// Write Back
 		particle_view.pos[idx] = pos;
@@ -148,4 +150,7 @@ struct BAOAB_LastUpdate {
 #include <sycl/sycl.hpp>
 template<typename TemperatureType>
 struct sycl::is_device_copyable<ARBD::BAOABIntegrate<TemperatureType>> : std::true_type {};
+
+template<typename TemperatureType>
+struct sycl::is_device_copyable<ARBD::BAOAB_LastUpdate<TemperatureType>> : std::true_type {};
 #endif

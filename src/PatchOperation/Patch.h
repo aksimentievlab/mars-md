@@ -13,9 +13,12 @@
 
 #include "Backend/Events.h"
 #include "Interactions/BondedInteraction.h"
+#include "Interactions/DeviceBondedInteraction.h"
 #include "Interactions/NonBondedInteraction.h"
+#include "Interactions/TabulatedPotential.h"
 #include "Objects/DeviceParticleManager.h"
 #include "Objects/Grid.h"
+#include "Objects/Tables.h"
 #include "PatchOperation/Pairlist.h"
 #include "System/PeriodicBox.h"
 #include "System/SystemForward.h"
@@ -53,7 +56,7 @@ class Patch {
 		  const Resource& resource,
 		  PairlistBuilderType pairlist_type = PairlistBuilderType::ZOrder)
 		: patch_id_(patch_id), capacity_(capacity), resource_(resource),
-		  particles_(capacity, resource) {
+		  particles_(capacity, resource), device_bonded_(resource) {
 		// Estimate max pairs: assume average of ~50 neighbors per particle
 		size_t estimated_max_pairs = capacity * 50;
 		pairlist_ = create_pairlist(pairlist_type, resource, capacity, estimated_max_pairs);
@@ -79,10 +82,20 @@ class Patch {
 
 	/**
 	 * @brief Set reference to system-wide periodic boundary conditions
+	 *
+	 * Also refreshes a device-resident copy of the box: bond/angle/dihedral
+	 * force kernels (see BondComputer.h) take a `const PeriodicBox*` that
+	 * they dereference on-device, so a host pointer like periodic_box_
+	 * itself is not usable there.
 	 * @param sim_box Pointer to system boundary conditions (not owned)
 	 */
-	void set_periodic_box(const PeriodicBox* sim_box) {
-		periodic_box_ = sim_box;
+	void set_periodic_box(const PeriodicBox* sim_box);
+
+	/**
+	 * @brief Get a device-resident pointer to the periodic box, or nullptr if unset
+	 */
+	const PeriodicBox* get_device_periodic_box() const {
+		return periodic_box_device_.size() > 0 ? periodic_box_device_.device_data() : nullptr;
 	}
 
 	/**
@@ -172,13 +185,52 @@ class Patch {
 									 int interpolation_scheme = 1);
 
 	/**
-	 * @brief Compute bonded forces for particles in this patch
+	 * @brief Compute bonded forces (bonds, angles, dihedrals) for particles in this patch
+	 *
+	 * Tabulated bonds/angles/dihedrals only for now; analytical forms are
+	 * loaded (BondedInteractions still records them) but skipped by the
+	 * Tabulated*Computer kernels - see AnalyticalBondComputer for the
+	 * per-BondTypeId launch that would be needed to cover them too.
+	 *
+	 * Bond/Angle/Dihedral ind1..ind4 are global particle indices; this
+	 * assumes they equal this patch's local particle-array indices, which
+	 * only holds while every particle lives in a single patch (true today -
+	 * true multi-patch decomposition, with a global-to-local index remap,
+	 * doesn't exist yet).
 	 * @param interactions Bonded interaction parameters from SystemState
 	 * @param particle_types Device particle type data from SimSystem
+	 * @param tables_registry Tabulated potential tables (device arrays must
+	 *        already be built via TablesRegistry::build_device_arrays())
+	 * @param resource_idx This patch's index into tables_registry's per-resource arrays
 	 * @return Event for async GPU execution
 	 */
 	Event calculate_bonded_forces(const BondedInteractions& interactions,
-								  const DeviceParticleTypes& particle_types);
+								  const DeviceParticleTypes& particle_types,
+								  const TablesRegistry& tables_registry,
+								  size_t resource_idx);
+
+	/**
+	 * @brief Get the bonded-pair exclusions loaded by calculate_bonded_forces()
+	 *
+	 * Entry point only: exposes DeviceBondedInteractions::exclusion_pairs()
+	 * (REPLACE-flagged bonds, plus whatever BondedInteractions::make_exclusions()
+	 * adds) so callers have a place to read them from. Not yet consulted by
+	 * any kernel - calculate_nonbonded_forces() currently only evaluates the
+	 * PMF/grid term (no pairwise nonbonded), so there is nothing to filter
+	 * against yet. Wire this into the pairwise nonbonded kernel once that exists.
+	 * Populated as a side effect of calculate_bonded_forces(); empty/zero
+	 * before its first call.
+	 */
+	DEVICE_PTR(const int2) get_exclusions() const {
+		return device_bonded_.exclusion_pairs();
+	}
+
+	/**
+	 * @brief Number of excluded pairs currently stored for this patch
+	 */
+	idx_t get_num_exclusions() const {
+		return device_bonded_.num_exclusions();
+	}
 
 	/**
 	 * @brief Integrate particle equations of motion
@@ -468,6 +520,15 @@ class Patch {
 	// System References (not owned)
 	//================================================================================
 	const PeriodicBox* periodic_box_{nullptr}; ///< System boundary conditions
+	DeviceBuffer<PeriodicBox> periodic_box_device_; ///< Device-resident copy for kernels that
+													 ///< dereference PeriodicBox* on-device
+
+	// Device-side bonded topology (bonds/angles/dihedrals/exclusions/tables)
+	// for calculate_bonded_forces(), lazily built on first call and cached
+	// (bond topology is static for the run). Constructed with resource_ in
+	// Patch's constructor - DeviceBondedInteractions has no default ctor.
+	DeviceBondedInteractions device_bonded_;
+	bool bonded_device_data_prepared_{false};
 };
 
 /**

@@ -11,10 +11,21 @@
 #include "ARBDLogger.h"
 #include "Backend/Events.h"
 #include "Backend/Kernels.h"
+#include "Interactions/Bonded/BondComputer.h"
 #include "Interactions/Nonbonded/PmfKernels.h"
 #include "PatchOperation/Integrator.h"
 #include "PatchOperation/Pairlist.h"
 namespace ARBD {
+
+void Patch::set_periodic_box(const PeriodicBox* sim_box) {
+	periodic_box_ = sim_box;
+	if (sim_box) {
+		periodic_box_device_ = DeviceBuffer<PeriodicBox>(1, resource_);
+		periodic_box_device_.copy_from_host(std::vector<PeriodicBox>{*sim_box});
+	} else {
+		periodic_box_device_ = DeviceBuffer<PeriodicBox>();
+	}
+}
 
 //================================================================================
 // Force Calculation Methods
@@ -51,39 +62,101 @@ Event Patch::calculate_nonbonded_forces(const NonBondedInteractions& interaction
 }
 
 Event Patch::calculate_bonded_forces(const BondedInteractions& interactions,
-									 const DeviceParticleTypes& particle_types) {
-	// Get particle view for kernel launch
-	idx_t num_particles = particles_.size();
+									 const DeviceParticleTypes& particle_types,
+									 const TablesRegistry& tables_registry,
+									 size_t resource_idx) {
+	(void)particle_types;
 
-	// Launch tabulated bond force computation
-	if (num_particles > 0) {
-		LOGTRACE("Patch {}: Computing {} tabulated bonds", patch_id_, num_particles);
-
-		// TODO: Launch TabulatedBondComputer kernel
-		// Need device-side bond data structures (particle_indices, tables)
-		// Event evt = launch_kernel(resource_, config, TabulatedBondComputer::compute,
-		//                           bond_indices, particle_view.pos, particle_view.ForceEnergy,
-		//                           bond_tables, periodic_box_, false);
+	if (particles_.size() == 0) {
+		return Event(nullptr, resource_);
 	}
 
-	// Launch tabulated angle force computation
-	if (num_particles > 0) {
-		LOGTRACE("Patch {}: Computing {} tabulated angles", patch_id_, num_particles);
-
-		// TODO: Launch TabulatedAngleComputer kernel
+	// Build the device-side bonded topology/table arrays once; bonded
+	// topology doesn't change during the run, so this is cached across steps.
+	if (!bonded_device_data_prepared_) {
+		device_bonded_.copy_from_host(interactions);
+		device_bonded_.link_tables(tables_registry, resource_idx);
+		bonded_device_data_prepared_ = true;
+		LOGINFO("Patch {}: Prepared {} bonds, {} angles, {} dihedrals, {} exclusions for device",
+				patch_id_,
+				device_bonded_.num_bonds(),
+				device_bonded_.num_angles(),
+				device_bonded_.num_dihedrals(),
+				device_bonded_.num_exclusions());
 	}
 
-	// Launch tabulated dihedral force computation
-	if (num_particles > 0) {
-		LOGTRACE("Patch {}: Computing {} tabulated dihedrals", patch_id_, num_particles);
-
-		// TODO: Launch TabulatedDihedralComputer kernel
+	if (device_bonded_.num_bonds() == 0 && device_bonded_.num_angles() == 0 &&
+		device_bonded_.num_dihedrals() == 0) {
+		return Event(nullptr, resource_);
 	}
 
-	LOGTRACE("Patch {}: Computed bonded forces for {} particles", patch_id_, num_particles);
+	const ParticleView particle_view = particles_.view();
+	const PeriodicBox* pbox = get_device_periodic_box();
+	constexpr bool get_energy = false;
 
-	// Return event for async execution
-	return Event(nullptr, resource_);
+	// Each kernel is submitted to the same in-order resource_ queue, so they
+	// execute sequentially regardless of which Event is returned/waited on;
+	// only the last launch's Event is kept, matching how callers already
+	// treat these results (SimManager discards them with (void)).
+	Event evt(nullptr, resource_);
+
+	if (device_bonded_.num_bonds() > 0) {
+		LOGTRACE("Patch {}: Computing {} bonds", patch_id_, device_bonded_.num_bonds());
+		evt = launch_tabulated_bonds(resource_,
+									device_bonded_.bond_indices(),
+									particle_view.pos,
+									particle_view.ForceEnergy,
+									device_bonded_.bond_potentials(),
+									device_bonded_.bond_table_indices(),
+									device_bonded_.bond_forms(),
+									pbox,
+									get_energy,
+									device_bonded_.num_bonds());
+	}
+
+	if (device_bonded_.num_angles() > 0) {
+		LOGTRACE("Patch {}: Computing {} angles", patch_id_, device_bonded_.num_angles());
+		evt = launch_tabulated_angles(resource_,
+									 device_bonded_.angle_indices(),
+									 particle_view.pos,
+									 particle_view.ForceEnergy,
+									 device_bonded_.angle_potentials(),
+									 device_bonded_.angle_table_indices(),
+									 device_bonded_.angle_forms(),
+									 pbox,
+									 get_energy,
+									 device_bonded_.num_angles());
+	}
+
+	if (device_bonded_.num_dihedrals() > 0) {
+		LOGTRACE("Patch {}: Computing {} dihedrals", patch_id_, device_bonded_.num_dihedrals());
+		evt = launch_tabulated_dihedrals(resource_,
+										device_bonded_.dihedral_indices(),
+										particle_view.pos,
+										particle_view.ForceEnergy,
+										device_bonded_.dihedral_potentials(),
+										device_bonded_.dihedral_table_indices(),
+										device_bonded_.dihedral_forms(),
+										pbox,
+										get_energy,
+										device_bonded_.num_dihedrals());
+	}
+
+	evt.wait();
+	{
+		std::vector<Vector3> dbg_force(std::min<idx_t>(2, particles_.size()));
+		particles_.ForceEnergy().copy_to_host(dbg_force.data(), dbg_force.size(), true);
+		LOGINFO("DEBUG Patch {} POST-KERNEL: force[0]=({},{},{}) force[1]=({},{},{})",
+				patch_id_,
+				dbg_force.size() > 0 ? dbg_force[0].x : -999,
+				dbg_force.size() > 0 ? dbg_force[0].y : -999,
+				dbg_force.size() > 0 ? dbg_force[0].z : -999,
+				dbg_force.size() > 1 ? dbg_force[1].x : -999,
+				dbg_force.size() > 1 ? dbg_force[1].y : -999,
+				dbg_force.size() > 1 ? dbg_force[1].z : -999);
+	}
+
+	return evt;
 }
 
 Event Patch::integrate_motion(float dt,
@@ -98,10 +171,12 @@ Event Patch::integrate_motion(float dt,
 				   ? temperature.kT
 				   : temperature.kT; // TODO: Sample from grid if gridded (for now use constant)
 
-	// Get box size from periodic box
-	Vector3 box_size(0.0f, 0.0f, 0.0f);
+	// Get the periodic box; wrapping needs its origin as well as its size, so
+	// pass the box itself rather than just the extents. A default-constructed
+	// box is non-periodic, so positions pass through unwrapped.
+	PeriodicBox sim_box;
 	if (periodic_box_) {
-		box_size = periodic_box_->get_box_size();
+		sim_box = *periodic_box_;
 	}
 
 	// Generate RNG seeds for deterministic, reproducible random numbers
@@ -138,7 +213,7 @@ Event Patch::integrate_motion(float dt,
 							   step,
 							   kT,
 							   particle_count_,
-							   box_size,
+							   sim_box,
 							   base_seed,
 							   base_ctr);
 		break;
@@ -153,7 +228,7 @@ Event Patch::integrate_motion(float dt,
 		evt = launch_BAOAB<float>(resource_,
 								  particle_view,
 								  particle_type_view,
-								  box_size,
+								  sim_box,
 								  dt,
 								  step,
 								  kT,

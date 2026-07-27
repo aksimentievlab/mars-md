@@ -125,20 +125,19 @@ class DeviceParticle {
 		mom_.copy_to_host(host.mom.data(), count);
 		orient_.copy_to_host(host.orient.data(), count);
 		flags_.copy_to_host(host.flags.data(), count);
-	}
 
-	void copy_force_energy_to_host(HostParticleData& host, idx_t count) {
-		if (host.size() < count)
-			host.resize(count);
-
-		// Copy entire ForceEnergy buffer (including t component)
+		// ForceEnergy_ packs force (xyz) and energy (t) together; unpack
+		// into host.force/host.energy separately. This used to be a
+		// separate copy_force_energy_to_host() that nothing ever called, so
+		// host.force silently stayed at whatever it was default-constructed
+		// to (zero) regardless of the actual on-device force.
 		std::vector<Vector3> temp(count);
 		ForceEnergy_.copy_to_host(temp.data(), count);
 		for (idx_t i = 0; i < count; ++i) {
 			host.force[i].x = temp[i].x;
 			host.force[i].y = temp[i].y;
 			host.force[i].z = temp[i].z;
-			host.force[i].t = 0.0f; // Clear t component in force
+			host.force[i].t = 0.0f;
 			host.energy[i] = temp[i].t;
 		}
 	}

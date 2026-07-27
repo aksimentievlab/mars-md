@@ -3,6 +3,7 @@
 #include "../Random/philox.h"
 #include "Header.h"
 #include "Objects/DeviceParticle.h"
+#include "System/PeriodicBox.h"
 #include "Types/Types.h"
 
 namespace ARBD {
@@ -10,7 +11,7 @@ template<typename TemperatureType = float>
 struct BDIntegrate {
 	ParticleView particle_view; // Pass by value (pointers are copied, data is shared)
 	const ParticleTypeView particle_types;
-	Vector3 box_size; // Pass by value for device compatibility
+	PeriodicBox sim_box; // Pass by value for device compatibility
 	float timestep;
 	TemperatureType kT;
 	idx_t num_particles;
@@ -21,14 +22,14 @@ struct BDIntegrate {
 	// Constructor for proper initialization
 	BDIntegrate(ParticleView pv,
 				const ParticleTypeView pt,
-				const Vector3& box,
+				const PeriodicBox& box,
 				float dt,
 				size_t current_step,
 				TemperatureType temp,
 				idx_t n,
 				uint64_t seed,
 				uint32_t ctr)
-		: particle_view(pv), particle_types(pt), box_size(box), timestep(dt), kT(temp),
+		: particle_view(pv), particle_types(pt), sim_box(box), timestep(dt), kT(temp),
 		  num_particles(n), base_seed(seed), base_ctr(ctr), current_step(current_step) {}
 
 	KERNEL_FUNC void operator()(idx_t idx) const {
@@ -62,10 +63,9 @@ struct BDIntegrate {
 		pos.z += (diffusion.z / kT) * force.z * timestep +
 				 sqrtf(2.0f * diffusion.z * timestep) * random.z;
 
-		// Apply periodic boundary conditions
-		pos.x = pos.x - box_size.x * roundf(pos.x / box_size.x);
-		pos.y = pos.y - box_size.y * roundf(pos.y / box_size.y);
-		pos.z = pos.z - box_size.z * roundf(pos.z / box_size.z);
+		// Apply periodic boundary conditions (see BAOAB: origin-relative wrap,
+		// matching legacy sys->wrap()).
+		pos = sim_box.wrap(pos);
 
 		particle_view.pos[idx] = pos;
 	}

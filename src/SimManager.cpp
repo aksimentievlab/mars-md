@@ -80,6 +80,19 @@ void SimManager::init() {
 				pending_initial_particles_.size());
 	}
 
+	// Load cached bonded interactions (from load_config or set_bonded_interactions)
+	if (pending_bonded_interactions_.get_num_bonds() > 0 ||
+		pending_bonded_interactions_.get_num_angles() > 0 ||
+		pending_bonded_interactions_.get_num_dihedrals() > 0) {
+		sys_state_.update_bonded_interactions(pending_bonded_interactions_);
+		LOGINFO("SimManager: Loaded {} bonds, {} angles, {} dihedrals, {} exclusions into system "
+				"state",
+				pending_bonded_interactions_.get_num_bonds(),
+				pending_bonded_interactions_.get_num_angles(),
+				pending_bonded_interactions_.get_num_dihedrals(),
+				pending_bonded_interactions_.get_exclusions().size());
+	}
+
 	// Perform domain decomposition (creates PatchManager in SimSystem)
 	LOGINFO("SimManager: Performing domain decomposition");
 	sys_.decompose_system(sys_state_);
@@ -217,11 +230,20 @@ void SimManager::execute_force_calculation(size_t step) {
 			}
 		}
 
+		// calculate_nonbonded_forces() clears the force buffer and writes the
+		// PMF/grid term; calculate_bonded_forces() must run after it and
+		// accumulate on top (it only ever atomic-adds, never clears).
 		Event evt =
 			patch->calculate_nonbonded_forces(sys_.get_nonbonded_interactions(),
 											  particle_types,
 											  grid_manager.get_device_grid_views(resource_idx));
 		(void)evt;
+
+		Event bonded_evt = patch->calculate_bonded_forces(sys_state_.get_bonded_interactions(),
+														  particle_types,
+														  sys_.get_tables_registry(),
+														  resource_idx);
+		(void)bonded_evt;
 	}
 
 	if (step == 1) {
@@ -329,10 +351,11 @@ void SimManager::write_dcd_frame(size_t step) {
 		// 3. Get positions for DCD writing
 		const auto& positions = sys_state_.get_global_positions();
 
+		const auto& periodicity = sys_.get_boundary_conditions().get_periodicity();
+		const bool with_unitcell = periodicity[0] || periodicity[1] || periodicity[2];
+
 		if (!dcd_header_written_) {
 			const int nsavc = std::max(1, static_cast<int>(sys_.get_output_period()));
-			const auto& periodicity = sys_.get_boundary_conditions().get_periodicity();
-			const bool with_unitcell = periodicity[0] || periodicity[1] || periodicity[2];
 			dcd_writer_->writeHeader(static_cast<int>(positions.size()),
 									 1,
 									 nsavc,
@@ -343,7 +366,17 @@ void SimManager::write_dcd_frame(size_t step) {
 			dcd_header_written_ = true;
 		}
 
-		dcd_writer_->writeStep(positions);
+		// The header's with_unitcell flag promises an extra block on every
+		// frame, so the cell must be supplied here or readers misparse the
+		// trajectory. CHARMM on-disk order is [A, cos(g), B, cos(b), cos(a), C];
+		// the box is orthorhombic, so all three cosines are 0.
+		if (with_unitcell) {
+			const Vector3 box = sys_.get_boundary_conditions().get_box_size();
+			const std::vector<double> unitcell{box.x, 0.0, box.y, 0.0, 0.0, box.z};
+			dcd_writer_->writeStep(positions, unitcell);
+		} else {
+			dcd_writer_->writeStep(positions);
+		}
 	}
 }
 

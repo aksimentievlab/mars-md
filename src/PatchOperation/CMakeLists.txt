@@ -78,6 +78,9 @@ if(USE_SYCL_ACPP OR USE_SYCL_ICPX)
         PatchOperation/ZOrderKernels/ZOrderSort.cpp
         PatchOperation/PairListKernels/ZOrderPairlist.cpp
         PatchOperation/PairListKernels/CellListPairlist.cpp
+        # Instantiates the integrator kernels (launch_BAOAB / launch_BD) via
+        # templates in Integrator.h, so it needs device compilation too.
+        PatchOperation/Patch.cpp
     )
     list(APPEND DEVICE_ONLY_HEADERS
         PatchOperation/ZOrderKernels/DeviceRadix.h

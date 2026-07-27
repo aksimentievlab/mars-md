@@ -271,10 +271,12 @@ class PatchManager {
 	 * @brief Compute bonded forces across all patches
 	 * @param interactions Bonded interactions from SystemState
 	 * @param particle_types Particle type data from SimSystem
+	 * @param tables_registry Tabulated potential tables from SimSystem
 	 * @return Vector of events for async computation
 	 */
 	std::vector<Event> compute_bonded_forces(const BondedInteractions& interactions,
-											 const DeviceParticleTypes& particle_types);
+											 const DeviceParticleTypes& particle_types,
+											 const TablesRegistry& tables_registry);
 
 	/**
 	 * @brief Integrate particle motion across all patches

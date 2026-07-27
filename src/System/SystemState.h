@@ -119,6 +119,10 @@ class SystemState {
 		bonded_interactions_ = bonded_interactions;
 	}
 
+	const BondedInteractions& get_bonded_interactions() const {
+		return bonded_interactions_;
+	}
+
 	/**
 	 * @brief Clear global particle arrays (called before gathering new data)
 	 */

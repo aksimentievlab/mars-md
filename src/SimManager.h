@@ -87,6 +87,20 @@ class SimManager {
 	}
 
 	/**
+	 * @brief Provide parsed bonded interactions (bonds/angles/dihedrals/
+	 * exclusions) to be loaded during init()
+	 *
+	 * The single-argument SimManager(SimSystem&) constructor - the one the
+	 * main arbd executable actually uses - never calls load_config(), so
+	 * without this the ConfigParser's parsed bonds never reach SystemState
+	 * and calculate_bonded_forces() would silently have nothing to compute.
+	 * @param bonded_interactions Parsed bonds/angles/dihedrals/exclusions (host-side)
+	 */
+	void set_bonded_interactions(const BondedInteractions& bonded_interactions) {
+		pending_bonded_interactions_ = bonded_interactions;
+	}
+
+	/**
 	 * @brief Run the main simulation loop
 	 * Executes the complete simulation with force calculation, integration, and I/O
 	 */
@@ -114,6 +128,8 @@ class SimManager {
 
 	// Initial particle data, cached until init() (needs particle type IDs assigned first)
 	std::vector<ParticleRead> pending_initial_particles_{};
+	// Bonded interactions, cached until init() (see set_bonded_interactions)
+	BondedInteractions pending_bonded_interactions_{};
 
 	// Random number generation
 	size_t current_step_{0}; ///< Current simulation step (used for RNG counter)
