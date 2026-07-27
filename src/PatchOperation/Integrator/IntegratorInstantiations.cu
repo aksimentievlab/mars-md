@@ -1,4 +1,5 @@
 #include "Backend/CUDA/KernelHelper.cuh"
+#include "PatchOperation/Integrator/BAOAB.h"
 #include "PatchOperation/Integrator/BD.h"
 #include "Types/Types.h"
 #include <cuda_runtime.h>
@@ -10,10 +11,12 @@ namespace ARBD {
 
 // BDIntegrate instantiation
 template struct BDIntegrate<float>;
-
+template struct BAOABIntegrate<float>;
 // launch_cuda_kernel instantiations
 template Event launch_cuda_kernel(const Resource& resource,
 								  const KernelConfig& config,
 								  BDIntegrate<float> kernel_func);
-
+template Event launch_cuda_kernel(const Resource& resource,
+								  const KernelConfig& config,
+								  BAOABIntegrate<float> kernel_func);
 } // namespace ARBD

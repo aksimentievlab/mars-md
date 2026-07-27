@@ -79,7 +79,8 @@ class SystemState {
 	 * @param ids Particle IDs
 	 */
 	void set_init_particle_data(const std::vector<ParticleRead>& particles) {
-		global_particle_data_.resize(particles.size());
+		global_particle_data_.clear();
+		global_particle_data_.reserve(particles.size());
 		for (const auto& particle : particles) {
 			global_particle_data_.global_id.push_back(particle.id);
 			global_particle_data_.type_id.push_back(
@@ -93,7 +94,11 @@ class SystemState {
 			global_particle_data_.is_dummy.push_back(false);
 			global_particle_data_.colvars_group_id.push_back(-1);
 			global_particle_data_.group_id.push_back(-1);
+			global_particle_data_.attached_rigid_body_id.push_back(particle.attached_rigid_body_id);
 		}
+		// Derive packed flags from is_active/is_dummy - consumers (e.g. Patch::
+		// copy_particles_from_host) index into `flags` directly and don't expect it empty.
+		global_particle_data_.pack_flags();
 		global_num_particles_ = global_particle_data_.size();
 	}
 

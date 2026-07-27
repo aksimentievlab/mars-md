@@ -5,7 +5,6 @@
 #include "Constants.h"
 #include "IO/DxIO.h"
 #include "IO/Reader.h"
-#include "IO/TabulatedReader.h"
 #include "Interactions/BondedInteraction.h"
 #include "Interactions/Interactions.h"
 #include "Objects/ParticleProperties.h"
@@ -45,8 +44,8 @@ struct Configuration {
 	float dielectric_constant{80.0f}; // Dielectric constant for solvent
 	PeriodicBox sim_box;
 
-	DynamicType ParticleDynamicType{DynamicType::Langevin};
-	DynamicType RigidBodyDynamicType{DynamicType::Langevin};
+	IntegratorType ParticleDynamicType{IntegratorType::Langevin};
+	IntegratorType RigidBodyDynamicType{IntegratorType::Langevin};
 	std::unordered_map<std::string, int> functions_id_map{};
 	// Simulation control
 	SimSteps steps{1e-5f, 1000}; // timestep in ns.
@@ -63,13 +62,13 @@ struct Configuration {
 	DecomposeDirection decompose_direction{DecomposeDirection::Z};
 
 	LongRangeMethod long_range_method{LongRangeMethod::PPPM};
-	ThermostatType thermostat{ThermostatType::NVE};
+	// ThermostatType thermostat{ThermostatType::NVE};
 	Pressure pressure{1.0f};
 	std::vector<Reservoir> reservoirs;
 	bool enable_bond_reactions = false;
 	bool enable_particle_reactions = false;
 	bool has_reaction = false;
-	BarostatType barostat{BarostatType::Isobaric};
+	// BarostatType barostat{BarostatType::Isobaric};
 	bool calculate_pressure{false};
 	float pressure_output_period{100.0f};
 	// arbd2 additions end

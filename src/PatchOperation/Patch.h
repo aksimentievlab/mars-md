@@ -15,6 +15,7 @@
 #include "Interactions/BondedInteraction.h"
 #include "Interactions/NonBondedInteraction.h"
 #include "Objects/DeviceParticleManager.h"
+#include "Objects/Grid.h"
 #include "PatchOperation/Pairlist.h"
 #include "System/PeriodicBox.h"
 #include "System/SystemForward.h"
@@ -165,7 +166,10 @@ class Patch {
 	 * @return Event for async GPU execution
 	 */
 	Event calculate_nonbonded_forces(const NonBondedInteractions& interactions,
-									 const DeviceParticleTypes& particle_types);
+									 const DeviceParticleTypes& particle_types,
+									 const DeviceBuffer<BaseGridView<float>>& grid_views,
+									 float electric_field = 0.0f,
+									 int interpolation_scheme = 1);
 
 	/**
 	 * @brief Compute bonded forces for particles in this patch

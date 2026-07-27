@@ -261,8 +261,7 @@ int main(int argc, char* argv[]) {
 							  "Invalid system configuration");
 	}
 	ARBD::SimManager manager(sys);
-	ARBD::SystemState init_state(sys);
-	init_state.set_init_particle_data(parser.get_init_particles());
+	manager.set_initial_particles(parser.get_init_particles());
 	manager.init();
 	manager.run();
 

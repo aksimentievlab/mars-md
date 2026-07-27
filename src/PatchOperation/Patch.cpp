@@ -10,6 +10,7 @@
 #include "ARBDException.h"
 #include "ARBDLogger.h"
 #include "Backend/Events.h"
+#include "Backend/Kernels.h"
 #include "Interactions/Nonbonded/PmfKernels.h"
 #include "PatchOperation/Integrator.h"
 #include "PatchOperation/Pairlist.h"
@@ -20,35 +21,33 @@ namespace ARBD {
 //================================================================================
 
 Event Patch::calculate_nonbonded_forces(const NonBondedInteractions& interactions,
-										const DeviceParticleTypes& particle_types) {
-	// Clear forces before computation
+										const DeviceParticleTypes& particle_types,
+										const DeviceBuffer<BaseGridView<float>>& grid_views,
+										float electric_field,
+										int interpolation_scheme) {
+	(void)interactions;
+
 	particles_.clear_forces();
 
-	// Get particle view for kernel launch
-	idx_t num_particles = particles_.size();
-
-	// For now, only compute PMF forces from grids
-	// TODO: Add pairwise tabulated forces using neighbor pairs
-
-	// Launch PMF kernel if PMF grids are present
-	// This uses BaseGrid for position-dependent forces
-	if (num_particles > 0) {
-		KernelConfig config = KernelConfig::for_1d(num_particles, resource_);
-
-		// TODO: Get grid data pointers and configs from interactions
-		// For now, just log that we would compute PMF forces
-		LOGTRACE("Patch {}: Computing PMF forces for {} particles", patch_id_, num_particles);
-
-		// Placeholder: Would launch ComputePMFKernel here
-		// Event evt = launch_kernel(resource_, config, ComputePMFKernel(),
-		//                           particle_view.pos, particle_view.type_id,
-		//                           particle_view.ForceEnergy, ...);
+	const idx_t num_particles = particles_.size();
+	if (num_particles == 0 || grid_views.empty()) {
+		return Event(nullptr, resource_);
 	}
 
-	LOGTRACE("Patch {}: Computed non-bonded forces for {} particles", patch_id_, num_particles);
+	const ParticleView particle_view = particles_.view();
+	const ParticleTypeView type_view = particle_types.view();
+	const KernelConfig config = KernelConfig::for_1d(num_particles, resource_);
 
-	// Return event for async execution
-	return Event(nullptr, resource_);
+	const ComputePMFKernel kernel{electric_field, interpolation_scheme};
+	return launch_kernel(resource_,
+						 config,
+						 kernel,
+						 particle_view.pos,
+						 particle_view.type_id,
+						 particle_view.ForceEnergy,
+						 &type_view,
+						 grid_views.data(),
+						 num_particles);
 }
 
 Event Patch::calculate_bonded_forces(const BondedInteractions& interactions,

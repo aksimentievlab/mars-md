@@ -66,14 +66,19 @@ class DeviceParticle {
 		return capacity_;
 	}
 
+	// NOTE: DeviceBuffer::clear() deallocates the underlying storage - it does not
+	// zero it. These clear_*() methods are called every step (e.g. before force
+	// accumulation) and must zero in place instead, or the buffer would be freed
+	// after the first call and every subsequent access would read/write a dangling
+	// pointer.
 	void clear_forces() {
-		ForceEnergy_.clear();
+		ForceEnergy_.fill(Vector3(0.0f, 0.0f, 0.0f));
 	}
 	void clear_orientations() {
-		orient_.clear();
+		orient_.fill(Vector3(0.0f, 0.0f, 0.0f));
 	}
 	void clear_flags() {
-		flags_.clear();
+		flags_.fill(0u);
 	}
 
 	// Bulk Copy Helper: Host -> Device (Structure of Arrays)

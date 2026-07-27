@@ -3,6 +3,7 @@
 #include "Types/Types.h"
 #include <string>
 
+// Host side
 namespace ARBD {
 enum ParticleFlags : uint32_t {
 	FLAG_NONE = 0,
@@ -38,7 +39,7 @@ class ParticleType {
 	float radius = 0.0;
 	float eps = 0.0f;
 	Vector3 diffusion = {0.0f, 0.0f, 0.0f};
-	float mu = 0.0f;
+	float mu = 0.0f; // for Nose-Hoover Langevin dynamics
 
 	// --- PMF / SMD Control ---
 	float meanPmf = 0.0f;

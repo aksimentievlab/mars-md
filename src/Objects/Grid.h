@@ -3,6 +3,7 @@
 #include "Backend/Buffer.h"
 #include "Backend/Resource.h"
 #include "Types/BaseGrid.h"
+#include "Types/BaseGridDevice.h"
 // #include "Types/NanoGridHandle.h"
 #include <memory>
 #include <string>
@@ -196,6 +197,7 @@ class GridManager {
 		// Clear existing device data
 		device_grid_ptrs_per_resource_.clear();
 		device_grid_configs_per_resource_.clear();
+		device_grid_views_per_resource_.clear();
 
 		// Build device arrays for each resource
 		for (size_t res_idx = 0; res_idx < resources.size(); ++res_idx) {
@@ -206,12 +208,15 @@ class GridManager {
 			// Initialize arrays for this resource
 			std::vector<float*> grid_ptrs(next_grid_id_, nullptr);
 			std::vector<BaseGrid<float>::Config> grid_configs(next_grid_id_);
+			std::vector<BaseGridView<float>> grid_views(next_grid_id_);
 
 			for (const auto& [grid_id, dense_idx] : grid_id_to_dense_idx_) {
 				auto& grid = dense_grids_[dense_idx];
 				grid.sync_to_device(resource);
 				grid_ptrs[grid_id] = grid.get_device_pointer(resource);
 				grid_configs[grid_id] = grid.config();
+				grid_views[grid_id] = grid.get_device_view(resource);
+				grid_views[grid_id].grid_id = grid_id;
 			}
 
 			/** Transfer sparse grids to this resource
@@ -228,6 +233,12 @@ class GridManager {
 			// Store device arrays for this resource
 			device_grid_ptrs_per_resource_.push_back(std::move(grid_ptrs));
 			device_grid_configs_per_resource_.push_back(std::move(grid_configs));
+
+			DeviceBuffer<BaseGridView<float>> device_views(grid_views.size(), resource);
+			if (!grid_views.empty()) {
+				device_views.copy_from_host(grid_views.data(), grid_views.size());
+			}
+			device_grid_views_per_resource_.push_back(std::move(device_views));
 		}
 
 		LOGINFO("GridManager: Device arrays built successfully for all resources");
@@ -257,6 +268,17 @@ class GridManager {
 									 std::to_string(resource_idx));
 		}
 		return device_grid_configs_per_resource_[resource_idx];
+	}
+
+	/**
+	 * @brief Get device BaseGridView array for kernel indexing by grid_id
+	 */
+	const DeviceBuffer<BaseGridView<float>>& get_device_grid_views(size_t resource_idx = 0) const {
+		if (resource_idx >= device_grid_views_per_resource_.size()) {
+			throw std::runtime_error("GridManager: Invalid resource index: " +
+									 std::to_string(resource_idx));
+		}
+		return device_grid_views_per_resource_[resource_idx];
 	}
 
 	/**
@@ -309,6 +331,7 @@ class GridManager {
 	// Device arrays per resource (outer index = resource_idx, inner index = grid_id)
 	std::vector<std::vector<float*>> device_grid_ptrs_per_resource_;
 	std::vector<std::vector<BaseGrid<float>::Config>> device_grid_configs_per_resource_;
+	std::vector<DeviceBuffer<BaseGridView<float>>> device_grid_views_per_resource_;
 
 	// ID counter
 	int next_grid_id_ = 0;

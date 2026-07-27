@@ -279,7 +279,9 @@ void PatchManager::gather_particles_to_state(SystemState& state) {
 		patch.copy_particles_to_host(tmp, 0, count);
 		all_particles.reserve(all_particles.size() + count);
 
-		all_particles.push_back(tmp, count);
+		for (idx_t i = 0; i < count; ++i) {
+			all_particles.push_back(tmp, i);
+		}
 	}
 
 	state.set_from_host_particle_data(all_particles);
@@ -446,14 +448,32 @@ idx_t PatchManager::gather_global_particle_count(idx_t local_count) {
 
 std::vector<Event>
 PatchManager::compute_nonbonded_forces(const NonBondedInteractions& interactions,
-									   const DeviceParticleTypes& particle_types) {
+									   const DeviceParticleTypes& particle_types,
+									   const GridManager& grid_manager,
+									   float electric_field,
+									   int interpolation_scheme) {
 	std::vector<Event> events;
 	events.reserve(patches_.size());
 
+	const auto& resources = sim_system_.get_resources();
 	for (auto& patch_ptr : patches_) {
 		if (!patch_ptr)
 			continue;
-		events.push_back(patch_ptr->calculate_nonbonded_forces(interactions, particle_types));
+
+		size_t resource_idx = 0;
+		for (size_t i = 0; i < resources.size(); ++i) {
+			if (resources[i] == patch_ptr->get_resource()) {
+				resource_idx = i;
+				break;
+			}
+		}
+
+		events.push_back(patch_ptr->calculate_nonbonded_forces(
+			interactions,
+			particle_types,
+			grid_manager.get_device_grid_views(resource_idx),
+			electric_field,
+			interpolation_scheme));
 	}
 	return events;
 }

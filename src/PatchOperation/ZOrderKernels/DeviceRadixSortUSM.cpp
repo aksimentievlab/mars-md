@@ -443,15 +443,6 @@ void device_radix_sort_pairs_usm(const Resource& device,
 		h.single_task([]() {});
 	});
 	end_event.wait();
-
-	// Calculate elapsed time
-	auto start_time = start_event.get_profiling_info<sycl::info::event_profiling::command_start>();
-	auto end_time = end_event.get_profiling_info<sycl::info::event_profiling::command_end>();
-
-	double milliseconds = (end_time - start_time) / 1e6;
-	uint32_t* final_keys = keys;
-	uint32_t* final_payloads = payloads;
-	return;
 }
 
 } // namespace ARBD

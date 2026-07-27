@@ -636,7 +636,7 @@ class SimSystem {
 	std::string output_name{"out"};
 	OutputFormat output_format_{OutputFormat::DCD};
 
-	LongRangeMethod long_range_method_{LongRangeMethod::PPPM};
+	LongRangeMethod long_range_method_{LongRangeMethod::None};
 	Pressure pressure_{1.0f};
 	BarostatType barostat_{BarostatType::None};
 	// bool calculate_pressure_{false};

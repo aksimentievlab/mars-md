@@ -1,7 +1,9 @@
 #pragma once
 #include "Header.h"
 #include "IndexList.h"
+#include "Math.h"
 #include "Matrix3.h"
+#include "Types.h"
 #include "Vector3.h"
 
 namespace ARBD {
@@ -392,6 +394,144 @@ HOST DEVICE Vector3_t<T> compute_gradient(CONSTANT_PTR(T) __restrict__ grid_valu
 	const Vector3_t<T> grad_grid(dx_grid, dy_grid, dz_grid);
 	return basis_inv.transpose().transform(grad_grid);
 }
+
+/*=========================================*\
+|  CUBIC (CATMULL-ROM) JOINT INTERPOLATION   |
+\*=========================================*/
+
+/**
+ * @brief 1D Catmull-Rom cubic value at parameter t in [0,1] given taps v0..v3
+ *        (v1,v2 are the interpolated segment's endpoints; v0,v3 supply tangents).
+ */
+template<typename T>
+HOST DEVICE inline T catmull_rom_value(T v0, T v1, T v2, T v3, T t) {
+	const T a3 = T{0.5} * (-v0 + T{3} * v1 - T{3} * v2 + v3);
+	const T a2 = T{0.5} * (T{2} * v0 - T{5} * v1 + T{4} * v2 - v3);
+	const T a1 = T{0.5} * (-v0 + v2);
+	return ((a3 * t + a2) * t + a1) * t + v1;
+}
+
+/**
+ * @brief Derivative of catmull_rom_value with respect to t.
+ */
+template<typename T>
+HOST DEVICE inline T catmull_rom_deriv(T v0, T v1, T v2, T v3, T t) {
+	const T a3 = T{0.5} * (-v0 + T{3} * v1 - T{3} * v2 + v3);
+	const T a2 = T{0.5} * (T{2} * v0 - T{5} * v1 + T{4} * v2 - v3);
+	const T a1 = T{0.5} * (-v0 + v2);
+	return (T{3} * a3 * t + T{2} * a2) * t + a1;
+}
+
+/**
+ * @brief Fetch a grid value at an integer index, or zero if out of bounds.
+ *        Applied per-tap; matches interpolate_grid_point's zero-pad convention.
+ */
+template<typename T>
+HOST DEVICE inline T fetch_grid_value_or_zero(CONSTANT_PTR(T) __restrict__ grid_values,
+											  int jx,
+											  int jy,
+											  int jz,
+											  const Vector3_t<idx_t>& dimensions) {
+	if (jx < 0 || jx >= static_cast<int>(dimensions.x) || jy < 0 ||
+		jy >= static_cast<int>(dimensions.y) || jz < 0 || jz >= static_cast<int>(dimensions.z)) {
+		return T{0};
+	}
+	const idx_t idx = static_cast<idx_t>(jz) + static_cast<idx_t>(jy) * dimensions.z +
+					  static_cast<idx_t>(jx) * dimensions.y * dimensions.z;
+	return grid_values[idx];
+}
+
+/**
+ * @brief Joint value+gradient sample via cubic (Catmull-Rom) interpolation.
+ * @details Separable cubic spline over a 4x4x4 neighborhood: ported from legacy
+ *          ARBD's RigidBodyGrid::interpolateForceD, restructured into two
+ *          reusable 1D helpers (catmull_rom_value/catmull_rom_deriv) applied
+ *          successively along x, then y, then z - mathematically identical to
+ *          the original inline a1/a2/a3 form. Returns the raw (non-negated)
+ *          gradient, matching compute_gradient's convention - the caller
+ *          negates for force.
+ */
+template<typename T>
+HOST DEVICE GridSample<T> sample_grid_cubic(CONSTANT_PTR(T) __restrict__ grid_values,
+											const Vector3_t<T>& world_pos,
+											const Vector3_t<T>& origin,
+											const Matrix3_t<T>& basis,
+											const Matrix3_t<T>& basis_inv,
+											const Vector3_t<idx_t>& dimensions,
+											int boundary_condition) {
+	const Vector3_t<T> grid_pos = basis_inv.transform(world_pos - origin);
+
+	const int homeX = static_cast<int>(math::floor(grid_pos.x));
+	const int homeY = static_cast<int>(math::floor(grid_pos.y));
+	const int homeZ = static_cast<int>(math::floor(grid_pos.z));
+	const T wx = grid_pos.x - static_cast<T>(homeX);
+	const T wy = grid_pos.y - static_cast<T>(homeY);
+	const T wz = grid_pos.z - static_cast<T>(homeZ);
+
+	// Stage 1: blend along x at each of the 4x4 (iy, iz) taps
+	T dVdx_stage1[4][4]; // [iy][iz]
+	T V_stage1[4][4];	 // [iy][iz]
+	for (int iz = 0; iz < 4; ++iz) {
+		const int jz = homeZ - 1 + iz;
+		for (int iy = 0; iy < 4; ++iy) {
+			const int jy = homeY - 1 + iy;
+			T v[4];
+			for (int ix = 0; ix < 4; ++ix) {
+				const int jx = homeX - 1 + ix;
+				v[ix] = fetch_grid_value_or_zero(grid_values, jx, jy, jz, dimensions);
+			}
+			dVdx_stage1[iy][iz] = catmull_rom_deriv(v[0], v[1], v[2], v[3], wx);
+			V_stage1[iy][iz] = catmull_rom_value(v[0], v[1], v[2], v[3], wx);
+		}
+	}
+
+	// Stage 2: blend along y at each of the 4 iz taps
+	T dVdx_stage2[4]; // d/dx, blended along y
+	T dVdy_stage2[4]; // d/dy, before z blend
+	T V_stage2[4];	  // value, blended along x and y
+	for (int iz = 0; iz < 4; ++iz) {
+		dVdx_stage2[iz] = catmull_rom_value(
+			dVdx_stage1[0][iz], dVdx_stage1[1][iz], dVdx_stage1[2][iz], dVdx_stage1[3][iz], wy);
+		dVdy_stage2[iz] = catmull_rom_deriv(
+			V_stage1[0][iz], V_stage1[1][iz], V_stage1[2][iz], V_stage1[3][iz], wy);
+		V_stage2[iz] = catmull_rom_value(
+			V_stage1[0][iz], V_stage1[1][iz], V_stage1[2][iz], V_stage1[3][iz], wy);
+	}
+
+	// Stage 3: blend along z
+	const Vector3_t<T> grad_grid(
+		catmull_rom_value(dVdx_stage2[0], dVdx_stage2[1], dVdx_stage2[2], dVdx_stage2[3], wz),
+		catmull_rom_value(dVdy_stage2[0], dVdy_stage2[1], dVdy_stage2[2], dVdy_stage2[3], wz),
+		catmull_rom_deriv(V_stage2[0], V_stage2[1], V_stage2[2], V_stage2[3], wz));
+
+	GridSample<T> result;
+	result.value = catmull_rom_value(V_stage2[0], V_stage2[1], V_stage2[2], V_stage2[3], wz);
+	result.gradient = basis_inv.transpose().transform(grad_grid);
+	return result;
+}
+
+/**
+ * @brief Joint value+gradient sample via trilinear interpolation.
+ *        Thin wrapper combining interpolate_grid_point + compute_gradient so
+ *        callers have one entry point per InterpolationOrder regardless of
+ *        scheme.
+ */
+template<typename T>
+HOST DEVICE GridSample<T> sample_grid_linear(CONSTANT_PTR(T) __restrict__ grid_values,
+											 const Vector3_t<T>& world_pos,
+											 const Vector3_t<T>& origin,
+											 const Matrix3_t<T>& basis,
+											 const Matrix3_t<T>& basis_inv,
+											 const Vector3_t<idx_t>& dimensions,
+											 int boundary_condition) {
+	GridSample<T> result;
+	result.value = interpolate_grid_point(
+		grid_values, world_pos, origin, basis_inv, dimensions, boundary_condition);
+	result.gradient = compute_gradient(
+		grid_values, world_pos, origin, basis, basis_inv, dimensions, boundary_condition);
+	return result;
+}
+
 /**
  * @brief Device-safe index wrapping for periodic boundaries
  */

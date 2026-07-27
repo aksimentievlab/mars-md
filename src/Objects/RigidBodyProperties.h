@@ -1,6 +1,6 @@
 // RigidBodyType.h (2025)
 // Author: Chris Maffeo <cmaffeo2@illinois.edu>
-// Author: Pin-Yi Li <pin-yi.li@illinois.edu>
+// Author: Pin-Yi Li <pinyili2@illinois.edu>
 // Metal does not support inheritance, so create a new class.
 #pragma once
 #include "Header.h"

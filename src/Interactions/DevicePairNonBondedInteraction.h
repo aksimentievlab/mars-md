@@ -1,6 +1,6 @@
 /**
- * @file DeviceNonBondedInteractions.h
- * @brief Device-side nonbonded interaction data structures
+ * @file DevicePairNonBondedInteraction.h
+ * @brief Device-side pairwise nonbonded interaction data structures
  * @author Pin-Yi Li <pinyili2@illinois.edu>
  * @date 2025-01-17
  */
@@ -16,9 +16,10 @@
 namespace ARBD {
 
 /**
- * @brief Device-side nonbonded interaction data (SoA format)
+ * @brief Device-side pairwise nonbonded interaction data (SoA format)
  *
- * Handles pairwise nonbonded interactions with O(1) type-pair lookup.
+ * Handles pairwise tabulated/analytical interactions with O(1) type-pair lookup.
+ * PMF and force-grid interactions use GridManager + ComputePMFKernel instead.
  * Uses bulk copy pattern for efficient device memory transfers.
  *
  * Design:
@@ -27,7 +28,7 @@ namespace ARBD {
  * - Bulk copy initialization (no individual device copies)
  * - Reuses TablesRegistry device buffers (no data duplication)
  */
-class DeviceNonBondedInteractions {
+class DevicePairNonBondedInteractions {
   public:
 	//========================================================================
 	// CONSTRUCTION & INITIALIZATION
@@ -40,7 +41,7 @@ class DeviceNonBondedInteractions {
 	 *
 	 * Call copy_pairwise_from_host() and link_pairwise_tables() after construction
 	 */
-	DeviceNonBondedInteractions(idx_t num_particle_types, const Resource& resource)
+	DevicePairNonBondedInteractions(idx_t num_particle_types, const Resource& resource)
 		: resource_(resource), num_particle_types_(num_particle_types),
 		  pairwise_table_matrix_(num_particle_types * num_particle_types, resource),
 		  pairwise_form_matrix_(num_particle_types * num_particle_types, resource) {
@@ -52,7 +53,7 @@ class DeviceNonBondedInteractions {
 		pairwise_table_matrix_.copy_from_host(init_tables.data(), init_tables.size());
 		pairwise_form_matrix_.copy_from_host(init_forms.data(), init_forms.size());
 
-		LOGDEBUG("DeviceNonBondedInteractions: Allocated for {} particle types ({} pairs)",
+		LOGDEBUG("DevicePairNonBondedInteractions: Allocated for {} particle types ({} pairs)",
 				 num_particle_types,
 				 num_particle_types * num_particle_types);
 	}
@@ -83,7 +84,7 @@ class DeviceNonBondedInteractions {
 			// Validate types
 			if (type1 < 0 || type2 < 0 || type1 >= static_cast<int>(num_particle_types_) ||
 				type2 >= static_cast<int>(num_particle_types_)) {
-				LOGWARN("DeviceNonBondedInteractions: Invalid type pair ({}, {}), skipping",
+				LOGWARN("DevicePairNonBondedInteractions: Invalid type pair ({}, {}), skipping",
 						type1,
 						type2);
 				continue;
@@ -104,7 +105,7 @@ class DeviceNonBondedInteractions {
 		pairwise_table_matrix_.copy_from_host(table_matrix.data(), table_matrix.size());
 		pairwise_form_matrix_.copy_from_host(form_matrix.data(), form_matrix.size());
 
-		LOGINFO("DeviceNonBondedInteractions: Copied {} pairwise interactions to device",
+		LOGINFO("DevicePairNonBondedInteractions: Copied {} pairwise interactions to device",
 				host_pairs.size());
 	}
 
@@ -124,7 +125,7 @@ class DeviceNonBondedInteractions {
 		const auto& nonbonded_tables = tables_registry.get_nonbonded();
 
 		if (nonbonded_tables.empty()) {
-			LOGDEBUG("DeviceNonBondedInteractions: No nonbonded tables to link");
+			LOGDEBUG("DevicePairNonBondedInteractions: No nonbonded tables to link");
 			return;
 		}
 
@@ -139,8 +140,9 @@ class DeviceNonBondedInteractions {
 
 			// Validate buffer
 			if (device_buffer.empty()) {
-				LOGWARN("DeviceNonBondedInteractions: Empty device buffer for table {}, skipping",
-						i);
+				LOGWARN(
+					"DevicePairNonBondedInteractions: Empty device buffer for table {}, skipping",
+					i);
 				continue;
 			}
 
@@ -160,7 +162,7 @@ class DeviceNonBondedInteractions {
 			nonbonded_potentials_ = DeviceBuffer<TabulatedPotential>(nb_pots.size(), resource_);
 			nonbonded_potentials_.copy_from_host(nb_pots.data(), nb_pots.size());
 
-			LOGINFO("DeviceNonBondedInteractions: Linked {} nonbonded potential tables",
+			LOGINFO("DevicePairNonBondedInteractions: Linked {} nonbonded potential tables",
 					nb_pots.size());
 		}
 	}
@@ -257,5 +259,5 @@ class DeviceNonBondedInteractions {
 #ifdef USE_SYCL
 #include <sycl/sycl.hpp>
 template<>
-struct sycl::is_device_copyable<ARBD::DeviceNonBondedInteractions> : std::true_type {};
+struct sycl::is_device_copyable<ARBD::DevicePairNonBondedInteractions> : std::true_type {};
 #endif

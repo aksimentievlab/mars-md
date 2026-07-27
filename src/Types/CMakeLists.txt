@@ -13,31 +13,17 @@ list(APPEND HOST_DEVICE_HEADERS
     Types/IndexList.h
     Types/BaseGridDevice.h
     Types/Bitmask.h
-    Types/Grid.h
-
     Types/Types.h
     Types/Math.h
+    # Sparse grid support (PNanoVDB - vendored, no nanovdb C++ dependency)
+    Types/PNanoVDB.h
+    Types/NanoGridDevice.h
 )
-
-if(BUILD_NANOVDB)
-    list(APPEND HOST_DEVICE_HEADERS
-        Types/NanoGridHandle.h
-        Types/NanoGridKernels.h
-    )
-endif()
 
 list(APPEND HOST_ONLY_HEADERS
     Types/Array.h
     Types/BaseGrid.h
 )
-
-# Conditionally add CUDA specific source files
-if(USE_CUDA)
-    list(APPEND LIB_SOURCES
-        #Types/CUDA/NanoGrid.cu
-    )
-    message(STATUS "Types: Adding CUDA specific sources to lib${PROJECT_NAME}")
-endif()
 
 # Propagate to parent scope
 set(LIB_SOURCES ${LIB_SOURCES} PARENT_SCOPE)

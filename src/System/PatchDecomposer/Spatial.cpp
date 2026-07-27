@@ -149,11 +149,24 @@ std::array<int, 3> SpatialPatchDecomposer::calculate_grid_dimensions(const Vecto
 
 	// Adjust to better match number of resources
 	if (total_patches > num_resources * 2) {
-		// Too many patches, reduce
+		// Too many patches, reduce (round up so we don't overshoot below num_resources)
 		float scale_factor = std::cbrt(static_cast<float>(num_resources) / total_patches);
-		dims[0] = std::max(1, static_cast<int>(dims[0] * scale_factor));
-		dims[1] = std::max(1, static_cast<int>(dims[1] * scale_factor));
-		dims[2] = std::max(1, static_cast<int>(dims[2] * scale_factor));
+		dims[0] = std::max(1, static_cast<int>(std::ceil(dims[0] * scale_factor)));
+		dims[1] = std::max(1, static_cast<int>(std::ceil(dims[1] * scale_factor)));
+		dims[2] = std::max(1, static_cast<int>(std::ceil(dims[2] * scale_factor)));
+	}
+
+	// Guarantee enough patches to use every resource, growing the largest
+	// dimension until parallelism is possible.
+	total_patches = static_cast<size_t>(dims[0]) * dims[1] * dims[2];
+	while (total_patches < num_resources) {
+		int* largest = &dims[0];
+		if (dims[1] > *largest)
+			largest = &dims[1];
+		if (dims[2] > *largest)
+			largest = &dims[2];
+		++(*largest);
+		total_patches = static_cast<size_t>(dims[0]) * dims[1] * dims[2];
 	}
 
 	return dims;

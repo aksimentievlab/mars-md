@@ -17,6 +17,7 @@
 #include "Backend/Events.h"
 #include "Backend/Resource.h"
 #include "Objects/DeviceParticleManager.h"
+#include "Objects/Grid.h"
 #include "PatchOperation/Patch.h"
 #include "System/PatchDecomposer.h"
 #include "System/SystemForward.h"
@@ -261,7 +262,10 @@ class PatchManager {
 	 * @return Vector of events for async computation
 	 */
 	std::vector<Event> compute_nonbonded_forces(const NonBondedInteractions& interactions,
-												const DeviceParticleTypes& particle_types);
+												const DeviceParticleTypes& particle_types,
+												const GridManager& grid_manager,
+												float electric_field = 0.0f,
+												int interpolation_scheme = 1);
 
 	/**
 	 * @brief Compute bonded forces across all patches

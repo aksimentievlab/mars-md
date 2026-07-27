@@ -44,7 +44,10 @@ void SimManager::load_config(const ConfigParser& parser) {
 	sys_.set_rigid_body_types(parser.get_sim_system().get_rigid_body_types());
 	sys_.set_base_seed(parser.get_sim_system().get_base_seed());
 
-	sys_state_.set_init_particle_data(parser.get_init_particles());
+	// Cache particles here; they are converted (type_name -> type_id) in init(),
+	// once particle type IDs have been assigned - SystemState::set_init_particle_data()
+	// would otherwise look up type names in an empty/unbuilt map.
+	pending_initial_particles_ = parser.get_init_particles();
 	sys_state_.update_bonded_interactions(parser.get_init_bonded_interactions());
 }
 
@@ -62,6 +65,21 @@ void SimManager::init() {
 		sys_.set_decomposer_type(sys_.get_decomposer_type());
 	}
 
+	// Particle type IDs and name->id maps must exist before any particle data
+	// referencing type names (by name) can be converted, so this must run
+	// before set_init_particle_data() below and before decomposition.
+	sys_.assign_particle_type_ids();
+	LOGINFO("SimManager: Particle type IDs assigned");
+	sys_.build_name_to_id_maps();
+	LOGINFO("SimManager: Name to ID maps built");
+
+	// Load cached initial particle data (from load_config or set_initial_particles)
+	if (!pending_initial_particles_.empty()) {
+		sys_state_.set_init_particle_data(pending_initial_particles_);
+		LOGINFO("SimManager: Loaded {} initial particles into system state",
+				pending_initial_particles_.size());
+	}
+
 	// Perform domain decomposition (creates PatchManager in SimSystem)
 	LOGINFO("SimManager: Performing domain decomposition");
 	sys_.decompose_system(sys_state_);
@@ -73,7 +91,10 @@ void SimManager::init() {
 						"Domain decomposition failed to create PatchManager");
 	}
 	LOGINFO("SimManager: Domain decomposition complete");
-	// copy partice types to device
+
+	// Distribute initial particles from system state into patches (device storage)
+	sys_.get_patch_manager()->distribute_particles_from_state(sys_state_);
+	LOGINFO("SimManager: Initial particles distributed to patches");
 
 	// Transfer grids to all GPU resources
 	sys_.get_grid_manager().build_device_arrays();
@@ -82,12 +103,6 @@ void SimManager::init() {
 	LOGINFO("SimManager: Tables transferred to all resources");
 	sys_.get_nonbonded_interactions().prepare_device_data();
 	LOGINFO("SimManager: Nonbonded interactions transferred to all resources");
-	sys_.assign_particle_type_ids();
-	LOGINFO("SimManager: Particle type IDs assigned");
-
-	LOGINFO("SimManager: Particle types transferred to all resources");
-	sys_.build_name_to_id_maps();
-	LOGINFO("SimManager: Name to ID maps built");
 
 	LOGINFO("SimManager: Initialization completed");
 }
@@ -108,11 +123,14 @@ void SimManager::run() {
 	LOGINFO("SimManager: Running {} steps with {} resources", num_steps, resources.size());
 
 	for (size_t step = 1; step <= num_steps; ++step) {
+		LOGINFO("DEBUG step {} dcd_writer_={}", step, static_cast<void*>(dcd_writer_.get()));
 		// ===== FORCE CALCULATION PHASE =====
 		execute_force_calculation(step);
+		LOGINFO("DEBUG step {} after force dcd_writer_={}", step, static_cast<void*>(dcd_writer_.get()));
 
 		// ===== INTEGRATION PHASE =====
 		execute_integration(step);
+		LOGINFO("DEBUG step {} after integrate dcd_writer_={}", step, static_cast<void*>(dcd_writer_.get()));
 
 		// ===== MULTI-RESOURCE SYNCHRONIZATION =====
 		if (resources.size() > 1) {
@@ -173,30 +191,36 @@ void SimManager::initialize_imd(int port) {
 //================================================================================
 
 void SimManager::execute_force_calculation(size_t step) {
-	// Access PatchManager through SimSystem
 	PatchManager* patch_mgr = sys_.get_patch_manager();
 	if (!patch_mgr) {
 		throw Exception(ExceptionType::RuntimeError,
 						SourceLocation(),
 						"PatchManager not available for force calculation");
 	}
+
+	const auto& resources = sys_.get_resources();
+	const auto& grid_manager = sys_.get_grid_manager();
+
 	for (auto& patch : patch_mgr->get_patches()) {
 		DeviceParticleTypes particle_types(sys_.get_particle_types(), patch->get_resource());
 		particle_types.copy_from_host(sys_.get_particle_types());
-		Event evt =
-			patch->calculate_nonbonded_forces(sys_.get_nonbonded_interactions(), particle_types);
-	}
-	// TODO: Implement force calculation
-	// For each patch:
-	//   1. Update neighbor list if needed
-	//   2. Clear forces
-	//   3. Compute pairwise forces
-	//   4. Compute bonded forces if present
-	//   5. Apply external forces (electric field, grids)
 
-	// Placeholder logging
+		size_t resource_idx = 0;
+		for (size_t i = 0; i < resources.size(); ++i) {
+			if (resources[i] == patch->get_resource()) {
+				resource_idx = i;
+				break;
+			}
+		}
+
+		Event evt = patch->calculate_nonbonded_forces(sys_.get_nonbonded_interactions(),
+													  particle_types,
+													  grid_manager.get_device_grid_views(resource_idx));
+		(void)evt;
+	}
+
 	if (step == 1) {
-		LOGINFO("SimManager: Force calculation not yet implemented");
+		LOGINFO("SimManager: PMF/grid force kernel launched (pairwise forces still TODO)");
 	}
 }
 

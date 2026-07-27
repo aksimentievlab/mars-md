@@ -30,6 +30,11 @@ inline std::string string_format(const char* format, Args... args) {
 #endif
 
 // Includes of various types (allows those to be used simply by including Types.h)
+template<typename T>
+struct GridSample {
+	T value;
+	Vector3_t<T> gradient; // raw gradient (∂V/∂x); caller negates for force
+};
 
 using Vector3 = Vector3_t<float>;
 using Matrix3 = Matrix3_t<float>;

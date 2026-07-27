@@ -23,6 +23,7 @@ list(APPEND HOST_DEVICE_HEADERS
 list(APPEND HOST_ONLY_HEADERS
     Interactions/BondedInteraction.h
     Interactions/NonBondedInteraction.h
+    Interactions/DevicePairNonBondedInteraction.h
     Interactions/Improper.h
 )
 

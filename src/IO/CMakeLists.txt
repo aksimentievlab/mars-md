@@ -18,7 +18,7 @@ list(APPEND HOST_ONLY_HEADERS
     IO/TrajectoryWriter.h
     IO/FileHandle.h
     IO/BondConfigReader.h
-    IO/NanoVDBIO.h
+    #IO/NanoVDBIO.h
 )
 
 # Propagate to parent scope

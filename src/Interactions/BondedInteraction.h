@@ -4,7 +4,6 @@
  */
 
 #pragma once
-#include "Bonded/SMDBond.h"
 #include "Header.h"
 #include "IO/Reader.h"
 #include "Objects/ParticleProperties.h"

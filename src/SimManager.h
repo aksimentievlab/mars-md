@@ -72,6 +72,20 @@ class SimManager {
 	 * @param parser Configuration parser
 	 */
 	void load_config(const ConfigParser& parser);
+
+	/**
+	 * @brief Provide initial particle data to be loaded during init()
+	 *
+	 * Particles are cached and only converted (type_name -> type_id) inside
+	 * init(), after particle type IDs have been assigned - calling
+	 * SystemState::set_init_particle_data() any earlier would look up type
+	 * names in an empty/unbuilt map.
+	 * @param particles Initial particle data (host-side)
+	 */
+	void set_initial_particles(std::vector<ParticleRead> particles) {
+		pending_initial_particles_ = std::move(particles);
+	}
+
 	/**
 	 * @brief Run the main simulation loop
 	 * Executes the complete simulation with force calculation, integration, and I/O
@@ -97,6 +111,9 @@ class SimManager {
 	//================================================================================
 	SimSystem& sys_; // System owns PatchManager, accessible via sys_.get_patch_manager()
 	SystemState sys_state_;
+
+	// Initial particle data, cached until init() (needs particle type IDs assigned first)
+	std::vector<ParticleRead> pending_initial_particles_{};
 
 	// Random number generation
 	size_t current_step_{0}; ///< Current simulation step (used for RNG counter)
