@@ -161,6 +161,9 @@ class SimSystem {
 	void set_box_size(float x, float y, float z) {
 		sim_box_.set_box_size(Vector3(x, y, z));
 	}
+	void set_origin(float x, float y, float z) {
+		sim_box_.set_origin(Vector3(x, y, z));
+	}
 	void set_periodicity(bool px, bool py, bool pz) {
 		sim_box_.set_periodicity(px, py, pz);
 	}

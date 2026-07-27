@@ -127,6 +127,7 @@ class SimManager {
 	//================================================================================
 	std::unique_ptr<TrajectoryWriter> traj_writer_;
 	std::unique_ptr<DcdWriter> dcd_writer_;
+	bool dcd_header_written_{false};
 
 	//================================================================================
 	// IMD (Interactive Molecular Dynamics) Support

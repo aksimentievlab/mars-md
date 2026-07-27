@@ -52,7 +52,7 @@ void SimManager::load_config(const ConfigParser& parser) {
 }
 
 void SimManager::init() {
-	wkf_timer_start(&timer0_);
+	wkf_timer_start(timer0_.timer);
 	LOGINFO("SimManager: Initializing simulation");
 
 	// Initialize output writers based on configuration
@@ -126,11 +126,15 @@ void SimManager::run() {
 		LOGINFO("DEBUG step {} dcd_writer_={}", step, static_cast<void*>(dcd_writer_.get()));
 		// ===== FORCE CALCULATION PHASE =====
 		execute_force_calculation(step);
-		LOGINFO("DEBUG step {} after force dcd_writer_={}", step, static_cast<void*>(dcd_writer_.get()));
+		LOGINFO("DEBUG step {} after force dcd_writer_={}",
+				step,
+				static_cast<void*>(dcd_writer_.get()));
 
 		// ===== INTEGRATION PHASE =====
 		execute_integration(step);
-		LOGINFO("DEBUG step {} after integrate dcd_writer_={}", step, static_cast<void*>(dcd_writer_.get()));
+		LOGINFO("DEBUG step {} after integrate dcd_writer_={}",
+				step,
+				static_cast<void*>(dcd_writer_.get()));
 
 		// ===== MULTI-RESOURCE SYNCHRONIZATION =====
 		if (resources.size() > 1) {
@@ -152,8 +156,8 @@ void SimManager::run() {
 	}
 
 	// ===== FINALIZATION =====
-	wkf_timer_stop(&timer0_);
-	const float elapsed = wkf_timer_time(&timer0_);
+	wkf_timer_stop(timer0_.timer);
+	const float elapsed = wkf_timer_time(timer0_.timer);
 
 	report_performance(elapsed, num_steps);
 	write_final_restart();
@@ -213,9 +217,10 @@ void SimManager::execute_force_calculation(size_t step) {
 			}
 		}
 
-		Event evt = patch->calculate_nonbonded_forces(sys_.get_nonbonded_interactions(),
-													  particle_types,
-													  grid_manager.get_device_grid_views(resource_idx));
+		Event evt =
+			patch->calculate_nonbonded_forces(sys_.get_nonbonded_interactions(),
+											  particle_types,
+											  grid_manager.get_device_grid_views(resource_idx));
 		(void)evt;
 	}
 
@@ -283,15 +288,15 @@ void SimManager::handle_output(size_t step) {
 
 	// Energy calculation and output
 	if (energy_output_period > 0 && step % energy_output_period == 0) {
-		wkf_timer_start(&timerE_);
+		wkf_timer_start(timerE_.timer);
 		// TODO: Implement energy calculation
 		// calculate_energy(step);
-		wkf_timer_stop(&timerE_);
+		wkf_timer_stop(timerE_.timer);
 	}
 
 	// Trajectory output
 	if (output_period > 0 && step % output_period == 0) {
-		wkf_timer_start(&timerS_);
+		wkf_timer_start(timerS_.timer);
 
 		if (dcd_writer_) {
 			write_dcd_frame(step);
@@ -300,7 +305,7 @@ void SimManager::handle_output(size_t step) {
 			// traj_writer_->write_frame(step);
 		}
 
-		wkf_timer_stop(&timerS_);
+		wkf_timer_stop(timerS_.timer);
 	}
 }
 
@@ -323,6 +328,21 @@ void SimManager::write_dcd_frame(size_t step) {
 	if (sys_state_.prepare_for_dcd_output()) {
 		// 3. Get positions for DCD writing
 		const auto& positions = sys_state_.get_global_positions();
+
+		if (!dcd_header_written_) {
+			const int nsavc = std::max(1, static_cast<int>(sys_.get_output_period()));
+			const auto& periodicity = sys_.get_boundary_conditions().get_periodicity();
+			const bool with_unitcell = periodicity[0] || periodicity[1] || periodicity[2];
+			dcd_writer_->writeHeader(static_cast<int>(positions.size()),
+									 1,
+									 nsavc,
+									 nsavc,
+									 0,
+									 sys_.get_timestep(),
+									 with_unitcell);
+			dcd_header_written_ = true;
+		}
+
 		dcd_writer_->writeStep(positions);
 	}
 }
@@ -334,7 +354,7 @@ void SimManager::write_dcd_frame(size_t step) {
 void SimManager::report_progress(size_t current_step, size_t total_steps) {
 	const float progress =
 		static_cast<float>(current_step) / static_cast<float>(total_steps) * 100.0f;
-	const float elapsed = wkf_timer_time(&timer0_);
+	const float elapsed = wkf_timer_time(timer0_.timer);
 	const float steps_per_sec = static_cast<float>(current_step) / elapsed;
 
 	LOGINFO("SimManager: Step {}/{} ({:.1f}%) | Elapsed: {:.2f}s | Rate: {:.1f} steps/s",
@@ -347,8 +367,8 @@ void SimManager::report_progress(size_t current_step, size_t total_steps) {
 
 void SimManager::report_performance(float elapsed_time, size_t total_steps) {
 	const float steps_per_second = static_cast<float>(total_steps) / elapsed_time;
-	const float io_time = wkf_timer_time(&timerS_);
-	const float energy_time = wkf_timer_time(&timerE_);
+	const float io_time = wkf_timer_time(timerS_.timer);
+	const float energy_time = wkf_timer_time(timerE_.timer);
 	const float compute_time = elapsed_time - io_time - energy_time;
 
 	LOGINFO("=========================================");
@@ -477,7 +497,8 @@ void SimManager::write_final_restart() {
 	// Gather particle data before writing restart
 	gather_particle_data_from_patches();
 
-	const std::string restart_filename = "out_final.restart"; // TODO: Get from SimSystem
+	const std::string restart_filename =
+		sys_.get_output_name() + ".restart"; // TODO: Get from SimSystem
 
 	// Get current particle positions
 	const auto& positions = sys_state_.get_global_positions();

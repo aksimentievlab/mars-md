@@ -13,6 +13,7 @@
 #include <cstdlib>
 #include <sstream>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 // pybind11 includes (implementation only)
@@ -157,6 +158,20 @@ void ConfigParser::parse_parameters(const Reader& reader) {
 		sim_system_ref_->set_cutoff(Length(reader.parseValue<float>(key)));
 	}
 
+	// pairlistDistance is a skin/padding distance added to the interaction
+	// cutoff to get the actual neighbor-list (pairlist) cutoff. Always set
+	// pairlist_cutoff_ here (using a zero skin if unspecified) so it tracks
+	// the configured cutoff rather than leaving SimSystem's hardcoded default.
+	{
+		float pairlist_distance = 0.0f;
+		if (hasParameterVariant(reader, "pairlistDistance", "pairlist_distance")) {
+			std::string key = findParameterVariant(reader, "pairlistDistance", "pairlist_distance");
+			pairlist_distance = reader.parseValue<float>(key);
+		}
+		sim_system_ref_->set_pairlist_cutoff(
+			Length(static_cast<float>(sim_system_ref_->get_cutoff()) + pairlist_distance));
+	}
+
 	if (hasParameterVariant(reader, "timestep", "timestep")) {
 		std::string key = findParameterVariant(reader, "timestep", "timestep");
 		sim_system_ref_->set_timestep(reader.parseValue<float>(key));
@@ -195,6 +210,12 @@ void ConfigParser::parse_parameters(const Reader& reader) {
 		std::string key = findParameterVariant(reader, "systemSize", "system_size");
 		Vector3 size = reader.parseVector3(key);
 		sim_system_ref_->set_box_size(size.x, size.y, size.z);
+	}
+
+	if (hasParameterVariant(reader, "origin", "origin")) {
+		std::string key = findParameterVariant(reader, "origin", "origin");
+		Vector3 origin = reader.parseVector3(key);
+		sim_system_ref_->set_origin(origin.x, origin.y, origin.z);
 	}
 
 	if (hasParameterVariant(reader, "decomposer", "decomposer")) {
@@ -385,6 +406,40 @@ void ConfigParser::get_elements(const Reader& reader) {
 		return key == "particle"; // Extend with other block headers as needed
 	};
 
+	// Keys recognized as fields of a "particle" block. The inner loop below
+	// must stop as soon as it sees anything outside this set - otherwise it
+	// silently swallows top-level directives (inputParticles, inputBonds,
+	// tabulatedFile, ...) that follow the last particle block, since it only
+	// used to break on the next "particle" header.
+	static const std::unordered_set<std::string_view> particle_field_keys = {
+		"num",
+		"diffusion",
+		"mass",
+		"gridFile",
+		"grid_file",
+		"diffusionGridFile",
+		"diffusion_grid_file",
+		"forceGridFiles",
+		"force_grid_files",
+		"gridFileScale",
+		"grid_file_scale",
+		"gridFileScaleSlope",
+		"grid_file_scale_slope",
+		"gridFileSMD",
+		"grid_file_smd",
+	};
+
+	// When the file also supplies explicit per-particle data, that data is
+	// authoritative and the "num"-based placeholders below (created at the
+	// origin, with no real position) must be skipped - otherwise particles
+	// end up duplicated: N placeholders plus the N real ones from the file.
+	const bool has_explicit_particle_source =
+		std::any_of(params.begin(), params.end(), [](const auto& kv) {
+			const auto& k = kv.first;
+			return k == "inputParticles" || k == "input_particles" ||
+				   k == "restartCoordinates" || k == "restart_coordinates";
+		});
+
 	// First pass: parse sequential blocks and inline keys
 	for (size_t i = 0; i < params.size();) {
 		const auto& [key, value] = params[i];
@@ -398,7 +453,7 @@ void ConfigParser::get_elements(const Reader& reader) {
 			++i;
 			for (; i < params.size(); ++i) {
 				const auto& [k, v] = params[i];
-				if (is_block_header(k))
+				if (is_block_header(k) || !particle_field_keys.count(k))
 					break;
 				// Helper lambda to check for variant keys
 				auto check_key = [&k](const std::string& camel, const std::string& snake) {
@@ -407,7 +462,8 @@ void ConfigParser::get_elements(const Reader& reader) {
 
 				if (k == "num") {
 					LOGDEBUG("num: {}", v);
-					ptype.num = std::stoi(v);
+					num = std::stoi(v);
+					ptype.num = num;
 				} else if (k == "diffusion") {
 					auto toks = tokenize(v);
 					if (toks.size() == 3) {
@@ -501,12 +557,16 @@ void ConfigParser::get_elements(const Reader& reader) {
 			}
 
 			sim_system_ref_->get_particle_types().push_back(std::move(ptype));
-			// Create particles for this type
-			for (int n = 0; n < num; ++n) {
-				ParticleRead p{};
-				p.id = static_cast<int>(init_particles_.size());
-				p.type_name = name;
-				init_particles_.push_back(p);
+			// Create placeholder particles for this type, unless explicit
+			// per-particle data is supplied elsewhere in the file (see
+			// has_explicit_particle_source above).
+			if (!has_explicit_particle_source) {
+				for (int n = 0; n < num; ++n) {
+					ParticleRead p{};
+					p.id = static_cast<int>(init_particles_.size());
+					p.type_name = name;
+					init_particles_.push_back(p);
+				}
 			}
 			continue; // i already at next header or end
 		}

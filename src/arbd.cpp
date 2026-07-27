@@ -40,6 +40,18 @@ struct ProgramOptions {
 	int stride = 1;
 };
 
+bool is_unsigned_integer(const char* s) {
+	if (!s || *s == '\0') {
+		return false;
+	}
+	for (const char* p = s; *p; ++p) {
+		if (!isdigit(static_cast<unsigned char>(*p))) {
+			return false;
+		}
+	}
+	return true;
+}
+
 bool parse_basic_args(int argc, char* argv[], ProgramOptions& opts) {
 	if (argc == 2 && (strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "-h") == 0)) {
 		printf("Usage: %s [OPTIONS] CONFIGFILE OUTPUT [SEED]\n", argv[0]);
@@ -74,9 +86,11 @@ bool parse_basic_args(int argc, char* argv[], ProgramOptions& opts) {
 				++i; // Skip next argument
 			}
 		} else if (strcmp(argv[i], "-gid") == 0 || strcmp(argv[i], "--gpu_ids") == 0) {
-			// Parse GPU IDs until we hit another flag or end of args
+			// Parse GPU IDs until we hit a non-numeric token (a flag, or the
+			// CONFIGFILE/OUTPUT positional args), not just any '-'-prefixed token -
+			// otherwise the positional args get silently swallowed as bogus IDs.
 			++i;
-			while (i < argc && argv[i][0] != '-') {
+			while (i < argc && is_unsigned_integer(argv[i])) {
 				opts.gpuIds.push_back(atoi(argv[i]));
 				++i;
 			}
@@ -188,25 +202,47 @@ int main(int argc, char* argv[]) {
 #elif defined(USE_SYCL)
 	std::cout << "ARBD compiled with SYCL support." << std::endl;
 
-	if (!options.gpuIds.empty()) {
-		for (int gpuId : options.gpuIds) {
-			resource_collection.push_back(ARBD::Resource(gpuId));
-		}
-	}
-	// If user specified number of GPUs, try first N devices
-	else if (options.numGpus > 0) {
-		for (int i = 0; i < options.numGpus; ++i) {
-			resource_collection.push_back(ARBD::Resource(i));
-		}
-	}
-	// Default: try device 0
-	else {
-		resource_collection.push_back(ARBD::Resource(0));
+	// Discover SYCL devices before building/validating any SYCL Resource -
+	// Resource::validate() checks id_ against SYCL::Manager::device_count(),
+	// which always returns 0 until Manager::init() has run.
+	size_t deviceCount = 0;
+	try {
+		ARBD::SYCL::Manager::init();
+		deviceCount = ARBD::SYCL::Manager::device_count();
+	} catch (const ARBD::Exception& e) {
+		std::cout << "SYCL device discovery failed: " << e.what() << std::endl;
 	}
 
-	// Fallback to CPU if no SYCL devices available
+	if (deviceCount > 0) {
+		if (!options.gpuIds.empty()) {
+			for (int gpuId : options.gpuIds) {
+				if (gpuId >= 0 && static_cast<size_t>(gpuId) < deviceCount) {
+					resource_collection.push_back(
+						ARBD::Resource::create_sycl_device(static_cast<short>(gpuId)));
+				} else {
+					std::cout << "Warning: GPU ID " << gpuId << " is invalid (available: 0-"
+							  << (deviceCount - 1) << ")" << std::endl;
+				}
+			}
+		}
+		// If user specified number of GPUs, try first N devices
+		else if (options.numGpus > 0) {
+			size_t gpusToUse = std::min(static_cast<size_t>(options.numGpus), deviceCount);
+			for (size_t i = 0; i < gpusToUse; ++i) {
+				resource_collection.push_back(
+					ARBD::Resource::create_sycl_device(static_cast<short>(i)));
+			}
+		}
+		// Default: try device 0
+		else {
+			resource_collection.push_back(ARBD::Resource::create_sycl_device(0));
+		}
+	}
+
+	// Fallback to CPU if no SYCL devices available or selected
 	if (resource_collection.empty()) {
 		std::cout << "No SYCL devices available. Falling back to CPU." << std::endl;
+		resource_collection.push_back(ARBD::Resource(ARBD::ResourceType::CPU));
 	}
 
 #elif defined(USE_METAL)
@@ -252,6 +288,9 @@ int main(int argc, char* argv[]) {
 
 	ARBD::SimSystem sys(resource_collection);
 	ARBD::ConfigParser parser(sys, options.configFile);
+	// OUTPUT is a required CLI positional (see usage), so it always takes
+	// precedence over any outputName/output_name set in the config file.
+	sys.set_output_name(options.outputFile);
 	sys.validate_physical_parameters();
 	sys.validate_method_parameters();
 	sys.validate_output_parameters();
