@@ -237,9 +237,5 @@ TEST_CASE("Tabulated Bond Force - Lookup", "[force][bonded][tabulated][!mayfail]
 	initialize_backend_once();
 	Resource res(Global::single_resource_id);
 
-	// TODO: Create tabulated potential from file or data
-	// TODO: Test lookup at various distances
-	// TODO: Verify forces match analytical derivative
-
 	WARN("Tabulated bond force test not fully implemented - requires table setup");
 }

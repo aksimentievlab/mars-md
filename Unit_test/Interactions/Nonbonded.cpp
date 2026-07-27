@@ -14,7 +14,8 @@
 
 #include "Backend/Kernels.h"
 #include "Backend/Resource.h"
-#include "Interactions/Nonbonded/Pairwise.h" // ← Corrected kernels
+#include "Interactions/Nonbonded/Columb.h"
+#include "Interactions/Nonbonded/Pairwise.h"
 #include "Objects/DeviceParticleManager.h"
 #include "PatchOperation/Pairlist.h"
 #include "System/PeriodicBox.h"
@@ -80,19 +81,15 @@ TEST_CASE("Softcore LJ - Repulsion", "[forces][nonbonded][softcore]") {
 	auto particle_view = particles.view();
 	auto type_view = type_manager.view();
 
-	SoftcoreForceKernel kernel{
-		particle_view,
-		&type_view,
-		pairlist->get_neighbor_pairs().data(),
-		pbox_buffer.data(),
-		pairlist->get_num_pairs(),
-		false // No energy
-	};
+	SoftcoreForceKernel kernel{particle_view,
+							   type_view,
+							   pbox_buffer.data(),
+							   pairlist->get_num_pairs()};
 
 	// Launch
 	KernelConfig config = KernelConfig::for_1d(pairlist->get_num_pairs(), res);
-	launch_kernel(res, config, kernel);
-	res.synchronize();
+	Event evt = launch_kernel(res, config, kernel);
+	evt.wait();
 
 	// Check forces
 	HostParticleData result;
@@ -117,11 +114,11 @@ TEST_CASE("Softcore LJ - No Force Outside Core", "[forces][nonbonded][softcore]"
 	DeviceParticle particles(2, res);
 	particles.copy_from_host(host_data, 2);
 
-	DeviceParticleManager type_manager(res);
+	DeviceParticleTypes type_manager(types, res);
 	type_manager.copy_from_host(types);
 
 	auto pairlist = create_pairlist(PairlistBuilderType::CellList, res, 10, 10);
-	pairlist->build_pairlist(particles.positions(), 2, 2.0f);
+	pairlist->build_pairlist(particles.pos(), 2, 2.0f);
 
 	PeriodicBox pbox_host(Vector3(100, 100, 100));
 	DeviceBuffer<PeriodicBox> pbox_buffer(1, res);
@@ -160,11 +157,11 @@ TEST_CASE("Coulomb - Repulsion Between Like Charges", "[forces][nonbonded][coulo
 	DeviceParticle particles(2, res);
 	particles.copy_from_host(host_data, 2);
 
-	DeviceParticleManager type_manager(res);
+	DeviceParticleTypes type_manager(types, res);
 	type_manager.copy_from_host(types);
 
 	auto pairlist = create_pairlist(PairlistBuilderType::CellList, res, 10, 10);
-	pairlist->build_pairlist(particles.positions(), 2, 3.0f);
+	pairlist->build_pairlist(particles.pos(), 2, 3.0f);
 
 	PeriodicBox pbox_host(Vector3(100, 100, 100));
 	DeviceBuffer<PeriodicBox> pbox_buffer(1, res);
@@ -173,15 +170,14 @@ TEST_CASE("Coulomb - Repulsion Between Like Charges", "[forces][nonbonded][coulo
 	auto particle_view = particles.view();
 	auto type_view = type_manager.view();
 
-	ColumbForceKernel kernel{particle_view,
-							 &type_view,
-							 pairlist->get_neighbor_pairs().data(),
-							 pbox_buffer.data(),
-							 pairlist->get_num_pairs(),
-							 false};
+	ColumbForceKernel<float> kernel{particle_view,
+									&type_view,
+									pairlist->get_neighbor_pairs().data(),
+									pbox_buffer.data(),
+									pairlist->get_num_pairs(),
+									false};
 
 	launch_kernel(res, KernelConfig::for_1d(pairlist->get_num_pairs(), res), kernel);
-	res.synchronize();
 
 	HostParticleData result;
 	particles.copy_to_host(result, 2);
@@ -190,8 +186,8 @@ TEST_CASE("Coulomb - Repulsion Between Like Charges", "[forces][nonbonded][coulo
 	float expected_force = constants::COULOMB * 1.0f * 1.0f / (2.0f * 2.0f);
 
 	// Like charges repel
-	REQUIRE(result.force[0].x == Catch::Matchers::WithinRel(-expected_force, 0.01));
-	REQUIRE(result.force[1].x == Catch::Matchers::WithinRel(expected_force, 0.01));
+	REQUIRE(result.force[0].x == Catch::Matchers::WithinRel(-expected_force, 0.01f));
+	REQUIRE(result.force[1].x == Catch::Matchers::WithinRel(expected_force, 0.01f));
 
 	// Equal and opposite
 	REQUIRE(std::abs(result.force[0].x + result.force[1].x) < 1e-4f);
@@ -217,7 +213,7 @@ TEST_CASE("Coulomb - Attraction Between Opposite Charges", "[forces][nonbonded][
 	type_manager.copy_from_host(types);
 
 	auto pairlist = create_pairlist(PairlistBuilderType::CellList, res, 10, 10);
-	pairlist->build_pairlist(particles.positions(), 2, 3.0f);
+	pairlist->build_pairlist(particles.pos(), 2, 3.0f);
 
 	PeriodicBox pbox_host(Vector3(100, 100, 100));
 	DeviceBuffer<PeriodicBox> pbox_buffer(1, res);
@@ -270,7 +266,7 @@ TEST_CASE("Combined Softcore + Coulomb", "[forces][nonbonded][combined]") {
 	type_manager.copy_from_host(types);
 
 	auto pairlist = create_pairlist(PairlistBuilderType::CellList, res, 10, 10);
-	pairlist->build_pairlist(particles.positions(), 2, 2.0f);
+	pairlist->build_pairlist(particles.pos(), 2, 2.0f);
 
 	PeriodicBox pbox_host(Vector3(100, 100, 100));
 	DeviceBuffer<PeriodicBox> pbox_buffer(1, res);

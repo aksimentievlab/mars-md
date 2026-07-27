@@ -20,6 +20,7 @@
 #include "PatchOperation/Pairlist.h"
 #include "Types/Types.h"
 #include <chrono>
+#include <numeric>
 
 using namespace ARBD;
 
@@ -223,8 +224,8 @@ TEST_CASE("ZOrder Pairlist - DEBUG Bounding Box", "[pairlist][debug]") {
 	std::cout << "Unique Morton codes: " << unique_codes.size() << " / 8" << std::endl;
 
 	if (unique_codes.size() < 8) {
-		std::cout << "⚠️  WARNING: Duplicate Morton codes detected!" << std::endl;
-		std::cout << "⚠️  This means bounding box computation is still broken!" << std::endl;
+		std::cout << "WARNING: Duplicate Morton codes detected!" << std::endl;
+		std::cout << "This means bounding box computation is still broken!" << std::endl;
 
 		// Print histogram
 		std::map<morton_t, int> code_count;
