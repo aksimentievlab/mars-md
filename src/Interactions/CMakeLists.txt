@@ -37,11 +37,13 @@ endif()
 if(USE_CUDA)
     list(APPEND LIB_SOURCES
         Interactions/Bonded/BondedInstantiations.cu
+        Interactions/Nonbonded/NonbondedInstantiations.cu
     )
 
     # Set CUDA properties for .cu files
     set_source_files_properties(
         Interactions/Bonded/BondedInstantiations.cu
+        Interactions/Nonbonded/NonbondedInstantiations.cu
         PROPERTIES
         LANGUAGE CUDA
         CUDA_SEPARABLE_COMPILATION ON

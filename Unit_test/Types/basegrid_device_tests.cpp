@@ -3,6 +3,7 @@
 #include "Backend/KernelConfig.h"
 #include "Backend/Kernels.h"
 #include "Types/BaseGridDevice.h"
+#include "basegrid_device.h"
 
 #include <vector>
 using Catch::Approx;
@@ -14,11 +15,7 @@ TEST_CASE("BaseGrid device interpolate and nearest", "[basegrid][device]") {
 	auto res = Resource{Global::single_resource_id};
 
 	using T = float;
-	struct Params {
-		Vector3_t<T> origin;
-		Matrix3_t<T> basis_inv;
-		Vector3_t<idx_t> dims;
-	};
+	using Params = Test::Params<T>;
 	Params h_params;
 	h_params.origin = Vector3_t<T>(0, 0, 0);
 	h_params.basis_inv = Matrix3_t<T>(T(1)).inverse();
@@ -48,27 +45,14 @@ TEST_CASE("BaseGrid device interpolate and nearest", "[basegrid][device]") {
 	DeviceBuffer<Params> d_params(1, res);
 	d_params.copy_from_host(&h_params, 1, true);
 
-	// Launch 1D kernel over positions - no captures to satisfy device copyability
-	auto kernel = [](idx_t i,
-					 const Vector3_t<T>* pos,
-					 const T* values,
-					 T* out_interp,
-					 T* out_nearest,
-					 const Params* params) {
-		const Params p = params[0];
-		const Vector3_t<T> pt = pos[i];
-		const T vi =
-			interpolate_grid_point<T>(values, pt, p.origin, p.basis_inv, p.dims, 2); // 2 = Periodic
-		const T vn =
-			get_value_nearest<T>(values, pt, p.origin, p.basis_inv, p.dims, 2); // 2 = Periodic
-		out_interp[i] = vi;
-		out_nearest[i] = vn;
-	};
-
-	KernelConfig cfg = KernelConfig::for_1d(static_cast<idx_t>(h_pos.size()), res);
-	cfg.sync = true;
-
-	launch_kernel(res, cfg, kernel, d_pos, d_values, d_out_interp, d_out_nearest, d_params);
+	Event evt = Test::launch_grid_query<T>(res,
+										   d_pos,
+										   d_values,
+										   d_out_interp,
+										   d_out_nearest,
+										   d_params,
+										   static_cast<idx_t>(h_pos.size()));
+	evt.wait();
 
 	std::vector<T> out_interp(h_pos.size());
 	std::vector<T> out_nearest(h_pos.size());

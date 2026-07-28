@@ -276,14 +276,16 @@ TEST_CASE("DirectTabulatedBondKernelTest", "[free][bonded][direct]") {
 	DeviceBuffer<int> forms_buf(1, res);
 	forms_buf.copy_from_host(std::vector<int>{static_cast<int>(InteractionForm::Tabulated)});
 
-	DeviceBuffer<int2> indices_buf(1, res);
-	indices_buf.copy_from_host(std::vector<int2>{int2{0, 1}});
+	DeviceBuffer<ARBD::int2> indices_buf(1, res);
+	indices_buf.copy_from_host(std::vector<ARBD::int2>{ARBD::int2{0, 1}});
 
-	DeviceBuffer<Vector3> positions_buf(2, res);
-	positions_buf.copy_from_host(std::vector<Vector3>{Vector3(0, 0, 0), Vector3(0, 0, 1.885f)});
+	DeviceBuffer<ARBD::Vector3> positions_buf(2, res);
+	positions_buf.copy_from_host(
+		std::vector<ARBD::Vector3>{ARBD::Vector3(0, 0, 0), ARBD::Vector3(0, 0, 1.885f)});
 
-	DeviceBuffer<Vector3> force_buf(2, res);
-	force_buf.copy_from_host(std::vector<Vector3>{Vector3(0, 0, 0), Vector3(0, 0, 0)});
+	DeviceBuffer<ARBD::Vector3> force_buf(2, res);
+	force_buf.copy_from_host(
+		std::vector<ARBD::Vector3>{ARBD::Vector3(0, 0, 0), ARBD::Vector3(0, 0, 0)});
 
 	PeriodicBox box(Vector3(500.0f, 500.0f, 500.0f));
 	DeviceBuffer<PeriodicBox> box_buf(1, res);

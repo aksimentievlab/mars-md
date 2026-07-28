@@ -40,48 +40,48 @@ struct alignas(16) Matrix3_t {
 
   public:
 	// Constructors - simplified to avoid complex template resolution
-	constexpr Matrix3_t() {
+	HOST DEVICE constexpr Matrix3_t() {
 		cols[0] = Vector3(T(1), T(0), T(0));
 		cols[1] = Vector3(T(0), T(1), T(0));
 		cols[2] = Vector3(T(0), T(0), T(1));
 	}
 
-	constexpr Matrix3_t(T s) {
+	HOST DEVICE constexpr Matrix3_t(T s) {
 		cols[0] = Vector3(s, T(0), T(0));
 		cols[1] = Vector3(T(0), s, T(0));
 		cols[2] = Vector3(T(0), T(0), s);
 	}
 
 	// Diagonal constructor
-	constexpr Matrix3_t(T x, T y, T z) {
+	HOST DEVICE constexpr Matrix3_t(T x, T y, T z) {
 		cols[0] = Vector3(x, T(0), T(0));
 		cols[1] = Vector3(T(0), y, T(0));
 		cols[2] = Vector3(T(0), T(0), z);
 	}
 
 	// Column vector constructor
-	constexpr Matrix3_t(const Vector3& c0, const Vector3& c1, const Vector3& c2) {
+	HOST DEVICE constexpr Matrix3_t(const Vector3& c0, const Vector3& c1, const Vector3& c2) {
 		cols[0] = c0;
 		cols[1] = c1;
 		cols[2] = c2;
 	}
 
 	// Simplified operators - avoid std::common_type_t
-	Matrix3 operator*(T s) const {
+	HOST DEVICE Matrix3 operator*(T s) const {
 		return Matrix3(cols[0] * s, cols[1] * s, cols[2] * s);
 	}
 
 	// Vector transformation
-	Vector3 transform(const Vector3& v) const {
+	HOST DEVICE Vector3 transform(const Vector3& v) const {
 		return cols[0] * v.x + cols[1] * v.y + cols[2] * v.z;
 	}
 
-	Vector3 operator*(const Vector3& v) const {
+	HOST DEVICE Vector3 operator*(const Vector3& v) const {
 		return transform(v);
 	}
 
 	// Matrix multiplication - same type only for Metal safety
-	Matrix3 operator*(const Matrix3& m) const {
+	HOST DEVICE Matrix3 operator*(const Matrix3& m) const {
 		Vector3 new_c0 = transform(m.cols[0]);
 		Vector3 new_c1 = transform(m.cols[1]);
 		Vector3 new_c2 = transform(m.cols[2]);
@@ -89,12 +89,12 @@ struct alignas(16) Matrix3_t {
 	}
 
 	// Matrix addition
-	Matrix3 operator+(const Matrix3& m) const {
+	HOST DEVICE Matrix3 operator+(const Matrix3& m) const {
 		return Matrix3(cols[0] + m.cols[0], cols[1] + m.cols[1], cols[2] + m.cols[2]);
 	}
 
 	// Matrix transpose
-	Matrix3 transpose() const {
+	HOST DEVICE Matrix3 transpose() const {
 		Vector3 r0(cols[0].x, cols[1].x, cols[2].x);
 		Vector3 r1(cols[0].y, cols[1].y, cols[2].y);
 		Vector3 r2(cols[0].z, cols[1].z, cols[2].z);
@@ -102,7 +102,7 @@ struct alignas(16) Matrix3_t {
 	}
 
 	// Matrix inverse - simplified
-	Matrix3 inverse() const {
+	HOST DEVICE Matrix3 inverse() const {
 		Vector3 c0 = cols[0], c1 = cols[1], c2 = cols[2];
 		Vector3 r0 = c1.cross(c2);
 		Vector3 r1 = c2.cross(c0);
@@ -115,33 +115,29 @@ struct alignas(16) Matrix3_t {
 	}
 
 	// Determinant
-	T det() const {
+	HOST DEVICE T det() const {
 		return cols[0].dot(cols[1].cross(cols[2]));
 	}
 
 	// Column accessors
-	const Vector3& ex() const {
+	HOST DEVICE const Vector3& ex() const {
 		return cols[0];
 	}
-	const Vector3& ey() const {
+	HOST DEVICE const Vector3& ey() const {
 		return cols[1];
 	}
-	const Vector3& ez() const {
+	HOST DEVICE const Vector3& ez() const {
 		return cols[2];
 	}
 
-	Vector3& ex() {
+	HOST DEVICE Vector3& ex() {
 		return cols[0];
 	}
-	Vector3& ey() {
+	HOST DEVICE Vector3& ey() {
 		return cols[1];
 	}
-	Vector3& ez() {
+	HOST DEVICE Vector3& ez() {
 		return cols[2];
-	}
-
-	Vector3& diagonal() {
-		return Vector3(cols[0].x, cols[1].y, cols[2].z);
 	}
 #ifdef HOST_GUARD
 
@@ -163,7 +159,7 @@ struct alignas(16) Matrix3_t {
 
 // Free function for scalar multiplication
 template<typename T>
-Matrix3_t<T> operator*(T s, const Matrix3_t<T>& m) {
+HOST DEVICE Matrix3_t<T> operator*(T s, const Matrix3_t<T>& m) {
 	return m * s;
 }
 

@@ -160,14 +160,22 @@ class PeriodicBox {
 	}
 
 	/**
-	 * @brief Set box size (device-safe)
+	 * @brief Set box size (host-only)
 	 *
 	 * Keeps basis_ in sync: consumers such as the spatial decomposer derive
 	 * the system bounds from the basis vectors, so leaving them at their
 	 * default here would make the decomposition disagree with the box the
 	 * integrator actually wraps into.
+	 *
+	 * Host-only: the box is configured once during setup (config parsing,
+	 * Python bindings, SimSystem) and is thereafter read-only on the device,
+	 * which receives it as a `const PeriodicBox*`. Mutating this shared,
+	 * simulation-global state from a kernel would be a data race across
+	 * threads. This also matches set_basis()/set_origin(), which are already
+	 * host-only, and avoids touching basis_ (a std::array, whose operator[]
+	 * is a host-only constexpr function) from device code.
 	 */
-	HOST DEVICE void set_box_size(const Vector3& box_size) {
+	HOST void set_box_size(const Vector3& box_size) {
 		box_size_ = box_size;
 		basis_[0] = Vector3(box_size.x, 0, 0);
 		basis_[1] = Vector3(0, box_size.y, 0);
@@ -175,9 +183,11 @@ class PeriodicBox {
 	}
 
 	/**
-	 * @brief Set periodicity for all dimensions (device-safe)
+	 * @brief Set periodicity for all dimensions
+	 *
+	 * Host-only for the same reason as set_box_size().
 	 */
-	HOST DEVICE void set_periodicity(bool px, bool py, bool pz) {
+	HOST void set_periodicity(bool px, bool py, bool pz) {
 		periodic_[0] = px;
 		periodic_[1] = py;
 		periodic_[2] = pz;

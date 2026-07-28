@@ -17,8 +17,12 @@ struct GenerateExclusionsFunctor {
 								// --- Pointers to GPU Data ---
 								DEVICE_PTR(const int2) adjacency_offsets,
 								DEVICE_PTR(const int) adjacency_list,
-								DEVICE_PTR(Exclude)
-									exclusions_output, // Pre-allocated output buffer
+								// Packed (ind1, ind2) pairs - the device-side SoA
+								// representation of exclusions, matching
+								// DeviceBondedInteractions::exclusion_pairs(). The
+								// host-side AoS Exclude type deliberately stays off
+								// the device.
+								DEVICE_PTR(int2) exclusions_output, // Pre-allocated output buffer
 								DEVICE_PTR(int)
 									exclusion_count,	 // Atomic counter for the output buffer
 								int max_exclusion_depth, // e.g., for "1-4", this would be 3
@@ -61,7 +65,7 @@ struct GenerateExclusionsFunctor {
 
 						// Add it to the exclusion list
 						int write_idx = ATOMIC_ADD(exclusion_count, 1);
-						exclusions_output[write_idx] = {(int)i, neighbor};
+						exclusions_output[write_idx] = int2{(int)i, neighbor};
 
 						// And add it to the frontier for the next depth level
 						frontier[frontier_end++] = neighbor;
@@ -79,7 +83,7 @@ inline Event launch_exclusion_generation(
 	int exclusion_depth, // e.g., 3 for a 1-4 exclusion
 	const DeviceBuffer<int2>& adj_offsets,
 	const DeviceBuffer<int>& adj_list,
-	DeviceBuffer<Exclude>& out_exclusions, // Must be pre-sized large enough
+	DeviceBuffer<int2>& out_exclusions,	   // Must be pre-sized large enough
 	DeviceBuffer<int>& out_exclusion_count // A buffer with one integer, initialized to 0
 ) {
 	KernelConfig config = KernelConfig::for_1d(num_particles, resource);
@@ -95,3 +99,29 @@ inline Event launch_exclusion_generation(
 						 num_particles);
 }
 } // namespace ARBD
+
+// Explicit template instantiation declaration to prevent host instantiation.
+// Launched with a trailing argument pack, so it is spelled out here exactly as
+// launch_kernel forwards it through get_buffer_pointer(). Real definition lives
+// in Bonded/BondedInstantiations.cu (exclusions are derived from bonded
+// topology adjacency).
+#ifdef USE_CUDA
+#include "Backend/CUDA/KernelHelper.cuh"
+namespace ARBD {
+extern template Event launch_cuda_kernel(const Resource& resource,
+										 const KernelConfig& config,
+										 GenerateExclusionsFunctor kernel_func,
+										 int2* adjacency_offsets,
+										 int* adjacency_list,
+										 int2* exclusions_output,
+										 int* exclusion_count,
+										 int max_exclusion_depth,
+										 int num_particles);
+} // namespace ARBD
+#endif
+
+#ifdef USE_SYCL
+#include <sycl/sycl.hpp>
+template<>
+struct sycl::is_device_copyable<ARBD::GenerateExclusionsFunctor> : std::true_type {};
+#endif

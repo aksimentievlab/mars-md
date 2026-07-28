@@ -1149,12 +1149,17 @@ template<typename T>
 constexpr auto get_buffer_pointer(T&& arg) {
 	if constexpr (is_device_buffer_v<std::decay_t<T>>) {
 		auto ptr = arg.device_data();
-		using ValueType = typename std::decay_t<T>::value_type;
 		// @todo: implement
 		(void)arg.get_access();
 
 #ifndef HOST_GUARD
-		return static_cast<ValueType*>(ptr);
+		// Preserve the pointee's cv-qualification. DEVICE_PTR is a textual
+		// macro (T*), so the const overload of device_data() yields `const T*`;
+		// casting that to the buffer's plain value_type* would strip const,
+		// which nvcc rejects outright once a const DeviceBuffer& is forwarded
+		// to launch_kernel from a .cu translation unit.
+		using PointeeType = std::remove_reference_t<decltype(*ptr)>;
+		return static_cast<PointeeType*>(ptr);
 #else
 		return ptr;
 #endif

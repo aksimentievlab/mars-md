@@ -32,6 +32,20 @@ target_link_libraries(arbd_unit_tests PRIVATE lib${PROJECT_NAME})
 if(USE_CUDA)
     find_package(CUDAToolkit REQUIRED)
     target_link_libraries(arbd_unit_tests PRIVATE CUDA::cudart)
+
+    # basegrid_device_tests.cpp launches a named GridQueryKernel functor (see
+    # Types/basegrid_device.h) rather than an ad hoc lambda, so its
+    # launch_cuda_kernel instantiation can be forced into a real CUDA
+    # compilation unit here instead of getting the host stub.
+    target_sources(arbd_unit_tests PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}/Types/basegrid_device_instantiations.cu
+    )
+    set_source_files_properties(
+        ${CMAKE_CURRENT_LIST_DIR}/Types/basegrid_device_instantiations.cu
+        PROPERTIES
+        LANGUAGE CUDA
+        CUDA_SEPARABLE_COMPILATION ON
+    )
 endif()
 
 if(USE_MPI)

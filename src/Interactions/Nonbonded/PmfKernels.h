@@ -119,6 +119,27 @@ struct ComputePMFKernel {
 
 } // namespace ARBD
 
+// Explicit template instantiation declaration to prevent host instantiation.
+// Unlike the launch_* helpers elsewhere, this kernel is launched with a
+// trailing argument pack (see Patch::calculate_nonbonded_forces), so the
+// declaration must spell out those arguments exactly as launch_kernel
+// forwards them through get_buffer_pointer(). Real definition lives in
+// Nonbonded/NonbondedInstantiations.cu.
+#ifdef USE_CUDA
+#include "Backend/CUDA/KernelHelper.cuh"
+namespace ARBD {
+extern template Event launch_cuda_kernel(const Resource& resource,
+										 const KernelConfig& config,
+										 ComputePMFKernel kernel_func,
+										 Vector3* positions,
+										 int* type_ids,
+										 Vector3* forces,
+										 ParticleTypeView types,
+										 const BaseGridView<float>* grid_configs,
+										 idx_t num_particles);
+} // namespace ARBD
+#endif
+
 #ifdef USE_SYCL
 #include <sycl/sycl.hpp>
 template<>

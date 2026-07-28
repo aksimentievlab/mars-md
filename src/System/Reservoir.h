@@ -25,10 +25,10 @@
 
 namespace ARBD {
 struct Reservoir {
-	HOST DEVICE Vector3 start;
-	HOST DEVICE Vector3 end;
-	HOST DEVICE int target_num;	 // target number of particles in the reservoir
-	HOST DEVICE int current_num; // current number of particles in the reservoir
+	HOST Vector3 start;
+	HOST Vector3 end;
+	HOST int target_num;  // target number of particles in the reservoir
+	HOST int current_num; // current number of particles in the reservoir
 	bool isinside(Vector3 r) const {
 		return r.x >= start.x && r.x <= end.x && r.y >= start.y && r.y <= end.y && r.z >= start.z &&
 			   r.z <= end.z;
@@ -46,9 +46,9 @@ class ReservoirManager { // ON host only
 	};
 
 	HOST int getTargetMeanNum() const;
-	HOST DEVICE int getCurrentMeanNum() const;
+	HOST int getCurrentMeanNum() const;
 
-	HOST DEVICE bool inside(int i, Vector3 r) {
+	HOST bool inside(int i, Vector3 r) {
 		return reservoirs[i].isinside(r);
 	};
 

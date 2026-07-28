@@ -12,6 +12,7 @@ namespace ARBD {
 // BDIntegrate instantiation
 template struct BDIntegrate<float>;
 template struct BAOABIntegrate<float>;
+template struct BAOAB_LastUpdate<float>;
 // launch_cuda_kernel instantiations
 template Event launch_cuda_kernel(const Resource& resource,
 								  const KernelConfig& config,
@@ -19,4 +20,8 @@ template Event launch_cuda_kernel(const Resource& resource,
 template Event launch_cuda_kernel(const Resource& resource,
 								  const KernelConfig& config,
 								  BAOABIntegrate<float> kernel_func);
+
+template Event launch_cuda_kernel(const Resource& resource,
+								  const KernelConfig& config,
+								  BAOAB_LastUpdate<float> kernel_func);
 } // namespace ARBD

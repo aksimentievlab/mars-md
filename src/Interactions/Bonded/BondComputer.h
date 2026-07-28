@@ -402,6 +402,21 @@ extern template Event launch_cuda_kernel(const Resource& resource,
 extern template Event launch_cuda_kernel(const Resource& resource,
 										 const KernelConfig& config,
 										 AnalyticalBondComputer<1> kernel_func);
+// Tabulated bond/angle/dihedral computers are concrete (non-template) types,
+// but still need their launch_cuda_kernel instantiation forced into a real
+// CUDA compilation unit (see Bonded/BondedInstantiations.cu) - otherwise any
+// host-only .cpp that calls launch_tabulated_bonds/_angles/_dihedrals (or
+// Patch::calculate_bonded_forces, which calls them) implicitly instantiates
+// the non-CUDA stub in KernelHelper.cuh and throws NotImplementedError.
+extern template Event launch_cuda_kernel(const Resource& resource,
+										 const KernelConfig& config,
+										 TabulatedBondComputer kernel_func);
+extern template Event launch_cuda_kernel(const Resource& resource,
+										 const KernelConfig& config,
+										 TabulatedAngleComputer kernel_func);
+extern template Event launch_cuda_kernel(const Resource& resource,
+										 const KernelConfig& config,
+										 TabulatedDihedralComputer kernel_func);
 } // namespace ARBD
 #endif
 

@@ -67,8 +67,7 @@ HOST DEVICE inline NanoGridContext make_nano_grid_context(pnanovdb_buf_t buf) {
 	NanoGridContext ctx;
 	ctx.buf = buf;
 	ctx.grid.address = pnanovdb_address_null();
-	ctx.grid_type =
-		static_cast<pnanovdb_grid_type_t>(pnanovdb_grid_get_grid_type(buf, ctx.grid));
+	ctx.grid_type = static_cast<pnanovdb_grid_type_t>(pnanovdb_grid_get_grid_type(buf, ctx.grid));
 	pnanovdb_tree_handle_t tree = pnanovdb_grid_get_tree(buf, ctx.grid);
 	pnanovdb_root_handle_t root = pnanovdb_tree_get_root(buf, tree);
 	pnanovdb_readaccessor_init(PNANOVDB_REF(ctx.acc), root);
@@ -101,8 +100,10 @@ HOST DEVICE inline T fetch_nano_value(NanoGridContext& ctx, int ix, int iy, int 
 	ijk.x = ix;
 	ijk.y = iy;
 	ijk.z = iz;
-	pnanovdb_address_t address = pnanovdb_readaccessor_get_value_address(
-		ctx.grid_type, ctx.buf, PNANOVDB_REF(ctx.acc), PNANOVDB_REF(ijk));
+	pnanovdb_address_t address = pnanovdb_readaccessor_get_value_address(ctx.grid_type,
+																		 ctx.buf,
+																		 PNANOVDB_REF(ctx.acc),
+																		 PNANOVDB_REF(ijk));
 	return read_grid_value<T>(ctx.buf, address);
 }
 
@@ -120,8 +121,8 @@ HOST DEVICE inline T fetch_nano_value(NanoGridContext& ctx, int ix, int iy, int 
  */
 template<typename T>
 HOST DEVICE inline Vector3_t<T> apply_inverse_jacobi_transpose(pnanovdb_buf_t buf,
-																pnanovdb_map_handle_t map,
-																const Vector3_t<T>& grad_grid) {
+															   pnanovdb_map_handle_t map,
+															   const Vector3_t<T>& grad_grid) {
 	const float sx = static_cast<float>(grad_grid.x);
 	const float sy = static_cast<float>(grad_grid.y);
 	const float sz = static_cast<float>(grad_grid.z);
@@ -263,12 +264,21 @@ HOST DEVICE GridSample<T> sample_grid_cubic(NanoGridContext& ctx, const Vector3_
 	T dVdy_stage2[4];
 	T V_stage2[4];
 	for (int iz = 0; iz < 4; ++iz) {
-		dVdx_stage2[iz] = catmull_rom_value(
-			dVdx_stage1[0][iz], dVdx_stage1[1][iz], dVdx_stage1[2][iz], dVdx_stage1[3][iz], wy);
-		dVdy_stage2[iz] = catmull_rom_deriv(
-			V_stage1[0][iz], V_stage1[1][iz], V_stage1[2][iz], V_stage1[3][iz], wy);
-		V_stage2[iz] = catmull_rom_value(
-			V_stage1[0][iz], V_stage1[1][iz], V_stage1[2][iz], V_stage1[3][iz], wy);
+		dVdx_stage2[iz] = catmull_rom_value(dVdx_stage1[0][iz],
+											dVdx_stage1[1][iz],
+											dVdx_stage1[2][iz],
+											dVdx_stage1[3][iz],
+											wy);
+		dVdy_stage2[iz] = catmull_rom_deriv(V_stage1[0][iz],
+											V_stage1[1][iz],
+											V_stage1[2][iz],
+											V_stage1[3][iz],
+											wy);
+		V_stage2[iz] = catmull_rom_value(V_stage1[0][iz],
+										 V_stage1[1][iz],
+										 V_stage1[2][iz],
+										 V_stage1[3][iz],
+										 wy);
 	}
 
 	// Stage 3: blend along z

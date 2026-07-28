@@ -16,6 +16,9 @@
 
 #include "ARBDException.h"
 #include "Backend/Resource.h"
+#ifdef USE_CUDA
+#include "Backend/CUDA/CUDAManager.h"
+#endif
 #include "IO/ConfigParser.h"
 #include "SignalManager.h"
 #include "SimManager.h"
@@ -60,8 +63,8 @@ bool parse_basic_args(int argc, char* argv[], ProgramOptions& opts) {
 		printf("  --info             Output basic CPU and CUDA information (stubbed) and exit\n");
 		printf("  --version          Output version information and exit\n");
 		printf("  -i, --imd=         IMD port (defaults to %u)\n", kDefaultIMDPort);
-		printf("  -g, --gpus=        Number of GPUs to use (defaults to %u)\n", kDefaultGpus);
-		printf("  -gid, --gpu_ids=   List of GPU IDs to use (e.g., --gid 0 1 2 3)\n");
+		printf("  --gpus=        Number of GPUs to use (defaults to %u)\n", kDefaultGpus);
+		printf("  -g, --gpu, --gpu_ids   List of GPU IDs to use (e.g., -g 0 1 2 3)\n");
 		printf("  -s, --stride=      Stride for DCD processing (defaults to 1)\n");
 		// printf("  -n, --nodes=       Number of nodes to use (defaults to %u)\n", kDefaultNodes);
 		return false; // Indicates help was shown, program should exit
@@ -80,12 +83,17 @@ bool parse_basic_args(int argc, char* argv[], ProgramOptions& opts) {
 
 	// Parse command line arguments
 	for (int i = 1; i < argc; ++i) {
-		if (strcmp(argv[i], "-g") == 0 || strcmp(argv[i], "--gpus") == 0) {
+		// Legacy convention: --gpus is a *count*, while -g/--gpu/--gpu_ids is a
+		// *list of device IDs*. Note --gpus and --gpu differ by one character
+		// and mean opposite things; both are matched exactly (strcmp), so there
+		// is no prefix collision, but keep them distinct when editing.
+		if (strcmp(argv[i], "--gpus") == 0) {
 			if (i + 1 < argc) {
 				opts.numGpus = atoi(argv[i + 1]);
 				++i; // Skip next argument
 			}
-		} else if (strcmp(argv[i], "-gid") == 0 || strcmp(argv[i], "--gpu_ids") == 0) {
+		} else if (strcmp(argv[i], "-g") == 0 || strcmp(argv[i], "--gpu") == 0 ||
+				   strcmp(argv[i], "--gpu_ids") == 0 || strcmp(argv[i], "-gid") == 0) {
 			// Parse GPU IDs until we hit a non-numeric token (a flag, or the
 			// CONFIGFILE/OUTPUT positional args), not just any '-'-prefixed token -
 			// otherwise the positional args get silently swallowed as bogus IDs.
@@ -162,8 +170,24 @@ int main(int argc, char* argv[]) {
 
 #ifdef USE_CUDA
 	std::cout << "ARBD compiled with CUDA support." << std::endl;
+
+	// Discover CUDA devices before building any Resource. Querying the driver
+	// directly with cudaGetDeviceCount() is not enough: CUDA::Manager caches
+	// per-device properties that KernelConfig::validate_block_size() consults
+	// on *every* kernel launch, and get_device_properties() throws until
+	// Manager::init() has run. That exception is swallowed by a catch-all which
+	// falls back to a default block size and logs a warning, so skipping this
+	// produces a warning per launch (millions of lines) rather than a hard
+	// failure. Mirrors the SYCL branch below.
 	int deviceCount = 0;
-	if (cudaGetDeviceCount(&deviceCount) == cudaSuccess && deviceCount > 0) {
+	try {
+		ARBD::CUDA::Manager::init();
+		deviceCount = ARBD::CUDA::Manager::device_count();
+	} catch (const ARBD::Exception& e) {
+		std::cout << "CUDA device discovery failed: " << e.what() << std::endl;
+	}
+
+	if (deviceCount > 0) {
 		// If user specified GPU IDs, use those
 		if (!options.gpuIds.empty()) {
 			for (int gpuId : options.gpuIds) {

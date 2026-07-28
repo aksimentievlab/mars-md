@@ -178,6 +178,15 @@ inline Event launch_pairwise_nonbonded(const Resource& resource,
 
 } // namespace ARBD
 
+#ifdef USE_CUDA
+#include "Backend/CUDA/KernelHelper.cuh"
+namespace ARBD {
+extern template Event launch_cuda_kernel(const Resource& resource,
+										 const KernelConfig& config,
+										 TabulatedNonBondedComputer kernel_func);
+} // namespace ARBD
+#endif
+
 #ifdef USE_SYCL
 #include <sycl/sycl.hpp>
 template<>

@@ -12,6 +12,7 @@
 #include "Backend/Buffer.h"
 #include "Backend/Resource.h"
 #include "Objects/DeviceParticle.h"
+#include "Objects/DeviceParticleManager.h"
 #include "SimParam.h"
 
 #include "Types/BaseGridDevice.h"
@@ -627,7 +628,7 @@ class LongRangeMethodFactory {
 
 /**
  * @brief Example of how to use the unified framework
- */
+
 class UnifiedLongRangeExample {
   public:
 	void demonstrate_usage() {
@@ -711,5 +712,5 @@ class UnifiedLongRangeExample {
 		}
 	}
 };
-
+ */
 } // namespace ARBD

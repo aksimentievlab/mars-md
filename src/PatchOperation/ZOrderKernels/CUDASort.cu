@@ -40,7 +40,7 @@ void device_radix_sort_pairs_cub(int device_id,
 		printf("CUB size query error: %s\n", cudaGetErrorString(err));
 		return;
 	}
-	printf("CUB requires %zu bytes of temp storage for %u elements\n", temp_storage_bytes, size);
+	// printf("CUB requires %zu bytes of temp storage for %u elements\n", temp_storage_bytes, size);
 
 	// 3. Allocate temporary storage
 	// In production, you might want to use a caching allocator here
