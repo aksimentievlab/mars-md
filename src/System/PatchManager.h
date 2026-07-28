@@ -267,6 +267,8 @@ class PatchManager {
 												const GridManager& grid_manager,
 												const TablesRegistry& tables_registry,
 												float cutoff,
+												size_t step,
+												size_t rebuild_period,
 												float electric_field = 0.0f,
 												int interpolation_scheme = 1);
 

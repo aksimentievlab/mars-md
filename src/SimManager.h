@@ -23,6 +23,7 @@
 #include "IO/DcdWriter.h"
 #include "IO/TrajectoryWriter.h"
 #include "IO/WKFUtils.h"
+#include "Objects/DeviceParticleManager.h"
 #include "System/SimSystem.h"
 #include "System/SystemState.h"
 
@@ -133,6 +134,12 @@ class SimManager {
 
 	// Random number generation
 	size_t current_step_{0}; ///< Current simulation step (used for RNG counter)
+
+	// Per-resource device particle-type tables, built once on first use.
+	// Particle types are static for the whole run, so re-allocating and
+	// re-uploading them every step (as execute_force_calculation used to)
+	// wastes a device malloc/free + H2D copy per patch per step.
+	std::vector<std::unique_ptr<DeviceParticleTypes>> device_particle_types_cache_;
 	//================================================================================
 	// Timing and Performance
 	//================================================================================

@@ -57,6 +57,8 @@ Event Patch::calculate_nonbonded_forces(const NonBondedInteractions& interaction
 										const TablesRegistry& tables_registry,
 										size_t resource_idx,
 										float cutoff,
+										size_t step,
+										size_t rebuild_period,
 										float electric_field,
 										int interpolation_scheme) {
 	(void)interactions;
@@ -105,9 +107,14 @@ Event Patch::calculate_nonbonded_forces(const NonBondedInteractions& interaction
 		pairwise_nb_device_data_prepared_ = true;
 	}
 
-	// Rebuild the neighbor list every call; no periodic-rebuild throttling
-	// (e.g. a decompPeriod-style skin/rebuild cadence) exists yet.
-	pairlist_->build_pairlist(particles_.pos(), particle_count_, cutoff);
+	// Rebuild the neighbor list every rebuild_period steps (mirrors legacy's
+	// decompPeriod gating: `s % decompPeriod == 0`), not every call - always
+	// rebuilds on step == 1 since the pairlist starts out empty. Pairs found
+	// at the last rebuild are reused (with cutoff/pairlist skin) on the steps
+	// in between.
+	if (rebuild_period == 0 || (step - 1) % rebuild_period == 0) {
+		pairlist_->build_pairlist(particles_.pos(), particle_count_, cutoff);
+	}
 
 	constexpr bool get_energy = false;
 	evt = launch_pairwise_nonbonded(resource_,
@@ -155,15 +162,6 @@ Event Patch::calculate_bonded_forces(const BondedInteractions& interactions,
 	// treat these results (SimManager discards them with (void)).
 	Event evt(nullptr, resource_);
 
-	LOGINFO("DEBUG calculate_bonded_forces: pbox={}, particles_.size()={}, "
-			"bond_indices={}, bond_potentials={}, bond_table_indices={}, bond_forms={}",
-			static_cast<const void*>(pbox),
-			particles_.size(),
-			static_cast<const void*>(device_bonded_.bond_indices()),
-			static_cast<const void*>(device_bonded_.bond_potentials()),
-			static_cast<const void*>(device_bonded_.bond_table_indices()),
-			static_cast<const void*>(device_bonded_.bond_forms()));
-
 	if (device_bonded_.num_bonds() > 0) {
 		LOGTRACE("Patch {}: Computing {} bonds", patch_id_, device_bonded_.num_bonds());
 		evt = launch_tabulated_bonds(resource_,
@@ -204,20 +202,6 @@ Event Patch::calculate_bonded_forces(const BondedInteractions& interactions,
 										pbox,
 										get_energy,
 										device_bonded_.num_dihedrals());
-	}
-
-	evt.wait();
-	{
-		std::vector<Vector3> dbg_force(std::min<idx_t>(2, particles_.size()));
-		particles_.ForceEnergy().copy_to_host(dbg_force.data(), dbg_force.size(), true);
-		LOGINFO("DEBUG Patch {} POST-KERNEL: force[0]=({},{},{}) force[1]=({},{},{})",
-				patch_id_,
-				dbg_force.size() > 0 ? dbg_force[0].x : -999,
-				dbg_force.size() > 0 ? dbg_force[0].y : -999,
-				dbg_force.size() > 0 ? dbg_force[0].z : -999,
-				dbg_force.size() > 1 ? dbg_force[1].x : -999,
-				dbg_force.size() > 1 ? dbg_force[1].y : -999,
-				dbg_force.size() > 1 ? dbg_force[1].z : -999);
 	}
 
 	return evt;

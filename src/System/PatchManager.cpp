@@ -109,7 +109,7 @@ void PatchManager::initialize_from_plan(const DecompositionPlan& plan,
 	discover_neighbors();
 	initialize_communication_buffers();
 
-	LOGINFO("PatchManager: Initialized from plan with {} patches", num_patches);
+	LOGTRACE("PatchManager: Initialized from plan with {} patches", num_patches);
 }
 
 void PatchManager::initialize_local_patches(idx_t estimated_particles, const Length& cutoff) {
@@ -160,7 +160,7 @@ void PatchManager::initialize_local_patches(idx_t estimated_particles, const Len
 	discover_neighbors();
 	initialize_communication_buffers();
 
-	LOGINFO("PatchManager: Initialized single local patch with capacity {}", estimated_particles);
+	LOGTRACE("PatchManager: Initialized single local patch with capacity {}", estimated_particles);
 }
 
 void PatchManager::setup_spatial_grid(int nx, int ny, int nz, bool px, bool py, bool pz) {
@@ -174,13 +174,13 @@ void PatchManager::setup_spatial_grid(int nx, int ny, int nz, bool px, bool py, 
 									  box.z / static_cast<float>(nz));
 	grid_info_.system_origin = Vector3(0.0f, 0.0f, 0.0f);
 
-	LOGINFO("PatchManager: Setup spatial grid {}x{}x{} with periodicity [{},{},{}]",
-			nx,
-			ny,
-			nz,
-			px,
-			py,
-			pz);
+	LOGTRACE("PatchManager: Setup spatial grid {}x{}x{} with periodicity [{},{},{}]",
+			 nx,
+			 ny,
+			 nz,
+			 px,
+			 py,
+			 pz);
 }
 
 void PatchManager::distribute_particles_from_state(SystemState& state) {
@@ -200,7 +200,7 @@ void PatchManager::distribute_particles_from_state(SystemState& state) {
 		auto& meta = patch_metadata_.front();
 		meta.particle_count = patch.get_particle_count();
 
-		LOGINFO("PatchManager: Distributed {} particles to single patch", global_particles.size());
+		LOGTRACE("PatchManager: Distributed {} particles to single patch", global_particles.size());
 		return;
 	}
 
@@ -246,9 +246,9 @@ void PatchManager::distribute_particles_from_state(SystemState& state) {
 		patch_metadata_[static_cast<size_t>(pid)].particle_count = patch.get_particle_count();
 	}
 
-	LOGINFO("PatchManager: Distributed {} particles across {} patches",
-			global_particles.size(),
-			patches_.size());
+	LOGTRACE("PatchManager: Distributed {} particles across {} patches",
+			 global_particles.size(),
+			 patches_.size());
 }
 
 void PatchManager::gather_particles_to_state(SystemState& state) {
@@ -287,9 +287,9 @@ void PatchManager::gather_particles_to_state(SystemState& state) {
 	state.set_from_host_particle_data(all_particles);
 	state.mark_synced();
 
-	LOGINFO("PatchManager: Gathered {} particles from {} patches",
-			all_particles.size(),
-			patches_.size());
+	LOGTRACE("PatchManager: Gathered {} particles from {} patches",
+			 all_particles.size(),
+			 patches_.size());
 }
 
 //================================================================================
@@ -453,6 +453,8 @@ PatchManager::compute_nonbonded_forces(const NonBondedInteractions& interactions
 									   const GridManager& grid_manager,
 									   const TablesRegistry& tables_registry,
 									   float cutoff,
+									   size_t step,
+									   size_t rebuild_period,
 									   float electric_field,
 									   int interpolation_scheme) {
 	std::vector<Event> events;
@@ -479,6 +481,8 @@ PatchManager::compute_nonbonded_forces(const NonBondedInteractions& interactions
 												  tables_registry,
 												  resource_idx,
 												  cutoff,
+												  step,
+												  rebuild_period,
 												  electric_field,
 												  interpolation_scheme));
 	}
@@ -566,7 +570,7 @@ PatchManager::LoadStats PatchManager::get_load_statistics() const {
 }
 
 void PatchManager::rebalance_patches(SystemState& state) {
-	LOGINFO("PatchManager: Rebalancing patches (delegated to SimSystem::rebalance_system)");
+	LOGTRACE("PatchManager: Rebalancing patches (delegated to SimSystem::rebalance_system)");
 	sim_system_.rebalance_system(state);
 }
 
@@ -677,22 +681,22 @@ void PatchManager::populate_metadata() {
 }
 
 void PatchManager::print_status() const {
-	LOGINFO("PatchManager: {} patches, grid {}x{}x{}",
-			patches_.size(),
-			grid_info_.dimensions[0],
-			grid_info_.dimensions[1],
-			grid_info_.dimensions[2]);
+	LOGTRACE("PatchManager: {} patches, grid {}x{}x{}",
+			 patches_.size(),
+			 grid_info_.dimensions[0],
+			 grid_info_.dimensions[1],
+			 grid_info_.dimensions[2]);
 	for (const auto& meta : patch_metadata_) {
-		LOGINFO("  Patch {}: bounds min=({}, {}, {}), max=({}, {}, {}), particles={}, capacity={}",
-				meta.patch_id,
-				meta.min_bounds.x,
-				meta.min_bounds.y,
-				meta.min_bounds.z,
-				meta.max_bounds.x,
-				meta.max_bounds.y,
-				meta.max_bounds.z,
-				meta.particle_count,
-				meta.capacity);
+		LOGTRACE("  Patch {}: bounds min=({}, {}, {}), max=({}, {}, {}), particles={}, capacity={}",
+				 meta.patch_id,
+				 meta.min_bounds.x,
+				 meta.min_bounds.y,
+				 meta.min_bounds.z,
+				 meta.max_bounds.x,
+				 meta.max_bounds.y,
+				 meta.max_bounds.z,
+				 meta.particle_count,
+				 meta.capacity);
 	}
 }
 

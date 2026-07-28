@@ -61,12 +61,6 @@ void ZOrderSort::sort_particles(const DeviceBuffer<Vector3>& positions,
 	sort_morton_codes();
 	resource_.synchronize_streams();
 
-	// DEBUG: Check if sort worked
-	std::vector<morton_t> check_codes(8);
-	std::vector<uint32_t> check_indices(8);
-	morton_codes_.copy_to_host_sync(check_codes.data(), 8);
-	sorted_indices_.copy_to_host_sync(check_indices.data(), 8);
-
 	// Step 3: Create inverse mapping
 	create_inverse_mapping();
 

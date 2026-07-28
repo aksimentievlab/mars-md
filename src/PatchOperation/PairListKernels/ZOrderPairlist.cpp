@@ -44,13 +44,13 @@ void ZOrderPairlist::build_pairlist(const DeviceBuffer<Vector3>& positions,
 	// Step 1: Determine bounding box
 	Vector3 box_min, box_max;
 	get_bounding_box(positions, num_particles, box_min, box_max);
-	LOGINFO("Bounding box: [{:.6f}, {:.6f}, {:.6f}] to [{:.6f}, {:.6f}, {:.6f}]",
-			box_min.x,
-			box_min.y,
-			box_min.z,
-			box_max.x,
-			box_max.y,
-			box_max.z);
+	LOGTRACE("Bounding box: [{:.6f}, {:.6f}, {:.6f}] to [{:.6f}, {:.6f}, {:.6f}]",
+			 box_min.x,
+			 box_min.y,
+			 box_min.z,
+			 box_max.x,
+			 box_max.y,
+			 box_max.z);
 	// Step 5: Update internal state
 	update_state(num_particles, cutoff);
 	// Step 2: Sort particles by Morton code
@@ -113,16 +113,10 @@ Pairlist::Statistics ZOrderPairlist::get_statistics() const {
 }
 
 void ZOrderPairlist::find_neighbors_zorder(size_t num_particles) {
-
-	std::cout << "[DEBUG] find_neighbors_zorder called with " << num_particles << " particles"
-			  << std::endl;
-	std::cout << "[DEBUG] max_pairs = " << max_pairs_ << std::endl;
-	std::cout << "[DEBUG] cutoff_squared = " << cutoff_squared_ << std::endl;
-
-	// Check pair_count before kernel
-	uint32_t count_before;
-	pair_count_.copy_to_host(&count_before, 1, true);
-	std::cout << "[DEBUG] pair_count BEFORE kernel: " << count_before << std::endl;
+	LOGTRACE("find_neighbors_zorder: {} particles, max_pairs={}, cutoff_squared={}",
+			 num_particles,
+			 max_pairs_,
+			 cutoff_squared_);
 
 	ZOrderNeighborKernel kernel{sorted_positions_.data(),
 								sorter_.get_morton_codes().data(),

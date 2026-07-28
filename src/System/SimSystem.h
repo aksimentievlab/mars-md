@@ -50,6 +50,7 @@ class SimSystem {
 	 */
 	SimSystem(const std::vector<Resource>& resources) : resources_(resources) {
 		grid_manager_.set_resources(&resources_);
+		tables_registry_.set_resources(&resources_);
 	}
 
 	void set_temperature(float temp) {
@@ -632,7 +633,7 @@ class SimSystem {
 
 	int output_period_{10};				   // output period in steps
 	int energy_output_period_{100};		   // energy output period in steps
-	int neighbor_list_rebuild_period{100}; // neighbor list rebuild period in steps
+	int neighbor_list_rebuild_period{1000}; // neighbor list rebuild period in steps
 	int rb_update_period_{1};			   // rigid body update period in steps
 
 	size_t global_seed_{214};

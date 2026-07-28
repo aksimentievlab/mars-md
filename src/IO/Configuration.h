@@ -52,7 +52,7 @@ struct Configuration {
 
 	float output_period{10.0f};
 	float energy_output_period{100.0f};
-	float neighbor_list_rebuild_period{100.0f};
+	float neighbor_list_rebuild_period{1000.0f};
 	size_t global_seed{214};
 	std::string output_name{"out"};
 	OutputFormat output_format{OutputFormat::DCD};

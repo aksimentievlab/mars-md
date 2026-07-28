@@ -30,18 +30,20 @@ struct Table {
 			is_periodic = true;
 			start = -constants::PI;
 		}
-		check_same_step_size();
 	}
 	bool check_same_step_size() {
 		if (X.empty() || X.size() < 2) {
-			LOGWARN("Table: Not enough values to check step size");
+			LOGWARN("Table {}: Not enough values to check step size", name);
 			return false;
 		}
 		step_size = X[1] - X[0];
 		start = X[0];
 		for (size_t i = 2; i < X.size(); ++i) {
 			if (std::abs(X[i] - X[i - 1]) - step_size > 1e-4) {
-				LOGWARN("Table: Step size is not the same for all values at index {}: {}", i, X[i]);
+				LOGWARN("Table {}: Step size is not the same for all values at index {}: {}",
+						name,
+						i,
+						X[i]);
 				return false;
 			}
 		}
@@ -218,7 +220,7 @@ class TablesRegistry {
 	void set_resources(const std::vector<Resource>* resources) {
 		resources_ = resources;
 		if (resources_) {
-			LOGINFO("TablesRegistry: Configured for {} resources", resources_->size());
+			LOGTRACE("TablesRegistry: Configured for {} resources", resources_->size());
 		}
 	}
 	void build_device_arrays() {
@@ -265,10 +267,10 @@ class TablesRegistry {
 
   private:
 	void build_device_arrays_impl(const std::vector<Resource>& resources) {
-		LOGINFO("TablesRegistry: Building device arrays for {} tables across {} resources",
-				angle_functions_.size() + dihedral_functions_.size() + bond_functions_.size() +
-					nonbonded_functions_.size(),
-				resources.size());
+		LOGTRACE("TablesRegistry: Building device arrays for {} tables across {} resources",
+				 angle_functions_.size() + dihedral_functions_.size() + bond_functions_.size() +
+					 nonbonded_functions_.size(),
+				 resources.size());
 
 		// Clear existing device data
 		device_tabulated_bond_y_buffers_.clear();
@@ -286,7 +288,7 @@ class TablesRegistry {
 		for (size_t res_idx = 0; res_idx < resources.size(); ++res_idx) {
 			const auto& resource = resources[res_idx];
 
-			LOGINFO("TablesRegistry: Transferring tables to resource {}", res_idx);
+			LOGTRACE("TablesRegistry: Transferring tables to resource {}", res_idx);
 
 			// Transfer bond function tables
 			for (size_t i = 0; i < bond_functions_.size(); ++i) {
@@ -342,7 +344,7 @@ class TablesRegistry {
 			}
 		}
 
-		LOGINFO("TablesRegistry: Device arrays built successfully for all resources");
+		LOGTRACE("TablesRegistry: Device arrays built successfully for all resources");
 	}
 
 	std::unordered_map<std::string, int> angle_name_to_idx_;

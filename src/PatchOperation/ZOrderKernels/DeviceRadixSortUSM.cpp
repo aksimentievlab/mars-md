@@ -22,10 +22,10 @@ void device_radix_sort_pairs_usm(const Resource& device,
 		LOGWARN("Launching {} blocks. Input size may be too large.", threadBlocks);
 	}
 
-	LOGINFO("DeviceRadixSortUSM: size={}, threadBlocks={} on device {}",
-			size,
-			threadBlocks,
-			device.id());
+	// LOGTRACE("DeviceRadixSortUSM: size={}, threadBlocks={} on device {}",
+	//		 size,
+	//		 threadBlocks,
+	//		 device.id());
 
 	auto start_event = q.submit([&](sycl::handler& h) {
 		h.single_task([]() {}); // Empty marker kernel

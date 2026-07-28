@@ -98,7 +98,7 @@ void ConfigParser::apply_defaults() {
 	sim_system_ref_->set_cutoff(10.0f);
 	sim_system_ref_->set_timestep(1e-5f);
 	sim_system_ref_->set_num_steps(1000);
-	sim_system_ref_->set_neighbor_list_rebuild_period(100.0f);
+	sim_system_ref_->set_neighbor_list_rebuild_period(1000.0f);
 	sim_system_ref_->set_output_period(10.0f);
 	sim_system_ref_->set_energy_output_period(100.0f);
 	sim_system_ref_->set_output_name("out");

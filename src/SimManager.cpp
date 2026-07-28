@@ -228,10 +228,11 @@ void SimManager::execute_force_calculation(size_t step) {
 	const auto& resources = sys_.get_resources();
 	const auto& grid_manager = sys_.get_grid_manager();
 
-	for (auto& patch : patch_mgr->get_patches()) {
-		DeviceParticleTypes particle_types(sys_.get_particle_types(), patch->get_resource());
-		particle_types.copy_from_host(sys_.get_particle_types());
+	if (device_particle_types_cache_.size() < resources.size()) {
+		device_particle_types_cache_.resize(resources.size());
+	}
 
+	for (auto& patch : patch_mgr->get_patches()) {
 		size_t resource_idx = 0;
 		for (size_t i = 0; i < resources.size(); ++i) {
 			if (resources[i] == patch->get_resource()) {
@@ -239,6 +240,16 @@ void SimManager::execute_force_calculation(size_t step) {
 				break;
 			}
 		}
+
+		// Particle types are static for the whole run - build the device
+		// table once per resource instead of re-allocating (13 device
+		// buffers) and re-uploading it on every step.
+		if (!device_particle_types_cache_[resource_idx]) {
+			device_particle_types_cache_[resource_idx] =
+				std::make_unique<DeviceParticleTypes>(sys_.get_particle_types(),
+													  patch->get_resource());
+		}
+		DeviceParticleTypes& particle_types = *device_particle_types_cache_[resource_idx];
 
 		// calculate_nonbonded_forces() clears the force buffer and writes the
 		// PMF/grid + pairwise nonbonded terms; calculate_bonded_forces() must
@@ -254,13 +265,19 @@ void SimManager::execute_force_calculation(size_t step) {
 			static_cast<float>(sys_.get_pairlist_cutoff()),
 			step,
 			static_cast<size_t>(sys_.get_neighbor_list_rebuild_period()));
-		(void)evt;
 
 		Event bonded_evt = patch->calculate_bonded_forces(sys_state_.get_bonded_interactions(),
 														  particle_types,
 														  sys_.get_tables_registry(),
 														  resource_idx);
-		(void)bonded_evt;
+
+		// Both events were previously discarded, relying on the (removed)
+		// per-step DeviceParticleTypes malloc/free to accidentally serialize
+		// the pipeline. Without that, forces from this patch must be waited
+		// on explicitly before integrate_motion() reads ForceEnergy, and
+		// before the next step's clear_forces()/PMF kernel overwrites it.
+		bonded_evt.wait();
+		evt.wait();
 	}
 
 	if (step == 1) {
@@ -290,6 +307,10 @@ void SimManager::execute_integration(size_t step) {
 	// Each patch runs independently on its assigned resource
 	for (auto& patch : patch_mgr->get_patches()) {
 		Event evt = patch->integrate_motion(timestep, temperature, particle_algorithm, step);
+		// Must complete before the next step's clear_forces()/PMF kernel
+		// touches positions again - see the matching wait in
+		// execute_force_calculation for why this can no longer be implicit.
+		evt.wait();
 	}
 
 	current_step_ = step; // Update step counter for RNG state tracking

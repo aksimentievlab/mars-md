@@ -190,7 +190,16 @@ class Patch {
 	 * @param particle_types Device particle type data from SimSystem
 	 * @param tables_registry Tabulated potential tables (bonded and nonbonded)
 	 * @param resource_idx This patch's index into tables_registry's per-resource arrays
-	 * @param cutoff Pairwise interaction cutoff distance, used to rebuild the neighbor list
+	 * @param cutoff Neighbor-list search radius used to rebuild the pairlist - should
+	 *        include the pairlist skin (SimSystem::get_pairlist_cutoff(), i.e.
+	 *        interaction cutoff + pairlistDistance), not just the raw interaction
+	 *        cutoff, since pairs found at one rebuild are reused for rebuild_period
+	 *        steps and particles can drift in the meantime.
+	 * @param step Current simulation step (1-indexed, matches SimManager's loop)
+	 * @param rebuild_period Rebuild the pairlist every `rebuild_period` steps (mirrors
+	 *        legacy's decompPeriod - see SimSystem::neighbor_list_rebuild_period),
+	 *        instead of every call. The pairlist always rebuilds on the first call
+	 *        (step == 1) since it starts out empty.
 	 * @return Event for async GPU execution
 	 */
 	Event calculate_nonbonded_forces(const NonBondedInteractions& interactions,
@@ -200,6 +209,8 @@ class Patch {
 									 const TablesRegistry& tables_registry,
 									 size_t resource_idx,
 									 float cutoff,
+									 size_t step,
+									 size_t rebuild_period,
 									 float electric_field = 0.0f,
 									 int interpolation_scheme = 1);
 
