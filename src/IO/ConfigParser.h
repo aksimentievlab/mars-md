@@ -76,11 +76,11 @@ class ConfigParser {
 	/**
 	 * @brief Get initial particles (temporary data, used once during initialization)
 	 */
-	std::vector<ParticleRead>& get_init_particles() {
+	std::vector<ParticleIO>& get_init_particles() {
 		return init_particles_;
 	}
 
-	const std::vector<ParticleRead>& get_init_particles() const {
+	const std::vector<ParticleIO>& get_init_particles() const {
 		return init_particles_;
 	}
 
@@ -95,7 +95,7 @@ class ConfigParser {
 	std::string file_name_; //*.bd
 
 	// Temporary initial topology data (used once during initialization, then discarded)
-	std::vector<ParticleRead> init_particles_{};
+	std::vector<ParticleIO> init_particles_{};
 	BondedInteractions init_bonded_interactions_{};
 
 	// BondConfigReader initialized in constructor body to ensure sim_system_ref_ is set

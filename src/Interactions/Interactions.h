@@ -3,6 +3,11 @@
 #include "System/PeriodicBox.h"
 #include "Types/Types.h"
 
+/**
+ * @brief This file is the basic definitions using for bonded and nonbonded interactions used in
+ * kernels.
+ */
+
 // Include STL headers for host-only class (before namespace to avoid conflicts)
 #if (!defined(__CUDACC__) || \
 	 (!defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__) && !defined(__METAL_VERSION__)))

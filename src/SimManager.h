@@ -83,7 +83,7 @@ class SimManager {
 	 * names in an empty/unbuilt map.
 	 * @param particles Initial particle data (host-side)
 	 */
-	void set_initial_particles(std::vector<ParticleRead> particles) {
+	void set_initial_particles(std::vector<ParticleIO> particles) {
 		pending_initial_particles_ = std::move(particles);
 	}
 
@@ -128,7 +128,7 @@ class SimManager {
 	SystemState sys_state_;
 
 	// Initial particle data, cached until init() (needs particle type IDs assigned first)
-	std::vector<ParticleRead> pending_initial_particles_{};
+	std::vector<ParticleIO> pending_initial_particles_{};
 	// Bonded interactions, cached until init() (see set_bonded_interactions)
 	BondedInteractions pending_bonded_interactions_{};
 
@@ -151,6 +151,14 @@ class SimManager {
 	std::unique_ptr<TrajectoryWriter> traj_writer_;
 	std::unique_ptr<DcdWriter> dcd_writer_;
 	bool dcd_header_written_{false};
+
+	// Momentum trajectory (Langevin dynamics only, mirrors legacy ARBD's
+	// "<name>.0.momentum.dcd" - the "0" is a legacy replica-index artifact
+	// kept for output compatibility, not an actual replica count).
+	std::unique_ptr<DcdWriter> momentum_dcd_writer_;
+	bool momentum_dcd_header_written_{false};
+	bool has_momentum_output_{false};
+	bool has_rigid_bodies_{false};
 
 	//================================================================================
 	// IMD (Interactive Molecular Dynamics) Support
@@ -215,6 +223,26 @@ class SimManager {
 	 * @param step Current simulation step
 	 */
 	void write_dcd_frame(size_t step);
+
+	/**
+	 * @brief Write a single momentum DCD trajectory frame
+	 * @note Reuses the SystemState gathered by write_dcd_frame() this tick -
+	 *       must be called only after write_dcd_frame() within the same output step.
+	 */
+	void write_momentum_dcd_frame(size_t step);
+
+	/**
+	 * @brief Compute and append kinetic/potential energy for this step
+	 * Writes "<name>.energy.dat", and "<name>.rb_energy.dat" if the system
+	 * has rigid body types, then refreshes the restart files.
+	 */
+	void write_energy_output(size_t step);
+
+	/**
+	 * @brief Overwrite the position (and, for Langevin dynamics, momentum)
+	 * restart files with the current SystemState.
+	 */
+	void write_restart_files();
 	/**
 	 * @brief Report simulation progress
 	 * @param current_step Current step

@@ -36,7 +36,6 @@ struct ColumbForceKernel {
 
 		int2 pair = neighbor_pairs[pair_idx];
 
-		// Access through ParticleView (like your integrators do)
 		Vector3 pos_i = particle_view.pos[pair.x];
 		Vector3 pos_j = particle_view.pos[pair.y];
 		int type_i = particle_view.type_id[pair.x];
@@ -52,7 +51,7 @@ struct ColumbForceKernel {
 		float qj = particle_types.charge[type_j];
 
 		// Compute
-		auto fe = ColumbPotential::compute(r_ij, distance, qi, qj);
+		ScalarForceEnergy fe = ColumbPotential::compute(r_ij, distance, qi, qj);
 
 		// Apply forces to ParticleView
 		Vector3 force_vec = fe.force_magnitude * unit_vec;

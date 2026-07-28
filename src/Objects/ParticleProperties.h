@@ -92,7 +92,7 @@ class ParticleType {
 // ============================================================================
 // 4. HOST STORAGE (For IO / Init)
 // ============================================================================
-struct ParticleRead {
+struct ParticleIO {
 	int id;
 	std::string type_name;
 	Vector3 position;
@@ -104,7 +104,7 @@ struct ParticleRead {
 	int colvars_group_id = -1;
 	int attached_rigid_body_id = -1;
 	// colvars groups this particle belongs to. One particle can belong to multiple groups.
-	ParticleRead& operator=(const ParticleRead& src) {
+	ParticleIO& operator=(const ParticleIO& src) {
 		id = src.id;
 		type_name = src.type_name;
 		position = src.position;
@@ -233,7 +233,7 @@ struct HostParticleData {
 		attached_rigid_body_id.push_back(particle.attached_rigid_body_id[idx]);
 	}
 
-	void push_back(const ParticleRead& particle,
+	void push_back(const ParticleIO& particle,
 				   std::unordered_map<std::string, int>& particle_type_name_to_id) {
 		global_id.push_back(particle.id);
 		type_id.push_back(particle_type_name_to_id.at(particle.type_name));

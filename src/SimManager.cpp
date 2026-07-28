@@ -1,6 +1,7 @@
 #include "SimManager.h"
 #include "System/PatchManager.h"
 #include <cstdio>
+#include <fstream>
 #include <random>
 
 namespace ARBD {
@@ -206,6 +207,16 @@ void SimManager::initialize_output_writers() {
 	LOGINFO("SimManager: Initialized DCD writer for '{}.dcd'", output_name);
 
 	// TODO: Add support for other output formats (PDB, HDF5) when needed
+
+	// Momentum trajectory/restart only make sense for Langevin dynamics
+	// (matches legacy ARBD's particle_dynamic == "Langevin" gating).
+	has_momentum_output_ = (sys_.get_particle_algorithm() == IntegratorType::Langevin);
+	if (has_momentum_output_) {
+		momentum_dcd_writer_ = std::make_unique<DcdWriter>(output_name + ".0.momentum.dcd");
+		LOGINFO("SimManager: Initialized momentum DCD writer for '{}.0.momentum.dcd'", output_name);
+	}
+
+	has_rigid_bodies_ = !sys_.get_rigid_body_types().empty();
 }
 
 void SimManager::initialize_imd(int port) {
@@ -255,6 +266,16 @@ void SimManager::execute_force_calculation(size_t step) {
 		// PMF/grid + pairwise nonbonded terms; calculate_bonded_forces() must
 		// run after it and accumulate on top (it only ever atomic-adds, never
 		// clears).
+		//
+		// Energy accumulation adds an extra atomic write (ForceEnergy.t)
+		// alongside the 3 force-component atomics on every pairwise-neighbor
+		// and bonded-term evaluation, so it's only enabled on the same steps
+		// handle_output() will actually report energy for - matching legacy
+		// ARBD, which likewise only computes energy every outputEnergyPeriod
+		// steps rather than every step.
+		const size_t energy_output_period = static_cast<size_t>(sys_.get_energy_output_period());
+		const bool compute_energy =
+			energy_output_period > 0 && step % energy_output_period == 0;
 		Event evt = patch->calculate_nonbonded_forces(
 			sys_.get_nonbonded_interactions(),
 			sys_state_.get_bonded_interactions(),
@@ -264,12 +285,16 @@ void SimManager::execute_force_calculation(size_t step) {
 			resource_idx,
 			static_cast<float>(sys_.get_pairlist_cutoff()),
 			step,
-			static_cast<size_t>(sys_.get_neighbor_list_rebuild_period()));
+			static_cast<size_t>(sys_.get_neighbor_list_rebuild_period()),
+			0.0f,
+			1,
+			compute_energy);
 
 		Event bonded_evt = patch->calculate_bonded_forces(sys_state_.get_bonded_interactions(),
 														  particle_types,
 														  sys_.get_tables_registry(),
-														  resource_idx);
+														  resource_idx,
+														  compute_energy);
 
 		// Both events were previously discarded, relying on the (removed)
 		// per-step DeviceParticleTypes malloc/free to accidentally serialize
@@ -346,26 +371,30 @@ void SimManager::handle_output(size_t step) {
 	const size_t output_period = static_cast<size_t>(sys_.get_output_period());
 	const size_t energy_output_period = static_cast<size_t>(sys_.get_energy_output_period());
 
-	// Energy calculation and output
-	if (energy_output_period > 0 && step % energy_output_period == 0) {
-		wkf_timer_start(timerE_.timer);
-		// TODO: Implement energy calculation
-		// calculate_energy(step);
-		wkf_timer_stop(timerE_.timer);
-	}
-
 	// Trajectory output
 	if (output_period > 0 && step % output_period == 0) {
 		wkf_timer_start(timerS_.timer);
 
 		if (dcd_writer_) {
 			write_dcd_frame(step);
+			// Reuses the SystemState write_dcd_frame() just gathered/synced.
+			if (momentum_dcd_writer_) {
+				write_momentum_dcd_frame(step);
+			}
 		} else if (traj_writer_) {
 			// Write with generic trajectory writer
 			// traj_writer_->write_frame(step);
 		}
 
 		wkf_timer_stop(timerS_.timer);
+	}
+
+	// Energy calculation and output (also refreshes the restart files, mirroring
+	// legacy ARBD's cadence of writing restarts alongside the energy report).
+	if (energy_output_period > 0 && step % energy_output_period == 0) {
+		wkf_timer_start(timerE_.timer);
+		write_energy_output(step);
+		wkf_timer_stop(timerE_.timer);
 	}
 }
 
@@ -415,6 +444,40 @@ void SimManager::write_dcd_frame(size_t step) {
 		} else {
 			dcd_writer_->writeStep(positions);
 		}
+	}
+}
+
+void SimManager::write_momentum_dcd_frame(size_t step) {
+	(void)step;
+	// SystemState was already gathered and synced by write_dcd_frame() this
+	// tick (handle_output only calls this right after it) - no need to
+	// re-gather from patches.
+	if (!sys_state_.is_state_synced()) {
+		return;
+	}
+	const auto& momentum = sys_state_.get_global_momentum();
+
+	const auto& periodicity = sys_.get_boundary_conditions().get_periodicity();
+	const bool with_unitcell = periodicity[0] || periodicity[1] || periodicity[2];
+
+	if (!momentum_dcd_header_written_) {
+		const int nsavc = std::max(1, static_cast<int>(sys_.get_output_period()));
+		momentum_dcd_writer_->writeHeader(static_cast<int>(momentum.size()),
+										  1,
+										  nsavc,
+										  nsavc,
+										  0,
+										  sys_.get_timestep(),
+										  with_unitcell);
+		momentum_dcd_header_written_ = true;
+	}
+
+	if (with_unitcell) {
+		const Vector3 box = sys_.get_boundary_conditions().get_box_size();
+		const std::vector<double> unitcell{box.x, 0.0, box.y, 0.0, 0.0, box.z};
+		momentum_dcd_writer_->writeStep(momentum, unitcell);
+	} else {
+		momentum_dcd_writer_->writeStep(momentum);
 	}
 }
 
@@ -569,24 +632,118 @@ void SimManager::load_restart_data(const std::string& filename) {
 }
 
 //================================================================================
-// Final Restart File
+// Energy Output
 //================================================================================
+
+void SimManager::write_energy_output(size_t step) {
+	(void)step;
+	// Gather the SystemState that execute_force_calculation() this step
+	// accumulated potential energy into (ForceEnergy.t, unpacked into
+	// HostParticleData::energy by DeviceParticle::copy_to_host).
+	gather_particle_data_from_patches();
+
+	const auto& particles = sys_state_.get_global_particles();
+	const size_t n = particles.size();
+
+	// Potential energy: sum of per-particle energy from bonded + pairwise
+	// nonbonded kernels (only accumulated when execute_force_calculation()
+	// enabled compute_energy for this step - see the energy_output_period
+	// gating there). Grid/PMF contributions are not tracked yet.
+	double potential_energy = 0.0;
+	for (float e : particles.energy) {
+		potential_energy += e;
+	}
+
+	// Kinetic energy: momenta are generated/integrated in units scaled by
+	// SQRT_CAL_TO_JOULE (see generate_initial_momentum), so 0.5*p^2/m must be
+	// divided by SQRT_CAL_TO_JOULE^2 to recover kcal/mol before expressing it
+	// as a multiple of kT - matching legacy ARBD's energy.dat convention.
+	const auto& particle_types = sys_.get_particle_types();
+	const Temperature& temperature = sys_.get_temperature_struct();
+	const float kT = temperature.kT;
+	double kinetic_energy_kcal = 0.0;
+	for (size_t i = 0; i < n; ++i) {
+		const int typ = particles.type_id[i];
+		const double mass = particle_types[typ].mass;
+		kinetic_energy_kcal += 0.5 * particles.mom[i].length2() / mass;
+	}
+	kinetic_energy_kcal /= (constants::SQRT_CAL_TO_JOULE * constants::SQRT_CAL_TO_JOULE);
+	const double kinetic_energy_kT = kT > 0.0f ? kinetic_energy_kcal / kT : 0.0;
+
+	const std::string energy_filename = sys_.get_output_name() + ".energy.dat";
+	std::ofstream energy_file(energy_filename, std::ios::out | std::ios::app);
+	if (energy_file.is_open()) {
+		energy_file << "Kinetic Energy: " << kinetic_energy_kT << " (kT) " << std::endl;
+		energy_file << "Potential Energy: " << potential_energy << " (kcal/mol) " << std::endl;
+	} else {
+		LOGWARN("SimManager: Failed to open '{}' for energy output", energy_filename);
+	}
+
+	if (has_rigid_bodies_) {
+		// TODO: rigid-body kinetic/potential energy is not yet computed by
+		// SimManager (no rigid-body dynamics pipeline exists yet); write
+		// zeros so downstream tooling that expects this file still gets it,
+		// matching legacy ARBD's rb_energy.dat format.
+		const std::string rb_energy_filename = sys_.get_output_name() + ".rb_energy.dat";
+		std::ofstream rb_energy_file(rb_energy_filename, std::ios::out | std::ios::app);
+		if (rb_energy_file.is_open()) {
+			rb_energy_file << "Kinetic Energy 0 (kT)" << std::endl;
+			rb_energy_file << "Potential Energy 0 (kcal/mol)" << std::endl;
+		} else {
+			LOGWARN("SimManager: Failed to open '{}' for rigid body energy output",
+					rb_energy_filename);
+		}
+	}
+
+	write_restart_files();
+}
+
+//================================================================================
+// Restart Files
+//================================================================================
+
+void SimManager::write_restart_files() {
+	// Assumes sys_state_ already holds the state to persist (gathered by the
+	// caller - write_energy_output() during the run, write_final_restart()
+	// at the end).
+	const auto& particles = sys_state_.get_global_particles();
+
+	const std::string restart_filename = sys_.get_output_name() + ".restart";
+	FILE* out = std::fopen(restart_filename.c_str(), "w");
+	if (out) {
+		for (size_t i = 0; i < particles.size(); ++i) {
+			const Vector3& p = particles.pos[i];
+			std::fprintf(out, "%d %.10g %.10g %.10g\n", particles.type_id[i], p.x, p.y, p.z);
+		}
+		std::fclose(out);
+	} else {
+		LOGWARN("SimManager: Failed to open '{}' for restart output", restart_filename);
+	}
+
+	// Momentum restart only applies to Langevin dynamics, matching the
+	// momentum trajectory gating in initialize_output_writers(). The "0" in
+	// the filename mirrors legacy ARBD's on-disk naming for this file.
+	if (has_momentum_output_) {
+		const std::string momentum_restart_filename = sys_.get_output_name() + ".0.momentum.restart";
+		FILE* mout = std::fopen(momentum_restart_filename.c_str(), "w");
+		if (mout) {
+			for (size_t i = 0; i < particles.size(); ++i) {
+				const Vector3& p = particles.mom[i];
+				std::fprintf(mout, "%d %.10g %.10g %.10g\n", particles.type_id[i], p.x, p.y, p.z);
+			}
+			std::fclose(mout);
+		} else {
+			LOGWARN("SimManager: Failed to open '{}' for momentum restart output",
+					momentum_restart_filename);
+		}
+	}
+}
 
 void SimManager::write_final_restart() {
 	// Gather particle data before writing restart
 	gather_particle_data_from_patches();
-
-	const std::string restart_filename =
-		sys_.get_output_name() + ".restart"; // TODO: Get from SimSystem
-
-	// Get current particle positions
-	const auto& positions = sys_state_.get_global_positions();
-
-	LOGINFO("SimManager: Writing final restart to '{}'", restart_filename);
-	LOGINFO("SimManager: {} particles at final state", positions.size());
-
-	// TODO: Implement actual restart file writing
-	// write_restart_file(restart_filename, positions, velocities, types);
+	write_restart_files();
+	LOGINFO("SimManager: Wrote final restart files for '{}'", sys_.get_output_name());
 }
 
 //================================================================================

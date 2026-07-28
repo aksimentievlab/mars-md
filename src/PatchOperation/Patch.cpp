@@ -60,7 +60,8 @@ Event Patch::calculate_nonbonded_forces(const NonBondedInteractions& interaction
 										size_t step,
 										size_t rebuild_period,
 										float electric_field,
-										int interpolation_scheme) {
+										int interpolation_scheme,
+										bool compute_energy) {
 	(void)interactions;
 
 	particles_.clear_forces();
@@ -116,7 +117,6 @@ Event Patch::calculate_nonbonded_forces(const NonBondedInteractions& interaction
 		pairlist_->build_pairlist(particles_.pos(), particle_count_, cutoff);
 	}
 
-	constexpr bool get_energy = false;
 	evt = launch_pairwise_nonbonded(resource_,
 									pairlist_->get_neighbor_pairs().data(),
 									particle_view.pos,
@@ -129,7 +129,7 @@ Event Patch::calculate_nonbonded_forces(const NonBondedInteractions& interaction
 									device_bonded_.exclusion_pairs(),
 									device_bonded_.num_exclusions(),
 									pbox,
-									get_energy,
+									compute_energy,
 									pairlist_->get_num_pairs());
 
 	return evt;
@@ -138,7 +138,8 @@ Event Patch::calculate_nonbonded_forces(const NonBondedInteractions& interaction
 Event Patch::calculate_bonded_forces(const BondedInteractions& interactions,
 									 const DeviceParticleTypes& particle_types,
 									 const TablesRegistry& tables_registry,
-									 size_t resource_idx) {
+									 size_t resource_idx,
+									 bool compute_energy) {
 	(void)particle_types;
 
 	if (particles_.size() == 0) {
@@ -154,7 +155,7 @@ Event Patch::calculate_bonded_forces(const BondedInteractions& interactions,
 
 	const ParticleView particle_view = particles_.view();
 	const PeriodicBox* pbox = get_device_periodic_box();
-	constexpr bool get_energy = false;
+	const bool get_energy = compute_energy;
 
 	// Each kernel is submitted to the same in-order resource_ queue, so they
 	// execute sequentially regardless of which Event is returned/waited on;

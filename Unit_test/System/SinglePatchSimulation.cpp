@@ -52,10 +52,10 @@ TEST_CASE("Single patch single GPU BD simulation runs end-to-end",
 	sys.add_particle_type(ptype);
 
 	const int num_particles = 200;
-	std::vector<ParticleRead> particles;
+	std::vector<ParticleIO> particles;
 	particles.reserve(num_particles);
 	for (int i = 0; i < num_particles; ++i) {
-		ParticleRead p;
+		ParticleIO p;
 		p.id = i;
 		p.type_name = "Ar";
 		p.position = Vector3(box * 0.5f, box * 0.5f, box * 0.5f);

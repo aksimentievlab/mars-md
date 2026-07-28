@@ -10,20 +10,20 @@
 #include <vector>
 
 namespace ARBD {
-class RigidBodyController;
-struct RigidBody {
+
+struct RigidBodyIO {
 	int id;
 	int type_id;
 	Vector3 position;
 	Matrix3 orientation;
 	Vector3 momentum;
-	Vector3 angularMomentum;
+	Vector3 angular_momentum;
 	Vector3 force;
 	Vector3 torque;
 
 	bool is_dummy = false;
 	bool has_orientation = false;
-	RigidBody& operator=(const RigidBody& src) {
+	RigidBodyIO& operator=(const RigidBodyIO& src) {
 		id = src.id;
 		type_id = src.type_id;
 		position = src.position;
@@ -41,12 +41,12 @@ class RigidBodyType {
 	int id;
 	float mass;
 	Vector3 inertia;
-	Vector3 transDamping;
-	Vector3 rotDamping;
-	Vector3 transForceCoeff;
-	Vector3 rotTorqueCoeff;
-	float rotational_diffusivity;
-	float rotational_damping_coefficient;
+	Vector3 trans_damping;
+	Vector3 rot_damping;
+	Vector3 trans_force_coeff;
+	Vector3 rot_torque_coeff;
+	float rot_diffusivity;
+	float rot_damping_coefficient;
 	float charge;
 	float radius;
 	float eps;
@@ -58,7 +58,7 @@ class RigidBodyType {
 	float pmf_scale_slope;
 	uint32_t pmf_smd_freq;
 
-	std::vector<ParticleRead> attached_particle;
+	std::vector<ParticleIO> attached_particle;
 	std::vector<uint32_t> potential_grid_ids;
 	std::vector<uint32_t> density_grid_ids;
 	std::vector<uint32_t> pmf_grid_ids;

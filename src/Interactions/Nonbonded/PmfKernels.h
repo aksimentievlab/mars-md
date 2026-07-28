@@ -54,7 +54,8 @@ HOST DEVICE inline Vector3 compute_position_dependent_force(const Vector3& pos,
 															const ParticleTypeView types,
 															const BaseGridView<float>* grid_configs,
 															float electric_field,
-															int scheme) {
+															int scheme,
+															bool get_energy = false) {
 	const float charge = types.charge[type_id];
 	Vector3 force(0.0f, 0.0f, charge * electric_field);
 
@@ -62,9 +63,16 @@ HOST DEVICE inline Vector3 compute_position_dependent_force(const Vector3& pos,
 	if (pmf_grid_id >= 0 && grid_configs != nullptr) {
 		const BaseGridView<float>& pmf_grid = grid_configs[pmf_grid_id];
 		if (pmf_grid.data != nullptr) {
+			// sample_pmf_grid() already computes both .gradient (for force)
+			// and .value (for energy) in a single grid interpolation, so
+			// tracking energy here costs nothing extra - unlike the pairwise/
+			// bonded kernels' get_energy, this isn't gating an extra atomic.
 			const GridSample<float> sample = pmf_detail::sample_pmf_grid(pmf_grid, pos, scheme);
 			const float scale = types.pmf_scale[type_id];
 			force += sample.gradient * (-scale);
+			if (get_energy) {
+				force.t += scale * sample.value;
+			}
 		}
 	}
 
@@ -96,6 +104,7 @@ HOST DEVICE inline Vector3 compute_position_dependent_force(const Vector3& pos,
 struct ComputePMFKernel {
 	float electric_field = 0.0f;
 	int scheme = 1;
+	bool get_energy = false;
 
 	KERNEL_FUNC void operator()(size_t i,
 								const Vector3* __restrict__ positions,
@@ -112,8 +121,11 @@ struct ComputePMFKernel {
 		const int type_id = type_ids[idx];
 		const Vector3 pos = positions[idx];
 
+		// One thread per particle - forces[idx] is only ever written by this
+		// thread, so this is a plain read-modify-write, not an atomic like
+		// the pairwise/bonded kernels' get_energy accumulation.
 		forces[idx] += compute_position_dependent_force(
-			pos, type_id, types, grid_configs, electric_field, scheme);
+			pos, type_id, types, grid_configs, electric_field, scheme, get_energy);
 	}
 };
 

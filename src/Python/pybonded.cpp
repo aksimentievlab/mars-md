@@ -37,16 +37,6 @@ void declare_bond(py::module& m) {
 		.value("Half_Harmonic", AnalyticalDihedralType::Half_Harmonic)
 		.value("WLCSK", AnalyticalDihedralType::WLCSK);
 
-	py::class_<Exclude>(m, "Exclude")
-		.def(py::init<>())
-		.def(py::init<int, int>(), py::arg("ind1"), py::arg("ind2"))
-		.def_readwrite("ind1", &Exclude::ind1)
-		.def_readwrite("ind2", &Exclude::ind2)
-		.def("__repr__", [](const Exclude& e) {
-			return "Exclude(ind1=" + std::to_string(e.ind1) + ", ind2=" + std::to_string(e.ind2) +
-				   ")";
-		});
-
 	py::enum_<InteractionForm>(m, "InteractionForm")
 		.value("Tabulated", InteractionForm::Tabulated)
 		.value("Analytical", InteractionForm::Analytical);

@@ -314,7 +314,7 @@ static std::vector<std::string> tokenize(const std::string& s) {
 }
 
 static void load_particles_file(const std::string& path,
-								std::vector<ParticleRead>& out,
+								std::vector<ParticleIO>& out,
 								const std::string& config_file_path) {
 	std::string resolved_path = resolve_file_path(path, config_file_path);
 	try {
@@ -330,7 +330,7 @@ static void load_particles_file(const std::string& path,
 			auto toks = tokenize(s);
 			if (toks.size() < 6)
 				continue;
-			ParticleRead p{};
+			ParticleIO p{};
 			p.id = std::stoi(toks[1]);
 			p.type_name = toks[2];
 			p.position.x = std::stof(toks[3]);
@@ -349,7 +349,7 @@ static void load_particles_file(const std::string& path,
 }
 
 static void load_restart_file(const std::string& path,
-							  std::vector<ParticleRead>& out,
+							  std::vector<ParticleIO>& out,
 							  const std::string& config_file_path,
 							  const std::vector<ParticleType>& particle_types) {
 	// Format: type_id coord_x coord_y coord_z
@@ -371,7 +371,7 @@ static void load_restart_file(const std::string& path,
 				LOGWARN("load_restart_file: Invalid line (expected 4 tokens): {}", s);
 				continue;
 			}
-			ParticleRead p{};
+			ParticleIO p{};
 			p.id = line_number; // particle_id is the line order
 			int type_id = std::stoi(toks[0]);
 			p.position.x = std::stof(toks[1]);
@@ -582,7 +582,7 @@ void ConfigParser::get_elements(const Reader& reader) {
 			// has_explicit_particle_source above).
 			if (!has_explicit_particle_source) {
 				for (int n = 0; n < num; ++n) {
-					ParticleRead p{};
+					ParticleIO p{};
 					p.id = static_cast<int>(init_particles_.size());
 					p.type_name = name;
 					init_particles_.push_back(p);

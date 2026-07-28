@@ -7,7 +7,7 @@
 using namespace ARBD;
 
 HostParticleData create_test_particles(int count, const std::string& pattern, float box_size) {
-	std::vector<ParticleRead> particles;
+	std::vector<ParticleIO> particles;
 	particles.reserve(count);
 
 	// Initialize random number generator for random patterns
@@ -16,7 +16,7 @@ HostParticleData create_test_particles(int count, const std::string& pattern, fl
 	std::uniform_real_distribution<float> dist(0.0f, box_size);
 
 	for (int i = 0; i < count; ++i) {
-		ParticleRead p;
+		ParticleIO p;
 		p.type_name = "A"; // Alternate between two particle types
 		p.id = i;
 		if (pattern == "linear") {

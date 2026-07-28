@@ -212,7 +212,8 @@ class Patch {
 									 size_t step,
 									 size_t rebuild_period,
 									 float electric_field = 0.0f,
-									 int interpolation_scheme = 1);
+									 int interpolation_scheme = 1,
+									 bool compute_energy = false);
 
 	/**
 	 * @brief Compute bonded forces (bonds, angles, dihedrals) for particles in this patch
@@ -237,7 +238,8 @@ class Patch {
 	Event calculate_bonded_forces(const BondedInteractions& interactions,
 								  const DeviceParticleTypes& particle_types,
 								  const TablesRegistry& tables_registry,
-								  size_t resource_idx);
+								  size_t resource_idx,
+								  bool compute_energy = false);
 
 	/**
 	 * @brief Get the bonded-pair exclusions consulted by the pairwise nonbonded kernel

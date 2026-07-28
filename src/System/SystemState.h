@@ -78,7 +78,7 @@ class SystemState {
 	 * @param momenta Particle momenta
 	 * @param ids Particle IDs
 	 */
-	void set_init_particle_data(const std::vector<ParticleRead>& particles) {
+	void set_init_particle_data(const std::vector<ParticleIO>& particles) {
 		global_particle_data_.clear();
 		global_particle_data_.reserve(particles.size());
 		for (const auto& particle : particles) {

@@ -86,7 +86,7 @@ struct Configuration {
 
 	// Initial Objects
 	std::vector<RigidBody> init_rigid_bodies{}; // init state only
-	std::vector<ParticleRead> init_particles{}; // init only
+	std::vector<ParticleIO> init_particles{}; // init only
 	std::vector<Bond> init_bonds{};				// init only, can be modified during simulation
 	std::vector<Angle> init_angles{};			// init only, can also be modified during simulation
 	std::vector<Dihedral> init_dihedrals{};		// init only

@@ -37,7 +37,7 @@ using namespace ARBD;
  * # Load config file and configure the system
  * parser = ConfigParser(sys, "circovirus.bd")
  *
- * # Get initial topology (used once during initialization)
+ * # Get initial topology as ParticleIO records (used once during initialization)
  * init_particles = parser.get_init_particles()
  *
  * # Runtime state is managed internally by SimManager (not exposed to Python)
@@ -337,7 +337,7 @@ void init_pysystem(py::module_& m) {
 			 py::return_value_policy::reference_internal,
 			 "Get reference to loaded SimSystem")
 		.def("get_init_particles",
-			 static_cast<std::vector<ParticleRead>& (ConfigParser::*)()>(
+			 static_cast<std::vector<ParticleIO>& (ConfigParser::*)()>(
 				 &ConfigParser::get_init_particles),
 			 py::return_value_policy::reference_internal,
 			 "Get initial particles (temporary data)")
