@@ -110,7 +110,7 @@ class SimManager {
 	 * @brief Get timing information
 	 */
 	float get_total_time() const {
-		return wkf_timer_time(timer0_.timer);
+		return static_cast<float>(wkf_timer_timenow(timer0_.timer));
 	}
 	float get_io_time() const {
 		return wkf_timer_time(timerS_.timer);
@@ -136,7 +136,7 @@ class SimManager {
 	//================================================================================
 	// Timing and Performance
 	//================================================================================
-	wkfmsgtimer timer0_, timerS_, timerE_;
+	wkfmsgtimer timer0_, timerS_, timerE_, timerP_;
 
 	//================================================================================
 	// I/O and Output Management
@@ -213,7 +213,7 @@ class SimManager {
 	 * @param current_step Current step
 	 * @param total_steps Total steps
 	 */
-	void report_progress(size_t current_step, size_t total_steps);
+	void report_progress(size_t current_step, size_t total_steps, size_t report_period);
 
 	/**
 	 * @brief Report final performance statistics

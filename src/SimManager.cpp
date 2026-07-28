@@ -1,5 +1,6 @@
 #include "SimManager.h"
 #include "System/PatchManager.h"
+#include <cstdio>
 #include <random>
 
 namespace ARBD {
@@ -12,6 +13,7 @@ SimManager::SimManager(SimSystem& sys) : sys_(sys), sys_state_(sys) {
 	timer0_.timer = wkf_timer_create();
 	timerS_.timer = wkf_timer_create();
 	timerE_.timer = wkf_timer_create();
+	timerP_.timer = wkf_timer_create();
 }
 
 SimManager::SimManager(SimSystem& sys, const ConfigParser& parser) : sys_(sys), sys_state_(sys) {
@@ -19,6 +21,7 @@ SimManager::SimManager(SimSystem& sys, const ConfigParser& parser) : sys_(sys), 
 	timer0_.timer = wkf_timer_create();
 	timerS_.timer = wkf_timer_create();
 	timerE_.timer = wkf_timer_create();
+	timerP_.timer = wkf_timer_create();
 }
 
 //================================================================================
@@ -52,7 +55,6 @@ void SimManager::load_config(const ConfigParser& parser) {
 }
 
 void SimManager::init() {
-	wkf_timer_start(timer0_.timer);
 	LOGINFO("SimManager: Initializing simulation");
 
 	// Initialize output writers based on configuration
@@ -135,19 +137,24 @@ void SimManager::run() {
 
 	LOGINFO("SimManager: Running {} steps with {} resources", num_steps, resources.size());
 
+	const size_t progress_period =
+		energy_output_period > 0 ? energy_output_period : 1000;
+	const int num_replicas = 1; // TODO: expose replicas from SimSystem config
+
+	std::printf("Configuration: %zu particles | %d replicas\n",
+				sys_state_.get_num_particles(),
+				num_replicas);
+	std::fflush(stdout);
+
+	wkf_timer_start(timer0_.timer);
+	wkf_timer_start(timerP_.timer);
+
 	for (size_t step = 1; step <= num_steps; ++step) {
-		LOGINFO("DEBUG step {} dcd_writer_={}", step, static_cast<void*>(dcd_writer_.get()));
 		// ===== FORCE CALCULATION PHASE =====
 		execute_force_calculation(step);
-		LOGINFO("DEBUG step {} after force dcd_writer_={}",
-				step,
-				static_cast<void*>(dcd_writer_.get()));
 
 		// ===== INTEGRATION PHASE =====
 		execute_integration(step);
-		LOGINFO("DEBUG step {} after integrate dcd_writer_={}",
-				step,
-				static_cast<void*>(dcd_writer_.get()));
 
 		// ===== MULTI-RESOURCE SYNCHRONIZATION =====
 		if (resources.size() > 1) {
@@ -163,12 +170,15 @@ void SimManager::run() {
 		}
 
 		// ===== PROGRESS REPORTING =====
-		if (step % 1000 == 0) {
-			report_progress(step, num_steps);
+		if (step % progress_period == 0) {
+			report_progress(step, num_steps, progress_period);
 		}
 	}
 
 	// ===== FINALIZATION =====
+	std::printf("\n");
+	std::fflush(stdout);
+
 	wkf_timer_stop(timer0_.timer);
 	const float elapsed = wkf_timer_time(timer0_.timer);
 
@@ -234,14 +244,16 @@ void SimManager::execute_force_calculation(size_t step) {
 		// PMF/grid + pairwise nonbonded terms; calculate_bonded_forces() must
 		// run after it and accumulate on top (it only ever atomic-adds, never
 		// clears).
-		Event evt =
-			patch->calculate_nonbonded_forces(sys_.get_nonbonded_interactions(),
-											  sys_state_.get_bonded_interactions(),
-											  particle_types,
-											  grid_manager.get_device_grid_views(resource_idx),
-											  sys_.get_tables_registry(),
-											  resource_idx,
-											  static_cast<float>(sys_.get_cutoff()));
+		Event evt = patch->calculate_nonbonded_forces(
+			sys_.get_nonbonded_interactions(),
+			sys_state_.get_bonded_interactions(),
+			particle_types,
+			grid_manager.get_device_grid_views(resource_idx),
+			sys_.get_tables_registry(),
+			resource_idx,
+			static_cast<float>(sys_.get_pairlist_cutoff()),
+			step,
+			static_cast<size_t>(sys_.get_neighbor_list_rebuild_period()));
 		(void)evt;
 
 		Event bonded_evt = patch->calculate_bonded_forces(sys_state_.get_bonded_interactions(),
@@ -389,18 +401,26 @@ void SimManager::write_dcd_frame(size_t step) {
 // Progress and Performance Reporting
 //================================================================================
 
-void SimManager::report_progress(size_t current_step, size_t total_steps) {
-	const float progress =
-		static_cast<float>(current_step) / static_cast<float>(total_steps) * 100.0f;
-	const float elapsed = wkf_timer_time(timer0_.timer);
-	const float steps_per_sec = static_cast<float>(current_step) / elapsed;
+void SimManager::report_progress(size_t current_step,
+								 size_t total_steps,
+								 size_t report_period) {
+	wkf_timer_stop(timerP_.timer);
+	const float interval_elapsed = static_cast<float>(wkf_timer_time(timerP_.timer));
+	wkf_timer_start(timerP_.timer);
 
-	LOGINFO("SimManager: Step {}/{} ({:.1f}%) | Elapsed: {:.2f}s | Rate: {:.1f} steps/s",
-			current_step,
-			total_steps,
-			progress,
-			elapsed,
-			steps_per_sec);
+	const float percent =
+		(100.0f * static_cast<float>(current_step)) / static_cast<float>(total_steps);
+	const float ms_per_step = interval_elapsed * 1000.0f / static_cast<float>(report_period);
+	const int num_replicas = 1; // TODO: expose replicas from SimSystem config
+	const float ns_per_day =
+		static_cast<float>(num_replicas) * sys_.get_timestep() / ms_per_step * 86400000.0f;
+
+	std::printf("\rStep %zu [%.2f%% complete | %.3f ms/step | %.3f ns/day]",
+				current_step,
+				percent,
+				ms_per_step,
+				ns_per_day);
+	std::fflush(stdout);
 }
 
 void SimManager::report_performance(float elapsed_time, size_t total_steps) {
