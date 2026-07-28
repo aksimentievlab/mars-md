@@ -161,7 +161,7 @@ TEST_CASE("BondedForcesTest", "[free][bonded]") {
 	// Full-scale repro: 129 particles in a chain, 128 sequential bonds -
 	// matches mpipi_k18 exactly (same particle count, same bond count/topology).
 	const idx_t num_particles = 129;
-	BondedInteractions interactions;
+	BondedInteractions bonded_interactions;
 	for (idx_t i = 0; i + 1 < num_particles; ++i) {
 		Bond bond;
 		bond.ind1 = static_cast<int>(i);
@@ -169,9 +169,9 @@ TEST_CASE("BondedForcesTest", "[free][bonded]") {
 		bond.function_index = function_index;
 		bond.form = InteractionForm::Tabulated;
 		bond.flag = BondFlag::DEFAULT;
-		interactions.add_bond(bond);
+		bonded_interactions.add_bond(bond);
 	}
-	std::cout << "Built " << interactions.get_num_bonds() << " bonds" << std::endl;
+	std::cout << "Built " << bonded_interactions.get_num_bonds() << " bonds" << std::endl;
 
 	// Match the real mpipi_k18 patch's capacity (from the spatial decomposer)
 	// rather than num_particles, in case scale/capacity is what triggers the
@@ -200,8 +200,15 @@ TEST_CASE("BondedForcesTest", "[free][bonded]") {
 	std::cout << "Calling calculate_nonbonded_forces (0 grids, should no-op)..." << std::endl;
 	NonBondedInteractions nb_interactions;
 	DeviceBuffer<BaseGridView<float>> empty_grid_views;
-	Event nb_evt =
-		patch.calculate_nonbonded_forces(nb_interactions, device_types, empty_grid_views);
+	Event nb_evt = patch.calculate_nonbonded_forces(nb_interactions,
+													bonded_interactions,
+													device_types,
+													empty_grid_views,
+													tables_registry,
+													0,
+													10.0f,
+													0.0f,
+													1);
 	nb_evt.wait();
 	std::cout << "calculate_nonbonded_forces returned successfully" << std::endl;
 
@@ -216,13 +223,14 @@ TEST_CASE("BondedForcesTest", "[free][bonded]") {
 		w -= home;
 		float U0 = t.Y[home];
 		float dU = t.Y[home + 1] - U0;
-		std::cout << "HOST check: dx=" << dx << " home=" << home << " U0=" << U0
-				  << " dU=" << dU << " step_inv=" << (1.0f / t.step_size)
+		std::cout << "HOST check: dx=" << dx << " home=" << home << " U0=" << U0 << " dU=" << dU
+				  << " step_inv=" << (1.0f / t.step_size)
 				  << " expected_force_mag=" << (dU / t.step_size) << std::endl;
 	}
 
 	std::cout << "Calling calculate_bonded_forces..." << std::endl;
-	Event evt = patch.calculate_bonded_forces(interactions, device_types, tables_registry, 0);
+	Event evt =
+		patch.calculate_bonded_forces(bonded_interactions, device_types, tables_registry, 0);
 	evt.wait();
 	std::cout << "calculate_bonded_forces returned successfully" << std::endl;
 
@@ -250,8 +258,8 @@ TEST_CASE("DirectTabulatedBondKernelTest", "[free][bonded][direct]") {
 
 	const Table& table = tables_registry.get_bond_functions()[function_index];
 	TabulatedPotential pot{};
-	pot.pot = const_cast<arbd_real*>(
-		tables_registry.get_device_bond_buffer(0, function_index).data());
+	pot.pot =
+		const_cast<arbd_real*>(tables_registry.get_device_bond_buffer(0, function_index).data());
 	pot.step_inv = static_cast<arbd_real>(1.0 / table.step_size);
 	pot.size = static_cast<unsigned int>(table.Y.size());
 	pot.start = static_cast<arbd_real>(table.start);
@@ -272,8 +280,7 @@ TEST_CASE("DirectTabulatedBondKernelTest", "[free][bonded][direct]") {
 	indices_buf.copy_from_host(std::vector<int2>{int2{0, 1}});
 
 	DeviceBuffer<Vector3> positions_buf(2, res);
-	positions_buf.copy_from_host(
-		std::vector<Vector3>{Vector3(0, 0, 0), Vector3(0, 0, 1.885f)});
+	positions_buf.copy_from_host(std::vector<Vector3>{Vector3(0, 0, 0), Vector3(0, 0, 1.885f)});
 
 	DeviceBuffer<Vector3> force_buf(2, res);
 	force_buf.copy_from_host(std::vector<Vector3>{Vector3(0, 0, 0), Vector3(0, 0, 0)});
