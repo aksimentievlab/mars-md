@@ -448,8 +448,11 @@ idx_t PatchManager::gather_global_particle_count(idx_t local_count) {
 
 std::vector<Event>
 PatchManager::compute_nonbonded_forces(const NonBondedInteractions& interactions,
+									   const BondedInteractions& bonded_interactions,
 									   const DeviceParticleTypes& particle_types,
 									   const GridManager& grid_manager,
+									   const TablesRegistry& tables_registry,
+									   float cutoff,
 									   float electric_field,
 									   int interpolation_scheme) {
 	std::vector<Event> events;
@@ -468,12 +471,16 @@ PatchManager::compute_nonbonded_forces(const NonBondedInteractions& interactions
 			}
 		}
 
-		events.push_back(patch_ptr->calculate_nonbonded_forces(
-			interactions,
-			particle_types,
-			grid_manager.get_device_grid_views(resource_idx),
-			electric_field,
-			interpolation_scheme));
+		events.push_back(
+			patch_ptr->calculate_nonbonded_forces(interactions,
+												  bonded_interactions,
+												  particle_types,
+												  grid_manager.get_device_grid_views(resource_idx),
+												  tables_registry,
+												  resource_idx,
+												  cutoff,
+												  electric_field,
+												  interpolation_scheme));
 	}
 	return events;
 }

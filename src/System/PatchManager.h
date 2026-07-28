@@ -262,8 +262,11 @@ class PatchManager {
 	 * @return Vector of events for async computation
 	 */
 	std::vector<Event> compute_nonbonded_forces(const NonBondedInteractions& interactions,
+												const BondedInteractions& bonded_interactions,
 												const DeviceParticleTypes& particle_types,
 												const GridManager& grid_manager,
+												const TablesRegistry& tables_registry,
+												float cutoff,
 												float electric_field = 0.0f,
 												int interpolation_scheme = 1);
 

@@ -12,6 +12,7 @@
 #include "Backend/Events.h"
 #include "Backend/Kernels.h"
 #include "Interactions/Bonded/BondComputer.h"
+#include "Interactions/Nonbonded/Pairwise.h"
 #include "Interactions/Nonbonded/PmfKernels.h"
 #include "PatchOperation/Integrator.h"
 #include "PatchOperation/Pairlist.h"
@@ -31,46 +32,9 @@ void Patch::set_periodic_box(const PeriodicBox* sim_box) {
 // Force Calculation Methods
 //================================================================================
 
-Event Patch::calculate_nonbonded_forces(const NonBondedInteractions& interactions,
-										const DeviceParticleTypes& particle_types,
-										const DeviceBuffer<BaseGridView<float>>& grid_views,
-										float electric_field,
-										int interpolation_scheme) {
-	(void)interactions;
-
-	particles_.clear_forces();
-
-	const idx_t num_particles = particles_.size();
-	if (num_particles == 0 || grid_views.empty()) {
-		return Event(nullptr, resource_);
-	}
-
-	const ParticleView particle_view = particles_.view();
-	const ParticleTypeView type_view = particle_types.view();
-	const KernelConfig config = KernelConfig::for_1d(num_particles, resource_);
-
-	const ComputePMFKernel kernel{electric_field, interpolation_scheme};
-	return launch_kernel(resource_,
-						 config,
-						 kernel,
-						 particle_view.pos,
-						 particle_view.type_id,
-						 particle_view.ForceEnergy,
-						 type_view,
-						 grid_views.data(),
-						 num_particles);
-}
-
-Event Patch::calculate_bonded_forces(const BondedInteractions& interactions,
-									 const DeviceParticleTypes& particle_types,
-									 const TablesRegistry& tables_registry,
-									 size_t resource_idx) {
-	(void)particle_types;
-
-	if (particles_.size() == 0) {
-		return Event(nullptr, resource_);
-	}
-
+void Patch::ensure_bonded_topology_ready(const BondedInteractions& interactions,
+										 const TablesRegistry& tables_registry,
+										 size_t resource_idx) {
 	// Build the device-side bonded topology/table arrays once; bonded
 	// topology doesn't change during the run, so this is cached across steps.
 	if (!bonded_device_data_prepared_) {
@@ -84,6 +48,97 @@ Event Patch::calculate_bonded_forces(const BondedInteractions& interactions,
 				device_bonded_.num_dihedrals(),
 				device_bonded_.num_exclusions());
 	}
+}
+
+Event Patch::calculate_nonbonded_forces(const NonBondedInteractions& interactions,
+										const BondedInteractions& bonded_interactions,
+										const DeviceParticleTypes& particle_types,
+										const DeviceBuffer<BaseGridView<float>>& grid_views,
+										const TablesRegistry& tables_registry,
+										size_t resource_idx,
+										float cutoff,
+										float electric_field,
+										int interpolation_scheme) {
+	(void)interactions;
+
+	particles_.clear_forces();
+
+	const idx_t num_particles = particles_.size();
+	if (num_particles == 0) {
+		return Event(nullptr, resource_);
+	}
+
+	// Exclusions must be ready before the pairwise kernel runs below - this
+	// function runs before calculate_bonded_forces() every step (see
+	// SimManager::execute_force_calculation), so bonded topology can't rely
+	// on that call having happened yet. Idempotent, cheap after the first call.
+	ensure_bonded_topology_ready(bonded_interactions, tables_registry, resource_idx);
+
+	const ParticleView particle_view = particles_.view();
+	const PeriodicBox* pbox = get_device_periodic_box();
+	Event evt(nullptr, resource_);
+
+	if (!grid_views.empty()) {
+		const ParticleTypeView type_view = particle_types.view();
+		const KernelConfig config = KernelConfig::for_1d(num_particles, resource_);
+
+		const ComputePMFKernel kernel{electric_field, interpolation_scheme};
+		evt = launch_kernel(resource_,
+							config,
+							kernel,
+							particle_view.pos,
+							particle_view.type_id,
+							particle_view.ForceEnergy,
+							type_view,
+							grid_views.data(),
+							num_particles);
+	}
+
+	// Lazily build the type-pair -> table matrix; pairwise topology (which
+	// type pairs have a tabulated potential) is static for the run, same as
+	// bonded topology above.
+	if (!pairwise_nb_device_data_prepared_) {
+		device_pair_nb_ =
+			std::make_unique<DevicePairNonBondedInteractions>(particle_types.size(), resource_);
+		device_pair_nb_->copy_pairwise_from_host(tables_registry.get_pair_nonbonded_types());
+		device_pair_nb_->link_pairwise_tables(tables_registry, resource_idx);
+		pairwise_nb_device_data_prepared_ = true;
+	}
+
+	// Rebuild the neighbor list every call; no periodic-rebuild throttling
+	// (e.g. a decompPeriod-style skin/rebuild cadence) exists yet.
+	pairlist_->build_pairlist(particles_.pos(), particle_count_, cutoff);
+
+	constexpr bool get_energy = false;
+	evt = launch_pairwise_nonbonded(resource_,
+									pairlist_->get_neighbor_pairs().data(),
+									particle_view.pos,
+									particle_view.ForceEnergy,
+									particle_view.type_id,
+									device_pair_nb_->pairwise_table_matrix(),
+									device_pair_nb_->pairwise_form_matrix(),
+									device_pair_nb_->nonbonded_potentials(),
+									device_pair_nb_->num_particle_types(),
+									device_bonded_.exclusion_pairs(),
+									device_bonded_.num_exclusions(),
+									pbox,
+									get_energy,
+									pairlist_->get_num_pairs());
+
+	return evt;
+}
+
+Event Patch::calculate_bonded_forces(const BondedInteractions& interactions,
+									 const DeviceParticleTypes& particle_types,
+									 const TablesRegistry& tables_registry,
+									 size_t resource_idx) {
+	(void)particle_types;
+
+	if (particles_.size() == 0) {
+		return Event(nullptr, resource_);
+	}
+
+	ensure_bonded_topology_ready(interactions, tables_registry, resource_idx);
 
 	if (device_bonded_.num_bonds() == 0 && device_bonded_.num_angles() == 0 &&
 		device_bonded_.num_dihedrals() == 0) {

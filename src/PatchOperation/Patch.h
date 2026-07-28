@@ -14,6 +14,7 @@
 #include "Backend/Events.h"
 #include "Interactions/BondedInteraction.h"
 #include "Interactions/DeviceBondedInteraction.h"
+#include "Interactions/DevicePairNonBondedInteraction.h"
 #include "Interactions/NonBondedInteraction.h"
 #include "Interactions/TabulatedPotential.h"
 #include "Objects/DeviceParticleManager.h"
@@ -174,13 +175,31 @@ class Patch {
 
 	/**
 	 * @brief Compute non-bonded forces for particles in this patch
-	 * @param interactions Non-bonded interaction parameters from SimSystem
+	 *
+	 * Evaluates both the PMF/grid term (position-dependent, per-particle) and
+	 * the pairwise tabulated nonbonded term (residue-pair potentials, via a
+	 * neighbor list rebuilt each call - see Pairlist.h). `bonded_interactions`
+	 * and `tables_registry`/`resource_idx` are needed here (not just in
+	 * calculate_bonded_forces) because exclusions must be ready before the
+	 * pairwise kernel runs, and this function is called first each step (see
+	 * SimManager::execute_force_calculation) - so bonded topology is prepared
+	 * lazily from whichever of the two calculate_* calls runs first.
+	 * @param interactions Non-bonded interaction parameters from SimSystem (currently unused -
+	 *        pairwise metadata is sourced from tables_registry, see get_pair_nonbonded_types())
+	 * @param bonded_interactions Bonded topology, needed to populate exclusions
 	 * @param particle_types Device particle type data from SimSystem
+	 * @param tables_registry Tabulated potential tables (bonded and nonbonded)
+	 * @param resource_idx This patch's index into tables_registry's per-resource arrays
+	 * @param cutoff Pairwise interaction cutoff distance, used to rebuild the neighbor list
 	 * @return Event for async GPU execution
 	 */
 	Event calculate_nonbonded_forces(const NonBondedInteractions& interactions,
+									 const BondedInteractions& bonded_interactions,
 									 const DeviceParticleTypes& particle_types,
 									 const DeviceBuffer<BaseGridView<float>>& grid_views,
+									 const TablesRegistry& tables_registry,
+									 size_t resource_idx,
+									 float cutoff,
 									 float electric_field = 0.0f,
 									 int interpolation_scheme = 1);
 
@@ -210,16 +229,14 @@ class Patch {
 								  size_t resource_idx);
 
 	/**
-	 * @brief Get the bonded-pair exclusions loaded by calculate_bonded_forces()
+	 * @brief Get the bonded-pair exclusions consulted by the pairwise nonbonded kernel
 	 *
-	 * Entry point only: exposes DeviceBondedInteractions::exclusion_pairs()
-	 * (REPLACE-flagged bonds, plus whatever BondedInteractions::make_exclusions()
-	 * adds) so callers have a place to read them from. Not yet consulted by
-	 * any kernel - calculate_nonbonded_forces() currently only evaluates the
-	 * PMF/grid term (no pairwise nonbonded), so there is nothing to filter
-	 * against yet. Wire this into the pairwise nonbonded kernel once that exists.
-	 * Populated as a side effect of calculate_bonded_forces(); empty/zero
-	 * before its first call.
+	 * Exposes DeviceBondedInteractions::exclusion_pairs() (REPLACE-flagged
+	 * bonds, plus whatever BondedInteractions::make_exclusions() adds), which
+	 * calculate_nonbonded_forces() checks (linear scan per pair) before
+	 * evaluating the pairwise tabulated term. Populated lazily by
+	 * ensure_bonded_topology_ready(), called from both calculate_bonded_forces()
+	 * and calculate_nonbonded_forces() - empty/zero before either has run.
 	 */
 	DEVICE_PTR(const int2) get_exclusions() const {
 		return device_bonded_.exclusion_pairs();
@@ -492,6 +509,18 @@ class Patch {
 	 * @brief Update space partitioning after bounds change
 	 */
 	void update_space_partition();
+
+	/**
+	 * @brief Lazily build device-side bonded topology (bonds/angles/dihedrals/exclusions/tables)
+	 *
+	 * Extracted so both calculate_bonded_forces() and calculate_nonbonded_forces()
+	 * can call it - the latter needs exclusions ready before evaluating the
+	 * pairwise term, but runs first each step (see SimManager::execute_force_calculation).
+	 * Idempotent via bonded_device_data_prepared_.
+	 */
+	void ensure_bonded_topology_ready(const BondedInteractions& interactions,
+									  const TablesRegistry& tables_registry,
+									  size_t resource_idx);
 	//================================================================================
 	// Core Patch Properties
 	//================================================================================
@@ -529,6 +558,13 @@ class Patch {
 	// Patch's constructor - DeviceBondedInteractions has no default ctor.
 	DeviceBondedInteractions device_bonded_;
 	bool bonded_device_data_prepared_{false};
+
+	// Device-side pairwise nonbonded topology (type-pair -> table matrix) for
+	// calculate_nonbonded_forces(), lazily built on first call. unique_ptr
+	// because construction needs num_particle_types, unknown at Patch
+	// construction time (unlike device_bonded_, which only needs the resource).
+	std::unique_ptr<DevicePairNonBondedInteractions> device_pair_nb_;
+	bool pairwise_nb_device_data_prepared_{false};
 };
 
 /**

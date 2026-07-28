@@ -61,7 +61,7 @@ void declare_particle_type(py::module& m) {
 		.def_readwrite("radius", &ParticleType::radius)
 		.def_readwrite("eps", &ParticleType::eps)
 		.def_readwrite("diffusion", &ParticleType::diffusion)
-		.def_readwrite("transDamping", &ParticleType::transDamping)
+		.def_readwrite("trans_damping", &ParticleType::trans_damping)
 		.def_readwrite("mu", &ParticleType::mu)
 		.def_readwrite("pmf_scale", &ParticleType::pmf_scale)
 		.def_readwrite("pmf_scale_slope", &ParticleType::pmf_scale_slope)

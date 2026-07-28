@@ -231,12 +231,17 @@ void SimManager::execute_force_calculation(size_t step) {
 		}
 
 		// calculate_nonbonded_forces() clears the force buffer and writes the
-		// PMF/grid term; calculate_bonded_forces() must run after it and
-		// accumulate on top (it only ever atomic-adds, never clears).
+		// PMF/grid + pairwise nonbonded terms; calculate_bonded_forces() must
+		// run after it and accumulate on top (it only ever atomic-adds, never
+		// clears).
 		Event evt =
 			patch->calculate_nonbonded_forces(sys_.get_nonbonded_interactions(),
+											  sys_state_.get_bonded_interactions(),
 											  particle_types,
-											  grid_manager.get_device_grid_views(resource_idx));
+											  grid_manager.get_device_grid_views(resource_idx),
+											  sys_.get_tables_registry(),
+											  resource_idx,
+											  static_cast<float>(sys_.get_cutoff()));
 		(void)evt;
 
 		Event bonded_evt = patch->calculate_bonded_forces(sys_state_.get_bonded_interactions(),
@@ -247,7 +252,7 @@ void SimManager::execute_force_calculation(size_t step) {
 	}
 
 	if (step == 1) {
-		LOGINFO("SimManager: PMF/grid force kernel launched (pairwise forces still TODO)");
+		LOGINFO("SimManager: PMF/grid and pairwise nonbonded force kernels launched");
 	}
 }
 

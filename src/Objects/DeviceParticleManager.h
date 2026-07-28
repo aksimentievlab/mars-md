@@ -290,6 +290,10 @@ class DeviceParticleTypes {
 				const_cast<int3*>(force_grid_id_.data())};
 	}
 
+	idx_t size() const {
+		return mass_.size();
+	}
+
   private:
 	DeviceBuffer<float> mass_;
 	DeviceBuffer<float> charge_;

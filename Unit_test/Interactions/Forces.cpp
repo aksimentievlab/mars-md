@@ -25,8 +25,11 @@ TEST_CASE("Harmonic Bond Force - Two Particles", "[force][bonded][bond]") {
 	initialize_backend_once();
 	Resource res(Global::single_resource_id);
 
-	// Create 2 particles separated by distance r = 1.5
-	HostParticleData host_data = create_test_particles(2, "linear", 100.0f);
+	// Create 2 particles separated by distance r = 1.5.
+	// create_test_particles' "linear" pattern spaces particles at
+	// box_size/(count+1), not box_size itself - pass 3*r to get particles r
+	// apart (see the "Equilibrium Distance" test below for the bug this caused).
+	HostParticleData host_data = create_test_particles(2, "linear", 4.5f);
 	host_data.type_id = std::vector<int>(2, 0);
 
 	// Copy to device
@@ -69,8 +72,13 @@ TEST_CASE("Harmonic Bond Force - Equilibrium Distance", "[force][bonded][bond]")
 	initialize_backend_once();
 	Resource res(Global::single_resource_id);
 
-	// Create 2 particles at equilibrium distance r0 = 1.0
-	HostParticleData host_data = create_test_particles(2, "linear", 1.0f);
+	// Create 2 particles at equilibrium distance r0 = 1.0.
+	// create_test_particles' "linear" pattern spaces particles at
+	// box_size/(count+1) = box_size/3 for count=2, so pass 3*r0 - passing r0
+	// directly (as this used to) put them at r0/3, silently making this test
+	// assert force==0 at the wrong distance until copy_to_host was fixed to
+	// actually return force data (previously always read back as zero).
+	HostParticleData host_data = create_test_particles(2, "linear", 3.0f);
 	host_data.type_id = std::vector<int>(2, 0);
 
 	DeviceParticle particles(2, res);
@@ -114,8 +122,9 @@ TEST_CASE("Morse Bond Force - Two Particles", "[force][bonded][bond][morse]") {
 	initialize_backend_once();
 	Resource res(Global::single_resource_id);
 
-	// Create 2 particles
-	HostParticleData host_data = create_test_particles(2, "linear", 1.5f);
+	// Create 2 particles, separated by r = 1.5 (see the "Equilibrium Distance"
+	// test above for why box_size must be 3*r for the "linear" pattern).
+	HostParticleData host_data = create_test_particles(2, "linear", 4.5f);
 	host_data.type_id = std::vector<int>(2, 0);
 
 	DeviceParticle particles(2, res);
@@ -151,14 +160,21 @@ TEST_CASE("Morse Bond Force - Two Particles", "[force][bonded][bond][morse]") {
 	HostParticleData result;
 	particles.copy_to_host(result, 2);
 
-	// Calculate expected force manually
+	// Calculate expected force manually. Force = -2*D0*a*exp_term*(1-exp_term)
+	// (negative of what this comment previously had - see
+	// AnalyticalForceComputer<1> in Analytical.h for why: force must be
+	// attractive, i.e. negative, for a stretched bond (r>r0), matching the
+	// Harmonic computer's sign convention).
 	// r = 1.5, r0 = 1.0, dr = 0.5
 	// exp_term = exp(-2.0 * 0.5) = exp(-1.0) ≈ 0.3679
-	// F = 2 * 10 * 2.0 * 0.3679 * (1 - 0.3679) ≈ 18.54
-	float expected_force = 18.54f;
+	// F = -2 * 10 * 2.0 * 0.3679 * (1 - 0.3679) ≈ -9.30
+	// Attractive force pulls particle 0 toward particle 1 (+x), so
+	// result.force[0].x is +9.30 (see AnalyticalBondComputer::operator():
+	// force_energy[indices.x] += -unit_vector*force_magnitude).
+	float expected_force = 9.30f;
 
-	REQUIRE(result.force[0].x == Approx(expected_force).epsilon(1.0f));
-	REQUIRE(result.force[1].x == Approx(-expected_force).epsilon(1.0f));
+	REQUIRE(result.force[0].x == Approx(expected_force).epsilon(0.05f));
+	REQUIRE(result.force[1].x == Approx(-expected_force).epsilon(0.05f));
 }
 
 TEST_CASE("Bond Force - Periodic Boundary Conditions", "[force][bonded][bond][pbc]") {

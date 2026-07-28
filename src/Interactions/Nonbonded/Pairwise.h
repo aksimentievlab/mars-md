@@ -1,7 +1,9 @@
 #pragma once
 #include "../Interactions.h"
+#include "Backend/Kernels.h"
 #include "Header.h"
 #include "Interactions/TabulatedPotential.h"
+#include "SimParam.h"
 #include "Types/Types.h"
 
 namespace ARBD {
@@ -38,14 +40,32 @@ struct SoftcoreForceKernel {
 };
 
 /**
- * @brief Tabulated bond force computer
+ * @brief Pairwise tabulated nonbonded force computer
+ *
+ * `particle_indices` comes from a Pairlist (see Pairlist.h) - already filtered
+ * by cutoff, and already remapped to original particle indices (see
+ * ZOrderNeighborKernel). Exclusions are a flat, unsorted list (bonded
+ * neighbors etc., see DeviceBondedInteractions::exclusion_pairs()) - checked
+ * via a linear scan per pair, which is fine for the small exclusion counts
+ * bonded topology produces; a sorted-range merge (as legacy's excludeMap
+ * does) would be needed to scale this to much larger systems.
+ *
+ * Table lookup mirrors DevicePairNonBondedInteractions: a flat
+ * num_particle_types*num_particle_types matrix maps (type_i, type_j) to an
+ * index into `tables` (-1 = no interaction for that type pair).
  */
 struct TabulatedNonBondedComputer {
 	// Members
 	DEVICE_PTR(const int2) particle_indices;
 	DEVICE_PTR(Vector3) positions;
 	DEVICE_PTR(Vector3) force_energy;
+	DEVICE_PTR(const int) type_ids;
+	DEVICE_PTR(const int) pairwise_table_matrix;
+	DEVICE_PTR(const int) pairwise_form_matrix;
 	DEVICE_PTR(const TabulatedPotential) tables;
+	idx_t num_particle_types;
+	DEVICE_PTR(const int2) exclusions;
+	idx_t num_exclusions;
 	const PeriodicBox* pbox;
 	bool get_energy;
 	idx_t num_pairs;
@@ -54,12 +74,20 @@ struct TabulatedNonBondedComputer {
 	TabulatedNonBondedComputer(DEVICE_PTR(const int2) indices,
 							   DEVICE_PTR(Vector3) pos,
 							   DEVICE_PTR(Vector3) fe,
+							   DEVICE_PTR(const int) type_id_arr,
+							   DEVICE_PTR(const int) table_matrix,
+							   DEVICE_PTR(const int) form_matrix,
 							   DEVICE_PTR(const TabulatedPotential) tabs,
+							   idx_t n_types,
+							   DEVICE_PTR(const int2) excl,
+							   idx_t n_excl,
 							   const PeriodicBox* box,
 							   bool energy,
-							   idx_t n)
-		: particle_indices(indices), positions(pos), force_energy(fe), tables(tabs), pbox(box),
-		  get_energy(energy), num_pairs(n) {}
+							   idx_t n_pairs)
+		: particle_indices(indices), positions(pos), force_energy(fe), type_ids(type_id_arr),
+		  pairwise_table_matrix(table_matrix), pairwise_form_matrix(form_matrix), tables(tabs),
+		  num_particle_types(n_types), exclusions(excl), num_exclusions(n_excl), pbox(box),
+		  get_energy(energy), num_pairs(n_pairs) {}
 
 	// Kernel operator
 	DEVICE void operator()(idx_t i) const {
@@ -68,15 +96,34 @@ struct TabulatedNonBondedComputer {
 
 		const int2& indices = particle_indices[i];
 
-		// Phase 1: Compute geometry
+		// Phase 1: Skip excluded pairs (bonded neighbors etc.)
+		for (idx_t e = 0; e < num_exclusions; ++e) {
+			const int2& ex = exclusions[e];
+			if ((ex.x == indices.x && ex.y == indices.y) ||
+				(ex.x == indices.y && ex.y == indices.x))
+				return;
+		}
+
+		// Phase 2: Type-pair -> table lookup
+		const int type_i = type_ids[indices.x];
+		const int type_j = type_ids[indices.y];
+		const idx_t matrix_idx = type_i * num_particle_types + type_j;
+		const int table_idx = pairwise_table_matrix[matrix_idx];
+		if (table_idx < 0)
+			return;
+		if (static_cast<InteractionForm>(pairwise_form_matrix[matrix_idx]) !=
+			InteractionForm::Tabulated)
+			return;
+
+		// Phase 3: Compute geometry
 		CalcDistance geom = CalcDistance::compute(positions, indices, pbox);
 		if (geom.distance < 1e-6f)
 			return;
 
-		// Phase 2: Lookup force from tabulated potential
-		const ScalarForceEnergy fe = TabulatedPotential::compute(geom.distance, &tables[i]);
+		// Phase 4: Lookup force from tabulated potential
+		const ScalarForceEnergy fe = TabulatedPotential::compute(geom.distance, &tables[table_idx]);
 
-		// Phase 3: Apply forces
+		// Phase 5: Apply forces
 		const Vector3 force = geom.unit_vector * fe.force_magnitude;
 		const float energy = fe.energy * 0.5f;
 
@@ -89,4 +136,50 @@ struct TabulatedNonBondedComputer {
 		}
 	}
 };
+
+/**
+ * @brief Launch pairwise tabulated nonbonded force computation
+ */
+inline Event launch_pairwise_nonbonded(const Resource& resource,
+									   DEVICE_PTR(const int2) particle_indices,
+									   DEVICE_PTR(Vector3) positions,
+									   DEVICE_PTR(Vector3) force_energy,
+									   DEVICE_PTR(const int) type_ids,
+									   DEVICE_PTR(const int) pairwise_table_matrix,
+									   DEVICE_PTR(const int) pairwise_form_matrix,
+									   DEVICE_PTR(const TabulatedPotential) tables,
+									   idx_t num_particle_types,
+									   DEVICE_PTR(const int2) exclusions,
+									   idx_t num_exclusions,
+									   const PeriodicBox* pbox,
+									   bool get_energy,
+									   idx_t num_pairs) {
+	if (num_pairs == 0)
+		return Event(nullptr, resource);
+
+	KernelConfig config = KernelConfig::for_1d(num_pairs, resource);
+
+	TabulatedNonBondedComputer computer(particle_indices,
+										positions,
+										force_energy,
+										type_ids,
+										pairwise_table_matrix,
+										pairwise_form_matrix,
+										tables,
+										num_particle_types,
+										exclusions,
+										num_exclusions,
+										pbox,
+										get_energy,
+										num_pairs);
+
+	return launch_kernel(resource, config, computer);
+}
+
 } // namespace ARBD
+
+#ifdef USE_SYCL
+#include <sycl/sycl.hpp>
+template<>
+struct sycl::is_device_copyable<ARBD::TabulatedNonBondedComputer> : std::true_type {};
+#endif
