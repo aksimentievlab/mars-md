@@ -56,7 +56,7 @@ Event Patch::calculate_nonbonded_forces(const NonBondedInteractions& interaction
 						 particle_view.pos,
 						 particle_view.type_id,
 						 particle_view.ForceEnergy,
-						 &type_view,
+						 type_view,
 						 grid_views.data(),
 						 num_particles);
 }
@@ -99,6 +99,15 @@ Event Patch::calculate_bonded_forces(const BondedInteractions& interactions,
 	// only the last launch's Event is kept, matching how callers already
 	// treat these results (SimManager discards them with (void)).
 	Event evt(nullptr, resource_);
+
+	LOGINFO("DEBUG calculate_bonded_forces: pbox={}, particles_.size()={}, "
+			"bond_indices={}, bond_potentials={}, bond_table_indices={}, bond_forms={}",
+			static_cast<const void*>(pbox),
+			particles_.size(),
+			static_cast<const void*>(device_bonded_.bond_indices()),
+			static_cast<const void*>(device_bonded_.bond_potentials()),
+			static_cast<const void*>(device_bonded_.bond_table_indices()),
+			static_cast<const void*>(device_bonded_.bond_forms()));
 
 	if (device_bonded_.num_bonds() > 0) {
 		LOGTRACE("Patch {}: Computing {} bonds", patch_id_, device_bonded_.num_bonds());

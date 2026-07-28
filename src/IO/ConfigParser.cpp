@@ -414,6 +414,8 @@ void ConfigParser::get_elements(const Reader& reader) {
 	static const std::unordered_set<std::string_view> particle_field_keys = {
 		"num",
 		"diffusion",
+		"transDamping",
+		"trans_damping",
 		"mass",
 		"gridFile",
 		"grid_file",
@@ -482,6 +484,24 @@ void ConfigParser::get_elements(const Reader& reader) {
 							 ptype.diffusion.x,
 							 ptype.diffusion.y,
 							 ptype.diffusion.z);
+				} else if (check_key("transDamping", "trans_damping")) {
+					auto toks = tokenize(v);
+					if (toks.size() == 3) {
+						ptype.trans_damping.x = std::stof(toks[0]);
+						ptype.trans_damping.y = std::stof(toks[1]);
+						ptype.trans_damping.z = std::stof(toks[2]);
+					} else if (toks.size() == 1) {
+						ptype.trans_damping.x = std::stof(toks[0]);
+						ptype.trans_damping.y = std::stof(toks[0]);
+						ptype.trans_damping.z = std::stof(toks[0]);
+					} else {
+						LOGWARN("Invalid transDamping format: {}", v);
+						ptype.trans_damping = Vector3(0.0f, 0.0f, 0.0f);
+					}
+					LOGDEBUG("transDamping: {}, {}, {}",
+							 ptype.trans_damping.x,
+							 ptype.trans_damping.y,
+							 ptype.trans_damping.z);
 				} else if (k == "mass") {
 					LOGDEBUG("mass: {}", v);
 					ptype.mass = std::stof(v);

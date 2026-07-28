@@ -44,8 +44,14 @@ struct TabulatedPotential {
 		arbd_real U0 = table->pot[home];
 		arbd_real dU = table->pot[home1] - U0;
 
+		// force_magnitude must be -dU/dr (not the raw energy slope): the
+		// bond/angle/dihedral/nonbonded computers all apply it via the same
+		// "-force to particle x, +force to particle y" convention that
+		// AnalyticalForceComputer uses with an already-negated force (e.g.
+		// harmonic bond's force = -k*(distance-r0)). Returning +dU/dr here
+		// inverted every tabulated potential well into a force hilltop.
 		return ScalarForceEnergy{
-			Vec2<arbd_real>{dU * table->step_inv, dU * w + U0}}; // Force magnitude, energy
+			Vec2<arbd_real>{-dU * table->step_inv, dU * w + U0}}; // Force magnitude, energy
 	}
 };
 } // namespace ARBD

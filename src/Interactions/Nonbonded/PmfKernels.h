@@ -51,27 +51,24 @@ HOST DEVICE inline float sample_force_grid_value(const BaseGridView<float>& grid
  */
 HOST DEVICE inline Vector3 compute_position_dependent_force(const Vector3& pos,
 															int type_id,
-															const ParticleTypeView* types,
+															const ParticleTypeView types,
 															const BaseGridView<float>* grid_configs,
 															float electric_field,
 															int scheme) {
-	if (types == nullptr)
-		return Vector3(0.0f, 0.0f, 0.0f);
-
-	const float charge = types->charge[type_id];
+	const float charge = types.charge[type_id];
 	Vector3 force(0.0f, 0.0f, charge * electric_field);
 
-	const int pmf_grid_id = types->pmf_grid_id[type_id];
+	const int pmf_grid_id = types.pmf_grid_id[type_id];
 	if (pmf_grid_id >= 0 && grid_configs != nullptr) {
 		const BaseGridView<float>& pmf_grid = grid_configs[pmf_grid_id];
 		if (pmf_grid.data != nullptr) {
 			const GridSample<float> sample = pmf_detail::sample_pmf_grid(pmf_grid, pos, scheme);
-			const float scale = types->pmf_scale[type_id];
+			const float scale = types.pmf_scale[type_id];
 			force += sample.gradient * (-scale);
 		}
 	}
 
-	const int3 force_grid_id = types->force_grid_id[type_id];
+	const int3 force_grid_id = types.force_grid_id[type_id];
 	if (grid_configs != nullptr) {
 		if (force_grid_id.x >= 0) {
 			const BaseGridView<float>& grid = grid_configs[force_grid_id.x];
@@ -104,7 +101,7 @@ struct ComputePMFKernel {
 								const Vector3* __restrict__ positions,
 								const int* __restrict__ type_ids,
 								Vector3* __restrict__ forces,
-								const ParticleTypeView* __restrict__ types,
+								const ParticleTypeView types,
 								const BaseGridView<float>* __restrict__ grid_configs,
 								idx_t num_particles) const {
 

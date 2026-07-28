@@ -29,6 +29,7 @@ struct alignas(16) ParticleTypeView {
 	CONSTANT_PTR(float) __restrict__ radius;
 	CONSTANT_PTR(float) __restrict__ eps;
 	CONSTANT_PTR(Vector3) __restrict__ diffusion;
+	CONSTANT_PTR(Vector3) __restrict__ trans_damping;
 	CONSTANT_PTR(float) __restrict__ mu;
 	CONSTANT_PTR(float) __restrict__ pmf_scale;
 	CONSTANT_PTR(float) __restrict__ pmf_scale_slope;

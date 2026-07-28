@@ -52,8 +52,8 @@ class RigidBodyType {
 	float eps;
 	float diffusion;
 	float mu; // for Nose-Hoover Langevin dynamics
-	int numPartGridFiles;
-	float meanPmf;
+	int num_grid_files;
+	// float meanPmf;
 	float pmf_scale;
 	float pmf_scale_slope;
 	uint32_t pmf_smd_freq;

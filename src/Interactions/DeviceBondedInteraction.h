@@ -52,6 +52,32 @@ class DeviceBondedInteractions {
 			bond_table_indices_.copy_from_host(bond_fn_idx.data(), num_bonds_);
 			bond_forms_ = DeviceBuffer<int>(num_bonds_, resource_);
 			bond_forms_.copy_from_host(bond_form.data(), num_bonds_);
+
+			int min_fn = bond_fn_idx.empty() ? -1 : bond_fn_idx[0];
+			int max_fn = bond_fn_idx.empty() ? -1 : bond_fn_idx[0];
+			for (int v : bond_fn_idx) {
+				min_fn = std::min(min_fn, v);
+				max_fn = std::max(max_fn, v);
+			}
+			LOGINFO("DEBUG copy_from_host: bond_fn_idx range [{}, {}] over {} bonds",
+					min_fn,
+					max_fn,
+					num_bonds_);
+
+			std::vector<int> fn_readback(num_bonds_);
+			bond_table_indices_.copy_to_host(fn_readback.data(), fn_readback.size(), true);
+			int rb_min = fn_readback.empty() ? -1 : fn_readback[0];
+			int rb_max = fn_readback.empty() ? -1 : fn_readback[0];
+			for (int v : fn_readback) {
+				rb_min = std::min(rb_min, v);
+				rb_max = std::max(rb_max, v);
+			}
+			LOGINFO("DEBUG copy_from_host readback: bond_table_indices_ range [{}, {}], "
+					"buffer.size()={}, data()={}",
+					rb_min,
+					rb_max,
+					bond_table_indices_.size(),
+					static_cast<const void*>(bond_table_indices_.data()));
 		}
 
 		// === ANGLES ===
@@ -152,6 +178,10 @@ class DeviceBondedInteractions {
 		const auto& angle_tables = tables_registry.get_angle_functions();
 		const auto& dihedral_tables = tables_registry.get_dihedral_functions();
 
+		LOGINFO("DEBUG link_tables: bond_tables.size()={}, resource_idx={}",
+				bond_tables.size(),
+				resource_idx);
+
 		// Build TabulatedPotential structs on HOST
 		std::vector<TabulatedPotential> bond_pots;
 		for (size_t i = 0; i < bond_tables.size(); ++i) {
@@ -165,6 +195,14 @@ class DeviceBondedInteractions {
 			pot.size = static_cast<unsigned int>(table.Y.size());
 			pot.start = table.start;
 			pot.is_periodic = false; // Bonds are not periodic
+
+			LOGINFO("DEBUG link_tables bond[{}]: Y.size()={}, step_inv={}, start={}, "
+					"device_buffer.size()={}",
+					i,
+					table.Y.size(),
+					pot.step_inv,
+					pot.start,
+					device_buffer.size());
 
 			bond_pots.push_back(pot);
 		}
@@ -206,6 +244,17 @@ class DeviceBondedInteractions {
 		if (!bond_pots.empty()) {
 			bond_potentials_ = DeviceBuffer<TabulatedPotential>(bond_pots.size(), resource_);
 			bond_potentials_.copy_from_host(bond_pots.data(), bond_pots.size());
+
+			std::vector<TabulatedPotential> readback(bond_pots.size());
+			bond_potentials_.copy_to_host(readback.data(), readback.size(), true);
+			LOGINFO("DEBUG link_tables readback bond[0]: pot={}, step_inv={}, size={}, "
+					"start={}, is_periodic={} (host had pot={})",
+					static_cast<void*>(readback[0].pot),
+					readback[0].step_inv,
+					readback[0].size,
+					readback[0].start,
+					readback[0].is_periodic,
+					static_cast<void*>(bond_pots[0].pot));
 		}
 
 		if (!angle_pots.empty()) {

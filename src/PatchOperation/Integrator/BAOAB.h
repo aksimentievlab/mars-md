@@ -47,13 +47,16 @@ struct BAOABIntegrate {
 		// 2. Physical Constants & Properties
 		float mass = particle_types.mass[type];
 
-		// Anisotropic Diffusion -> Anisotropic Gamma (Damping)
-		// Uses Einstein relation: gamma = kT / (m * D)
-		// Strictly matches old kernel logic: gamma = Vector3(kTlocal / (mass * diff.e))
-		Vector3 diffusion = particle_types.diffusion[type];
-		Vector3 gamma(kT / (mass * diffusion.x),
-					  kT / (mass * diffusion.y),
-					  kT / (mass * diffusion.z));
+		// gamma is transDamping directly (legacy: Vector3 gamma = pt.transDamping).
+		// This is distinct from `diffusion`, which only feeds the plain
+		// Brownian integrator (BD.h) - the two are independent inputs here,
+		// matching legacy BrownianParticleType's separate fields. Legacy only
+		// derives gamma from diffusion via the Einstein relation when a
+		// per-particle diffusionGrid is set (position-dependent D); that
+		// override, and the analogous position-dependent kT (kTGrid) case,
+		// are unimplemented here - TODO: a separate BAOAB_TempGrid kernel
+		// variant, not a branch in this hot path.
+		Vector3 gamma = particle_types.trans_damping[type];
 
 		// --- B: Momentum Update (Half Step) ---
 		// p = p + 0.5 * dt * F * Unit1

@@ -39,10 +39,12 @@ class ParticleType {
 	float radius = 0.0;
 	float eps = 0.0f;
 	Vector3 diffusion = {0.0f, 0.0f, 0.0f};
+	// Translational damping (gamma) used directly by the Langevin/BAOAB integrator
+	Vector3 trans_damping = {0.0f, 0.0f, 0.0f};
 	float mu = 0.0f; // for Nose-Hoover Langevin dynamics
 
 	// --- PMF / SMD Control ---
-	float meanPmf = 0.0f;
+	// float meanPmf = 0.0f;
 	float pmf_scale = 1.0f;
 	float pmf_scale_slope = 0.0f;
 	uint32_t pmf_smd_freq = 0;
@@ -61,10 +63,11 @@ class ParticleType {
 	ParticleType(const std::string& name) : name(name) {}
 	ParticleType(const ParticleType& src)
 		: name(src.name), id(src.id), num(src.num), mass(src.mass), charge(src.charge),
-		  radius(src.radius), eps(src.eps), diffusion(src.diffusion), mu(src.mu),
-		  pmf_scale(src.pmf_scale), pmf_scale_slope(src.pmf_scale_slope),
-		  pmf_smd_freq(src.pmf_smd_freq), pmf_grid_id(src.pmf_grid_id),
-		  diffusion_grid_id(src.diffusion_grid_id), force_grid_id(src.force_grid_id),
+		  radius(src.radius), eps(src.eps), diffusion(src.diffusion),
+		  trans_damping(src.trans_damping), mu(src.mu), pmf_scale(src.pmf_scale),
+		  pmf_scale_slope(src.pmf_scale_slope), pmf_smd_freq(src.pmf_smd_freq),
+		  pmf_grid_id(src.pmf_grid_id), diffusion_grid_id(src.diffusion_grid_id),
+		  force_grid_id(src.force_grid_id),
 		  reservoir(src.reservoir ? std::make_unique<Reservoir>(*src.reservoir) : nullptr) {}
 	ParticleType(const std::string& name,
 				 float mass,
