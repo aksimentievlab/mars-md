@@ -62,8 +62,6 @@ class RigidBodyType {
 	std::vector<uint32_t> potential_grid_ids;
 	std::vector<uint32_t> density_grid_ids;
 	std::vector<uint32_t> pmf_grid_ids;
-
-	std::shared_ptr<RigidBodyController> RBC;
 };
 
 } // namespace ARBD

@@ -88,7 +88,7 @@ class ZOrderDecomposer : public PatchDecomposer {
 		size_t num_patches;
 		std::vector<size_t> particles_per_patch;
 		float load_imbalance_factor; ///< max_load / avg_load
-		double decomposition_time_ms;
+		float decomposition_time_ms;
 		Vector3 global_box_min;
 		Vector3 global_box_max;
 	};

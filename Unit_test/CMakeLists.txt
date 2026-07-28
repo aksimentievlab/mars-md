@@ -16,6 +16,7 @@ add_executable(arbd_unit_tests
     ${CMAKE_CURRENT_LIST_DIR}/TestParticle.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Compute/BDKernels.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Interactions/Forces.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Interactions/GridGrid.cpp
     ${CMAKE_CURRENT_LIST_DIR}/System/SingleGPU.cpp
     ${CMAKE_CURRENT_LIST_DIR}/System/SinglePatchSimulation.cpp
 )

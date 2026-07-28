@@ -12,6 +12,7 @@ list(APPEND HOST_DEVICE_HEADERS
     Interactions/Bonded/Analytical.h
     Interactions/Bonded/ProductPotentialMigration.h
     Interactions/Nonbonded/PmfKernels.h
+    Interactions/Nonbonded/GridGridKernels.h
     Interactions/Nonbonded/Pairwise.h
     Interactions/Nonbonded/Columb.h
     Interactions/TabulatedPotential.h
