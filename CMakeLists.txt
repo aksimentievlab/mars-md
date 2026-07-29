@@ -92,7 +92,7 @@ if(USE_CUDA)
     set(CMAKE_CUDA_STANDARD_REQUIRED ON)
     set(CMAKE_CUDA_EXTENSIONS OFF)
     set(CMAKE_CUDA_ARCHITECTURES "80;86;89;90;100;120") #100, 120 are not supported by all GPUs and compilers
-    set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --extended-lambda --allow-unsupported-compiler")
+    set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --extended-lambda --allow-unsupported-compiler -diag-suppress=177")
     message(STATUS "CUDA architectures set to: ${CMAKE_CUDA_ARCHITECTURES}")
     message(STATUS "CUDA flags: ${CMAKE_CUDA_FLAGS}")
 endif()

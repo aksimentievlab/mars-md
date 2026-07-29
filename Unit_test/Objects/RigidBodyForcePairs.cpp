@@ -36,14 +36,14 @@ std::vector<RigidBodyType> two_type_config() {
 	types[0].name = "Protein";
 	types[0].id = 0;
 	types[0].density_grid_keys = {"Elec", "SF6"};
-	types[0].density_grid_ids = {100, 101};
+	types[0].density_grids = {GridTerm{100}, GridTerm{101}};
 	types[0].pmf_keys = {"Elec"};
-	types[0].pmf_grid_ids = {300};
+	types[0].pmf_grids = {GridTerm{300}};
 
 	types[1].name = "Membrane";
 	types[1].id = 1;
 	types[1].potential_grid_keys = {"Elec"};
-	types[1].potential_grid_ids = {200};
+	types[1].potential_grids = {GridTerm{200}};
 
 	return types;
 }
@@ -99,10 +99,10 @@ TEST_CASE("RigidBodyForcePairList: legacy only checks density(ti) against potent
 	std::vector<RigidBodyType> types(2);
 	types[0].name = "Membrane";
 	types[0].potential_grid_keys = {"Elec"};
-	types[0].potential_grid_ids = {200};
+	types[0].potential_grids = {GridTerm{200}};
 	types[1].name = "Protein";
 	types[1].density_grid_keys = {"Elec"};
-	types[1].density_grid_ids = {100};
+	types[1].density_grids = {GridTerm{100}};
 
 	const auto grid_format =
 		make_format_table({{100, GridFormat::Dense}, {200, GridFormat::Dense}});

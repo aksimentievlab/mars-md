@@ -1,5 +1,6 @@
 #pragma once
 #include "Header.h"
+#include "Types/GridTerm.h"
 #include "Types/Types.h"
 #include "Types/Vector3.h"
 namespace ARBD {
@@ -52,12 +53,12 @@ struct alignas(16) RigidBodyTypeView {
 	CONSTANT_PTR(int) __restrict__ pmf_grid_offset;
 	CONSTANT_PTR(int) __restrict__ pmf_grid_count;
 	// Backing storage the offset/count pairs above index into - one shared
-	// pointer (not per-type), laid out per type as [potential ids][density
-	// ids][pmf ids] contiguously. grid_scales is the parallel per-grid scale
-	// factor at the same index (mirrors ParticleType::pmf_scale, generalized
-	// to one-per-grid; legacy: potentialGridScale/densityGridScale).
-	CONSTANT_PTR(int) __restrict__ grid_ids;
-	CONSTANT_PTR(float) __restrict__ grid_scales;
+	// pointer (not per-type), laid out per type as [potential terms][density
+	// terms][pmf terms] contiguously. One GridTerm (grid_id + scale +
+	// scale_slope + boundary_condition) per grid, matching
+	// ParticleTypeView::pmf_grid_terms - a single load per grid instead of
+	// combining parallel id/scale arrays.
+	CONSTANT_PTR(GridTerm) __restrict__ grid_terms;
 };
 } // namespace ARBD
 

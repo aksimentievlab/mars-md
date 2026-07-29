@@ -330,7 +330,7 @@ class DeviceParticleTypes {
 	DeviceBuffer<float> mu_;
 	DeviceBuffer<uint32_t> pmf_smd_freq_;
 	// offset+count per type into the flat pmf_grid_terms_ table (same layout as
-	// DeviceRigidBodyTypes' grid_ids_/grid_scales_).
+	// DeviceRigidBodyTypes' grid_terms_).
 	DeviceBuffer<int> pmf_grid_offset_;
 	DeviceBuffer<int> pmf_grid_count_;
 	DeviceBuffer<GridTerm> pmf_grid_terms_;

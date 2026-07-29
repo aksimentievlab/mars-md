@@ -153,16 +153,14 @@ class DeviceRigidBodyTypes {
 		pmf_grid_offset_ = DeviceBuffer<int>(n, res);
 		pmf_grid_count_ = DeviceBuffer<int>(n, res);
 
-		idx_t total_grid_ids = 0;
+		idx_t total_grid_terms = 0;
 		for (const auto& t : types) {
-			total_grid_ids +=
-				t.potential_grid_ids.size() + t.density_grid_ids.size() + t.pmf_grid_ids.size();
+			total_grid_terms += t.potential_grids.size() + t.density_grids.size() + t.pmf_grids.size();
 		}
 		// A size-0 DeviceBuffer isn't a meaningful case to support here, so
 		// always allocate at least 1 entry.
-		const idx_t grid_id_capacity = total_grid_ids > 0 ? total_grid_ids : 1;
-		grid_ids_ = DeviceBuffer<int>(grid_id_capacity, res);
-		grid_scales_ = DeviceBuffer<float>(grid_id_capacity, res);
+		const idx_t grid_term_capacity = total_grid_terms > 0 ? total_grid_terms : 1;
+		grid_terms_ = DeviceBuffer<GridTerm>(grid_term_capacity, res);
 
 		copy_from_host(types);
 	}
@@ -183,16 +181,8 @@ class DeviceRigidBodyTypes {
 		std::vector<int> density_grid_count(n);
 		std::vector<int> pmf_grid_offset(n);
 		std::vector<int> pmf_grid_count(n);
-		std::vector<int> grid_ids;
-		std::vector<float> grid_scales;
-		grid_ids.reserve(grid_ids_.size());
-		grid_scales.reserve(grid_ids_.size());
-
-		// One scale value per grid id, in the same order (a missing/short
-		// scale vector defaults to 1.0, i.e. unscaled).
-		auto scale_or_one = [](const std::vector<float>& scales, size_t j) {
-			return j < scales.size() ? scales[j] : 1.0f;
-		};
+		std::vector<GridTerm> grid_terms;
+		grid_terms.reserve(grid_terms_.size());
 
 		int offset = 0;
 		for (size_t i = 0; i < n; i++) {
@@ -207,27 +197,18 @@ class DeviceRigidBodyTypes {
 			rot_damping_coefficient[i] = t.rot_damping_coefficient;
 
 			potential_grid_offset[i] = offset;
-			potential_grid_count[i] = static_cast<int>(t.potential_grid_ids.size());
-			for (size_t j = 0; j < t.potential_grid_ids.size(); j++) {
-				grid_ids.push_back(static_cast<int>(t.potential_grid_ids[j]));
-				grid_scales.push_back(scale_or_one(t.potential_grid_scale, j));
-			}
+			potential_grid_count[i] = static_cast<int>(t.potential_grids.size());
+			grid_terms.insert(grid_terms.end(), t.potential_grids.begin(), t.potential_grids.end());
 			offset += potential_grid_count[i];
 
 			density_grid_offset[i] = offset;
-			density_grid_count[i] = static_cast<int>(t.density_grid_ids.size());
-			for (size_t j = 0; j < t.density_grid_ids.size(); j++) {
-				grid_ids.push_back(static_cast<int>(t.density_grid_ids[j]));
-				grid_scales.push_back(scale_or_one(t.density_grid_scale, j));
-			}
+			density_grid_count[i] = static_cast<int>(t.density_grids.size());
+			grid_terms.insert(grid_terms.end(), t.density_grids.begin(), t.density_grids.end());
 			offset += density_grid_count[i];
 
 			pmf_grid_offset[i] = offset;
-			pmf_grid_count[i] = static_cast<int>(t.pmf_grid_ids.size());
-			for (size_t j = 0; j < t.pmf_grid_ids.size(); j++) {
-				grid_ids.push_back(static_cast<int>(t.pmf_grid_ids[j]));
-				grid_scales.push_back(scale_or_one(t.pmf_grid_scale, j));
-			}
+			pmf_grid_count[i] = static_cast<int>(t.pmf_grids.size());
+			grid_terms.insert(grid_terms.end(), t.pmf_grids.begin(), t.pmf_grids.end());
 			offset += pmf_grid_count[i];
 		}
 
@@ -245,9 +226,8 @@ class DeviceRigidBodyTypes {
 		density_grid_count_.copy_from_host(density_grid_count.data(), n);
 		pmf_grid_offset_.copy_from_host(pmf_grid_offset.data(), n);
 		pmf_grid_count_.copy_from_host(pmf_grid_count.data(), n);
-		if (!grid_ids.empty()) {
-			grid_ids_.copy_from_host(grid_ids.data(), grid_ids.size());
-			grid_scales_.copy_from_host(grid_scales.data(), grid_scales.size());
+		if (!grid_terms.empty()) {
+			grid_terms_.copy_from_host(grid_terms.data(), grid_terms.size());
 		}
 	}
 
@@ -275,11 +255,8 @@ class DeviceRigidBodyTypes {
 	DeviceBuffer<float>& rot_damping_coefficient() {
 		return rot_damping_coefficient_;
 	}
-	DeviceBuffer<int>& grid_ids() {
-		return grid_ids_;
-	}
-	DeviceBuffer<float>& grid_scales() {
-		return grid_scales_;
+	DeviceBuffer<GridTerm>& grid_terms() {
+		return grid_terms_;
 	}
 
 	// Get View for Kernels
@@ -298,8 +275,7 @@ class DeviceRigidBodyTypes {
 				density_grid_count_.data(),
 				pmf_grid_offset_.data(),
 				pmf_grid_count_.data(),
-				grid_ids_.data(),
-				grid_scales_.data()};
+				grid_terms_.data()};
 	}
 
 	const RigidBodyTypeView view() const {
@@ -317,8 +293,7 @@ class DeviceRigidBodyTypes {
 				const_cast<int*>(density_grid_count_.data()),
 				const_cast<int*>(pmf_grid_offset_.data()),
 				const_cast<int*>(pmf_grid_count_.data()),
-				const_cast<int*>(grid_ids_.data()),
-				const_cast<float*>(grid_scales_.data())};
+				const_cast<GridTerm*>(grid_terms_.data())};
 	}
 
 	idx_t size() const {
@@ -341,10 +316,8 @@ class DeviceRigidBodyTypes {
 	DeviceBuffer<int> pmf_grid_offset_;
 	DeviceBuffer<int> pmf_grid_count_;
 	// Flat, shared across all types: laid out per type as [potential
-	// ids][density ids][pmf ids] contiguously (see RigidBodyTypeView).
-	// grid_scales_ is the parallel per-grid scale factor at the same index.
-	DeviceBuffer<int> grid_ids_;
-	DeviceBuffer<float> grid_scales_;
+	// terms][density terms][pmf terms] contiguously (see RigidBodyTypeView).
+	DeviceBuffer<GridTerm> grid_terms_;
 };
 
 } // namespace ARBD

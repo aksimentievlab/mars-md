@@ -69,9 +69,9 @@ class RigidBodyForcePairList {
 				match_and_emit(static_cast<int>(ti),
 							   static_cast<int>(tj),
 							   t1.density_grid_keys,
-							   t1.density_grid_ids,
+							   t1.density_grids,
 							   t2.potential_grid_keys,
-							   t2.potential_grid_ids,
+							   t2.potential_grids,
 							   /*is_pmf=*/false,
 							   update_period,
 							   grid_format);
@@ -86,9 +86,9 @@ class RigidBodyForcePairList {
 			match_and_emit(static_cast<int>(ti),
 						   static_cast<int>(ti),
 						   t1.density_grid_keys,
-						   t1.density_grid_ids,
+						   t1.density_grids,
 						   t1.pmf_keys,
-						   t1.pmf_grid_ids,
+						   t1.pmf_grids,
 						   /*is_pmf=*/true,
 						   update_period,
 						   grid_format);
@@ -108,9 +108,9 @@ class RigidBodyForcePairList {
 	void match_and_emit(int type_i,
 						 int type_j,
 						 const std::vector<std::string>& keys1,
-						 const std::vector<uint32_t>& ids1,
+						 const std::vector<GridTerm>& grids1,
 						 const std::vector<std::string>& keys2,
-						 const std::vector<uint32_t>& ids2,
+						 const std::vector<GridTerm>& grids2,
 						 bool is_pmf,
 						 int update_period,
 						 const std::function<GridFormat(int)>& grid_format) {
@@ -120,8 +120,8 @@ class RigidBodyForcePairList {
 					continue;
 				emit(type_i,
 					 type_j,
-					 static_cast<int>(ids1[k1]),
-					 static_cast<int>(ids2[k2]),
+					 grids1[k1].grid_id,
+					 grids2[k2].grid_id,
 					 is_pmf,
 					 update_period,
 					 grid_format);

@@ -6,6 +6,7 @@
 #include "Header.h"
 #include "Objects/ParticleProperties.h"
 #include "Types/BaseGrid.h"
+#include "Types/GridTerm.h"
 #include "Types/Types.h"
 #include <vector>
 
@@ -62,19 +63,15 @@ class RigidBodyType {
 	uint32_t pmf_smd_freq;
 
 	std::vector<ParticleIO> attached_particle;
-	std::vector<uint32_t> potential_grid_ids;
-	std::vector<uint32_t> density_grid_ids;
-	std::vector<uint32_t> pmf_grid_ids;
-	// Per-grid scale factor, parallel to (same length/order as) the id lists
-	// above - mirrors ParticleType::pmf_scale, generalized from a single
-	// value to one-per-grid since a RigidBodyType can carry multiple named
-	// potential/density/pmf grids (legacy: potentialGridScale/
-	// densityGridScale, keyed by potentialGridScaleKeys/densityGridScaleKeys
-	// in RigidBodyType.h).
-	std::vector<float> potential_grid_scale;
-	std::vector<float> density_grid_scale;
-	std::vector<float> pmf_grid_scale;
-	// Logical grid-key name per entry, parallel to the id lists above -
+	// One GridTerm (grid_id + scale + scale_slope + boundary_condition) per
+	// referenced grid - mirrors ParticleType::pmf_grids (see Types/GridTerm.h)
+	// instead of separate parallel id/scale arrays, since a grid-force kernel
+	// reads one of these per grid rather than combining several arrays.
+	// Parallel to (same length/order as) the key vectors below.
+	std::vector<GridTerm> potential_grids;
+	std::vector<GridTerm> density_grids;
+	std::vector<GridTerm> pmf_grids;
+	// Logical grid-key name per entry, parallel to the grid lists above -
 	// legacy: potentialGridKeys/densityGridKeys/pmfKeys. Distinct from the
 	// grid's filename/grid_id: two types loading different grid files pair up
 	// for a grid-grid force whenever their key names match (e.g. both call a

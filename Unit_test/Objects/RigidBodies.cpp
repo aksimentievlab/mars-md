@@ -33,20 +33,16 @@ std::vector<RigidBodyType> create_test_rigid_body_types() {
 	types[0].id = 0;
 	types[0].mass = 10.0f;
 	types[0].inertia = Vector3(1.0f, 2.0f, 3.0f);
-	types[0].potential_grid_ids = {0, 1};
-	types[0].potential_grid_scale = {1.0f, 2.0f};
-	types[0].density_grid_ids = {2};
-	types[0].density_grid_scale = {3.0f};
+	types[0].potential_grids = {GridTerm{0, 1.0f}, GridTerm{1, 2.0f}};
+	types[0].density_grids = {GridTerm{2, 3.0f}};
 
 	types[1].name = "B";
 	types[1].id = 1;
 	types[1].mass = 20.0f;
 	types[1].inertia = Vector3(4.0f, 5.0f, 6.0f);
-	types[1].density_grid_ids = {3, 4};
-	// Deliberately left empty: copy_from_host must default the scale to 1.0
-	// rather than reading past the end of the scale vector.
-	types[1].pmf_grid_ids = {5};
-	types[1].pmf_grid_scale = {0.5f};
+	// Default-scale GridTerms (scale == 1.0), unlike type 0's explicitly-scaled ones.
+	types[1].density_grids = {GridTerm{3}, GridTerm{4}};
+	types[1].pmf_grids = {GridTerm{5, 0.5f}};
 
 	return types;
 }
@@ -84,7 +80,7 @@ TEST_CASE("Device Rigid Body Copy From Host To Device", "[device][rigidbody]") {
 	REQUIRE(result.torque[3] == Vector3(0.0f, 0.0f, 0.0f));
 }
 
-TEST_CASE("Device Rigid Body Types flat grid-id buffer", "[device][rigidbody]") {
+TEST_CASE("Device Rigid Body Types flat grid-term buffer", "[device][rigidbody]") {
 	initialize_backend_once();
 	Resource res(Global::single_resource_id);
 
@@ -101,12 +97,17 @@ TEST_CASE("Device Rigid Body Types flat grid-id buffer", "[device][rigidbody]") 
 	// Layout is [type0: potential, density, pmf][type1: potential, density,
 	// pmf] contiguously - type0 contributes 3 entries, type1 contributes 3.
 	const size_t total = 6;
-	std::vector<int> grid_ids(total);
-	std::vector<float> grid_scales(total);
-	device_types.grid_ids().copy_to_host(grid_ids.data(), total);
-	device_types.grid_scales().copy_to_host(grid_scales.data(), total);
+	std::vector<GridTerm> grid_terms(total);
+	device_types.grid_terms().copy_to_host(grid_terms.data(), total);
+
+	std::vector<int> grid_ids;
+	std::vector<float> grid_scales;
+	for (const GridTerm& term : grid_terms) {
+		grid_ids.push_back(term.grid_id);
+		grid_scales.push_back(term.scale);
+	}
 
 	REQUIRE(grid_ids == std::vector<int>{0, 1, 2, 3, 4, 5});
-	// type1's density grids have no scale vector supplied, so they default to 1.0.
+	// type1's density grids used the default-scale GridTerm, i.e. 1.0.
 	REQUIRE(grid_scales == std::vector<float>{1.0f, 2.0f, 3.0f, 1.0f, 1.0f, 0.5f});
 }
