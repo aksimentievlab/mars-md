@@ -51,6 +51,7 @@ using float2 = Vec2<float>;
 using arbd_int = int;
 using arbd_real = float;
 
+
 /**
  * @brief Backend-agnostic atomic add operation
  * @tparam T Arithmetic type (int, float, double, etc.)

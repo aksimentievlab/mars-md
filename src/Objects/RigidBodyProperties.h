@@ -27,8 +27,11 @@ struct RigidBodyIO {
 		id = src.id;
 		type_id = src.type_id;
 		position = src.position;
+		orientation = src.orientation;
 		momentum = src.momentum;
+		angular_momentum = src.angular_momentum;
 		force = src.force;
+		torque = src.torque;
 		is_dummy = src.is_dummy;
 		has_orientation = src.has_orientation;
 		return *this;
@@ -62,6 +65,123 @@ class RigidBodyType {
 	std::vector<uint32_t> potential_grid_ids;
 	std::vector<uint32_t> density_grid_ids;
 	std::vector<uint32_t> pmf_grid_ids;
+	// Per-grid scale factor, parallel to (same length/order as) the id lists
+	// above - mirrors ParticleType::pmf_scale, generalized from a single
+	// value to one-per-grid since a RigidBodyType can carry multiple named
+	// potential/density/pmf grids (legacy: potentialGridScale/
+	// densityGridScale, keyed by potentialGridScaleKeys/densityGridScaleKeys
+	// in RigidBodyType.h).
+	std::vector<float> potential_grid_scale;
+	std::vector<float> density_grid_scale;
+	std::vector<float> pmf_grid_scale;
+	// Logical grid-key name per entry, parallel to the id lists above -
+	// legacy: potentialGridKeys/densityGridKeys/pmfKeys. Distinct from the
+	// grid's filename/grid_id: two types loading different grid files pair up
+	// for a grid-grid force whenever their key names match (e.g. both call a
+	// grid "Elec"), which is how RigidBodyForcePairList (Phase 3) finds
+	// force-pair candidates.
+	std::vector<std::string> potential_grid_keys;
+	std::vector<std::string> density_grid_keys;
+	std::vector<std::string> pmf_keys;
+};
+
+// ============================================================================
+// HOST STORAGE (SoA, for device upload/download) - mirrors HostParticleData
+// ============================================================================
+struct HostRigidBodyData {
+	std::vector<int> global_id;
+	std::vector<int> type_id;
+	std::vector<Vector3> position;
+	std::vector<Matrix3> orientation;
+	std::vector<Vector3> momentum;
+	std::vector<Vector3> angular_momentum;
+	std::vector<Vector3> force;
+	std::vector<Vector3> torque;
+
+	size_t size() const {
+		return global_id.size();
+	}
+
+	void resize(size_t n) {
+		global_id.resize(n);
+		type_id.resize(n);
+		position.resize(n);
+		orientation.resize(n);
+		momentum.resize(n);
+		angular_momentum.resize(n);
+		force.resize(n);
+		torque.resize(n);
+	}
+
+	void clear() {
+		global_id.clear();
+		type_id.clear();
+		position.clear();
+		orientation.clear();
+		momentum.clear();
+		angular_momentum.clear();
+		force.clear();
+		torque.clear();
+	}
+
+	void reserve(size_t n) {
+		global_id.reserve(n);
+		type_id.reserve(n);
+		position.reserve(n);
+		orientation.reserve(n);
+		momentum.reserve(n);
+		angular_momentum.reserve(n);
+		force.reserve(n);
+		torque.reserve(n);
+	}
+
+	void push_back(const RigidBodyIO& rb) {
+		global_id.push_back(rb.id);
+		type_id.push_back(rb.type_id);
+		position.push_back(rb.position);
+		orientation.push_back(rb.orientation);
+		momentum.push_back(rb.momentum);
+		angular_momentum.push_back(rb.angular_momentum);
+		force.push_back(rb.force);
+		torque.push_back(rb.torque);
+	}
+
+	void push_back(const HostRigidBodyData& rb, size_t idx) {
+		global_id.push_back(rb.global_id[idx]);
+		type_id.push_back(rb.type_id[idx]);
+		position.push_back(rb.position[idx]);
+		orientation.push_back(rb.orientation[idx]);
+		momentum.push_back(rb.momentum[idx]);
+		angular_momentum.push_back(rb.angular_momentum[idx]);
+		force.push_back(rb.force[idx]);
+		torque.push_back(rb.torque[idx]);
+	}
+
+	void remove_swap(size_t idx) {
+		if (idx >= size())
+			return;
+
+		const size_t last = size() - 1;
+		if (idx < last) {
+			std::swap(global_id[idx], global_id[last]);
+			std::swap(type_id[idx], type_id[last]);
+			std::swap(position[idx], position[last]);
+			std::swap(orientation[idx], orientation[last]);
+			std::swap(momentum[idx], momentum[last]);
+			std::swap(angular_momentum[idx], angular_momentum[last]);
+			std::swap(force[idx], force[last]);
+			std::swap(torque[idx], torque[last]);
+		}
+
+		global_id.pop_back();
+		type_id.pop_back();
+		position.pop_back();
+		orientation.pop_back();
+		momentum.pop_back();
+		angular_momentum.pop_back();
+		force.pop_back();
+		torque.pop_back();
+	}
 };
 
 } // namespace ARBD

@@ -1,5 +1,6 @@
 #pragma once
 #include "System/Reservoir.h"
+#include "Types/BaseGridDevice.h"
 #include "Types/Types.h"
 #include <string>
 
@@ -45,14 +46,28 @@ class ParticleType {
 
 	// --- PMF / SMD Control ---
 	// float meanPmf = 0.0f;
-	float pmf_scale = 1.0f;
-	float pmf_scale_slope = 0.0f;
 	uint32_t pmf_smd_freq = 0;
 
+	// One entry per file listed in `gridFile`, each carrying its own scale,
+	// scale slope and boundary condition (legacy: gridFileScale /
+	// gridFileScaleSlope / gridFileBoundaryConditions are all per-entry lists).
+	// pmf_grid_names is parallel to this and holds the unresolved filenames;
+	// SimSystem::assign_particle_type_ids fills in each term's grid_id.
+	std::vector<GridTerm> pmf_grids;
+	std::vector<std::string> pmf_grid_names;
+
 	// --- Grid IDs ---
-	int pmf_grid_id = -1;
 	int diffusion_grid_id = -1;
 	int3 force_grid_id = {-1, -1, -1}; // 3d grid
+	// Per-type scale for the x/y/z force grids, parallel to force_grid_id.
+	// Legacy applied this once at load time (Configuration.cpp's
+	// partForceGridScale -> forceXGrid->scale()), which worked because each
+	// ParticleType owned its own BaseGrid copy. arbd2v's GridManager dedups
+	// grids by filename, so two types sharing a force grid file share one
+	// grid_id - baking a scale into the grid data would apply both types'
+	// scales to that shared grid. Hence a runtime per-type factor instead,
+	// matching pmf_scale and RigidBodyType's *_grid_scale vectors.
+	Vector3 force_grid_scale = {1.0f, 1.0f, 1.0f};
 
 	std::string pmf_grid_name = "";
 	std::string diffusion_grid_name = "";
@@ -64,10 +79,17 @@ class ParticleType {
 	ParticleType(const ParticleType& src)
 		: name(src.name), id(src.id), num(src.num), mass(src.mass), charge(src.charge),
 		  radius(src.radius), eps(src.eps), diffusion(src.diffusion),
-		  trans_damping(src.trans_damping), mu(src.mu), pmf_scale(src.pmf_scale),
-		  pmf_scale_slope(src.pmf_scale_slope), pmf_smd_freq(src.pmf_smd_freq),
-		  pmf_grid_id(src.pmf_grid_id), diffusion_grid_id(src.diffusion_grid_id),
-		  force_grid_id(src.force_grid_id),
+		  trans_damping(src.trans_damping), mu(src.mu), pmf_smd_freq(src.pmf_smd_freq),
+		  pmf_grids(src.pmf_grids), pmf_grid_names(src.pmf_grid_names),
+		  diffusion_grid_id(src.diffusion_grid_id), force_grid_id(src.force_grid_id),
+		  force_grid_scale(src.force_grid_scale),
+		  // These *_name fields used to be omitted here, so every copy silently
+		  // reset them to "". That matters because declaring this copy ctor
+		  // suppresses the implicit move ctor, so ConfigParser's
+		  // `push_back(std::move(ptype))` actually calls *this* - the grid names
+		  // parsed from the config were being dropped on the way into
+		  // SimSystem's particle-type vector.
+		  diffusion_grid_name(src.diffusion_grid_name), force_grid_names(src.force_grid_names),
 		  reservoir(src.reservoir ? std::make_unique<Reservoir>(*src.reservoir) : nullptr) {}
 	ParticleType(const std::string& name,
 				 float mass,
@@ -76,16 +98,13 @@ class ParticleType {
 				 float eps,
 				 float diffusion,
 				 float mu,
-				 float pmf_scale,
-				 float pmf_scale_slope,
-				 float pmf_smd_freq,
-				 int pmf_grid_id,
+				 uint32_t pmf_smd_freq,
+				 std::vector<GridTerm> pmf_grids,
 				 int diffusion_grid_id,
 				 int3 force_grid_ids,
 				 std::unique_ptr<Reservoir> reservoir)
 		: name(name), mass(mass), charge(charge), radius(radius), eps(eps), diffusion(diffusion),
-		  mu(mu), pmf_scale(pmf_scale), pmf_scale_slope(pmf_scale_slope),
-		  pmf_smd_freq(pmf_smd_freq), pmf_grid_id(pmf_grid_id),
+		  mu(mu), pmf_smd_freq(pmf_smd_freq), pmf_grids(std::move(pmf_grids)),
 		  diffusion_grid_id(diffusion_grid_id), force_grid_id(force_grid_ids),
 		  reservoir(reservoir ? std::make_unique<Reservoir>(*reservoir) : nullptr) {}
 };

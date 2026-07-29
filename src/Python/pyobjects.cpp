@@ -82,6 +82,19 @@ void declare_particle_io(py::module& m) {
  * ```
  */
 void declare_particle_type(py::module& m) {
+	// Bound so pybind11/stl.h can convert ParticleType::pmf_grids
+	// (std::vector<GridTerm>) instead of failing at attribute access.
+	py::class_<GridTerm>(m, "GridTerm")
+		.def(py::init<>())
+		.def_readwrite("grid_id", &GridTerm::grid_id)
+		.def_readwrite("scale", &GridTerm::scale)
+		.def_readwrite("scale_slope", &GridTerm::scale_slope)
+		.def_readwrite("boundary_condition", &GridTerm::boundary_condition)
+		.def("__repr__", [](const GridTerm& t) {
+			return "GridTerm(grid_id=" + std::to_string(t.grid_id) +
+				   ", scale=" + std::to_string(t.scale) + ")";
+		});
+
 	auto cls = py::class_<ParticleType>(m, "ParticleType")
 				   .def(py::init<const std::string&>(), py::arg("name"))
 				   .def_readwrite("name", &ParticleType::name)
@@ -92,10 +105,11 @@ void declare_particle_type(py::module& m) {
 				   .def_readwrite("radius", &ParticleType::radius)
 				   .def_readwrite("eps", &ParticleType::eps)
 				   .def_readwrite("mu", &ParticleType::mu)
-				   .def_readwrite("pmf_scale", &ParticleType::pmf_scale)
-				   .def_readwrite("pmf_scale_slope", &ParticleType::pmf_scale_slope)
 				   .def_readwrite("pmf_smd_freq", &ParticleType::pmf_smd_freq)
-				   .def_readwrite("pmf_grid_id", &ParticleType::pmf_grid_id)
+				   // One entry per gridFile, each with its own scale/slope/BC -
+				   // replaces the old scalar pmf_scale/pmf_grid_id pair.
+				   .def_readwrite("pmf_grids", &ParticleType::pmf_grids)
+				   .def_readwrite("pmf_grid_names", &ParticleType::pmf_grid_names)
 				   .def_readwrite("diffusion_grid_id", &ParticleType::diffusion_grid_id)
 				   .def_readwrite("force_grid_id", &ParticleType::force_grid_id)
 				   .def("__repr__", [](const ParticleType& pt) {
@@ -112,39 +126,39 @@ void declare_particle_type(py::module& m) {
 // ============================================================================
 
 void declare_rigid_body(py::module& m) {
-	py::class_<RigidBody>(m, "RigidBody")
+	py::class_<RigidBodyIO>(m, "RigidBody")
 		.def(py::init<>())
 		.def_property(
 			"idx",
-			[](const RigidBody& rb) { return rb.id; },
-			[](RigidBody& rb, int value) { rb.id = value; })
-		.def_readwrite("type_id", &RigidBody::type_id)
-		.def_readwrite("position", &RigidBody::position)
-		.def_readwrite("orientation", &RigidBody::orientation)
-		.def_readwrite("momentum", &RigidBody::momentum)
+			[](const RigidBodyIO& rb) { return rb.id; },
+			[](RigidBodyIO& rb, int value) { rb.id = value; })
+		.def_readwrite("type_id", &RigidBodyIO::type_id)
+		.def_readwrite("position", &RigidBodyIO::position)
+		.def_readwrite("orientation", &RigidBodyIO::orientation)
+		.def_readwrite("momentum", &RigidBodyIO::momentum)
 		.def_property(
 			"angular_momentum",
-			[](const RigidBody& rb) -> const Vector3& { return rb.angularMomentum; },
-			[](RigidBody& rb, const Vector3& value) { rb.angularMomentum = value; })
-		.def_readwrite("force", &RigidBody::force)
-		.def_readwrite("torque", &RigidBody::torque)
-		.def_readwrite("is_dummy", &RigidBody::is_dummy)
-		.def_readwrite("has_orientation", &RigidBody::has_orientation)
-		.def("__repr__", [](const RigidBody& rb) {
-			return "RigidBody(idx=" + std::to_string(rb.id) + ", type_id=" +
-				   std::to_string(rb.type_id) + ", position=" + rb.position.to_string() + ")";
+			[](const RigidBodyIO& rb) -> const Vector3& { return rb.angular_momentum; },
+			[](RigidBodyIO& rb, const Vector3& value) { rb.angular_momentum = value; })
+		.def_readwrite("force", &RigidBodyIO::force)
+		.def_readwrite("torque", &RigidBodyIO::torque)
+		.def_readwrite("is_dummy", &RigidBodyIO::is_dummy)
+		.def_readwrite("has_orientation", &RigidBodyIO::has_orientation)
+		.def("__repr__", [](const RigidBodyIO& rb) {
+			return "RigidBody(idx=" + std::to_string(rb.id) +
+				   ", type_id=" + std::to_string(rb.type_id) +
+				   ", position=" + rb.position.to_string() + ")";
 		});
 }
 
 void declare_rigid_body_type(py::module& m) {
 	auto cls = py::class_<RigidBodyType>(m, "RigidBodyType")
-				   .def(
-					   py::init([](const std::string& name) {
-						   RigidBodyType rbt{};
-						   rbt.name = name;
-						   return rbt;
-					   }),
-					   py::arg("name"))
+				   .def(py::init([](const std::string& name) {
+							RigidBodyType rbt{};
+							rbt.name = name;
+							return rbt;
+						}),
+						py::arg("name"))
 				   .def_readwrite("name", &RigidBodyType::name)
 				   .def_readwrite("id", &RigidBodyType::id)
 				   .def_readwrite("mass", &RigidBodyType::mass)
@@ -162,7 +176,8 @@ void declare_rigid_body_type(py::module& m) {
 						   rbt.attached_particle = particles;
 					   })
 				   .def("__repr__", [](const RigidBodyType& rbt) {
-					   return "RigidBodyType(name='" + rbt.name + "', id=" + std::to_string(rbt.id) +
+					   return "RigidBodyType(name='" + rbt.name +
+							  "', id=" + std::to_string(rbt.id) +
 							  ", mass=" + std::to_string(rbt.mass) + ")";
 				   });
 
@@ -170,12 +185,14 @@ void declare_rigid_body_type(py::module& m) {
 	def_vector3_property<RigidBodyType, &RigidBodyType::trans_damping>(cls, "damping_coefficient");
 	def_vector3_property<RigidBodyType, &RigidBodyType::rot_damping>(cls, "rotational_damping");
 	def_vector3_property<RigidBodyType, &RigidBodyType::trans_force_coeff>(cls,
-																			 "trans_force_coeff");
+																		   "trans_force_coeff");
 	def_vector3_property<RigidBodyType, &RigidBodyType::rot_torque_coeff>(cls, "rot_torque_coeff");
 	def_float_property<RigidBodyType, &RigidBodyType::diffusion>(cls, "diffusivity");
-	def_float_property<RigidBodyType, &RigidBodyType::rot_diffusivity>(cls, "rotational_diffusivity");
+	def_float_property<RigidBodyType, &RigidBodyType::rot_diffusivity>(cls,
+																	   "rotational_diffusivity");
 	def_float_property<RigidBodyType, &RigidBodyType::rot_damping_coefficient>(
-		cls, "rotational_damping_coefficient");
+		cls,
+		"rotational_damping_coefficient");
 }
 
 // ============================================================================

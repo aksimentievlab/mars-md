@@ -563,8 +563,14 @@ class SimSystem {
 		for (auto& particle_type : particle_types_) {
 			particle_type.id = particle_type_id_counter;
 			particle_type_names_[particle_type_id_counter] = particle_type.name;
-			particle_type.pmf_grid_id =
-				get_grid_manager().get_grid_key(particle_type.pmf_grid_name).grid_id;
+			// pmf_grid_names is parallel to pmf_grids (one gridFile entry each).
+			for (size_t g = 0; g < particle_type.pmf_grids.size(); ++g) {
+				const std::string& gname = g < particle_type.pmf_grid_names.size()
+											   ? particle_type.pmf_grid_names[g]
+											   : std::string{};
+				particle_type.pmf_grids[g].grid_id =
+					get_grid_manager().get_grid_key(gname).grid_id;
+			}
 			particle_type.diffusion_grid_id =
 				get_grid_manager().get_grid_key(particle_type.diffusion_grid_name).grid_id;
 			particle_type.force_grid_id = {

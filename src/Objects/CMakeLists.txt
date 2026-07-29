@@ -3,13 +3,14 @@
 
 list(APPEND HOST_DEVICE_HEADERS
     Objects/DeviceParticle.h
+    Objects/DeviceRigidBody.h
 )
 
 list(APPEND HOST_ONLY_HEADERS
     Objects/Grid.h
     Objects/Tables.h
     Objects/ParticleProperties.h
-    #Objects/RigidBodyProperties.h
+    Objects/RigidBodyProperties.h
     #Objects/GroupSites.h
 )
 

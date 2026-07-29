@@ -4,6 +4,7 @@
 #include "Backend/Resource.h"
 #include "Types/BaseGrid.h"
 #include "Types/BaseGridDevice.h"
+#include "Types/GridTerm.h"
 // #include "Types/NanoGridHandle.h"
 #include <memory>
 #include <string>
@@ -12,9 +13,10 @@
 
 namespace ARBD {
 
+// What a grid is used for - host-side bookkeeping only, so it stays here.
+// GridFormat and InterpolationOrder moved to Types/GridTerm.h: device code
+// (and, soon, the sparse backend) needs them, and can't include this header.
 enum class GridType { Potential, Diffusion, PMF, Force, Density };
-enum class GridFormat { Dense, Sparse };
-enum class InterpolationOrder : int { Linear = 1, Cubic = 3 };
 /**
  * @brief Lightweight grid identifier with metadata
  * @details Used for configuration and lookup. Does NOT own grid data.
@@ -162,6 +164,19 @@ class GridManager {
 	 */
 	bool has_grid(const std::string& filename) const {
 		return fname_to_gridkey_.count(filename) > 0;
+	}
+
+	/**
+	 * @brief Storage format of a previously-assigned grid_id
+	 * @details Used by RigidBodyForcePairList (Phase 3) to enforce the
+	 *          format-uniformity rule on grid-grid pairs.
+	 */
+	GridFormat get_grid_format(int grid_id) const {
+		if (grid_id_to_dense_idx_.count(grid_id))
+			return GridFormat::Dense;
+		if (grid_id_to_sparse_idx_.count(grid_id))
+			return GridFormat::Sparse;
+		throw_value_error("GridManager: Invalid grid_id: %d", grid_id);
 	}
 
 	/**

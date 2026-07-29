@@ -1,5 +1,6 @@
 #pragma once
 #include "Header.h"
+#include "Types/BaseGridDevice.h"
 #include "Types/Types.h"
 #include "Types/Vector3.h"
 namespace ARBD {
@@ -31,12 +32,22 @@ struct alignas(16) ParticleTypeView {
 	CONSTANT_PTR(Vector3) __restrict__ diffusion;
 	CONSTANT_PTR(Vector3) __restrict__ trans_damping;
 	CONSTANT_PTR(float) __restrict__ mu;
-	CONSTANT_PTR(float) __restrict__ pmf_scale;
-	CONSTANT_PTR(float) __restrict__ pmf_scale_slope;
-	CONSTANT_PTR(float) __restrict__ pmf_smd_freq;
-	CONSTANT_PTR(int) __restrict__ pmf_grid_id;
+	CONSTANT_PTR(uint32_t) __restrict__ pmf_smd_freq;
+	// A type can reference any number of PMF grids (legacy's `gridFile` takes a
+	// list), so the per-type data is an offset+count range into the flat
+	// pmf_grid_terms array below - same layout as RigidBodyTypeView's
+	// potential/density/pmf grid ranges. Per-grid scale and boundary condition
+	// live in the term, not here: legacy keys both per (type, grid) pair, so two
+	// types sharing one deduped grid file can weight it differently.
+	CONSTANT_PTR(int) __restrict__ pmf_grid_offset;
+	CONSTANT_PTR(int) __restrict__ pmf_grid_count;
+	CONSTANT_PTR(GridTerm) __restrict__ pmf_grid_terms;
 	CONSTANT_PTR(int) __restrict__ diffusion_grid_id;
 	CONSTANT_PTR(int3) __restrict__ force_grid_id;
+	// Per-type x/y/z scale for force_grid_id's grids (see
+	// ParticleType::force_grid_scale for why this is a runtime factor rather
+	// than baked into the grid data at load time).
+	CONSTANT_PTR(Vector3) __restrict__ force_grid_scale;
 };
 } // namespace ARBD
 

@@ -168,12 +168,21 @@ class DeviceParticleTypes {
 		diffusion_ = DeviceBuffer<Vector3>(types.size(), res);
 		trans_damping_ = DeviceBuffer<Vector3>(types.size(), res);
 		mu_ = DeviceBuffer<float>(types.size(), res);
-		pmf_scale_ = DeviceBuffer<float>(types.size(), res);
-		pmf_scale_slope_ = DeviceBuffer<float>(types.size(), res);
-		pmf_smd_freq_ = DeviceBuffer<float>(types.size(), res);
-		pmf_grid_id_ = DeviceBuffer<int>(types.size(), res);
+		pmf_smd_freq_ = DeviceBuffer<uint32_t>(types.size(), res);
+		pmf_grid_offset_ = DeviceBuffer<int>(types.size(), res);
+		pmf_grid_count_ = DeviceBuffer<int>(types.size(), res);
+
+		// Zero terms is legitimate (no type declared a gridFile); Buffer's ctor
+		// skips allocation for count 0 and the kernel's per-type count is 0 too,
+		// so the null data() is never reached.
+		size_t total_pmf_terms = 0;
+		for (const auto& t : types) {
+			total_pmf_terms += t.pmf_grids.size();
+		}
+		pmf_grid_terms_ = DeviceBuffer<GridTerm>(total_pmf_terms, res);
 		diffusion_grid_id_ = DeviceBuffer<int>(types.size(), res);
 		force_grid_id_ = DeviceBuffer<int3>(types.size(), res);
+		force_grid_scale_ = DeviceBuffer<Vector3>(types.size(), res);
 		copy_from_host(types);
 	}
 
@@ -185,12 +194,14 @@ class DeviceParticleTypes {
 		std::vector<Vector3> diffusion(types.size());
 		std::vector<Vector3> trans_damping(types.size());
 		std::vector<float> mu(types.size());
-		std::vector<float> pmf_scale(types.size());
-		std::vector<float> pmf_scale_slope(types.size());
-		std::vector<float> pmf_smd_freq(types.size());
-		std::vector<int> pmf_grid_id(types.size());
+		std::vector<uint32_t> pmf_smd_freq(types.size());
+		std::vector<int> pmf_grid_offset(types.size());
+		std::vector<int> pmf_grid_count(types.size());
+		std::vector<GridTerm> pmf_grid_terms;
+		pmf_grid_terms.reserve(pmf_grid_terms_.size());
 		std::vector<int> diffusion_grid_id(types.size());
 		std::vector<int3> force_grid_id(types.size());
+		std::vector<Vector3> force_grid_scale(types.size());
 		for (size_t i = 0; i < types.size(); i++) {
 			mass[i] = types[i].mass;
 			charge[i] = types[i].charge;
@@ -199,12 +210,19 @@ class DeviceParticleTypes {
 			diffusion[i] = types[i].diffusion;
 			trans_damping[i] = types[i].trans_damping;
 			mu[i] = types[i].mu;
-			pmf_scale[i] = types[i].pmf_scale;
-			pmf_scale_slope[i] = types[i].pmf_scale_slope;
 			pmf_smd_freq[i] = types[i].pmf_smd_freq;
-			pmf_grid_id[i] = types[i].pmf_grid_id;
+
+			// Flatten this type's PMF grid list into the shared term table; the
+			// kernel walks [offset, offset + count).
+			pmf_grid_offset[i] = static_cast<int>(pmf_grid_terms.size());
+			pmf_grid_count[i] = static_cast<int>(types[i].pmf_grids.size());
+			pmf_grid_terms.insert(pmf_grid_terms.end(),
+								  types[i].pmf_grids.begin(),
+								  types[i].pmf_grids.end());
+
 			diffusion_grid_id[i] = types[i].diffusion_grid_id;
 			force_grid_id[i] = types[i].force_grid_id;
+			force_grid_scale[i] = types[i].force_grid_scale;
 		}
 		mass_.copy_from_host(mass.data(), types.size());
 		charge_.copy_from_host(charge.data(), types.size());
@@ -213,12 +231,15 @@ class DeviceParticleTypes {
 		diffusion_.copy_from_host(diffusion.data(), types.size());
 		trans_damping_.copy_from_host(trans_damping.data(), types.size());
 		mu_.copy_from_host(mu.data(), types.size());
-		pmf_scale_.copy_from_host(pmf_scale.data(), types.size());
-		pmf_scale_slope_.copy_from_host(pmf_scale_slope.data(), types.size());
 		pmf_smd_freq_.copy_from_host(pmf_smd_freq.data(), types.size());
-		pmf_grid_id_.copy_from_host(pmf_grid_id.data(), types.size());
+		pmf_grid_offset_.copy_from_host(pmf_grid_offset.data(), types.size());
+		pmf_grid_count_.copy_from_host(pmf_grid_count.data(), types.size());
+		if (!pmf_grid_terms.empty()) {
+			pmf_grid_terms_.copy_from_host(pmf_grid_terms.data(), pmf_grid_terms.size());
+		}
 		diffusion_grid_id_.copy_from_host(diffusion_grid_id.data(), types.size());
 		force_grid_id_.copy_from_host(force_grid_id.data(), types.size());
+		force_grid_scale_.copy_from_host(force_grid_scale.data(), types.size());
 	}
 	DeviceBuffer<float>& mass() {
 		return mass_;
@@ -238,23 +259,26 @@ class DeviceParticleTypes {
 	DeviceBuffer<float>& mu() {
 		return mu_;
 	}
-	DeviceBuffer<float>& pmf_scale() {
-		return pmf_scale_;
-	}
-	DeviceBuffer<float>& pmf_scale_slope() {
-		return pmf_scale_slope_;
-	}
-	DeviceBuffer<float>& pmf_smd_freq() {
+	DeviceBuffer<uint32_t>& pmf_smd_freq() {
 		return pmf_smd_freq_;
 	}
-	DeviceBuffer<int>& pmf_grid_id() {
-		return pmf_grid_id_;
+	DeviceBuffer<int>& pmf_grid_offset() {
+		return pmf_grid_offset_;
+	}
+	DeviceBuffer<int>& pmf_grid_count() {
+		return pmf_grid_count_;
+	}
+	DeviceBuffer<GridTerm>& pmf_grid_terms() {
+		return pmf_grid_terms_;
 	}
 	DeviceBuffer<int>& diffusion_grid_id() {
 		return diffusion_grid_id_;
 	}
 	DeviceBuffer<int3>& force_grid_id() {
 		return force_grid_id_;
+	}
+	DeviceBuffer<Vector3>& force_grid_scale() {
+		return force_grid_scale_;
 	}
 
 	// Get View for Kernels
@@ -266,12 +290,13 @@ class DeviceParticleTypes {
 				diffusion_.data(),
 				trans_damping_.data(),
 				mu_.data(),
-				pmf_scale_.data(),
-				pmf_scale_slope_.data(),
 				pmf_smd_freq_.data(),
-				pmf_grid_id_.data(),
+				pmf_grid_offset_.data(),
+				pmf_grid_count_.data(),
+				pmf_grid_terms_.data(),
 				diffusion_grid_id_.data(),
-				force_grid_id_.data()};
+				force_grid_id_.data(),
+				force_grid_scale_.data()};
 	}
 
 	const ParticleTypeView view() const {
@@ -282,12 +307,13 @@ class DeviceParticleTypes {
 				const_cast<Vector3*>(diffusion_.data()),
 				const_cast<Vector3*>(trans_damping_.data()),
 				const_cast<float*>(mu_.data()),
-				const_cast<float*>(pmf_scale_.data()),
-				const_cast<float*>(pmf_scale_slope_.data()),
-				const_cast<float*>(pmf_smd_freq_.data()),
-				const_cast<int*>(pmf_grid_id_.data()),
+				const_cast<uint32_t*>(pmf_smd_freq_.data()),
+				const_cast<int*>(pmf_grid_offset_.data()),
+				const_cast<int*>(pmf_grid_count_.data()),
+				const_cast<GridTerm*>(pmf_grid_terms_.data()),
 				const_cast<int*>(diffusion_grid_id_.data()),
-				const_cast<int3*>(force_grid_id_.data())};
+				const_cast<int3*>(force_grid_id_.data()),
+				const_cast<Vector3*>(force_grid_scale_.data())};
 	}
 
 	idx_t size() const {
@@ -302,12 +328,15 @@ class DeviceParticleTypes {
 	DeviceBuffer<Vector3> diffusion_;
 	DeviceBuffer<Vector3> trans_damping_;
 	DeviceBuffer<float> mu_;
-	DeviceBuffer<float> pmf_scale_;
-	DeviceBuffer<float> pmf_scale_slope_;
-	DeviceBuffer<float> pmf_smd_freq_;
-	DeviceBuffer<int> pmf_grid_id_;
+	DeviceBuffer<uint32_t> pmf_smd_freq_;
+	// offset+count per type into the flat pmf_grid_terms_ table (same layout as
+	// DeviceRigidBodyTypes' grid_ids_/grid_scales_).
+	DeviceBuffer<int> pmf_grid_offset_;
+	DeviceBuffer<int> pmf_grid_count_;
+	DeviceBuffer<GridTerm> pmf_grid_terms_;
 	DeviceBuffer<int> diffusion_grid_id_;
 	DeviceBuffer<int3> force_grid_id_;
+	DeviceBuffer<Vector3> force_grid_scale_;
 };
 
 } // namespace ARBD

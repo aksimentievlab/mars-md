@@ -72,11 +72,11 @@ class BaseGrid {
 	 * @brief Grid configuration structure for initialization
 	 */
 
-	enum class BoundaryCondition : int {
-		Dirichlet = 0, ///< Fixed value at boundary
-		Neumann = 1,   ///< Fixed derivative at boundary
-		Periodic = 2   ///< Periodic boundary conditions
-	};
+	// Boundary conditions aren't specific to dense storage - the sparse
+	// (PNanoVDB) path and GridTerm's per-(type,grid) override use the same
+	// three, so the enum lives in Types/GridTerm.h. Kept as a nested alias so
+	// existing BaseGrid<T>::BoundaryCondition spellings still work.
+	using BoundaryCondition = GridBoundaryCondition;
 
 	struct Config {
 		Vector3_t<T> origin{0, 0, 0};		  ///< Origin point of the grid

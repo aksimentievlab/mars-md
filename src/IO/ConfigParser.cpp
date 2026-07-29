@@ -313,6 +313,52 @@ static std::vector<std::string> tokenize(const std::string& s) {
 	return out;
 }
 
+/**
+ * @brief Apply a per-entry config list (gridFileScale, ...) to a type's PMF terms
+ * @details Legacy semantics: a single value applies to every gridFile entry
+ *          (Configuration.cpp default-fills the scale array that way), while a
+ *          list must line up one-to-one with the gridFile entries. Deferred
+ *          until the whole particle block is parsed so these keys may appear
+ *          before or after gridFile.
+ */
+template<typename Assign>
+static void apply_pmf_grid_list(const std::string& key,
+								const std::vector<std::string>& toks,
+								std::vector<GridTerm>& terms,
+								Assign&& assign) {
+	if (toks.empty())
+		return;
+	if (terms.empty()) {
+		LOGWARN("{} given but this particle type has no gridFile entries - ignoring", key);
+		return;
+	}
+	if (toks.size() != 1 && toks.size() != terms.size()) {
+		LOGWARN("{}: got {} values for {} gridFile entries - ignoring",
+				key,
+				toks.size(),
+				terms.size());
+		return;
+	}
+	for (size_t j = 0; j < terms.size(); ++j) {
+		assign(terms[j], toks.size() == 1 ? toks[0] : toks[j]);
+	}
+}
+
+/// Parse one gridFileBoundaryConditions token; <0 means "keep the grid's own".
+static int parse_boundary_condition(std::string tok) {
+	std::transform(tok.begin(), tok.end(), tok.begin(), [](unsigned char c) {
+		return static_cast<char>(std::tolower(c));
+	});
+	if (tok == "dirichlet")
+		return static_cast<int>(GridBoundaryCondition::Dirichlet);
+	if (tok == "neumann")
+		return static_cast<int>(GridBoundaryCondition::Neumann);
+	if (tok == "periodic")
+		return static_cast<int>(GridBoundaryCondition::Periodic);
+	LOGWARN("Unrecognized gridFileBoundaryConditions value '{}' - using the grid's own", tok);
+	return -1;
+}
+
 static void load_particles_file(const std::string& path,
 								std::vector<ParticleIO>& out,
 								const std::string& config_file_path) {
@@ -423,6 +469,8 @@ void ConfigParser::get_elements(const Reader& reader) {
 		"diffusion_grid_file",
 		"forceGridFiles",
 		"force_grid_files",
+		"forceGridScale",
+		"force_grid_scale",
 		"gridFileScale",
 		"grid_file_scale",
 		"gridFileScaleSlope",
@@ -438,8 +486,8 @@ void ConfigParser::get_elements(const Reader& reader) {
 	const bool has_explicit_particle_source =
 		std::any_of(params.begin(), params.end(), [](const auto& kv) {
 			const auto& k = kv.first;
-			return k == "inputParticles" || k == "input_particles" ||
-				   k == "restartCoordinates" || k == "restart_coordinates";
+			return k == "inputParticles" || k == "input_particles" || k == "restartCoordinates" ||
+				   k == "restart_coordinates";
 		});
 
 	// First pass: parse sequential blocks and inline keys
@@ -450,6 +498,12 @@ void ConfigParser::get_elements(const Reader& reader) {
 			int num = 0;
 			int type_index = static_cast<int>(sim_system_ref_->get_particle_types().size());
 			ParticleType ptype(name);
+			// Per-gridFile-entry lists, applied once the block is fully parsed so
+			// they don't depend on appearing after gridFile (see
+			// apply_pmf_grid_list).
+			std::vector<std::string> pending_pmf_scale;
+			std::vector<std::string> pending_pmf_scale_slope;
+			std::vector<std::string> pending_pmf_bc;
 
 			// Consume following field lines until next header
 			++i;
@@ -507,14 +561,22 @@ void ConfigParser::get_elements(const Reader& reader) {
 					ptype.mass = std::stof(v);
 				} else if (check_key("gridFile", "grid_file")) {
 					LOGDEBUG("gridFile/grid_file: {}", v);
-					// Load grid using GridManager and store grid_id in ParticleType
-					GridKey grid_key = sim_system_ref_->get_grid_manager().add_dense_grid(v);
-					if (grid_key.is_valid()) {
-						ptype.pmf_grid_id = grid_key.grid_id;
-						ptype.pmf_grid_name = v;
-						LOGDEBUG("Assigned PMF grid '{}' with grid_id={}", v, grid_key.grid_id);
-					} else {
-						LOGWARN("Failed to load grid file '{}'", v);
+					// Legacy takes a whitespace-separated list here, one PMF grid
+					// per token, each summed into the force with its own scale.
+					for (const auto& fname : tokenize(v)) {
+						GridKey grid_key =
+							sim_system_ref_->get_grid_manager().add_dense_grid(fname);
+						if (grid_key.is_valid()) {
+							GridTerm term;
+							term.grid_id = grid_key.grid_id;
+							ptype.pmf_grids.push_back(term);
+							ptype.pmf_grid_names.push_back(fname);
+							LOGDEBUG("Assigned PMF grid '{}' with grid_id={}",
+									 fname,
+									 grid_key.grid_id);
+						} else {
+							LOGWARN("Failed to load grid file '{}'", fname);
+						}
 					}
 				} else if (check_key("diffusionGridFile", "diffusion_grid_file")) {
 					LOGDEBUG("diffusionGridFile/diffusion_grid_file: {}", v);
@@ -561,12 +623,32 @@ void ConfigParser::get_elements(const Reader& reader) {
 						ptype.force_grid_names = {"", "", ""};
 						ptype.force_grid_id = {-1, -1, -1};
 					}
+				} else if (check_key("forceGridScale", "force_grid_scale")) {
+					LOGDEBUG("forceGridScale/force_grid_scale: {}", v);
+					auto toks = tokenize(v);
+					if (toks.size() == 3) {
+						ptype.force_grid_scale = {std::stof(toks[0]),
+												  std::stof(toks[1]),
+												  std::stof(toks[2])};
+					} else if (toks.size() == 1) {
+						const float s = std::stof(toks[0]);
+						LOGINFO("forceGridScale: got one value '{}', applying it to x, y and z", v);
+						ptype.force_grid_scale = {s, s, s};
+					} else {
+						LOGINFO("forceGridScale: expected three (or one) floating point scale "
+								"values for x,y,z but got '{}' - leaving force grids unscaled",
+								v);
+					}
 				} else if (check_key("gridFileScale", "grid_file_scale")) {
 					LOGDEBUG("gridFileScale/grid_file_scale: {}", v);
-					ptype.pmf_scale = std::stof(v);
+					pending_pmf_scale = tokenize(v);
 				} else if (check_key("gridFileScaleSlope", "grid_file_scale_slope")) {
 					LOGDEBUG("gridFileScaleSlope/grid_file_scale_slope: {}", v);
-					ptype.pmf_scale_slope = std::stof(v);
+					pending_pmf_scale_slope = tokenize(v);
+				} else if (check_key("gridFileBoundaryConditions",
+									 "grid_file_boundary_conditions")) {
+					LOGDEBUG("gridFileBoundaryConditions: {}", v);
+					pending_pmf_bc = tokenize(v);
 				} else if (check_key("gridFileSMD", "grid_file_smd")) {
 					LOGDEBUG("gridFileSMD/grid_file_smd: {}", v);
 					ptype.pmf_smd_freq = std::stoi(v);
@@ -575,6 +657,23 @@ void ConfigParser::get_elements(const Reader& reader) {
 					(void)0;
 				}
 			}
+
+			apply_pmf_grid_list("gridFileScale",
+								pending_pmf_scale,
+								ptype.pmf_grids,
+								[](GridTerm& t, const std::string& s) { t.scale = std::stof(s); });
+			apply_pmf_grid_list("gridFileScaleSlope",
+								pending_pmf_scale_slope,
+								ptype.pmf_grids,
+								[](GridTerm& t, const std::string& s) {
+									t.scale_slope = std::stof(s);
+								});
+			apply_pmf_grid_list("gridFileBoundaryConditions",
+								pending_pmf_bc,
+								ptype.pmf_grids,
+								[](GridTerm& t, const std::string& s) {
+									t.boundary_condition = parse_boundary_condition(s);
+								});
 
 			sim_system_ref_->get_particle_types().push_back(std::move(ptype));
 			// Create placeholder particles for this type, unless explicit

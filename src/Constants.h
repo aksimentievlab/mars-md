@@ -40,9 +40,16 @@ constexpr float PDBVELINVFACTOR = 1.0f / PDBVELFACTOR;
 constexpr float PNPERKCALMOL = 69.479f;
 constexpr float SMALLRAD = 0.0005f;
 constexpr float SMALLRAD2 = SMALLRAD * SMALLRAD;
+
+// Legacy RigidBody unit conversions (v1 RigidBody.cu).
+constexpr float impulse_to_momentum = 4.1867999435271e4f;
+constexpr float langevin_damp_scale = 10000.0f;
+constexpr float velocity_scale = 1e4f;
 } // namespace constants
 
 // Use inline variables for configuration constants
 inline constexpr int MAX_NEIGHBORS = 27;
+
+
 
 } // namespace ARBD

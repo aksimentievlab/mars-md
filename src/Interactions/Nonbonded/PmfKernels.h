@@ -59,41 +59,59 @@ HOST DEVICE inline Vector3 compute_position_dependent_force(const Vector3& pos,
 	const float charge = types.charge[type_id];
 	Vector3 force(0.0f, 0.0f, charge * electric_field);
 
-	const int pmf_grid_id = types.pmf_grid_id[type_id];
-	if (pmf_grid_id >= 0 && grid_configs != nullptr) {
-		const BaseGridView<float>& pmf_grid = grid_configs[pmf_grid_id];
-		if (pmf_grid.data != nullptr) {
+	// A type can reference any number of PMF grids; its terms occupy
+	// [offset, offset + count) of the flat table (legacy: the per-type
+	// pt.pmf[i] loop over numPartGridFiles, minus the pointer chasing).
+	if (grid_configs != nullptr) {
+		const int pmf_begin = types.pmf_grid_offset[type_id];
+		const int pmf_end = pmf_begin + types.pmf_grid_count[type_id];
+		for (int k = pmf_begin; k < pmf_end; ++k) {
+			const GridTerm term = types.pmf_grid_terms[k];
+			if (!term.is_valid())
+				continue;
+			BaseGridView<float> pmf_grid = grid_configs[term.grid_id];
+			if (pmf_grid.data == nullptr)
+				continue;
+			// Legacy keys boundary conditions per (type, grid), not per grid, so
+			// a term may override the one baked into the shared grid view.
+			if (term.boundary_condition >= 0)
+				pmf_grid.boundary_condition = term.boundary_condition;
+
 			// sample_pmf_grid() already computes both .gradient (for force)
 			// and .value (for energy) in a single grid interpolation, so
 			// tracking energy here costs nothing extra - unlike the pairwise/
 			// bonded kernels' get_energy, this isn't gating an extra atomic.
 			const GridSample<float> sample = pmf_detail::sample_pmf_grid(pmf_grid, pos, scheme);
-			const float scale = types.pmf_scale[type_id];
-			force += sample.gradient * (-scale);
+			force += sample.gradient * (-term.scale);
 			if (get_energy) {
-				force.t += scale * sample.value;
+				force.t += term.scale * sample.value;
 			}
 		}
 	}
 
 	const int3 force_grid_id = types.force_grid_id[type_id];
 	if (grid_configs != nullptr) {
+		// Legacy baked this scale into the grid data at load time
+		// (Configuration.cpp's forceXGrid->scale()); arbd2v applies it here
+		// instead because GridManager shares one grid_id across every type
+		// referencing the same file - see ParticleType::force_grid_scale.
+		const Vector3 force_grid_scale = types.force_grid_scale[type_id];
 		if (force_grid_id.x >= 0) {
 			const BaseGridView<float>& grid = grid_configs[force_grid_id.x];
 			if (grid.data != nullptr) {
-				force.x += pmf_detail::sample_force_grid_value(grid, pos, scheme);
+				force.x += force_grid_scale.x * pmf_detail::sample_force_grid_value(grid, pos, scheme);
 			}
 		}
 		if (force_grid_id.y >= 0) {
 			const BaseGridView<float>& grid = grid_configs[force_grid_id.y];
 			if (grid.data != nullptr) {
-				force.y += pmf_detail::sample_force_grid_value(grid, pos, scheme);
+				force.y += force_grid_scale.y * pmf_detail::sample_force_grid_value(grid, pos, scheme);
 			}
 		}
 		if (force_grid_id.z >= 0) {
 			const BaseGridView<float>& grid = grid_configs[force_grid_id.z];
 			if (grid.data != nullptr) {
-				force.z += pmf_detail::sample_force_grid_value(grid, pos, scheme);
+				force.z += force_grid_scale.z * pmf_detail::sample_force_grid_value(grid, pos, scheme);
 			}
 		}
 	}

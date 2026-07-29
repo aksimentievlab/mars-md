@@ -1,4 +1,5 @@
 #pragma once
+#include "GridTerm.h"
 #include "Header.h"
 #include "IndexList.h"
 #include "Math.h"
@@ -257,6 +258,26 @@ struct InterpolateGridPoint {
 };
 
 /**
+ * @brief Fetch a grid value at an integer index, or zero if out of bounds.
+ *        Applied per-tap; matches the zero-pad convention used by cubic sampling.
+ */
+template<typename T>
+HOST DEVICE inline T fetch_grid_value_or_zero(CONSTANT_PTR(T) __restrict__ grid_values,
+											  int jx,
+											  int jy,
+											  int jz,
+											  const Vector3_t<idx_t>& dimensions) {
+	if (jx < 0 || jx >= static_cast<int>(dimensions.x) || jy < 0 ||
+		jy >= static_cast<int>(dimensions.y) || jz < 0 ||
+		jz >= static_cast<int>(dimensions.z)) {
+		return T{0};
+	}
+	const idx_t idx = static_cast<idx_t>(jz) + static_cast<idx_t>(jy) * dimensions.z +
+					  static_cast<idx_t>(jx) * dimensions.y * dimensions.z;
+	return grid_values[idx];
+}
+
+/**
  * @brief Device-safe interpolation function (CUDA/SYCL compatible)
  */
 template<typename T>
@@ -279,38 +300,23 @@ HOST DEVICE T interpolate_grid_point(CONSTANT_PTR(T) __restrict__ grid_values,
 		return T{0};
 	}
 
-	// Linear interpolation
-	const idx_t i0 = static_cast<idx_t>(grid_pos.x);
-	const idx_t j0 = static_cast<idx_t>(grid_pos.y);
-	const idx_t k0 = static_cast<idx_t>(grid_pos.z);
-
-	const idx_t i1 = i0 + 1;
-	const idx_t j1 = j0 + 1;
-	const idx_t k1 = k0 + 1;
+	// Linear interpolation - zero-pad missing neighbors at grid edges (legacy convention).
+	const int i0 = static_cast<int>(grid_pos.x);
+	const int j0 = static_cast<int>(grid_pos.y);
+	const int k0 = static_cast<int>(grid_pos.z);
 
 	const T fx = grid_pos.x - static_cast<T>(i0);
 	const T fy = grid_pos.y - static_cast<T>(j0);
 	const T fz = grid_pos.z - static_cast<T>(k0);
 
-	// Get grid indices using consistent indexing
-	const idx_t idx000 = k0 + j0 * nz + i0 * ny * nz;
-	const idx_t idx001 = k1 + j0 * nz + i0 * ny * nz;
-	const idx_t idx010 = k0 + j1 * nz + i0 * ny * nz;
-	const idx_t idx011 = k1 + j1 * nz + i0 * ny * nz;
-	const idx_t idx100 = k0 + j0 * nz + i1 * ny * nz;
-	const idx_t idx101 = k1 + j0 * nz + i1 * ny * nz;
-	const idx_t idx110 = k0 + j1 * nz + i1 * ny * nz;
-	const idx_t idx111 = k1 + j1 * nz + i1 * ny * nz;
-
-	// Trilinear interpolation
-	const T v000 = grid_values[idx000];
-	const T v001 = grid_values[idx001];
-	const T v010 = grid_values[idx010];
-	const T v011 = grid_values[idx011];
-	const T v100 = grid_values[idx100];
-	const T v101 = grid_values[idx101];
-	const T v110 = grid_values[idx110];
-	const T v111 = grid_values[idx111];
+	const T v000 = fetch_grid_value_or_zero(grid_values, i0, j0, k0, dimensions);
+	const T v001 = fetch_grid_value_or_zero(grid_values, i0, j0, k0 + 1, dimensions);
+	const T v010 = fetch_grid_value_or_zero(grid_values, i0, j0 + 1, k0, dimensions);
+	const T v011 = fetch_grid_value_or_zero(grid_values, i0, j0 + 1, k0 + 1, dimensions);
+	const T v100 = fetch_grid_value_or_zero(grid_values, i0 + 1, j0, k0, dimensions);
+	const T v101 = fetch_grid_value_or_zero(grid_values, i0 + 1, j0, k0 + 1, dimensions);
+	const T v110 = fetch_grid_value_or_zero(grid_values, i0 + 1, j0 + 1, k0, dimensions);
+	const T v111 = fetch_grid_value_or_zero(grid_values, i0 + 1, j0 + 1, k0 + 1, dimensions);
 
 	const T v00 = v000 * (T{1} - fx) + v100 * fx;
 	const T v01 = v001 * (T{1} - fx) + v101 * fx;
@@ -420,25 +426,6 @@ HOST DEVICE inline T catmull_rom_deriv(T v0, T v1, T v2, T v3, T t) {
 	const T a2 = T{0.5} * (T{2} * v0 - T{5} * v1 + T{4} * v2 - v3);
 	const T a1 = T{0.5} * (-v0 + v2);
 	return (T{3} * a3 * t + T{2} * a2) * t + a1;
-}
-
-/**
- * @brief Fetch a grid value at an integer index, or zero if out of bounds.
- *        Applied per-tap; matches interpolate_grid_point's zero-pad convention.
- */
-template<typename T>
-HOST DEVICE inline T fetch_grid_value_or_zero(CONSTANT_PTR(T) __restrict__ grid_values,
-											  int jx,
-											  int jy,
-											  int jz,
-											  const Vector3_t<idx_t>& dimensions) {
-	if (jx < 0 || jx >= static_cast<int>(dimensions.x) || jy < 0 ||
-		jy >= static_cast<int>(dimensions.y) || jz < 0 || jz >= static_cast<int>(dimensions.z)) {
-		return T{0};
-	}
-	const idx_t idx = static_cast<idx_t>(jz) + static_cast<idx_t>(jy) * dimensions.z +
-					  static_cast<idx_t>(jx) * dimensions.y * dimensions.z;
-	return grid_values[idx];
 }
 
 /**
@@ -621,6 +608,32 @@ HOST DEVICE T get_neighbor_from_grid(CONSTANT_PTR(T) __restrict__ grid_values,
 
 	const idx_t neighbor_idx = nk + nj * dimensions.z + ni * dimensions.y * dimensions.z;
 	return grid_values[neighbor_idx];
+}
+
+/**
+ * @brief Format-templated grid sampler seam for Phase 4 batched RB grid-grid kernels.
+ * @details Dense is fully defined; Sparse is declared-only until PNanoVDB lands.
+ */
+template<GridFormat F, typename T>
+HOST DEVICE GridSample<T> sample_grid(CONSTANT_PTR(T) __restrict__ grid_values,
+									  const Vector3_t<T>& world_pos,
+									  const Vector3_t<T>& origin,
+									  const Matrix3_t<T>& basis,
+									  const Matrix3_t<T>& basis_inv,
+									  const Vector3_t<idx_t>& dimensions,
+									  int boundary_condition,
+									  int scheme) {
+	if constexpr (F == GridFormat::Dense) {
+		if (scheme == static_cast<int>(InterpolationOrder::Linear)) {
+			return sample_grid_linear(
+				grid_values, world_pos, origin, basis, basis_inv, dimensions, boundary_condition);
+		}
+		return sample_grid_cubic(
+			grid_values, world_pos, origin, basis, basis_inv, dimensions, boundary_condition);
+	} else {
+		GridSample<T> zero{};
+		return zero;
+	}
 }
 
 } // namespace ARBD

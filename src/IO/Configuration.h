@@ -85,7 +85,7 @@ struct Configuration {
 		grid_id_dictionary{}; // Grid ID -> loaded grids
 
 	// Initial Objects
-	std::vector<RigidBody> init_rigid_bodies{}; // init state only
+	std::vector<RigidBodyIO> init_rigid_bodies{}; // init state only
 	std::vector<ParticleIO> init_particles{}; // init only
 	std::vector<Bond> init_bonds{};				// init only, can be modified during simulation
 	std::vector<Angle> init_angles{};			// init only, can also be modified during simulation

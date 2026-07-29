@@ -13,10 +13,13 @@ add_executable(arbd_unit_tests
     ${CMAKE_CURRENT_LIST_DIR}/Types/vector3_tests.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Types/basegrid_device_tests.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Objects/Particles.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Objects/RigidBodies.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Objects/RigidBodyForcePairs.cpp
     ${CMAKE_CURRENT_LIST_DIR}/TestParticle.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Compute/BDKernels.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Interactions/Forces.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Interactions/GridGrid.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Interactions/Pmf.cpp
     ${CMAKE_CURRENT_LIST_DIR}/System/SingleGPU.cpp
     ${CMAKE_CURRENT_LIST_DIR}/System/SinglePatchSimulation.cpp
 )

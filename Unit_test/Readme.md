@@ -7,8 +7,6 @@
 
 ## CUDA and SYCL passed all tests in the folder.
 
-# CUDA did not pass BaseGrid.cpp.
-
 # Tests only passed in CUDA:
 
 # Tests only passed in SYCL: Types/basegrid_device_test.cpp

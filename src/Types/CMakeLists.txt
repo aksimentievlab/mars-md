@@ -11,6 +11,7 @@ list(APPEND HOST_DEVICE_HEADERS
     Types/Matrix3.h
     Types/TypeName.h
     Types/IndexList.h
+    Types/GridTerm.h
     Types/BaseGridDevice.h
     Types/Bitmask.h
     Types/Types.h

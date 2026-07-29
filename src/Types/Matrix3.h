@@ -139,6 +139,7 @@ struct alignas(16) Matrix3_t {
 	HOST DEVICE Vector3& ez() {
 		return cols[2];
 	}
+
 #ifdef HOST_GUARD
 
 	auto to_string() const {
@@ -163,8 +164,55 @@ HOST DEVICE Matrix3_t<T> operator*(T s, const Matrix3_t<T>& m) {
 	return m * s;
 }
 
-// Common type aliases
-using Matrix3f = Matrix3_t<float>;
+// Elementary rotation matrices + re-orthogonalization (legacy RigidBody.cu Rx/Ry/Rz).
+template<typename T>
+HOST DEVICE Matrix3_t<T> rotation_matrix_x(T t) {
+	const T qt = T{0.25} * t * t;
+	const T c = (T{1} - qt) / (T{1} + qt);
+	const T s = t / (T{1} + qt);
+	using Vector3 = Vector3_t<T>;
+	using Matrix3 = Matrix3_t<T>;
+	return Matrix3(Vector3(T{1}, T{0}, T{0}),
+				   Vector3(T{0}, c, -s),
+				   Vector3(T{0}, s, c));
+}
+
+template<typename T>
+HOST DEVICE Matrix3_t<T> rotation_matrix_y(T t) {
+	const T qt = T{0.25} * t * t;
+	const T c = (T{1} - qt) / (T{1} + qt);
+	const T s = t / (T{1} + qt);
+	using Vector3 = Vector3_t<T>;
+	using Matrix3 = Matrix3_t<T>;
+	return Matrix3(Vector3(c, T{0}, s),
+				   Vector3(T{0}, T{1}, T{0}),
+				   Vector3(-s, T{0}, c));
+}
+
+template<typename T>
+HOST DEVICE Matrix3_t<T> rotation_matrix_z(T t) {
+	const T qt = T{0.25} * t * t;
+	const T c = (T{1} - qt) / (T{1} + qt);
+	const T s = t / (T{1} + qt);
+	using Vector3 = Vector3_t<T>;
+	using Matrix3 = Matrix3_t<T>;
+	return Matrix3(Vector3(c, -s, T{0}),
+				   Vector3(s, c, T{0}),
+				   Vector3(T{0}, T{0}, T{1}));
+}
+
+template<typename T>
+HOST DEVICE Matrix3_t<T> normalize_orientation(Matrix3_t<T> orientation) {
+	using Vector3 = Vector3_t<T>;
+	using Matrix3 = Matrix3_t<T>;
+	Vector3 x = orientation.ex();
+	Vector3 z = x.cross(orientation.ey());
+	z = z / z.length();
+	x = x / x.length();
+	Vector3 y = z.cross(x);
+	y = y / y.length();
+	return Matrix3(x, y, z);
+}
 
 } // namespace ARBD
 
