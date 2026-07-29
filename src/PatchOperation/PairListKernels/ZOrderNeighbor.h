@@ -1,7 +1,5 @@
 #pragma once
 /**
- * @file ZOrderNeighbor_FINAL_FIX.h
- * @brief FULLY FIXED version of ZOrderNeighborKernel
  *
  * BUGS FIXED:
  * 1. Changed `if (i >= j) continue` to `if (i == j) continue`
@@ -94,11 +92,6 @@ struct ZOrderNeighborKernel {
 			// If Morton codes are too far apart, subsequent particles
 			// in the sorted order are unlikely to be spatial neighbors
 			morton_t code_j = sorted_morton_codes[j];
-
-			// Only check early termination when moving forward in sorted order
-			// if (j > i && (code_j - code_i) > 0x1000000) { // Heuristic threshold
-			//	break;
-			//}
 		}
 	}
 };

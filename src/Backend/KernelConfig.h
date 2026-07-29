@@ -96,10 +96,20 @@ struct KernelConfig {
 				auto max_work_item_sizes =
 					sycl_device.get_info<sycl::info::device::max_work_item_sizes<3>>();
 
-				// Clamp each dimension to device limits
-				block_size.x = std::min(block_size.x, static_cast<idx_t>(max_work_item_sizes[0]));
+				// SYCL's id<3>/range<3> indexes from the slowest-varying
+				// dimension (index 0 = z in the x/y/z convention used
+				// elsewhere in this file), the reverse of block_size.x/y/z -
+				// index [0] is NOT the x-dimension limit. Mapping it
+				// directly (as if SYCL used the same order) silently
+				// clamped block_size.x to the device's z-dimension limit
+				// (64 on this build's CUDA-backend SYCL target) instead of
+				// its actual, much larger x-dimension limit, while callers
+				// kept computing per-block indices assuming their requested
+				// (unclamped) block_size - see RigidBodyGridBatch.h's
+				// batched force kernel for the bug this caused.
+				block_size.x = std::min(block_size.x, static_cast<idx_t>(max_work_item_sizes[2]));
 				block_size.y = std::min(block_size.y, static_cast<idx_t>(max_work_item_sizes[1]));
-				block_size.z = std::min(block_size.z, static_cast<idx_t>(max_work_item_sizes[2]));
+				block_size.z = std::min(block_size.z, static_cast<idx_t>(max_work_item_sizes[0]));
 
 				// Ensure total work-group size doesn't exceed device limit
 				idx_t total_work_items = block_size.x * block_size.y * block_size.z;

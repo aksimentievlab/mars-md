@@ -3,6 +3,7 @@
 #include "Interactions/Nonbonded/GridGridKernels.h"
 #include "Interactions/Nonbonded/Pairwise.h"
 #include "Interactions/Nonbonded/PmfKernels.h"
+#include "Interactions/Nonbonded/RigidBodyGridBatch.h"
 #include "System/PeriodicBox.h"
 #include "Types/Types.h"
 #include <cuda_runtime.h>
@@ -37,5 +38,19 @@ template Event launch_cuda_kernel_with_workitem(const Resource& resource,
 												const BaseGridView<float> u,
 												Vector3* ret_force_energy,
 												Vector3* ret_torque);
+
+// Phase 4.1 batched RB grid-grid dispatch (RigidBodyGridBatch.h): cull +
+// worklist build, prefix sum, and the batched block-reduction force kernel.
+template Event launch_cuda_kernel(const Resource& resource,
+								  const KernelConfig& config,
+								  RBGridCullKernel kernel_func);
+
+template Event launch_cuda_kernel(const Resource& resource,
+								  const KernelConfig& config,
+								  RBGridPrefixSumKernel kernel_func);
+
+template Event launch_cuda_kernel_with_workitem(const Resource& resource,
+												const KernelConfig& config,
+												RBGridBatchedForceKernel kernel_func);
 
 } // namespace ARBD

@@ -51,7 +51,6 @@ using float2 = Vec2<float>;
 using arbd_int = int;
 using arbd_real = float;
 
-
 /**
  * @brief Backend-agnostic atomic add operation
  * @tparam T Arithmetic type (int, float, double, etc.)
@@ -72,13 +71,61 @@ HOST DEVICE inline void atomic_add(T* ptr, T value) {
 	*ptr += value;
 #endif
 #elif defined(USE_SYCL)
-	sycl::atomic_ref<T, sycl::memory_order::relaxed, sycl::memory_scope::device>(*(ptr)) += value;
+#ifdef __SYCL_DEVICE_ONLY__
+	sycl::atomic_ref<T,
+					 sycl::memory_order::relaxed,
+					 sycl::memory_scope::device,
+					 sycl::access::address_space::global_space>(*ptr)
+		.fetch_add(value);
+#else
+	*ptr += value;
+#endif
 #elif defined(USE_METAL)
 	atomic_fetch_add_explicit(reinterpret_cast<device atomic<T>*>(ptr),
 							  value,
 							  memory_order_relaxed);
 #else
 	(*(ptr) += (value));
+#endif
+};
+
+/**
+ * @brief Backend-agnostic atomic fetch-add: adds value to *ptr and returns
+ *        the value at ptr *before* the add (unlike atomic_add(), which is
+ *        void - useful for allocating a slot via a shared counter).
+ * @tparam T Arithmetic type (int, unsigned int, float, etc.)
+ *
+ * @warning Must not be called from a non-template context with a T other
+ * than what any backend-specific overload set actually supports (e.g. CUDA's
+ * atomicAdd) - being a template itself, unlike Header.h's ATOMIC_ADD macro,
+ * this dispatches per-backend without an `if constexpr` on a concrete type,
+ * so it has no untaken-branch-still-must-typecheck pitfall to worry about.
+ *
+ * SYCL branch explicitly specifies address_space::global_space, matching
+ * every existing counter/slot-allocation atomic_ref in this codebase (e.g.
+ * ZOrderNeighborKernel::pair_count, AdaptiveKernels.h) - the default
+ * (generic_space) silently misbehaves for USM device pointers on at least
+ * the CUDA backend of SYCL (nvptx64-nvidia-cuda), even though it happens to
+ * work for atomic_add()'s per-component float adds above.
+ */
+template<typename T>
+HOST DEVICE inline T atomic_fetch_add(T* ptr, T value) {
+#ifdef __CUDA_ARCH__
+	return atomicAdd(ptr, value);
+#elif defined(__SYCL_DEVICE_ONLY__)
+	return sycl::atomic_ref<T,
+							sycl::memory_order::relaxed,
+							sycl::memory_scope::device,
+							sycl::access::address_space::global_space>(*(ptr))
+		.fetch_add(value);
+#elif defined(USE_METAL)
+	return atomic_fetch_add_explicit(reinterpret_cast<device atomic<T>*>(ptr),
+									 value,
+									 memory_order_relaxed);
+#else
+	const T old = *ptr;
+	*ptr += value;
+	return old;
 #endif
 };
 
