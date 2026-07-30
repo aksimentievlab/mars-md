@@ -204,8 +204,7 @@ void SimManager::run() {
 
 	LOGINFO("SimManager: Running {} steps with {} resources", num_steps, resources.size());
 
-	const size_t progress_period =
-		energy_output_period > 0 ? energy_output_period : 1000;
+	const size_t progress_period = energy_output_period > 0 ? energy_output_period : 1000;
 	const int num_replicas = 1; // TODO: expose replicas from SimSystem config
 
 	std::printf("Configuration: %zu particles | %d replicas\n",
@@ -346,8 +345,7 @@ void SimManager::execute_force_calculation(size_t step) {
 		// ARBD, which likewise only computes energy every outputEnergyPeriod
 		// steps rather than every step.
 		const size_t energy_output_period = static_cast<size_t>(sys_.get_energy_output_period());
-		const bool compute_energy =
-			energy_output_period > 0 && step % energy_output_period == 0;
+		const bool compute_energy = energy_output_period > 0 && step % energy_output_period == 0;
 		Event evt = patch->calculate_nonbonded_forces(
 			sys_.get_nonbonded_interactions(),
 			sys_state_.get_bonded_interactions(),
@@ -381,13 +379,18 @@ void SimManager::execute_force_calculation(size_t step) {
 	// Patch::calculate_bonded_forces's own documented limitation), then RB
 	// Langevin - legacy step order.
 	if (rigid_body_manager_) {
-		Event grid_evt = rigid_body_manager_->compute_grid_grid_forces(
-			grid_manager, 0, step, static_cast<float>(sys_.get_cutoff()));
+		Event grid_evt =
+			rigid_body_manager_->compute_grid_grid_forces(grid_manager,
+														  0,
+														  step,
+														  static_cast<float>(sys_.get_cutoff()));
 
 		auto& patches = patch_mgr->get_patches();
 		if (!patches.empty()) {
 			Event particle_rb_evt = rigid_body_manager_->compute_particle_rb_forces(
-				grid_manager, 0, patches.front()->get_particles().view());
+				grid_manager,
+				0,
+				patches.front()->get_particles().view());
 			particle_rb_evt.wait();
 		}
 		grid_evt.wait();
@@ -582,9 +585,7 @@ void SimManager::write_momentum_dcd_frame(size_t step) {
 // Progress and Performance Reporting
 //================================================================================
 
-void SimManager::report_progress(size_t current_step,
-								 size_t total_steps,
-								 size_t report_period) {
+void SimManager::report_progress(size_t current_step, size_t total_steps, size_t report_period) {
 	wkf_timer_stop(timerP_.timer);
 	const float interval_elapsed = static_cast<float>(wkf_timer_time(timerP_.timer));
 	wkf_timer_start(timerP_.timer);
@@ -799,51 +800,80 @@ void SimManager::write_energy_output(size_t step) {
 // Restart Files
 //================================================================================
 
+void SimManager::wait_for_pending_restart_write() {
+	if (pending_restart_write_.valid()) {
+		pending_restart_write_.get();
+	}
+}
+
 void SimManager::write_restart_files() {
+	// Bound to at most one in-flight write, and make sure the previous write
+	// (if any) is done before this one starts writing the same files.
+	wait_for_pending_restart_write();
+
 	// Assumes sys_state_ already holds the state to persist (gathered by the
 	// caller - write_energy_output() during the run, write_final_restart()
-	// at the end).
+	// at the end). Snapshot (copy) the fields the writer needs rather than
+	// handing the background task a reference into sys_state_: the next
+	// gather_particles_to_state() move-assigns a fresh HostParticleData in,
+	// which would otherwise race with this task still reading the old one.
 	const auto& particles = sys_state_.get_global_particles();
+	std::vector<int> type_id = particles.type_id;
+	std::vector<Vector3> pos = particles.pos;
+	std::vector<Vector3> mom = has_momentum_output_ ? particles.mom : std::vector<Vector3>{};
+	const std::string output_name = sys_.get_output_name();
+	const bool write_momentum = has_momentum_output_;
 
-	const std::string restart_filename = sys_.get_output_name() + ".restart";
-	FILE* out = std::fopen(restart_filename.c_str(), "w");
-	if (out) {
-		std::string buf;
-		buf.reserve(particles.size() * 32);
-		for (size_t i = 0; i < particles.size(); ++i) {
-			append_restart_line(buf, particles.type_id[i], particles.pos[i]);
-		}
-		std::fwrite(buf.data(), 1, buf.size(), out);
-		std::fclose(out);
-	} else {
-		LOGWARN("SimManager: Failed to open '{}' for restart output", restart_filename);
-	}
-
-	// Momentum restart only applies to Langevin dynamics, matching the
-	// momentum trajectory gating in initialize_output_writers(). The "0" in
-	// the filename mirrors legacy ARBD's on-disk naming for this file.
-	if (has_momentum_output_) {
-		const std::string momentum_restart_filename = sys_.get_output_name() + ".0.momentum.restart";
-		FILE* mout = std::fopen(momentum_restart_filename.c_str(), "w");
-		if (mout) {
-			std::string buf;
-			buf.reserve(particles.size() * 32);
-			for (size_t i = 0; i < particles.size(); ++i) {
-				append_restart_line(buf, particles.type_id[i], particles.mom[i]);
+	pending_restart_write_ = std::async(
+		std::launch::async,
+		[type_id = std::move(type_id),
+		 pos = std::move(pos),
+		 mom = std::move(mom),
+		 output_name,
+		 write_momentum]() {
+			const std::string restart_filename = output_name + ".restart";
+			FILE* out = std::fopen(restart_filename.c_str(), "w");
+			if (out) {
+				std::string buf;
+				buf.reserve(pos.size() * 32);
+				for (size_t i = 0; i < pos.size(); ++i) {
+					append_restart_line(buf, type_id[i], pos[i]);
+				}
+				std::fwrite(buf.data(), 1, buf.size(), out);
+				std::fclose(out);
+			} else {
+				LOGWARN("SimManager: Failed to open '{}' for restart output", restart_filename);
 			}
-			std::fwrite(buf.data(), 1, buf.size(), mout);
-			std::fclose(mout);
-		} else {
-			LOGWARN("SimManager: Failed to open '{}' for momentum restart output",
-					momentum_restart_filename);
-		}
-	}
+
+			// Momentum restart only applies to Langevin dynamics, matching
+			// the momentum trajectory gating in initialize_output_writers().
+			// The "0" in the filename mirrors legacy ARBD's on-disk naming.
+			if (write_momentum) {
+				const std::string momentum_restart_filename = output_name + ".0.momentum.restart";
+				FILE* mout = std::fopen(momentum_restart_filename.c_str(), "w");
+				if (mout) {
+					std::string buf;
+					buf.reserve(mom.size() * 32);
+					for (size_t i = 0; i < mom.size(); ++i) {
+						append_restart_line(buf, type_id[i], mom[i]);
+					}
+					std::fwrite(buf.data(), 1, buf.size(), mout);
+					std::fclose(mout);
+				} else {
+					LOGWARN("SimManager: Failed to open '{}' for momentum restart output",
+							momentum_restart_filename);
+				}
+			}
+		});
 }
 
 void SimManager::write_final_restart() {
 	// Gather particle data before writing restart
 	gather_particle_data_from_patches();
 	write_restart_files();
+	// The final restart write must actually be on disk before the process
+	// exits - unlike periodic writes, there's no "next" write to overlap with.
+	wait_for_pending_restart_write();
 	LOGINFO("SimManager: Wrote final restart files for '{}'", sys_.get_output_name());
 }
 
