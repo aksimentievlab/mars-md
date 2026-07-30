@@ -40,14 +40,14 @@ namespace gridgrid_detail {
  * updated to include a wrapDiff() against a PeriodicBox when that lands.
  */
 HOST DEVICE inline void grid_grid_voxel_force_torque(const BaseGridView<float>& rho,
-													  const BaseGridView<float>& u,
-													  const Matrix3& basis_rho,
-													  const Matrix3& basis_u_inv,
-													  const Vector3& origin_offset,
-													  idx_t r_id,
-													  int scheme,
-													  Vector3& force_energy_out,
-													  Vector3& torque_out) {
+													 const BaseGridView<float>& u,
+													 const Matrix3& basis_rho,
+													 const Matrix3& basis_u_inv,
+													 const Vector3& origin_offset,
+													 idx_t r_id,
+													 int scheme,
+													 Vector3& force_energy_out,
+													 Vector3& torque_out) {
 	const idx_t nz = rho.nz();
 	const idx_t ny = rho.ny();
 	const idx_t iz = r_id % nz;
@@ -58,11 +58,20 @@ HOST DEVICE inline void grid_grid_voxel_force_torque(const BaseGridView<float>& 
 	const Vector3 u_local = basis_u_inv.transform(r_pos + origin_offset);
 
 	const Matrix3 identity(1.0f);
-	const GridSample<float> sample =
-		(scheme == 0) ? sample_grid_linear(
-							 u.data, u_local, Vector3(0.0f), identity, identity, u.dimensions, u.boundary_condition)
-					  : sample_grid_cubic(
-							u.data, u_local, Vector3(0.0f), identity, identity, u.dimensions, u.boundary_condition);
+	const GridSample<float> sample = (scheme == 0) ? sample_grid_linear(u.data,
+																		u_local,
+																		Vector3(0.0f),
+																		identity,
+																		identity,
+																		u.dimensions,
+																		u.boundary_condition)
+												   : sample_grid_cubic(u.data,
+																	   u_local,
+																	   Vector3(0.0f),
+																	   identity,
+																	   identity,
+																	   u.dimensions,
+																	   u.boundary_condition);
 
 	const float r_val = rho.data[r_id];
 	// sample.gradient is raw (∂V/∂x); force = -gradient, then transform from
@@ -106,7 +115,7 @@ struct ComputeGridGridForceKernel {
 	Matrix3 basis_u_inv;
 	Vector3 origin_offset; // origin_rho_minus_origin_u, lab frame
 	int scheme = 1;
-	idx_t block_size = 128;
+	idx_t block_size = 128; // legacy used 128
 
 	template<typename WorkItemT>
 	KERNEL_FUNC void operator()(size_t i,
@@ -125,8 +134,15 @@ struct ComputeGridGridForceKernel {
 		torque[tid] = Vector3(0.0f);
 
 		if (r_id < rho.size()) {
-			gridgrid_detail::grid_grid_voxel_force_torque(
-				rho, u, basis_rho, basis_u_inv, origin_offset, r_id, scheme, force[tid], torque[tid]);
+			gridgrid_detail::grid_grid_voxel_force_torque(rho,
+														  u,
+														  basis_rho,
+														  basis_u_inv,
+														  origin_offset,
+														  r_id,
+														  scheme,
+														  force[tid],
+														  torque[tid]);
 		}
 
 		item.barrier();
@@ -161,12 +177,12 @@ struct ComputeGridGridForceKernel {
 #include "Backend/CUDA/KernelHelper.cuh"
 namespace ARBD {
 extern template Event launch_cuda_kernel_with_workitem(const Resource& resource,
-														const KernelConfig& config,
-														ComputeGridGridForceKernel kernel_func,
-														const BaseGridView<float> rho,
-														const BaseGridView<float> u,
-														Vector3* ret_force_energy,
-														Vector3* ret_torque);
+													   const KernelConfig& config,
+													   ComputeGridGridForceKernel kernel_func,
+													   const BaseGridView<float> rho,
+													   const BaseGridView<float> u,
+													   Vector3* ret_force_energy,
+													   Vector3* ret_torque);
 } // namespace ARBD
 #endif
 

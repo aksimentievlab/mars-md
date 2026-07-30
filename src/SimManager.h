@@ -24,6 +24,7 @@
 #include "IO/TrajectoryWriter.h"
 #include "IO/WKFUtils.h"
 #include "Objects/DeviceParticleManager.h"
+#include "Objects/RigidBodyManager.h"
 #include "System/SimSystem.h"
 #include "System/SystemState.h"
 
@@ -102,6 +103,27 @@ class SimManager {
 	}
 
 	/**
+	 * @brief Provide initial rigid-body data to be loaded during init()
+	 *
+	 * Mirrors set_initial_particles() - cached until init() so it isn't
+	 * needed until after rigid-body type IDs are assigned. Unlike particles,
+	 * no name->id resolution happens here (ConfigParser already resolves
+	 * RigidBodyIO::type_id at parse time), so this is just cached, not
+	 * converted.
+	 * @param bodies Initial rigid-body data (host-side)
+	 */
+	void set_initial_rigid_bodies(std::vector<RigidBodyIO> bodies) {
+		pending_initial_rigid_bodies_ = std::move(bodies);
+	}
+
+	/**
+	 * @brief Get the rigid-body manager, or nullptr if the system has no rigid body types
+	 */
+	const RigidBodyManager* get_rigid_body_manager() const {
+		return rigid_body_manager_.get();
+	}
+
+	/**
 	 * @brief Run the main simulation loop
 	 * Executes the complete simulation with force calculation, integration, and I/O
 	 */
@@ -129,8 +151,14 @@ class SimManager {
 
 	// Initial particle data, cached until init() (needs particle type IDs assigned first)
 	std::vector<ParticleIO> pending_initial_particles_{};
+	// Initial rigid-body data, cached until init() (see set_initial_rigid_bodies)
+	std::vector<RigidBodyIO> pending_initial_rigid_bodies_{};
 	// Bonded interactions, cached until init() (see set_bonded_interactions)
 	BondedInteractions pending_bonded_interactions_{};
+
+	// Owns all rigid-body device state once the system has rigid body types;
+	// null otherwise. Constructed in init(), after grids are on-device.
+	std::unique_ptr<RigidBodyManager> rigid_body_manager_;
 
 	// Random number generation
 	size_t current_step_{0}; ///< Current simulation step (used for RNG counter)

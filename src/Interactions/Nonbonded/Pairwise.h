@@ -96,12 +96,27 @@ struct TabulatedNonBondedComputer {
 
 		const int2& indices = particle_indices[i];
 
-		// Phase 1: Skip excluded pairs (bonded neighbors etc.)
-		for (idx_t e = 0; e < num_exclusions; ++e) {
-			const int2& ex = exclusions[e];
-			if ((ex.x == indices.x && ex.y == indices.y) ||
-				(ex.x == indices.y && ex.y == indices.x))
-				return;
+		// Phase 1: Skip excluded pairs (bonded neighbors etc.).
+		// `exclusions` is canonicalized to (min, max) and sorted lexicographically
+		// (see DeviceBondedInteractions), so we binary-search for this pair rather
+		// than scanning the whole list. This is the difference between O(log E) and
+		// O(E) per candidate pair; the linear scan made large systems appear to hang.
+		if (num_exclusions > 0) {
+			const int query_lo = indices.x < indices.y ? indices.x : indices.y;
+			const int query_hi = indices.x < indices.y ? indices.y : indices.x;
+			idx_t lo = 0;
+			idx_t hi = num_exclusions; // half-open [lo, hi)
+			while (lo < hi) {
+				const idx_t mid = lo + (hi - lo) / 2;
+				const int2& ex = exclusions[mid];
+				if (ex.x < query_lo || (ex.x == query_lo && ex.y < query_hi)) {
+					lo = mid + 1;
+				} else if (ex.x > query_lo || (ex.x == query_lo && ex.y > query_hi)) {
+					hi = mid;
+				} else {
+					return; // found: pair is excluded
+				}
+			}
 		}
 
 		// Phase 2: Type-pair -> table lookup

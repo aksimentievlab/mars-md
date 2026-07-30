@@ -9,6 +9,8 @@
 #include "Backend/KernelConfig.h"
 #include "Backend/Resource.h"
 #include "Interactions/Nonbonded/RigidBodyGridBatch.h"
+#include "Interactions/Nonbonded/RigidBodyParticleGridBatch.h"
+#include "Objects/DeviceParticle.h"
 #include "Objects/DeviceRigidBodyManager.h"
 #include "Objects/Grid.h"
 #include "Objects/RigidBodyForcePairs.h"
@@ -78,6 +80,7 @@ class RigidBodyManager {
 		force_pairs_.build(types, grid_format, grid_grid_update_period);
 		host_type_id_ = host_rigid_bodies.type_id;
 		grid_grid_dispatch_ready_ = false;
+		particle_grid_dispatch_ready_ = false;
 	}
 
 	/**
@@ -248,6 +251,12 @@ class RigidBodyManager {
 
 		const BaseGridView<float>* grid_views = grid_manager.get_device_grid_views(grid_resource_idx).data();
 
+		// All three kernels share the GridCompute stream (architecture
+		// decision, todo.md Phase 4.2): they already saturate the GPU, so
+		// splitting further buys little, and it lets this whole pipeline
+		// overlap with the nonbonded/bonded path on the Compute stream.
+		void* grid_stream = compute_resource().get_stream(StreamType::GridCompute);
+
 		RBGridCullKernel cull{std::as_const(*bodies_).view(),
 							 candidate_pairs_.data(),
 							 candidate_pair_idx_.data(),
@@ -263,11 +272,13 @@ class RigidBodyManager {
 							 num_candidates_,
 							 grid_grid_overflow_.data()};
 		KernelConfig cull_config = KernelConfig::for_1d(num_candidates_, compute_resource());
+		cull_config.explicit_queue = grid_stream;
 		launch_kernel(compute_resource(), cull_config, cull);
 
 		RBGridPrefixSumKernel scan{
 			grid_grid_work_.data(), grid_grid_work_count_.data(), grid_grid_total_blocks_.data()};
 		KernelConfig scan_config = KernelConfig::for_1d(1, compute_resource());
+		scan_config.explicit_queue = grid_stream;
 		launch_kernel(compute_resource(), scan_config, scan);
 
 		RBGridBatchedForceKernel force{bodies_->view(),
@@ -282,6 +293,7 @@ class RigidBodyManager {
 		force_config.grid_size = {std::max<idx_t>(max_total_blocks_, 1), 1, 1};
 		force_config.problem_size = {force_config.grid_size.x * force_config.block_size.x, 1, 1};
 		force_config.shared_memory = 2 * grid_grid_threads_per_block_ * sizeof(Vector3);
+		force_config.explicit_queue = grid_stream;
 
 		return launch_kernel_with_workitem(compute_resource(), force_config, force);
 	}
@@ -302,11 +314,141 @@ class RigidBodyManager {
 	}
 
 	/**
+	 * @brief Precompute the static (RB instance, potential-grid) candidate
+	 *        list for batched particle-RB dispatch (Phase 4.3).
+	 *
+	 * Unlike prepare_grid_grid_dispatch(), there's no distance-based culling
+	 * here (see RigidBodyParticleGridBatch.h) and every candidate shares the
+	 * same num_particles, so block counts are uniform across candidates -
+	 * the whole worklist reduces to plain arithmetic, no worklist buffer or
+	 * prefix sum needed.
+	 *
+	 * @param types Same RigidBodyType vector passed to initialize() -
+	 *        re-passed here rather than cached, since RigidBodyManager has
+	 *        no other need for host-side RigidBodyType data once initialize()
+	 *        uploads it to device buffers.
+	 * @param num_particles Total particle count sampling these grids. RBs
+	 *        don't own particles (architecture decision #4 - particles stay
+	 *        in Patch/DeviceParticle), so this comes from whichever Patch(es)
+	 *        hold them; single-patch assumption, matching the rest of this
+	 *        codebase today.
+	 */
+	void prepare_particle_grid_dispatch(const std::vector<RigidBodyType>& types,
+										idx_t num_particles,
+										idx_t threads_per_block = 128) {
+		ensure_initialized();
+		particle_grid_threads_per_block_ = threads_per_block;
+		particle_grid_num_particles_ = num_particles;
+		particle_grid_blocks_per_candidate_ =
+			(num_particles + threads_per_block - 1) / threads_per_block;
+
+		std::unordered_map<int, std::vector<int>> instances_by_type;
+		for (size_t i = 0; i < host_type_id_.size(); ++i) {
+			instances_by_type[host_type_id_[i]].push_back(static_cast<int>(i));
+		}
+
+		std::vector<int> cand_rb_id;
+		std::vector<int> cand_grid_id;
+		std::vector<float> cand_scale;
+		for (size_t t = 0; t < types.size(); ++t) {
+			const auto& instances = instances_by_type[static_cast<int>(t)];
+			for (const GridTerm& term : types[t].potential_grids) {
+				for (int rb_id : instances) {
+					cand_rb_id.push_back(rb_id);
+					cand_grid_id.push_back(term.grid_id);
+					cand_scale.push_back(term.scale);
+				}
+			}
+		}
+
+		particle_grid_num_candidates_ = static_cast<idx_t>(cand_rb_id.size());
+
+		const idx_t capacity = particle_grid_num_candidates_ > 0 ? particle_grid_num_candidates_ : 1;
+		particle_grid_candidate_rb_id_ = DeviceBuffer<int>(capacity, compute_resource());
+		particle_grid_candidate_grid_id_ = DeviceBuffer<int>(capacity, compute_resource());
+		particle_grid_candidate_scale_ = DeviceBuffer<float>(capacity, compute_resource());
+		particle_grid_work_ = DeviceBuffer<RBParticleGridWork>(capacity, compute_resource());
+		if (!cand_rb_id.empty()) {
+			particle_grid_candidate_rb_id_.copy_from_host(cand_rb_id.data(), cand_rb_id.size(), true);
+			particle_grid_candidate_grid_id_.copy_from_host(
+				cand_grid_id.data(), cand_grid_id.size(), true);
+			particle_grid_candidate_scale_.copy_from_host(cand_scale.data(), cand_scale.size(), true);
+		}
+
+		particle_grid_dispatch_ready_ = true;
+	}
+
+	/**
+	 * @brief Batched particle-RB grid forces (Phase 4.3): rebuild per-candidate
+	 *        transforms, then the batched force kernel - two kernels back to
+	 *        back on the GridCompute stream, no host sync between them.
+	 *
+	 * @param grid_manager Must already have build_device_arrays() called.
+	 * @param grid_resource_idx Must match what prepare_particle_grid_dispatch()
+	 *        (indirectly, via the types passed to it) assumes.
+	 * @param particles Particle view from whichever Patch owns them; this
+	 *        kernel atomically accumulates into its ForceEnergy buffer, so it
+	 *        must not be cleared or read again until the returned Event
+	 *        completes (see todo.md Phase 4.2's correctness constraint).
+	 * @param scheme Interpolation order (1=Linear, 3=Cubic; InterpolationOrder).
+	 */
+	Event compute_particle_rb_forces(const GridManager& grid_manager,
+									 size_t grid_resource_idx,
+									 ParticleView particles,
+									 int scheme = 1) {
+		ensure_initialized();
+		if (!particle_grid_dispatch_ready_) {
+			throw Exception(ExceptionType::RuntimeError,
+							 SourceLocation(),
+							 "RigidBodyManager: prepare_particle_grid_dispatch() must be called "
+							 "before compute_particle_rb_forces()");
+		}
+		if (particle_grid_num_candidates_ == 0 || particle_grid_blocks_per_candidate_ == 0) {
+			return Event(nullptr, compute_resource());
+		}
+
+		const BaseGridView<float>* grid_views =
+			grid_manager.get_device_grid_views(grid_resource_idx).data();
+		void* grid_stream = compute_resource().get_stream(StreamType::GridCompute);
+
+		RBParticleGridBuildKernel build{std::as_const(*bodies_).view(),
+									   particle_grid_candidate_rb_id_.data(),
+									   particle_grid_candidate_grid_id_.data(),
+									   particle_grid_candidate_scale_.data(),
+									   particle_grid_num_candidates_,
+									   grid_views,
+									   scheme,
+									   particle_grid_work_.data()};
+		KernelConfig build_config =
+			KernelConfig::for_1d(particle_grid_num_candidates_, compute_resource());
+		build_config.explicit_queue = grid_stream;
+		launch_kernel(compute_resource(), build_config, build);
+
+		RBParticleGridForceKernel force{bodies_->view(),
+										particles,
+										particle_grid_work_.data(),
+										grid_views,
+										particle_grid_num_particles_,
+										particle_grid_blocks_per_candidate_,
+										particle_grid_threads_per_block_};
+		const idx_t total_blocks = particle_grid_num_candidates_ * particle_grid_blocks_per_candidate_;
+		KernelConfig force_config;
+		force_config.dim = 1;
+		force_config.block_size = {particle_grid_threads_per_block_, 1, 1};
+		force_config.grid_size = {total_blocks, 1, 1};
+		force_config.problem_size = {total_blocks * particle_grid_threads_per_block_, 1, 1};
+		force_config.shared_memory = 2 * particle_grid_threads_per_block_ * sizeof(Vector3);
+		force_config.explicit_queue = grid_stream;
+
+		return launch_kernel_with_workitem(compute_resource(), force_config, force);
+	}
+
+	/**
 	 * @brief Broadcast RB position/orientation to non-compute resources.
 	 *
 	 * No-op while resources_.size() == 1 (architecture decision #3) - real
 	 * work lands once a second resource needs RB state for grid-particle
-	 * forces (Phase 4.3).
+	 * forces.
 	 */
 	void broadcast_state_to_resources() {}
 
@@ -366,6 +508,17 @@ class RigidBodyManager {
 	DeviceBuffer<unsigned int> grid_grid_work_count_;
 	DeviceBuffer<unsigned int> grid_grid_total_blocks_;
 	DeviceBuffer<unsigned int> grid_grid_overflow_;
+
+	// Phase 4.3 batched particle-RB dispatch state (see prepare_particle_grid_dispatch).
+	bool particle_grid_dispatch_ready_{false};
+	idx_t particle_grid_threads_per_block_{128};
+	idx_t particle_grid_num_particles_{0};
+	idx_t particle_grid_blocks_per_candidate_{0};
+	idx_t particle_grid_num_candidates_{0};
+	DeviceBuffer<int> particle_grid_candidate_rb_id_;
+	DeviceBuffer<int> particle_grid_candidate_grid_id_;
+	DeviceBuffer<float> particle_grid_candidate_scale_;
+	DeviceBuffer<RBParticleGridWork> particle_grid_work_;
 };
 
 } // namespace ARBD

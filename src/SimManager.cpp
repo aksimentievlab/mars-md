@@ -46,12 +46,17 @@ void SimManager::load_config(const ConfigParser& parser) {
 	sys_.set_rigid_body_integrator_type(parser.get_sim_system().get_rigid_body_algorithm());
 	sys_.set_particle_types(parser.get_sim_system().get_particle_types());
 	sys_.set_rigid_body_types(parser.get_sim_system().get_rigid_body_types());
+	sys_.set_rb_update_period(parser.get_sim_system().get_rb_update_period());
 	sys_.set_base_seed(parser.get_sim_system().get_base_seed());
 
 	// Cache particles here; they are converted (type_name -> type_id) in init(),
 	// once particle type IDs have been assigned - SystemState::set_init_particle_data()
 	// would otherwise look up type names in an empty/unbuilt map.
 	pending_initial_particles_ = parser.get_init_particles();
+	// Unlike particles, ConfigParser already resolves RigidBodyIO::type_id at
+	// parse time (see ConfigParser.cpp's rigidBody block), so this can be
+	// cached as-is with no further conversion needed in init().
+	pending_initial_rigid_bodies_ = parser.get_init_rigid_bodies();
 	sys_state_.update_bonded_interactions(parser.get_init_bonded_interactions());
 }
 
@@ -73,6 +78,8 @@ void SimManager::init() {
 	// before set_init_particle_data() below and before decomposition.
 	sys_.assign_particle_type_ids();
 	LOGINFO("SimManager: Particle type IDs assigned");
+	sys_.assign_rigid_body_type_ids();
+	LOGINFO("SimManager: Rigid body type IDs assigned");
 	sys_.build_name_to_id_maps();
 	LOGINFO("SimManager: Name to ID maps built");
 
@@ -81,6 +88,13 @@ void SimManager::init() {
 		sys_state_.set_init_particle_data(pending_initial_particles_);
 		LOGINFO("SimManager: Loaded {} initial particles into system state",
 				pending_initial_particles_.size());
+	}
+
+	// Load cached initial rigid-body data (from load_config or set_initial_rigid_bodies)
+	if (!pending_initial_rigid_bodies_.empty()) {
+		sys_state_.set_init_rigid_body_data(pending_initial_rigid_bodies_);
+		LOGINFO("SimManager: Loaded {} initial rigid bodies into system state",
+				pending_initial_rigid_bodies_.size());
 	}
 
 	// Load cached bonded interactions (from load_config or set_bonded_interactions)
@@ -119,6 +133,31 @@ void SimManager::init() {
 	LOGINFO("SimManager: Tables transferred to all resources");
 	sys_.get_nonbonded_interactions().prepare_device_data();
 	LOGINFO("SimManager: Nonbonded interactions transferred to all resources");
+
+	// Rigid-body manager construction needs grids already on-device
+	// (prepare_grid_grid_dispatch/prepare_particle_grid_dispatch read grid
+	// sizes/views), so this must run after build_device_arrays() above.
+	if (!sys_.get_rigid_body_types().empty()) {
+		rigid_body_manager_ = std::make_unique<RigidBodyManager>(sys_.get_resources());
+		rigid_body_manager_->initialize(
+			sys_.get_rigid_body_types(),
+			sys_state_.get_global_rigid_bodies(),
+			[this](int id) { return sys_.get_grid_manager().get_grid_format(id); },
+			sys_.get_rb_update_period());
+		rigid_body_manager_->prepare_grid_grid_dispatch(sys_.get_grid_manager(), 0);
+		rigid_body_manager_->prepare_particle_grid_dispatch(sys_.get_rigid_body_types(),
+															sys_state_.get_num_particles());
+		LOGINFO("SimManager: Rigid body manager initialized with {} bodies",
+				sys_state_.get_num_rigid_bodies());
+
+		// RigidBodyManager only implements DLM/Langevin-style integration
+		// (Phase 4 never built Brownian/VelocityVerlet rigid-body integrators) -
+		// warn rather than silently ignoring a different configured algorithm.
+		if (sys_.get_rigid_body_algorithm() != IntegratorType::Langevin) {
+			LOGWARN("SimManager: only Langevin/DLM rigid-body dynamics is implemented; "
+					"ignoring the configured rigid body algorithm");
+		}
+	}
 
 	LOGINFO("SimManager: Initialization completed");
 }
@@ -236,6 +275,12 @@ void SimManager::execute_force_calculation(size_t step) {
 						"PatchManager not available for force calculation");
 	}
 
+	// Legacy step order: clear RB forces -> particle nonbonded/bonded -> RB
+	// grid-grid/particle-RB -> RB Langevin (see the RB force block below).
+	if (rigid_body_manager_) {
+		rigid_body_manager_->bodies().clear_forces();
+	}
+
 	const auto& resources = sys_.get_resources();
 	const auto& grid_manager = sys_.get_grid_manager();
 
@@ -305,6 +350,27 @@ void SimManager::execute_force_calculation(size_t step) {
 		evt.wait();
 	}
 
+	// RB grid-grid, then particle-RB (single-patch assumption, matching
+	// Patch::calculate_bonded_forces's own documented limitation), then RB
+	// Langevin - legacy step order.
+	if (rigid_body_manager_) {
+		Event grid_evt = rigid_body_manager_->compute_grid_grid_forces(
+			grid_manager, 0, step, static_cast<float>(sys_.get_cutoff()));
+
+		auto& patches = patch_mgr->get_patches();
+		if (!patches.empty()) {
+			Event particle_rb_evt = rigid_body_manager_->compute_particle_rb_forces(
+				grid_manager, 0, patches.front()->get_particles().view());
+			particle_rb_evt.wait();
+		}
+		grid_evt.wait();
+
+		const Temperature& temperature = sys_.get_temperature_struct();
+		rigid_body_manager_
+			->add_langevin_forces(sys_.get_timestep(), temperature.kT, sys_.get_base_seed(), step)
+			.wait();
+	}
+
 	if (step == 1) {
 		LOGINFO("SimManager: PMF/grid and pairwise nonbonded force kernels launched");
 	}
@@ -336,6 +402,10 @@ void SimManager::execute_integration(size_t step) {
 		// touches positions again - see the matching wait in
 		// execute_force_calculation for why this can no longer be implicit.
 		evt.wait();
+	}
+
+	if (rigid_body_manager_) {
+		rigid_body_manager_->integrate_motion(timestep, sys_.get_boundary_conditions()).wait();
 	}
 
 	current_step_ = step; // Update step counter for RNG state tracking

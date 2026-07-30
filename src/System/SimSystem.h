@@ -94,6 +94,10 @@ class SimSystem {
 		neighbor_list_rebuild_period = period;
 	}
 
+	void set_rb_update_period(int period) {
+		rb_update_period_ = period;
+	}
+
 	void set_output_period(float period) {
 		output_period_ = period;
 	}
@@ -362,6 +366,14 @@ class SimSystem {
 	 */
 	float get_neighbor_list_rebuild_period() const {
 		return neighbor_list_rebuild_period;
+	}
+
+	/**
+	 * @brief Get rigid-body grid-grid/particle-RB dispatch update period (legacy:
+	 *        rigidBodyGridGridPeriod)
+	 */
+	int get_rb_update_period() const {
+		return rb_update_period_;
 	}
 
 	/**

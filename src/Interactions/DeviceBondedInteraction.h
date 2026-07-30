@@ -8,6 +8,8 @@
 #include "Objects/Tables.h"
 #include "Types/Types.h"
 #include "Types/Vector3.h"
+#include <algorithm>
+#include <utility>
 
 namespace ARBD {
 
@@ -108,10 +110,24 @@ class DeviceBondedInteractions {
 		num_exclusions_ = exclusions.size();
 
 		if (num_exclusions_ > 0) {
+			// Canonicalize each exclusion to (min, max) and sort lexicographically.
+			// The nonbonded kernel binary-searches this array once per candidate
+			// pair, turning the exclusion test from O(num_exclusions) into
+			// O(log num_exclusions). Without this, a system with N bonded beads
+			// pays O(num_pairs * num_exclusions) ~ O(N^2) every step, which makes
+			// large systems (100k+ particles) appear to hang.
 			std::vector<int2> excl_pairs(num_exclusions_);
 			for (size_t i = 0; i < num_exclusions_; ++i) {
-				excl_pairs[i] = int2{exclusions[i].ind1, exclusions[i].ind2};
+				int a = exclusions[i].ind1;
+				int b = exclusions[i].ind2;
+				if (a > b) {
+					std::swap(a, b);
+				}
+				excl_pairs[i] = int2{a, b};
 			}
+			std::sort(excl_pairs.begin(), excl_pairs.end(), [](const int2& p, const int2& q) {
+				return p.x != q.x ? p.x < q.x : p.y < q.y;
+			});
 			exclusion_pairs_ = DeviceBuffer<int2>(num_exclusions_, resource_);
 			exclusion_pairs_.copy_from_host(excl_pairs.data(), num_exclusions_);
 		}

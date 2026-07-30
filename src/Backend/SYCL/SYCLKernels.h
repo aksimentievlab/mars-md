@@ -91,7 +91,7 @@ Event launch_sycl_kernel_with_workitem(const Resource& resource,
 									   Functor kernel_functor,
 									   Args... args) {
 
-	sycl::queue& queue = *static_cast<sycl::queue*>(resource.get_stream());
+	sycl::queue& queue = *static_cast<sycl::queue*>(config.get_queue(resource));
 
 	idx_t local_range_sycl = config.block_size.x;
 	idx_t global_range_sycl;
@@ -152,7 +152,7 @@ Event launch_sycl_kernel_1d(const Resource& resource,
 							Functor kernel_functor,
 							Args... args) {
 
-	sycl::queue& queue = *static_cast<sycl::queue*>(resource.get_stream());
+	sycl::queue& queue = *static_cast<sycl::queue*>(config.get_queue(resource));
 	idx_t local_range_sycl = std::min(config.block_size.x, config.problem_size.x);
 	idx_t global_range_sycl =
 		((config.problem_size.x + local_range_sycl - 1) / local_range_sycl) * local_range_sycl;
@@ -204,7 +204,7 @@ Event launch_sycl_kernel_2d(const Resource& resource,
 	}
 
 	// Get queue from config or resource
-	sycl::queue& queue = *static_cast<sycl::queue*>(resource.get_stream());
+	sycl::queue& queue = *static_cast<sycl::queue*>(local_config.get_queue(resource));
 
 	// Ensure global range is divisible by local range to avoid non-uniform
 	// work-groups SYCL 2D: (y, x) mapping to maintain x as fastest varying
@@ -264,7 +264,7 @@ Event launch_sycl_kernel_3d(const Resource& resource,
 	}
 
 	// Get queue from config or resource
-	sycl::queue& queue = *static_cast<sycl::queue*>(resource.get_stream());
+	sycl::queue& queue = *static_cast<sycl::queue*>(local_config.get_queue(resource));
 
 	// Ensure global range is divisible by local range to avoid non-uniform
 	// work-groups SYCL 3D: (z, y, x) mapping where x is fastest varying (dim 2),

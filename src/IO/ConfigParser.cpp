@@ -9,6 +9,7 @@
 
 // Standard library includes
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cstdlib>
 #include <sstream>
@@ -313,6 +314,32 @@ static std::vector<std::string> tokenize(const std::string& s) {
 	return out;
 }
 
+/// Parse "x y z" into a Vector3; used by rigidBody's position/momentum/etc.
+static Vector3 parse_vector3(const std::string& s, const Vector3& fallback = Vector3(0.0f)) {
+	const auto toks = tokenize(s);
+	if (toks.size() != 3) {
+		LOGWARN("Expected 3 values for a Vector3, got '{}' - using default", s);
+		return fallback;
+	}
+	return Vector3(std::stof(toks[0]), std::stof(toks[1]), std::stof(toks[2]));
+}
+
+/// Parse 9 whitespace-separated values as 3 human-readable rows into a
+/// Matrix3 - Matrix3's own constructor takes column vectors, so this
+/// transposes at construction time.
+static Matrix3 parse_matrix3_rows(const std::string& s) {
+	const auto toks = tokenize(s);
+	if (toks.size() != 9) {
+		LOGWARN("Expected 9 values (3x3, row-major) for orientation, got '{}' - using identity", s);
+		return Matrix3(1.0f);
+	}
+	std::array<float, 9> m;
+	for (int i = 0; i < 9; ++i) {
+		m[i] = std::stof(toks[i]);
+	}
+	return Matrix3(Vector3(m[0], m[3], m[6]), Vector3(m[1], m[4], m[7]), Vector3(m[2], m[5], m[8]));
+}
+
 /**
  * @brief Apply a per-entry config list (gridFileScale, ...) to a type's PMF terms
  * @details Legacy semantics: a single value applies to every gridFile entry
@@ -449,7 +476,7 @@ void ConfigParser::get_elements(const Reader& reader) {
 	const auto params = reader.getParameters();
 
 	auto is_block_header = [](std::string_view key) {
-		return key == "particle"; // Extend with other block headers as needed
+		return key == "particle" || key == "rigidBody"; // Extend with other block headers as needed
 	};
 
 	// Keys recognized as fields of a "particle" block. The inner loop below
@@ -477,6 +504,36 @@ void ConfigParser::get_elements(const Reader& reader) {
 		"grid_file_scale_slope",
 		"gridFileSMD",
 		"grid_file_smd",
+	};
+
+	// Keys recognized as fields of a "rigidBody" block. One instance is
+	// created per block (position/orientation/momentum/angularMomentum
+	// inline) rather than particle-style "num" + a separate coordinate file -
+	// rigid bodies are few, matching legacy Configtodo.cpp's actual keys.
+	static const std::unordered_set<std::string_view> rigid_body_field_keys = {
+		"mass",
+		"inertia",
+		"transDamping",
+		"trans_damping",
+		"rotDamping",
+		"rot_damping",
+		"densityGrid",
+		"density_grid",
+		"potentialGrid",
+		"potential_grid",
+		"pmf",
+		"pmf_grid",
+		"densityGridScale",
+		"density_grid_scale",
+		"potentialGridScale",
+		"potential_grid_scale",
+		"pmfScale",
+		"pmf_grid_scale",
+		"position",
+		"orientation",
+		"momentum",
+		"angularMomentum",
+		"angular_momentum",
 	};
 
 	// When the file also supplies explicit per-particle data, that data is
@@ -690,6 +747,118 @@ void ConfigParser::get_elements(const Reader& reader) {
 			continue; // i already at next header or end
 		}
 
+		if (key == "rigidBody") {
+			std::string name = value;
+			RigidBodyType rbtype;
+			rbtype.name = name;
+			RigidBodyIO rb_io{};
+			rb_io.orientation = Matrix3(1.0f);
+
+			// Deferred like particle's gridFileScale/gridFileScaleSlope - these
+			// keys may appear before or after the grid list they scale, and
+			// each of the three grid lists (density/potential/pmf) is scaled
+			// independently.
+			std::vector<std::string> pending_density_scale;
+			std::vector<std::string> pending_potential_scale;
+			std::vector<std::string> pending_pmf_scale;
+
+			++i;
+			for (; i < params.size(); ++i) {
+				const auto& [k, v] = params[i];
+				if (is_block_header(k) || !rigid_body_field_keys.count(k))
+					break;
+				auto check_key = [&k](const std::string& camel, const std::string& snake) {
+					return k == camel || k == snake;
+				};
+
+				if (k == "mass") {
+					rbtype.mass = std::stof(v);
+				} else if (k == "inertia") {
+					rbtype.inertia = parse_vector3(v);
+				} else if (check_key("transDamping", "trans_damping")) {
+					rbtype.trans_damping = parse_vector3(v);
+				} else if (check_key("rotDamping", "rot_damping")) {
+					rbtype.rot_damping = parse_vector3(v);
+				} else if (check_key("densityGrid", "density_grid")) {
+					// Grid identity here doubles as the pairing key (Phase 3's
+					// RigidBodyForcePairList matches a density grid against a
+					// potential grid by name): two rigidBody types meant to
+					// interact simply reference the same grid file.
+					for (const auto& fname : tokenize(v)) {
+						GridKey grid_key = sim_system_ref_->get_grid_manager().add_dense_grid(fname);
+						if (grid_key.is_valid()) {
+							rbtype.density_grids.push_back(GridTerm{grid_key.grid_id});
+							rbtype.density_grid_keys.push_back(fname);
+						} else {
+							LOGWARN("Failed to load rigid body density grid file '{}'", fname);
+						}
+					}
+				} else if (check_key("potentialGrid", "potential_grid")) {
+					for (const auto& fname : tokenize(v)) {
+						GridKey grid_key = sim_system_ref_->get_grid_manager().add_dense_grid(fname);
+						if (grid_key.is_valid()) {
+							rbtype.potential_grids.push_back(GridTerm{grid_key.grid_id});
+							rbtype.potential_grid_keys.push_back(fname);
+						} else {
+							LOGWARN("Failed to load rigid body potential grid file '{}'", fname);
+						}
+					}
+				} else if (check_key("pmf", "pmf_grid")) {
+					for (const auto& fname : tokenize(v)) {
+						GridKey grid_key = sim_system_ref_->get_grid_manager().add_dense_grid(fname);
+						if (grid_key.is_valid()) {
+							rbtype.pmf_grids.push_back(GridTerm{grid_key.grid_id});
+							rbtype.pmf_keys.push_back(fname);
+						} else {
+							LOGWARN("Failed to load rigid body pmf grid file '{}'", fname);
+						}
+					}
+				} else if (check_key("densityGridScale", "density_grid_scale")) {
+					pending_density_scale = tokenize(v);
+				} else if (check_key("potentialGridScale", "potential_grid_scale")) {
+					pending_potential_scale = tokenize(v);
+				} else if (check_key("pmfScale", "pmf_grid_scale")) {
+					pending_pmf_scale = tokenize(v);
+				} else if (k == "position") {
+					rb_io.position = parse_vector3(v);
+				} else if (k == "orientation") {
+					rb_io.orientation = parse_matrix3_rows(v);
+					rb_io.has_orientation = true;
+				} else if (k == "momentum") {
+					rb_io.momentum = parse_vector3(v);
+				} else if (check_key("angularMomentum", "angular_momentum")) {
+					rb_io.angular_momentum = parse_vector3(v);
+				} else {
+					// Recognized but not yet wired into RigidBodyType storage in this branch
+					(void)0;
+				}
+			}
+
+			apply_pmf_grid_list("densityGridScale",
+								pending_density_scale,
+								rbtype.density_grids,
+								[](GridTerm& t, const std::string& s) { t.scale = std::stof(s); });
+			apply_pmf_grid_list("potentialGridScale",
+								pending_potential_scale,
+								rbtype.potential_grids,
+								[](GridTerm& t, const std::string& s) { t.scale = std::stof(s); });
+			apply_pmf_grid_list("pmfScale",
+								pending_pmf_scale,
+								rbtype.pmf_grids,
+								[](GridTerm& t, const std::string& s) { t.scale = std::stof(s); });
+
+			// Insertion order here is exactly what assign_rigid_body_type_ids()
+			// later assigns as RigidBodyType::id, so this is safe to resolve
+			// immediately (unlike ParticleIO, which defers via type_name since
+			// its data can arrive from a separate file, not necessarily in
+			// insertion order).
+			rb_io.id = static_cast<int>(init_rigid_bodies_.size());
+			rb_io.type_id = static_cast<int>(sim_system_ref_->get_rigid_body_types().size());
+			sim_system_ref_->get_rigid_body_types().push_back(std::move(rbtype));
+			init_rigid_bodies_.push_back(rb_io);
+			continue; // i already at next header or end
+		}
+
 		// Parse tabulated nonbonded interactions: format is i@j@file
 		if (key == "tabulatedFile" || key == "tabulated_file") {
 			// Parse the format: type_id_1@type_id_2@file_path
@@ -741,6 +910,8 @@ void ConfigParser::get_elements(const Reader& reader) {
 							  init_particles_,
 							  file_name_,
 							  sim_system_ref_->get_particle_types());
+		} else if (key == "rigidBodyGridGridPeriod" || key == "rigid_body_grid_grid_period") {
+			sim_system_ref_->set_rb_update_period(std::stoi(value));
 		}
 
 		++i;

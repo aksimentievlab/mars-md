@@ -88,6 +88,17 @@ class ConfigParser {
 		return init_bonded_interactions_;
 	}
 
+	/**
+	 * @brief Get initial rigid bodies (temporary data, used once during initialization)
+	 */
+	std::vector<RigidBodyIO>& get_init_rigid_bodies() {
+		return init_rigid_bodies_;
+	}
+
+	const std::vector<RigidBodyIO>& get_init_rigid_bodies() const {
+		return init_rigid_bodies_;
+	}
+
   private:
 	// Reference to the SimSystem being configured
 	SimSystem* sim_system_ref_;
@@ -96,6 +107,7 @@ class ConfigParser {
 
 	// Temporary initial topology data (used once during initialization, then discarded)
 	std::vector<ParticleIO> init_particles_{};
+	std::vector<RigidBodyIO> init_rigid_bodies_{};
 	BondedInteractions init_bonded_interactions_{};
 
 	// BondConfigReader initialized in constructor body to ensure sim_system_ref_ is set

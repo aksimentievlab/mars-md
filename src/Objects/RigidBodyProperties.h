@@ -42,25 +42,25 @@ struct RigidBodyIO {
 class RigidBodyType {
   public:
 	std::string name;
-	int id;
-	float mass;
-	Vector3 inertia;
-	Vector3 trans_damping;
-	Vector3 rot_damping;
-	Vector3 trans_force_coeff;
-	Vector3 rot_torque_coeff;
-	float rot_diffusivity;
-	float rot_damping_coefficient;
-	float charge;
-	float radius;
-	float eps;
-	float diffusion;
-	float mu; // for Nose-Hoover Langevin dynamics
-	int num_grid_files;
+	int id = -1; // Default to invalid, will be set after initialization
+	float mass = 1.0f; // Avoid divide-by-zero if missed
+	Vector3 inertia = {1.0f, 1.0f, 1.0f}; // Avoid divide-by-zero if missed
+	Vector3 trans_damping = {0.0f, 0.0f, 0.0f};
+	Vector3 rot_damping = {0.0f, 0.0f, 0.0f};
+	Vector3 trans_force_coeff = {0.0f, 0.0f, 0.0f};
+	Vector3 rot_torque_coeff = {0.0f, 0.0f, 0.0f};
+	float rot_diffusivity = 0.0f;
+	float rot_damping_coefficient = 0.0f;
+	float charge = 0.0f;
+	float radius = 0.0f;
+	float eps = 0.0f;
+	float diffusion = 0.0f;
+	float mu = 0.0f; // for Nose-Hoover Langevin dynamics
+	int num_grid_files = 0;
 	// float meanPmf;
-	float pmf_scale;
-	float pmf_scale_slope;
-	uint32_t pmf_smd_freq;
+	float pmf_scale = 1.0f;
+	float pmf_scale_slope = 0.0f;
+	uint32_t pmf_smd_freq = 0;
 
 	std::vector<ParticleIO> attached_particle;
 	// One GridTerm (grid_id + scale + scale_slope + boundary_condition) per

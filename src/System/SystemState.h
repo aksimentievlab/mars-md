@@ -12,6 +12,7 @@
 #include "ARBDException.h"
 #include "ARBDLogger.h"
 #include "Backend/Buffer.h"
+#include "Objects/RigidBodyProperties.h"
 #include "System/SimSystem.h"
 #include "SystemForward.h"
 #include "Types/BaseGrid.h"
@@ -121,6 +122,37 @@ class SystemState {
 
 	const BondedInteractions& get_bonded_interactions() const {
 		return bonded_interactions_;
+	}
+
+	/**
+	 * @brief Set initial rigid-body data
+	 * @details Unlike set_init_particle_data(), no name->id resolution happens
+	 *          here: ConfigParser resolves RigidBodyIO::type_id directly at
+	 *          parse time (insertion order into SimSystem::get_rigid_body_types()
+	 *          is what assign_rigid_body_type_ids() later assigns as .id), so
+	 *          this is a plain copy.
+	 * @param bodies Initial rigid-body instances (host-side)
+	 */
+	void set_init_rigid_body_data(const std::vector<RigidBodyIO>& bodies) {
+		global_rigid_body_data_.clear();
+		global_rigid_body_data_.reserve(bodies.size());
+		for (const auto& rb : bodies) {
+			global_rigid_body_data_.push_back(rb);
+		}
+	}
+
+	/**
+	 * @brief Get complete global rigid-body data
+	 */
+	const HostRigidBodyData& get_global_rigid_bodies() const {
+		return global_rigid_body_data_;
+	}
+
+	/**
+	 * @brief Get number of rigid bodies in the system
+	 */
+	size_t get_num_rigid_bodies() const {
+		return global_rigid_body_data_.size();
 	}
 
 	/**
@@ -237,6 +269,11 @@ class SystemState {
 	// Global particle state (host-side, ready for I/O)
 	HostParticleData global_particle_data_; // Always sorted by ID.
 	BondedInteractions bonded_interactions_;
+
+	// Rigid-body state (static instance count for the run - unlike particles,
+	// nothing migrates/reacts them yet, so no separate "changes every
+	// timestep" gathering path exists).
+	HostRigidBodyData global_rigid_body_data_;
 
 	// Metadata
 	bool state_synced_{false}; // Flag indicating if state is up-to-date
