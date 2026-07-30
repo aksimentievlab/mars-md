@@ -64,8 +64,9 @@ struct TabulatedNonBondedComputer {
 	DEVICE_PTR(const int) pairwise_form_matrix;
 	DEVICE_PTR(const TabulatedPotential) tables;
 	idx_t num_particle_types;
-	DEVICE_PTR(const int2) exclusions;
-	idx_t num_exclusions;
+	DEVICE_PTR(const int) excl_offsets;	  // CSR: per-particle offsets, size num_excl_particles+1
+	DEVICE_PTR(const int) excl_neighbors; // CSR: excluded partners, concatenated per particle
+	idx_t num_excl_particles;			  // particles covered by excl_offsets
 	const PeriodicBox* pbox;
 	bool get_energy;
 	idx_t num_pairs;
@@ -79,15 +80,16 @@ struct TabulatedNonBondedComputer {
 							   DEVICE_PTR(const int) form_matrix,
 							   DEVICE_PTR(const TabulatedPotential) tabs,
 							   idx_t n_types,
-							   DEVICE_PTR(const int2) excl,
-							   idx_t n_excl,
+							   DEVICE_PTR(const int) excl_off,
+							   DEVICE_PTR(const int) excl_nbr,
+							   idx_t n_excl_particles,
 							   const PeriodicBox* box,
 							   bool energy,
 							   idx_t n_pairs)
 		: particle_indices(indices), positions(pos), force_energy(fe), type_ids(type_id_arr),
 		  pairwise_table_matrix(table_matrix), pairwise_form_matrix(form_matrix), tables(tabs),
-		  num_particle_types(n_types), exclusions(excl), num_exclusions(n_excl), pbox(box),
-		  get_energy(energy), num_pairs(n_pairs) {}
+		  num_particle_types(n_types), excl_offsets(excl_off), excl_neighbors(excl_nbr),
+		  num_excl_particles(n_excl_particles), pbox(box), get_energy(energy), num_pairs(n_pairs) {}
 
 	// Kernel operator
 	DEVICE void operator()(idx_t i) const {
@@ -97,25 +99,18 @@ struct TabulatedNonBondedComputer {
 		const int2& indices = particle_indices[i];
 
 		// Phase 1: Skip excluded pairs (bonded neighbors etc.).
-		// `exclusions` is canonicalized to (min, max) and sorted lexicographically
-		// (see DeviceBondedInteractions), so we binary-search for this pair rather
-		// than scanning the whole list. This is the difference between O(log E) and
-		// O(E) per candidate pair; the linear scan made large systems appear to hang.
-		if (num_exclusions > 0) {
-			const int query_lo = indices.x < indices.y ? indices.x : indices.y;
-			const int query_hi = indices.x < indices.y ? indices.y : indices.x;
-			idx_t lo = 0;
-			idx_t hi = num_exclusions; // half-open [lo, hi)
-			while (lo < hi) {
-				const idx_t mid = lo + (hi - lo) / 2;
-				const int2& ex = exclusions[mid];
-				if (ex.x < query_lo || (ex.x == query_lo && ex.y < query_hi)) {
-					lo = mid + 1;
-				} else if (ex.x > query_lo || (ex.x == query_lo && ex.y > query_hi)) {
-					hi = mid;
-				} else {
-					return; // found: pair is excluded
-				}
+		// Scan only particle `indices.x`'s excluded-partner list (CSR), which is
+		// ~degree(indices.x) entries (typically 1-2 for a linear polymer) rather
+		// than the whole exclusion set. Each exclusion is stored in both partners'
+		// lists, so checking one endpoint is sufficient. This keeps the per-pair
+		// exclusion test O(1) w.r.t. system size; the old full scan was O(N) per
+		// pair, i.e. O(N^2) per step, which made large systems appear to hang.
+		if (indices.x < static_cast<int>(num_excl_particles)) {
+			const int begin = excl_offsets[indices.x];
+			const int end = excl_offsets[indices.x + 1];
+			for (int e = begin; e < end; ++e) {
+				if (excl_neighbors[e] == indices.y)
+					return; // excluded
 			}
 		}
 
@@ -164,8 +159,9 @@ inline Event launch_pairwise_nonbonded(const Resource& resource,
 									   DEVICE_PTR(const int) pairwise_form_matrix,
 									   DEVICE_PTR(const TabulatedPotential) tables,
 									   idx_t num_particle_types,
-									   DEVICE_PTR(const int2) exclusions,
-									   idx_t num_exclusions,
+									   DEVICE_PTR(const int) excl_offsets,
+									   DEVICE_PTR(const int) excl_neighbors,
+									   idx_t num_excl_particles,
 									   const PeriodicBox* pbox,
 									   bool get_energy,
 									   idx_t num_pairs) {
@@ -182,8 +178,9 @@ inline Event launch_pairwise_nonbonded(const Resource& resource,
 										pairwise_form_matrix,
 										tables,
 										num_particle_types,
-										exclusions,
-										num_exclusions,
+										excl_offsets,
+										excl_neighbors,
+										num_excl_particles,
 										pbox,
 										get_energy,
 										num_pairs);

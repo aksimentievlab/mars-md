@@ -126,8 +126,9 @@ Event Patch::calculate_nonbonded_forces(const NonBondedInteractions& interaction
 									device_pair_nb_->pairwise_form_matrix(),
 									device_pair_nb_->nonbonded_potentials(),
 									device_pair_nb_->num_particle_types(),
-									device_bonded_.exclusion_pairs(),
-									device_bonded_.num_exclusions(),
+									device_bonded_.exclusion_offsets(),
+									device_bonded_.exclusion_neighbors(),
+									device_bonded_.num_excl_particles(),
 									pbox,
 									compute_energy,
 									pairlist_->get_num_pairs());

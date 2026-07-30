@@ -110,13 +110,11 @@ class DeviceBondedInteractions {
 		num_exclusions_ = exclusions.size();
 
 		if (num_exclusions_ > 0) {
-			// Canonicalize each exclusion to (min, max) and sort lexicographically.
-			// The nonbonded kernel binary-searches this array once per candidate
-			// pair, turning the exclusion test from O(num_exclusions) into
-			// O(log num_exclusions). Without this, a system with N bonded beads
-			// pays O(num_pairs * num_exclusions) ~ O(N^2) every step, which makes
-			// large systems (100k+ particles) appear to hang.
+			// Keep the flat (canonicalized, sorted) pair list for any consumer that
+			// still wants it, but the nonbonded kernel uses the per-particle CSR
+			// lists built below.
 			std::vector<int2> excl_pairs(num_exclusions_);
+			int max_idx = 0;
 			for (size_t i = 0; i < num_exclusions_; ++i) {
 				int a = exclusions[i].ind1;
 				int b = exclusions[i].ind2;
@@ -124,12 +122,42 @@ class DeviceBondedInteractions {
 					std::swap(a, b);
 				}
 				excl_pairs[i] = int2{a, b};
+				max_idx = std::max(max_idx, b);
 			}
 			std::sort(excl_pairs.begin(), excl_pairs.end(), [](const int2& p, const int2& q) {
 				return p.x != q.x ? p.x < q.x : p.y < q.y;
 			});
 			exclusion_pairs_ = DeviceBuffer<int2>(num_exclusions_, resource_);
 			exclusion_pairs_.copy_from_host(excl_pairs.data(), num_exclusions_);
+
+			// Build per-particle CSR exclusion lists. Each exclusion (a,b) is
+			// recorded in both a's and b's segment, so the nonbonded kernel can
+			// test a candidate pair (i,j) by scanning only i's excluded partners
+			// (~degree(i), typically 1-2 for a linear polymer). This replaces the
+			// O(log num_exclusions) binary search (and the original O(num_exclusions)
+			// scan) in the per-pair hot loop.
+			num_excl_particles_ = static_cast<idx_t>(max_idx) + 1;
+			std::vector<int> offsets(num_excl_particles_ + 1, 0);
+			for (size_t i = 0; i < num_exclusions_; ++i) {
+				offsets[excl_pairs[i].x + 1]++;
+				offsets[excl_pairs[i].y + 1]++;
+			}
+			for (idx_t p = 0; p < num_excl_particles_; ++p) {
+				offsets[p + 1] += offsets[p];
+			}
+			const size_t total = static_cast<size_t>(offsets[num_excl_particles_]);
+			std::vector<int> neighbors(total);
+			std::vector<int> cursor(offsets.begin(), offsets.end() - 1);
+			for (size_t i = 0; i < num_exclusions_; ++i) {
+				const int a = excl_pairs[i].x;
+				const int b = excl_pairs[i].y;
+				neighbors[cursor[a]++] = b;
+				neighbors[cursor[b]++] = a;
+			}
+			excl_offsets_ = DeviceBuffer<int>(num_excl_particles_ + 1, resource_);
+			excl_offsets_.copy_from_host(offsets.data(), num_excl_particles_ + 1);
+			excl_neighbors_ = DeviceBuffer<int>(total, resource_);
+			excl_neighbors_.copy_from_host(neighbors.data(), total);
 		}
 
 		// === RESTRAINTS ===
@@ -298,6 +326,16 @@ class DeviceBondedInteractions {
 	idx_t num_exclusions() const {
 		return num_exclusions_;
 	}
+	// Per-particle (CSR) exclusion view; see member declarations below.
+	DEVICE_PTR(const int) exclusion_offsets() const {
+		return excl_offsets_.data();
+	}
+	DEVICE_PTR(const int) exclusion_neighbors() const {
+		return excl_neighbors_.data();
+	}
+	idx_t num_excl_particles() const {
+		return num_excl_particles_;
+	}
 
 	// Restraints
 	DEVICE_PTR(const int) restraint_particle_ids() const {
@@ -340,6 +378,14 @@ class DeviceBondedInteractions {
 	// === EXCLUSIONS ===
 	DeviceBuffer<int2> exclusion_pairs_; // Pairs to exclude from nonbonded
 	idx_t num_exclusions_{0};
+	// Per-particle (CSR) view of the same exclusions: excl_neighbors_ holds, for
+	// each particle p, its excluded partners in [excl_offsets_[p], excl_offsets_[p+1]).
+	// Each exclusion (a,b) is stored in both a's and b's segment. The nonbonded
+	// kernel uses this to test a candidate pair in O(degree(p)) (~2 for a linear
+	// chain) instead of scanning/searching all exclusions.
+	DeviceBuffer<int> excl_offsets_;   // size num_excl_particles_ + 1
+	DeviceBuffer<int> excl_neighbors_; // size 2 * num_exclusions_
+	idx_t num_excl_particles_{0};      // number of particles covered by excl_offsets_
 
 	// === RESTRAINTS ===
 	DeviceBuffer<int> restraint_particle_ids_;

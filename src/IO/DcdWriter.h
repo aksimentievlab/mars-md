@@ -252,6 +252,7 @@ class DcdWriter {
   private:
 	std::string fileName_;
 	int fd_;
+	std::vector<float> coord_buffer_; // reused per-frame packing buffer for one X/Y/Z block
 
 	/**
 	 * @brief Open DCD file for writing with backup handling
@@ -480,32 +481,36 @@ class DcdWriter {
 			safeWrite(&out_integer, sizeof(int));
 		}
 
-		// Write coordinates efficiently using Vector3 memory layout
+		// Write coordinates using the DCD block layout (X block, Y block, Z
+		// block), one contiguous write() per block. Extracting each component
+		// into a packed buffer first turns 3*N write() syscalls per frame into
+		// 3 - for a 300k-atom system that is ~900k syscalls/frame eliminated,
+		// which otherwise dominates wall-clock (the coordinate loops here were
+		// the single largest cost in large-system runs).
 		int coord_size = N * sizeof(float);
-
-		// Since Vector3 has x,y,z,w layout with proper alignment,
-		// we can efficiently extract components without temporary arrays
 		const Vector3* pos_data = positions.data();
 
-		// X coordinates: stride through Vector3 array accessing x component
-		safeWrite(&coord_size, sizeof(int));
+		coord_buffer_.resize(N);
+
 		for (int i = 0; i < N; ++i) {
-			safeWrite(&pos_data[i].x, sizeof(float));
+			coord_buffer_[i] = pos_data[i].x;
 		}
+		safeWrite(&coord_size, sizeof(int));
+		safeWrite(coord_buffer_.data(), coord_size);
 		safeWrite(&coord_size, sizeof(int));
 
-		// Y coordinates: stride through Vector3 array accessing y component
-		safeWrite(&coord_size, sizeof(int));
 		for (int i = 0; i < N; ++i) {
-			safeWrite(&pos_data[i].y, sizeof(float));
+			coord_buffer_[i] = pos_data[i].y;
 		}
+		safeWrite(&coord_size, sizeof(int));
+		safeWrite(coord_buffer_.data(), coord_size);
 		safeWrite(&coord_size, sizeof(int));
 
-		// Z coordinates: stride through Vector3 array accessing z component
-		safeWrite(&coord_size, sizeof(int));
 		for (int i = 0; i < N; ++i) {
-			safeWrite(&pos_data[i].z, sizeof(float));
+			coord_buffer_[i] = pos_data[i].z;
 		}
+		safeWrite(&coord_size, sizeof(int));
+		safeWrite(coord_buffer_.data(), coord_size);
 		safeWrite(&coord_size, sizeof(int));
 
 		// Update header counters
