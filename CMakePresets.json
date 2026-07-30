@@ -218,10 +218,10 @@
             "binaryDir": "${sourceDir}/build/tbgl-cuda-release",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Release",
-                "CMAKE_CUDA_COMPILER": "/software/cuda-12.4/bin/nvcc",
-                "CMAKE_CUDA_HOST_COMPILER": "/software/gcc-12.3.0/bin/gcc",
-                "CMAKE_CXX_COMPILER": "/software/gcc-12.3.0/bin/g++",
-                "CMAKE_C_COMPILER": "/software/gcc-12.3.0/bin/gcc",
+                "CMAKE_CUDA_COMPILER": "/software/cuda-12.8/bin/nvcc",
+                "CMAKE_CUDA_HOST_COMPILER": "/software/gcc-14.2.0-rh8/bin/gcc",
+                "CMAKE_CXX_COMPILER": "/software/gcc-14.2.0-rh8/bin/g++",
+                "CMAKE_C_COMPILER": "/software/gcc-14.2.0-rh8/bin/gcc",
                 "USE_CUDA": "ON",
                 "CMAKE_CXX_EXTENSIONS": "OFF"
             }
