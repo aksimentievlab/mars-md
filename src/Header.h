@@ -248,29 +248,8 @@ using threadgroup_ptr = threadgroup T*;
 #endif
 
 constexpr inline short NUM_QUEUES = 4;
-// bump to 5 for cross-GPU gathering streams.
+inline constexpr int MAX_NEIGHBORS = 27;
 
-/**
- * @brief Optimized reduction helper for scenarios with many threads
- *
- * This function provides a pattern for reducing atomic contention by using
- * local accumulation and reduced frequency of atomic operations.
- *
- * @tparam T Arithmetic type
- * @param local_values Array of local values to reduce
- * @param count Number of local values
- * @param global_sum Pointer to global accumulator
- * @return Local thread's contribution to the sum
- */
-template<typename T>
-inline T atomic_reduce_batch(const T* local_values, size_t count, T* global_sum) {
-	T local_total = T{0};
-	for (size_t i = 0; i < count; ++i) {
-		local_total += local_values[i];
-	}
-	atomic_add(global_sum, local_total);
-	return local_total;
-}
 using idx_t = size_t;
 using patch_t = size_t;
 using particle_t = size_t;

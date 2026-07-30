@@ -156,4 +156,13 @@ HOST DEVICE inline void atomic_add(Vector3_t<T>* ptr, const Vector3_t<T>& value)
 #endif
 }
 
+template<typename T>
+inline T atomic_reduce_batch(const T* local_values, size_t count, T* global_sum) {
+	T local_total = T{0};
+	for (size_t i = 0; i < count; ++i) {
+		local_total += local_values[i];
+	}
+	atomic_add(global_sum, local_total);
+	return local_total;
+}
 } // namespace ARBD

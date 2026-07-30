@@ -9,13 +9,12 @@
 // use new instead
 /**
  * @file Constants.h
- * @brief Physical and mathematical constants for ARBD simulations
+ * @brief Physical and mathematical constants for ARBD simulations. Device constants are defined in
+ * Header.h.
  * @details Contains all constant values used throughout the ARBD project
  */
 
 namespace ARBD {
-// Main namespace for Atomic Resolution Brownian Dynamics
-
 namespace constants {
 constexpr float PI = 3.141592653589793f;
 constexpr float TWOPI = 2.0f * PI;
@@ -46,10 +45,5 @@ constexpr float impulse_to_momentum = 4.1867999435271e4f;
 constexpr float langevin_damp_scale = 10000.0f;
 constexpr float velocity_scale = 1e4f;
 } // namespace constants
-
-// Use inline variables for configuration constants
-inline constexpr int MAX_NEIGHBORS = 27;
-
-
 
 } // namespace ARBD

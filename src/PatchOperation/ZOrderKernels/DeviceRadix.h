@@ -15,6 +15,9 @@ class Resource;
 #ifndef SG_SIZE
 #if defined(__AMDGCN_WAVEFRONT_SIZE) && (__AMDGCN_WAVEFRONT_SIZE == 64)
 #define SG_SIZE 64
+#elif defined(__INTEL_VCE__) || defined(__SYCL_SINGLE_TASK__) // Intel compiler checks
+// Force SIMD16 for PVC to save registers:
+#define SG_SIZE 16
 #else
 #define SG_SIZE 32 // Default for NVIDIA (Delta) and Intel
 #endif
