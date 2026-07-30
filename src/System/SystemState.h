@@ -108,9 +108,9 @@ class SystemState {
 	 * @param particles Host particle data gathered from patches
 	 * @note Particles should be sorted by ID after gathering for consistent DCD output
 	 */
-	void set_from_host_particle_data(const HostParticleData& particles) {
-		global_particle_data_ = particles;
+	void set_from_host_particle_data(HostParticleData particles) {
 		global_num_particles_ = particles.size();
+		global_particle_data_ = std::move(particles);
 		// Ensure particles are sorted by ID for consistent DCD output
 		sort_particles_by_id();
 	}

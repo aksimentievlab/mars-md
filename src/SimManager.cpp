@@ -1,10 +1,37 @@
 #include "SimManager.h"
 #include "System/PatchManager.h"
+#include <charconv>
 #include <cstdio>
 #include <fstream>
 #include <random>
 
 namespace ARBD {
+
+namespace {
+// fprintf's "%.10g" goes through glibc's arbitrary-precision decimal
+// conversion (__printf_fp_l / __mpn_*), which nsys CPU sampling showed
+// dominating the ~700ms per-output-frame host stall for ~300k particles
+// (2x fprintf calls per particle, pos + momentum restart). std::to_chars
+// uses a shortest-round-trip algorithm that is orders of magnitude faster
+// for the same information content, and the restart-file reader
+// (ConfigParser.cpp load_restart_file) just tokenizes on whitespace, so the
+// exact textual form doesn't matter.
+void append_restart_line(std::string& buf, int type_id, const Vector3& v) {
+	char tmp[64];
+	auto append = [&](auto value) {
+		auto res = std::to_chars(tmp, tmp + sizeof(tmp), value);
+		buf.append(tmp, res.ptr);
+	};
+	append(type_id);
+	buf.push_back(' ');
+	append(v.x);
+	buf.push_back(' ');
+	append(v.y);
+	buf.push_back(' ');
+	append(v.z);
+	buf.push_back('\n');
+}
+} // namespace
 
 //================================================================================
 // Constructor
@@ -781,10 +808,12 @@ void SimManager::write_restart_files() {
 	const std::string restart_filename = sys_.get_output_name() + ".restart";
 	FILE* out = std::fopen(restart_filename.c_str(), "w");
 	if (out) {
+		std::string buf;
+		buf.reserve(particles.size() * 32);
 		for (size_t i = 0; i < particles.size(); ++i) {
-			const Vector3& p = particles.pos[i];
-			std::fprintf(out, "%d %.10g %.10g %.10g\n", particles.type_id[i], p.x, p.y, p.z);
+			append_restart_line(buf, particles.type_id[i], particles.pos[i]);
 		}
+		std::fwrite(buf.data(), 1, buf.size(), out);
 		std::fclose(out);
 	} else {
 		LOGWARN("SimManager: Failed to open '{}' for restart output", restart_filename);
@@ -797,10 +826,12 @@ void SimManager::write_restart_files() {
 		const std::string momentum_restart_filename = sys_.get_output_name() + ".0.momentum.restart";
 		FILE* mout = std::fopen(momentum_restart_filename.c_str(), "w");
 		if (mout) {
+			std::string buf;
+			buf.reserve(particles.size() * 32);
 			for (size_t i = 0; i < particles.size(); ++i) {
-				const Vector3& p = particles.mom[i];
-				std::fprintf(mout, "%d %.10g %.10g %.10g\n", particles.type_id[i], p.x, p.y, p.z);
+				append_restart_line(buf, particles.type_id[i], particles.mom[i]);
 			}
+			std::fwrite(buf.data(), 1, buf.size(), mout);
 			std::fclose(mout);
 		} else {
 			LOGWARN("SimManager: Failed to open '{}' for momentum restart output",
