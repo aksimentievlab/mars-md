@@ -65,7 +65,8 @@ enum class StreamType {
 	Compute = 0,	 ///< Dedicated compute stream (stream 0)
 	Memory = 1,		 ///< Dedicated memory transfer stream (stream 1)
 	GridCompute = 2, ///< RB grid-grid / grid-particle batched kernels (stream 2)
-	Optional = 3	 ///< Additional async stream (stream 3) eg multi-GPU halo exchange/NCCL
+	Output = 3,
+	// Gather = 4
 };
 
 // namespace ARBD

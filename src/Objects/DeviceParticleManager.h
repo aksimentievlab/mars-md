@@ -114,7 +114,12 @@ class DeviceParticle {
 	}
 
 	// Bulk Copy Helper: Device -> Host
-	void copy_to_host(HostParticleData& host, idx_t count) const {
+	// `need_energy` gates the ForceEnergy_ device->host copy and its
+	// per-particle unpack loop: host.force is never read anywhere in the
+	// codebase, and host.energy is only read by SimManager::write_energy_output.
+	// DCD-frame and restart-only gathers (the common case) don't need either,
+	// so skip this field-copy + O(N) unpack loop for them.
+	void copy_to_host(HostParticleData& host, idx_t count, bool need_energy = false) const {
 		// Ensure host vectors are sized appropriately
 		if (host.size() < count)
 			host.resize(count);
@@ -126,18 +131,12 @@ class DeviceParticle {
 		orient_.copy_to_host(host.orient.data(), count);
 		flags_.copy_to_host(host.flags.data(), count);
 
-		// ForceEnergy_ packs force (xyz) and energy (t) together; unpack
-		// into host.force/host.energy separately. This used to be a
-		// separate copy_force_energy_to_host() that nothing ever called, so
-		// host.force silently stayed at whatever it was default-constructed
-		// to (zero) regardless of the actual on-device force.
+		if (!need_energy)
+			return;
+		// write energy to host
 		std::vector<Vector3> temp(count);
 		ForceEnergy_.copy_to_host(temp.data(), count);
 		for (idx_t i = 0; i < count; ++i) {
-			host.force[i].x = temp[i].x;
-			host.force[i].y = temp[i].y;
-			host.force[i].z = temp[i].z;
-			host.force[i].t = 0.0f;
 			host.energy[i] = temp[i].t;
 		}
 	}

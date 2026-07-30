@@ -495,7 +495,7 @@ void SimManager::handle_output(size_t step) {
 	}
 }
 
-void SimManager::gather_particle_data_from_patches() {
+void SimManager::gather_particle_data_from_patches(bool need_energy) {
 	PatchManager* patch_mgr = sys_.get_patch_manager();
 	sys_state_.clear_global_arrays();
 	if (!patch_mgr) {
@@ -503,7 +503,7 @@ void SimManager::gather_particle_data_from_patches() {
 						SourceLocation(),
 						"PatchManager not available for gathering particle data");
 	}
-	patch_mgr->gather_particles_to_state(sys_state_);
+	patch_mgr->gather_particles_to_state(sys_state_, need_energy);
 
 	sys_state_.mark_synced();
 }
@@ -737,7 +737,7 @@ void SimManager::write_energy_output(size_t step) {
 	// Gather the SystemState that execute_force_calculation() this step
 	// accumulated potential energy into (ForceEnergy.t, unpacked into
 	// HostParticleData::energy by DeviceParticle::copy_to_host).
-	gather_particle_data_from_patches();
+	gather_particle_data_from_patches(/*need_energy=*/true);
 
 	const auto& particles = sys_state_.get_global_particles();
 	const size_t n = particles.size();

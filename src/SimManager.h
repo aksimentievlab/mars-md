@@ -243,8 +243,11 @@ class SimManager {
 	 * @brief Gather particle data from all patches into SystemState
 	 * Collects positions, momenta, and IDs from all patches and assembles
 	 * them into global arrays in SystemState for output.
+	 * @param need_energy Also gather force/energy - only write_energy_output
+	 *        reads these; DCD/restart writers don't, so they skip this
+	 *        field-copy by default (see Patch::copy_particles_to_host).
 	 */
-	void gather_particle_data_from_patches();
+	void gather_particle_data_from_patches(bool need_energy = false);
 
 	/**
 	 * @brief Write a single DCD trajectory frame

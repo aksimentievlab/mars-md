@@ -152,8 +152,10 @@ class PatchManager {
 	/**
 	 * @brief Gather particles from patches back to SystemState
 	 * @param state System state to store gathered particles
+	 * @param need_energy Also gather ForceEnergy (skipped by default - see
+	 *        Patch::copy_particles_to_host)
 	 */
-	void gather_particles_to_state(SystemState& state);
+	void gather_particles_to_state(SystemState& state, bool need_energy = false);
 
 	//================================================================================
 	// Patch Access and Management

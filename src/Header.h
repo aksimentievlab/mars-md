@@ -248,6 +248,7 @@ using threadgroup_ptr = threadgroup T*;
 #endif
 
 constexpr inline short NUM_QUEUES = 4;
+// bump to 5 for cross-GPU gathering streams.
 
 /**
  * @brief Optimized reduction helper for scenarios with many threads

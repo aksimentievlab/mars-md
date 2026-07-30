@@ -437,7 +437,8 @@ void Patch::copy_particles_from_host(const HostParticleData& host_data,
 
 void Patch::copy_particles_to_host(HostParticleData& host_data,
 								   idx_t start_idx,
-								   idx_t count) const {
+								   idx_t count,
+								   bool need_energy) const {
 	if (count > particle_count_) {
 		throw Exception(ExceptionType::RuntimeError,
 						SourceLocation(),
@@ -454,7 +455,7 @@ void Patch::copy_particles_to_host(HostParticleData& host_data,
 	// Copy from device to temporary host buffer
 	HostParticleData temp_data;
 	temp_data.resize(count);
-	particles_.copy_to_host(temp_data, count);
+	particles_.copy_to_host(temp_data, count, need_energy);
 
 	// Copy to target location in host data
 	for (idx_t i = 0; i < count; ++i) {

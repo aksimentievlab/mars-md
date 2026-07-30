@@ -509,8 +509,14 @@ class Patch {
 	 * @param host_data Output host particle data
 	 * @param start_idx Starting index in host data for output
 	 * @param count Number of particles to copy
+	 * @param need_energy Also copy/unpack ForceEnergy (skipped by default -
+	 *        DCD/restart writers never read force or energy; only the
+	 *        energy-output path needs it)
 	 */
-	void copy_particles_to_host(HostParticleData& host_data, idx_t start_idx, idx_t count) const;
+	void copy_particles_to_host(HostParticleData& host_data,
+								 idx_t start_idx,
+								 idx_t count,
+								 bool need_energy = false) const;
 
   private:
 	/**

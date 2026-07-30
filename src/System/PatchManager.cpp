@@ -251,7 +251,7 @@ void PatchManager::distribute_particles_from_state(SystemState& state) {
 			 patches_.size());
 }
 
-void PatchManager::gather_particles_to_state(SystemState& state) {
+void PatchManager::gather_particles_to_state(SystemState& state, bool need_energy) {
 	state.clear_global_arrays();
 
 	if (patches_.empty()) {
@@ -266,22 +266,19 @@ void PatchManager::gather_particles_to_state(SystemState& state) {
 	for (const auto& meta : patch_metadata_) {
 		total += static_cast<size_t>(meta.particle_count);
 	}
-	all_particles.reserve(total);
+	all_particles.resize(total);
 
+	idx_t offset = 0;
 	for (size_t pid = 0; pid < patches_.size(); ++pid) {
 		const auto& patch = *patches_[pid];
 		const idx_t count = patch.get_particle_count();
 		if (count == 0)
 			continue;
 
-		HostParticleData tmp;
-		tmp.reserve(count);
-		patch.copy_particles_to_host(tmp, 0, count);
-		all_particles.reserve(all_particles.size() + count);
-
-		for (idx_t i = 0; i < count; ++i) {
-			all_particles.push_back(tmp, i);
-		}
+		// Write directly into this patch's slice of all_particles instead of
+		// staging through a per-patch `tmp` + push_back double-copy.
+		patch.copy_particles_to_host(all_particles, offset, count, need_energy);
+		offset += count;
 	}
 
 	state.set_from_host_particle_data(all_particles);
