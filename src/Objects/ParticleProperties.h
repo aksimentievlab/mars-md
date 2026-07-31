@@ -112,28 +112,34 @@ class ParticleType {
 // 4. HOST STORAGE (For IO / Init)
 // ============================================================================
 struct ParticleIO {
-	int id;
+	// Index of this particle in the global particle array. Assigned by
+	// whoever produces the list (ConfigParser sets it to insertion order);
+	// defaulted rather than left uninitialized because SystemState::
+	// set_init_particle_data() copies it straight into global_id, so a
+	// producer that forgets to set it would otherwise emit garbage ids.
+	int id{-1};
+	// Stable per-object handle, used only to let bonded terms (Bond/Angle/
+	// Dihedral/Exclude/Restraint) name a particle *before* the staged list
+	// order - and hence `id` - is known. The Python bindings assign one at
+	// construction; SimManager::init() maps uid -> staged index and rewrites
+	// the terms' indices (see BondedInteractions::resolve_particle_uids).
+	// Unused (-1) on the ConfigParser path, which supplies indices directly.
+	int uid{-1};
 	std::string type_name;
 	Vector3 position;
 	Vector3 momentum;
 	Vector3 orientation{1.0f, 0.0f, 0.0f};
 	Vector3 force;
-	float energy;
+	float energy{0.0f};
 	int group_id = -1; // belongs to no one.
 	int colvars_group_id = -1;
 	int attached_rigid_body_id = -1;
 	// colvars groups this particle belongs to. One particle can belong to multiple groups.
-	ParticleIO& operator=(const ParticleIO& src) {
-		id = src.id;
-		type_name = src.type_name;
-		position = src.position;
-		momentum = src.momentum;
-		force = src.force;
-		orientation = src.orientation;
-		energy = src.energy;
-		group_id = src.group_id;
-		return *this;
-	}
+	// Defaulted rather than hand-written: the previous hand-written version
+	// listed only a subset of members, silently dropping colvars_group_id and
+	// attached_rigid_body_id (the latter is what links a particle to its rigid
+	// body) on every copy-assignment.
+	ParticleIO& operator=(const ParticleIO& src) = default;
 };
 
 struct HostParticleData {

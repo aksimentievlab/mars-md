@@ -32,6 +32,7 @@
 */
 #include "Objects/Grid.h"
 #include "Objects/Tables.h"
+#include "PyTypeCasters.h"
 
 // pybind11 core
 #include <pybind11/numpy.h>

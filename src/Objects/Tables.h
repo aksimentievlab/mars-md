@@ -3,6 +3,7 @@
 #include "IO/FileHandle.h"
 #include "Interactions/NonBondedInteraction.h"
 #include "Types/Types.h"
+#include <optional>
 #include <string>
 #include <unordered_map>
 
@@ -97,6 +98,39 @@ struct Table {
 		// dU * step_inv in TabulatedPotential::compute), while still
 		// reporting a plausible-looking (but wrong, always-at-x=start) energy.
 		check_same_step_size();
+	}
+
+	/**
+	 * @brief Populate X/Y directly from an in-memory Y-value sequence (e.g. a
+	 *        Python list or numpy array), bypassing read_file(). X is
+	 *        generated evenly starting at `start`, using either `stop` (the
+	 *        last X value; spacing is derived from Y.size()) or an explicit
+	 *        `step_size` - exactly one of the two must be given, mirroring
+	 *        numpy's linspace(start, stop, num) vs. arange(start, step=...)
+	 *        conventions.
+	 */
+	void set_values(std::vector<arbd_real> y_values,
+					arbd_real start_,
+					std::optional<arbd_real> stop = std::nullopt,
+					std::optional<arbd_real> step_size_ = std::nullopt) {
+		if (y_values.size() < 2) {
+			throw_value_error("Table::set_values: need at least 2 Y values, got %zu",
+							  y_values.size());
+		}
+		if (stop.has_value() == step_size_.has_value()) {
+			throw_value_error(
+				"Table::set_values: provide exactly one of stop or step_size, not both/neither");
+		}
+
+		Y = std::move(y_values);
+		start = start_;
+		step_size = stop.has_value() ? (*stop - start) / static_cast<arbd_real>(Y.size() - 1)
+									  : *step_size_;
+
+		X.resize(Y.size());
+		for (size_t i = 0; i < X.size(); ++i) {
+			X[i] = start + step_size * static_cast<arbd_real>(i);
+		}
 	}
 };
 

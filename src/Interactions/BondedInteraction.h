@@ -52,11 +52,34 @@ enum class AnalyticalDihedralType {
 	COUNT
 };
 
+/**
+ * @brief Particle handles recorded by a bonded term until indices are known.
+ * @details Bonded terms address particles by index into the global particle
+ *          array, but a caller building topology in memory (the Python
+ *          bindings, mirroring arbdmodel's `add_bond(i=b1, j=b2, ...)`) has
+ *          particle *objects*, not indices - the ordering isn't fixed until
+ *          SimManager::stage_particles(). Such a term records the particles'
+ *          ParticleIO::uid handles here; SimManager::init() maps them to
+ *          staged indices via BondedInteractions::resolve_particle_uids().
+ *          All -1 on the ConfigParser path, which supplies indices directly.
+ */
+struct ParticleUids {
+	int uid1{-1};
+	int uid2{-1};
+	int uid3{-1};
+	int uid4{-1};
+
+	bool empty() const {
+		return uid1 < 0 && uid2 < 0 && uid3 < 0 && uid4 < 0;
+	}
+};
+
 // Host-Side Exclusion Definition
 class Exclude {
   public:
 	int ind1;
 	int ind2;
+	ParticleUids uids{};
 	Exclude() : ind1(-1), ind2(-1) {}
 	Exclude(int ind1, int ind2) : ind1(ind1), ind2(ind2) {}
 	bool operator!=(const Exclude& other) const {
@@ -110,6 +133,7 @@ class Bond {
 		}
 	}
 	int ind1, ind2;
+	ParticleUids uids{};
 	std::string function_name{""}; // file name or function name
 	InteractionForm form{InteractionForm::Tabulated};
 	int function_index{-1};
@@ -122,6 +146,7 @@ class Bond {
 // Host-side angle definition
 struct Angle {
 	int ind1, ind2, ind3;
+	ParticleUids uids{};
 	std::string function_name;
 	InteractionForm form;
 	int function_index{-1};
@@ -130,6 +155,7 @@ struct Angle {
 // Host-side dihedral definition
 struct Dihedral {
 	int ind1, ind2, ind3, ind4;
+	ParticleUids uids{};
 	std::string function_name;
 	InteractionForm form;
 	int function_index{-1};
@@ -141,6 +167,7 @@ struct Restraint {
 	Restraint() : ind(-1) {}
 	Restraint(int id, Vector3 r0, float k) : ind(id), r0(r0), k(k) {}
 	int ind;
+	ParticleUids uids{};
 	Vector3 r0;
 	float k;
 };
@@ -260,6 +287,46 @@ class BondedInteractions {
 	}
 	void add_restraint(const Restraint& restraint) {
 		restraints_.push_back(restraint);
+	}
+
+	/**
+	 * @brief Rewrite every term's particle indices from its recorded uids.
+	 * @param uid_to_index Callable mapping a ParticleIO::uid to its index in
+	 *        the staged particle array.
+	 * @details No-op for terms whose uids are unset (the ConfigParser path,
+	 *          which supplies indices directly). Templated on the lookup so
+	 *          this header needs nothing from SimManager/SystemState.
+	 * @see ParticleUids
+	 */
+	template<typename UidToIndex>
+	void resolve_particle_uids(UidToIndex&& uid_to_index) {
+		auto fix = [&](const int uid, int& ind) {
+			if (uid >= 0) {
+				ind = uid_to_index(uid);
+			}
+		};
+		for (auto& b : bonds_) {
+			fix(b.uids.uid1, b.ind1);
+			fix(b.uids.uid2, b.ind2);
+		}
+		for (auto& a : angles_) {
+			fix(a.uids.uid1, a.ind1);
+			fix(a.uids.uid2, a.ind2);
+			fix(a.uids.uid3, a.ind3);
+		}
+		for (auto& d : dihedrals_) {
+			fix(d.uids.uid1, d.ind1);
+			fix(d.uids.uid2, d.ind2);
+			fix(d.uids.uid3, d.ind3);
+			fix(d.uids.uid4, d.ind4);
+		}
+		for (auto& e : exclusions_) {
+			fix(e.uids.uid1, e.ind1);
+			fix(e.uids.uid2, e.ind2);
+		}
+		for (auto& r : restraints_) {
+			fix(r.uids.uid1, r.ind);
+		}
 	}
 
 	size_t get_num_bonds() const {

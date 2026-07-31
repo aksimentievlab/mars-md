@@ -626,6 +626,18 @@ class SimSystem {
 		for (const auto& rigid_body_type : rigid_body_types_) {
 			rigid_body_type_name_to_id_[rigid_body_type.name] = rigid_body_type.id;
 		}
+		// Nonbonded pairs specified by type name (rather than by the numeric
+		// ids the legacy `tabulatedFile i@j@file` syntax supplies) can only be
+		// resolved once the map above exists - see PairNonBonded::type_name_1.
+		nonbonded_interactions_.resolve_type_names([this](const std::string& name) {
+			auto it = particle_type_name_to_id_.find(name);
+			if (it == particle_type_name_to_id_.end()) {
+				throw_value_error("SimSystem: nonbonded interaction references unknown particle "
+								  "type '%s'",
+								  name);
+			}
+			return it->second;
+		});
 	}
 
   private:

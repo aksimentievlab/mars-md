@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <fstream>
 #include <random>
+#include <unordered_map>
 
 namespace ARBD {
 
@@ -112,6 +113,31 @@ void SimManager::init() {
 
 	// Load cached initial particle data (from load_config or set_initial_particles)
 	if (!pending_initial_particles_.empty()) {
+		// The staged list order *is* the global particle indexing, so assign
+		// ids from it (ConfigParser already does this for its own path) and,
+		// while the mapping is known, rewrite any bonded terms that named
+		// their particles by ParticleIO::uid handle rather than by index -
+		// see ParticleUids in Interactions/BondedInteraction.h.
+		std::unordered_map<int, int> uid_to_index;
+		for (size_t i = 0; i < pending_initial_particles_.size(); ++i) {
+			auto& particle = pending_initial_particles_[i];
+			particle.id = static_cast<int>(i);
+			if (particle.uid >= 0) {
+				uid_to_index[particle.uid] = static_cast<int>(i);
+			}
+		}
+		if (!uid_to_index.empty()) {
+			pending_bonded_interactions_.resolve_particle_uids([&](int uid) {
+				auto it = uid_to_index.find(uid);
+				if (it == uid_to_index.end()) {
+					throw_value_error("SimManager: bonded interaction references a particle that "
+									  "was not staged (uid %d)",
+									  uid);
+				}
+				return it->second;
+			});
+		}
+
 		sys_state_.set_init_particle_data(pending_initial_particles_);
 		LOGINFO("SimManager: Loaded {} initial particles into system state",
 				pending_initial_particles_.size());

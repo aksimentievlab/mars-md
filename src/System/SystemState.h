@@ -126,17 +126,23 @@ class SystemState {
 
 	/**
 	 * @brief Set initial rigid-body data
-	 * @details Unlike set_init_particle_data(), no name->id resolution happens
-	 *          here: ConfigParser resolves RigidBodyIO::type_id directly at
-	 *          parse time (insertion order into SimSystem::get_rigid_body_types()
+	 * @details ConfigParser resolves RigidBodyIO::type_id directly at parse
+	 *          time (insertion order into SimSystem::get_rigid_body_types()
 	 *          is what assign_rigid_body_type_ids() later assigns as .id), so
-	 *          this is a plain copy.
+	 *          bodies it produces already have a valid type_id and an empty
+	 *          type_name. Callers that don't already know the numeric id
+	 *          (e.g. the Python bindings) may set type_name instead, mirroring
+	 *          ParticleIO::type_name/set_init_particle_data() - resolved here
+	 *          via SimSystem::get_rigid_body_type_id() when non-empty.
 	 * @param bodies Initial rigid-body instances (host-side)
 	 */
 	void set_init_rigid_body_data(const std::vector<RigidBodyIO>& bodies) {
 		global_rigid_body_data_.clear();
 		global_rigid_body_data_.reserve(bodies.size());
-		for (const auto& rb : bodies) {
+		for (auto rb : bodies) {
+			if (!rb.type_name.empty()) {
+				rb.type_id = sim_system_.get_rigid_body_type_id(rb.type_name);
+			}
 			global_rigid_body_data_.push_back(rb);
 		}
 	}

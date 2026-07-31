@@ -15,6 +15,15 @@ namespace ARBD {
 struct RigidBodyIO {
 	int id;
 	int type_id;
+	// Set directly by ConfigParser at parse time (insertion order into
+	// SimSystem::get_rigid_body_types() - see SystemState::
+	// set_init_rigid_body_data()'s comment). `type_name` is an alternate,
+	// deferred-resolution path for callers that don't already know the
+	// numeric id (e.g. the Python bindings - RigidBody.type_name mirrors
+	// ParticleIO.type_name): when non-empty, set_init_rigid_body_data()
+	// resolves it via SimSystem::get_rigid_body_type_id() and overwrites
+	// type_id, exactly like ParticleIO::type_name already does for particles.
+	std::string type_name;
 	Vector3 position;
 	Matrix3 orientation;
 	Vector3 momentum;
@@ -27,6 +36,7 @@ struct RigidBodyIO {
 	RigidBodyIO& operator=(const RigidBodyIO& src) {
 		id = src.id;
 		type_id = src.type_id;
+		type_name = src.type_name;
 		position = src.position;
 		orientation = src.orientation;
 		momentum = src.momentum;

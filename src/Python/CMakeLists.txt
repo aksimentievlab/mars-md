@@ -12,13 +12,17 @@ endif()
 
 pybind11_add_module("py${PROJECT_NAME}" MODULE
     pyarbd.cpp
-    pytypes.cpp
     pysystem.cpp
     pyobjects.cpp
     pybonded.cpp
     pyloadfile.cpp
     pysim.cpp
 )
+
+# The target keeps the "py" prefix to avoid colliding with the arbd executable
+# target, but the built module must be named for its PYBIND11_MODULE symbol
+# (arbd) or `import arbd` won't find it.
+set_target_properties("py${PROJECT_NAME}" PROPERTIES OUTPUT_NAME "${PROJECT_NAME}")
 
 if(USE_CUDA)
     set(CMAKE_INTERPROCEDURAL_OPTIMIZATION "${_pyarbd_saved_ipo}")

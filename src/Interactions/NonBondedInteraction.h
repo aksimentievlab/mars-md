@@ -20,14 +20,55 @@ const std::vector<std::string> long_range_nonbonded_types = {"E-field", "Pmf"};
 struct PairNonBonded {
 	int type_id_1{-1};
 	int type_id_2{-1};
+	// Alternate, deferred-resolution path for callers that don't already know
+	// the numeric type ids (e.g. the Python bindings, which take ParticleType
+	// objects) - mirrors ParticleIO::type_name / RigidBodyIO::type_name. When
+	// non-empty, SimSystem::build_name_to_id_maps() resolves these into
+	// type_id_1/type_id_2 (see resolve_type_names below); the legacy
+	// `tabulatedFile i@j@file` config path supplies ids directly and leaves
+	// these empty. Safe to defer because the ids aren't read until
+	// Patch::calculate_nonbonded_forces builds the type-pair matrix on the
+	// first step, long after type ids are assigned.
+	std::string type_name_1{};
+	std::string type_name_2{};
 	int id{-1};
 	std::string function_name{""};
 	InteractionForm form{InteractionForm::Tabulated};
 	int function_index{-1};
-	PairNonBonded(int type_id_1, int type_id_2, const std::string& function_name)
-		: function_name(function_name) {
+
+	PairNonBonded(int type_id_1, int type_id_2, const std::string& function_name) {
 		this->type_id_1 = std::min(type_id_1, type_id_2);
 		this->type_id_2 = std::max(type_id_1, type_id_2);
+		set_function(function_name);
+	}
+
+	PairNonBonded(const std::string& type_name_1,
+				  const std::string& type_name_2,
+				  const std::string& function_name)
+		: type_name_1(type_name_1), type_name_2(type_name_2) {
+		set_function(function_name);
+	}
+
+	/**
+	 * @brief Resolve type_name_1/type_name_2 into type_id_1/type_id_2.
+	 * @param name_to_id Callable mapping a type name to its assigned id.
+	 * @note No-op when the names are empty (ids were supplied directly).
+	 *       Templated on the lookup so this header stays independent of
+	 *       SimSystem, which includes it transitively via Objects/Tables.h.
+	 */
+	template<typename NameToId>
+	void resolve_type_names(NameToId&& name_to_id) {
+		if (type_name_1.empty() || type_name_2.empty()) {
+			return;
+		}
+		const int a = name_to_id(type_name_1);
+		const int b = name_to_id(type_name_2);
+		type_id_1 = std::min(a, b);
+		type_id_2 = std::max(a, b);
+	}
+
+  private:
+	void set_function(const std::string& function_name) {
 		auto it = std::find(AnalyticalNameList::pair_nonbonded_types.begin(),
 							AnalyticalNameList::pair_nonbonded_types.end(),
 							function_name);
@@ -36,8 +77,8 @@ struct PairNonBonded {
 			function_index = std::distance(AnalyticalNameList::pair_nonbonded_types.begin(), it);
 		} else {
 			form = InteractionForm::Tabulated;
-			this->function_name = function_name;
 		}
+		this->function_name = function_name;
 	}
 };
 
@@ -93,6 +134,17 @@ class NonBondedInteractions {
 		}
 		for (size_t i = 0; i < long_range_nonbonded_.size(); ++i) {
 			long_range_nonbonded_[i].type_id = static_cast<int>(i);
+		}
+	}
+
+	/**
+	 * @brief Resolve every name-specified pair into numeric type ids.
+	 * @see PairNonBonded::resolve_type_names
+	 */
+	template<typename NameToId>
+	void resolve_type_names(NameToId&& name_to_id) {
+		for (auto& pair : pair_nonbonded_) {
+			pair.resolve_type_names(name_to_id);
 		}
 	}
 

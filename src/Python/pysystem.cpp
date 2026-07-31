@@ -1,6 +1,7 @@
 #include "Backend/Resource.h"
 #include "IO/ConfigParser.h"
 #include "Interactions/NonBondedInteraction.h"
+#include "PyTypeCasters.h"
 #include "SimParam.h"
 #include "System/SimSystem.h"
 
@@ -60,11 +61,13 @@ using namespace ARBD;
  * sys.set_timestep(0.01)
  * sys.set_num_steps(1000)
  *
- * # Define particle types
+ * # Define particle types (add_particle_type copies into the system;
+ * # get_particle_types() returns a snapshot copy, so appending to it
+ * # would be a no-op)
  * ptype = ParticleType("A")
  * ptype.mass = 1.0
  * ptype.charge = 0.0
- * sys.get_particle_types().append(ptype)
+ * sys.add_particle_type(ptype)
  *
  * # Initial particles can be provided via ConfigParser.get_init_particles()
  * # or generated programmatically and passed to SimManager
@@ -306,16 +309,37 @@ void init_pysystem(py::module_& m) {
 			 "Set output file format")
 		.def("get_output_format", &SimSystem::get_output_format, "Get output file format")
 		// Type definitions (time-invariant configuration)
+		.def("add_particle_type",
+			 &SimSystem::add_particle_type,
+			 py::arg("type"),
+			 "Register a particle type (copied into the system)")
+		.def("add_rigid_body_type",
+			 &SimSystem::add_rigid_body_type,
+			 py::arg("type"),
+			 "Register a rigid body type (copied into the system)")
+		// NOTE: these return a *copy* as a plain Python list - pybind11/stl.h
+		// converts std::vector<T> by value, so reference_internal cannot make
+		// the result a live view and mutating it (e.g. .append()) does nothing
+		// to the system. Use add_particle_type()/add_rigid_body_type() to
+		// register types; these are for inspection only.
 		.def("get_particle_types",
-			 static_cast<std::vector<ParticleType>& (SimSystem::*)()>(
+			 static_cast<const std::vector<ParticleType>& (SimSystem::*)() const>(
 				 &SimSystem::get_particle_types),
-			 py::return_value_policy::reference_internal,
-			 "Get particle types")
+			 "Get a copy of the registered particle types (read-only snapshot)")
 		.def("get_rigid_body_types",
-			 static_cast<std::vector<RigidBodyType>& (SimSystem::*)()>(
+			 static_cast<const std::vector<RigidBodyType>& (SimSystem::*)() const>(
 				 &SimSystem::get_rigid_body_types),
-			 py::return_value_policy::reference_internal,
-			 "Get rigid body types")
+			 "Get a copy of the registered rigid body types (read-only snapshot)")
+		.def("get_particle_type_id",
+			 &SimSystem::get_particle_type_id,
+			 py::arg("name"),
+			 "Resolve a particle type name to its assigned id (valid only after "
+			 "SimManager.init())")
+		.def("get_rigid_body_type_id",
+			 &SimSystem::get_rigid_body_type_id,
+			 py::arg("name"),
+			 "Resolve a rigid body type name to its assigned id (valid only after "
+			 "SimManager.init())")
 		.def("get_grid_manager",
 			 static_cast<GridManager& (SimSystem::*)()>(&SimSystem::get_grid_manager),
 			 py::return_value_policy::reference_internal,
