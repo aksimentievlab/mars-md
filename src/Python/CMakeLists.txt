@@ -17,6 +17,7 @@ pybind11_add_module("py${PROJECT_NAME}" MODULE
     pyobjects.cpp
     pybonded.cpp
     pyloadfile.cpp
+    pysim.cpp
 )
 
 if(USE_CUDA)

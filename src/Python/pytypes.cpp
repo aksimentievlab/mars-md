@@ -1,4 +1,6 @@
 #include "Types/Array.h"
+#include "Types/Matrix3.h"
+#include "Types/Types.h"
 #include "Types/Vector3.h"
 #include <pybind11/numpy.h>
 #include <pybind11/operators.h>
@@ -95,6 +97,51 @@ py::array_t<T> vector_arr_to_numpy_array(const Array<Vector3_t<T>>& arr) {
 	return result;
 }
 
+/**
+ * @note Example usage (in Python):
+ * ```python
+ * >>> from arbd2v import array_to_matrix
+ * >>> a = np.eye(3)
+ * >>> mat = array_to_matrix(a)
+ * ```
+ * Rows in, columns out: Matrix3_t stores column vectors, so a numpy array
+ * (read row-major) is transposed into the column-vector constructor.
+ */
+template<typename T>
+Matrix3_t<T> array_to_matrix(py::array_t<T> a) {
+	py::buffer_info info = a.request();
+	if (info.ndim != 2 || info.shape[0] != 3 || info.shape[1] != 3)
+		throw std::runtime_error("Matrix3 numpy array must have shape (3, 3)");
+
+	T* ptr = static_cast<T*>(info.ptr);
+	Vector3_t<T> row0(ptr[0], ptr[1], ptr[2]);
+	Vector3_t<T> row1(ptr[3], ptr[4], ptr[5]);
+	Vector3_t<T> row2(ptr[6], ptr[7], ptr[8]);
+	return Matrix3_t<T>(Vector3_t<T>(row0.x, row1.x, row2.x),
+						Vector3_t<T>(row0.y, row1.y, row2.y),
+						Vector3_t<T>(row0.z, row1.z, row2.z));
+}
+
+template<typename T>
+py::array_t<T> matrix_to_numpy_array(const Matrix3_t<T>& mat) {
+	auto result = py::array_t<T>({3, 3});
+	py::buffer_info info = result.request();
+	T* ptr = static_cast<T*>(info.ptr);
+	const auto& c0 = mat.ex();
+	const auto& c1 = mat.ey();
+	const auto& c2 = mat.ez();
+	ptr[0] = c0.x;
+	ptr[1] = c1.x;
+	ptr[2] = c2.x;
+	ptr[3] = c0.y;
+	ptr[4] = c1.y;
+	ptr[5] = c2.y;
+	ptr[6] = c0.z;
+	ptr[7] = c1.z;
+	ptr[8] = c2.z;
+	return result;
+}
+
 // ============================================================================
 // VECTOR3 BINDINGS
 // ============================================================================
@@ -169,6 +216,59 @@ void declare_array(py::module& m, const std::string& typestr) {
 }
 
 // ============================================================================
+// MATRIX3 BINDINGS
+// ============================================================================
+
+/**
+ * @note Example usage (in Python):
+ * ```python
+ * >>> from arbd2v import Matrix3
+ * >>> identity = Matrix3()
+ * >>> diag = Matrix3(1.0, 2.0, 3.0)             # diagonal (spacing) matrix
+ * >>> basis = Matrix3(ex, ey, ez)               # from three Vector3 columns
+ * >>> from_np = Matrix3(np.eye(3))
+ * >>> v = basis.transform(Vector3(1.0, 0.0, 0.0))
+ * ```
+ */
+template<typename T>
+void declare_matrix(py::module& m, const std::string& typestr) {
+	using Class = Matrix3_t<T>;
+	using Vec = Vector3_t<T>;
+	std::string pyclass_name = std::string("Matrix3_t_") + typestr;
+	py::class_<Class>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
+		.def(py::init<>())
+		.def(py::init<T>())
+		.def(py::init<T, T, T>())
+		.def(py::init<const Vec&, const Vec&, const Vec&>())
+		.def(py::init([](py::array_t<T> a) { return array_to_matrix<T>(a); }))
+		.def_property(
+			"ex",
+			[](const Class& mat) -> const Vec& { return mat.ex(); },
+			[](Class& mat, const Vec& v) { mat.ex() = v; })
+		.def_property(
+			"ey",
+			[](const Class& mat) -> const Vec& { return mat.ey(); },
+			[](Class& mat, const Vec& v) { mat.ey() = v; })
+		.def_property(
+			"ez",
+			[](const Class& mat) -> const Vec& { return mat.ez(); },
+			[](Class& mat, const Vec& v) { mat.ez() = v; })
+		.def(py::self * py::self)
+		.def(py::self + py::self)
+		.def(py::self * T())
+		.def("transform", &Class::transform, py::arg("v"))
+		.def("__mul__", [](const Class& mat, const Vec& v) { return mat.transform(v); })
+		.def("transpose", &Class::transpose)
+		.def("inverse", &Class::inverse)
+		.def("det", &Class::det)
+		.def("to_numpy", &matrix_to_numpy_array<T>)
+		.def("__repr__", [](const Class& mat) {
+			return "Matrix3(ex=" + mat.ex().to_string() + ", ey=" + mat.ey().to_string() +
+				   ", ez=" + mat.ez().to_string() + ", det=" + std::to_string(mat.det()) + ")";
+		});
+}
+
+// ============================================================================
 // MAIN INITIALIZATION FUNCTION
 // ============================================================================
 
@@ -184,5 +284,8 @@ void init_pytypes(py::module_& m) {
 	declare_array<int>(m, "int");
 	declare_array<float>(m, "float");
 	declare_array<double>(m, "double");
-	m.attr("VectorArr") = m.attr("Vector3_Array_t_float");
+
+	// Matrix3 types
+	declare_matrix<float>(m, "float");
+	m.attr("Matrix3") = m.attr("Matrix3_t_float");
 }

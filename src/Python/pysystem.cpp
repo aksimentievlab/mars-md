@@ -1,5 +1,6 @@
 #include "Backend/Resource.h"
 #include "IO/ConfigParser.h"
+#include "Interactions/NonBondedInteraction.h"
 #include "SimParam.h"
 #include "System/SimSystem.h"
 
@@ -84,6 +85,11 @@ void init_pysystem(py::module_& m) {
 		.value("Spatial", DecomposerType::Spatial)
 		.value("RecursiveBisection", DecomposerType::RecursiveBisection)
 		.value("Geometric", DecomposerType::Geometric);
+
+	py::enum_<DecomposeDirection>(m, "DecomposeDirection")
+		.value("X", DecomposeDirection::X)
+		.value("Y", DecomposeDirection::Y)
+		.value("Z", DecomposeDirection::Z);
 
 	py::enum_<LongRangeMethod>(m, "LongRangeMethod")
 		.value("CutoffAMR", LongRangeMethod::CutoffAMR)
@@ -246,6 +252,7 @@ void init_pysystem(py::module_& m) {
 		.def("set_decomposer_type",
 			 &SimSystem::set_decomposer_type,
 			 py::arg("type"),
+			 py::arg("direction") = DecomposeDirection::Z,
 			 "Set domain decomposition method")
 		.def("get_decomposer_type",
 			 &SimSystem::get_decomposer_type,
@@ -313,6 +320,13 @@ void init_pysystem(py::module_& m) {
 			 static_cast<GridManager& (SimSystem::*)()>(&SimSystem::get_grid_manager),
 			 py::return_value_policy::reference_internal,
 			 "Get GridManager for unified grid management")
+		.def("get_nonbonded_interactions",
+			 static_cast<NonBondedInteractions& (SimSystem::*)()>(
+				 &SimSystem::get_nonbonded_interactions),
+			 py::return_value_policy::reference_internal,
+			 "Get NonBondedInteractions - pair/long-range parameters are tied to particle "
+			 "type definitions, so this lives on SimSystem rather than being staged into "
+			 "SimManager like bonded interactions")
 		// Validation
 		.def("is_valid", &SimSystem::is_valid, "Check if system configuration is valid")
 		.def("__repr__", [](const SimSystem& sys) {

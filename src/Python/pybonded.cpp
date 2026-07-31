@@ -1,5 +1,6 @@
 #include "Interactions/BondedInteraction.h"
 #include "Interactions/Interactions.h"
+#include "Interactions/NonBondedInteraction.h"
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
@@ -38,6 +39,7 @@ void declare_bond(py::module& m) {
 		.value("WLCSK", AnalyticalDihedralType::WLCSK);
 
 	py::enum_<InteractionForm>(m, "InteractionForm")
+		.value("Grid", InteractionForm::Grid)
 		.value("Tabulated", InteractionForm::Tabulated)
 		.value("Analytical", InteractionForm::Analytical);
 
@@ -134,10 +136,16 @@ void declare_restraint(py::module& m) {
  */
 void declare_bonded_interaction(py::module& m) {
 	py::class_<BondedInteractions>(m, "BondedInteractions")
-		.def(py::init<std::vector<Bond>, std::vector<Angle>, std::vector<Dihedral>>(),
-			 py::arg("bonds"),
-			 py::arg("angles"),
-			 py::arg("dihedrals"))
+		.def(py::init<std::vector<Bond>,
+					  std::vector<Angle>,
+					  std::vector<Dihedral>,
+					  std::vector<Exclude>,
+					  std::vector<Restraint>>(),
+			 py::arg("bonds") = std::vector<Bond>{},
+			 py::arg("angles") = std::vector<Angle>{},
+			 py::arg("dihedrals") = std::vector<Dihedral>{},
+			 py::arg("exclusions") = std::vector<Exclude>{},
+			 py::arg("restraints") = std::vector<Restraint>{})
 		.def("add_bond", &BondedInteractions::add_bond)
 		.def("add_angle", &BondedInteractions::add_angle)
 		.def("add_dihedral", &BondedInteractions::add_dihedral)
@@ -148,6 +156,60 @@ void declare_bonded_interaction(py::module& m) {
 			return "BondedInteraction(bonds=" + std::to_string(bi.get_num_bonds()) +
 				   ", angles=" + std::to_string(bi.get_num_angles()) +
 				   ", dihedrals=" + std::to_string(bi.get_num_dihedrals()) + ")";
+		});
+}
+
+// ============================================================================
+// NONBONDED INTERACTION BINDINGS
+// ============================================================================
+// Unlike Bond/Angle/Dihedral (per-run topology, staged into SimManager via
+// send_bonded_interactions - see pysim.cpp), NonBondedInteractions lives on
+// SimSystem itself (SimSystem::get_nonbonded_interactions(), pysystem.cpp):
+// pair/long-range parameters are tied to particle type definitions, which
+// are also SimSystem-owned.
+
+void declare_nonbonded_interaction(py::module& m) {
+	py::class_<PairNonBonded>(m, "PairNonBonded")
+		.def(py::init<int, int, const std::string&>(),
+			 py::arg("type_id_1"),
+			 py::arg("type_id_2"),
+			 py::arg("function_name"))
+		.def_readwrite("type_id_1", &PairNonBonded::type_id_1)
+		.def_readwrite("type_id_2", &PairNonBonded::type_id_2)
+		.def_readwrite("id", &PairNonBonded::id)
+		.def_readwrite("name", &PairNonBonded::function_name)
+		.def_readwrite("form", &PairNonBonded::form)
+		.def_readwrite("function_index", &PairNonBonded::function_index)
+		.def("__repr__", [](const PairNonBonded& p) {
+			return "PairNonBonded(type_id_1=" + std::to_string(p.type_id_1) +
+				   ", type_id_2=" + std::to_string(p.type_id_2) + ", name='" + p.function_name +
+				   "')";
+		});
+
+	py::class_<LongRangeNonBonded>(m, "LongRangeNonBonded")
+		.def(py::init<>())
+		.def_readwrite("type_id", &LongRangeNonBonded::type_id)
+		.def_readwrite("name", &LongRangeNonBonded::function_name)
+		.def_readwrite("form", &LongRangeNonBonded::form)
+		.def_readwrite("function_index", &LongRangeNonBonded::function_index)
+		.def("__repr__", [](const LongRangeNonBonded& l) {
+			return "LongRangeNonBonded(type_id=" + std::to_string(l.type_id) + ", name='" +
+				   l.function_name + "')";
+		});
+
+	py::class_<NonBondedInteractions>(m, "NonBondedInteractions")
+		.def(py::init<std::vector<PairNonBonded>, std::vector<LongRangeNonBonded>>(),
+			 py::arg("pair_nonbonded") = std::vector<PairNonBonded>{},
+			 py::arg("long_range_nonbonded") = std::vector<LongRangeNonBonded>{})
+		.def("add_pair_nonbonded", &NonBondedInteractions::add_pair_nonbonded, py::arg("pair"))
+		.def("add_long_range_nonbonded",
+			 &NonBondedInteractions::add_long_range_nonbonded,
+			 py::arg("long_range"))
+		.def("get_num_pair_nonbonded", &NonBondedInteractions::get_num_pair_nonbonded)
+		.def("get_num_long_range_nonbonded", &NonBondedInteractions::get_num_long_range_nonbonded)
+		.def("__repr__", [](const NonBondedInteractions& nb) {
+			return "NonBondedInteractions(pairs=" + std::to_string(nb.get_num_pair_nonbonded()) +
+				   ", long_range=" + std::to_string(nb.get_num_long_range_nonbonded()) + ")";
 		});
 }
 
@@ -177,5 +239,6 @@ void init_pybonded(py::module_& m) {
 
 	// Interaction managers
 	declare_bonded_interaction(m);
+	declare_nonbonded_interaction(m);
 	declare_register_potential(m);
 }
