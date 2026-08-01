@@ -11,15 +11,13 @@ class Resource;
 // ----------------------------------------------------------------------------
 // 1. Hardware Detection (Wave32 vs Wave64)
 // ----------------------------------------------------------------------------
-// You can also define SG_SIZE via compiler flags (-DSG_SIZE=64)
+// Override with -DSG_SIZE=N on the compiler command line (see stampede-icpx-release
+// in CMakePresets.json). Host and device TUs must agree on SG_SIZE / DRS_PART_SIZE.
 #ifndef SG_SIZE
 #if defined(__AMDGCN_WAVEFRONT_SIZE) && (__AMDGCN_WAVEFRONT_SIZE == 64)
 #define SG_SIZE 64
-#elif defined(__INTEL_VCE__) || defined(__SYCL_SINGLE_TASK__) // Intel compiler checks
-// Force SIMD16 for PVC to save registers:
-#define SG_SIZE 16
 #else
-#define SG_SIZE 32 // Default for NVIDIA (Delta) and Intel
+#define SG_SIZE 32 // NVIDIA SYCL, Intel PVC host+device, and generic fallback
 #endif
 #endif
 

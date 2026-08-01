@@ -7,6 +7,7 @@
 
 #include "../catch_boiler.h"
 #include "Constants.h"
+#include "Backend/Events.h"
 #include "IO/DxIO.h"
 #include "Objects/DeviceParticleManager.h"
 #include "Objects/Grid.h"
@@ -131,8 +132,8 @@ TEST_CASE("RigidBodyManager::add_langevin_forces perturbs force/torque",
 	auto host = single_body_at_rest(Vector3(0.0f, 0.0f, 0.0f));
 	mgr.initialize(types, host, unreachable_grid_format);
 
-	mgr.add_langevin_forces(/*dt=*/1.0f, /*kT=*/1.0f, /*base_seed=*/7, /*step=*/0);
-
+	Event evt = mgr.add_langevin_forces(/*dt=*/1.0f, /*kT=*/1.0f, /*base_seed=*/7, /*step=*/0);
+	evt.wait();
 	HostRigidBodyData result;
 	mgr.bodies().copy_to_host(result, 1);
 
@@ -325,7 +326,7 @@ TEST_CASE("RigidBodyManager: prepare_particle_grid_dispatch + compute_particle_r
 	mgr.compute_particle_rb_forces(grid_manager, /*grid_resource_idx=*/0, particles.view()).wait();
 
 	HostParticleData particle_result;
-	particles.copy_to_host(particle_result, 1);
+	particles.copy_to_host(particle_result, 1, /*need_energy=*/true);
 	HostRigidBodyData rb_result;
 	mgr.bodies().copy_to_host(rb_result, 1);
 

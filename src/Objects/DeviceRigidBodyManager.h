@@ -72,11 +72,11 @@ class DeviceRigidBody {
 		return capacity_;
 	}
 
-	// See DeviceParticle::clear_forces() for why this fills in place rather
-	// than calling DeviceBuffer::clear() (which deallocates).
+	// See DeviceParticle::clear_forces() for why these fills are synchronous
+	// and operate in place rather than calling DeviceBuffer::clear().
 	void clear_forces() {
-		force_.fill(Vector3(0.0f, 0.0f, 0.0f));
-		torque_.fill(Vector3(0.0f, 0.0f, 0.0f));
+		force_.fill(Vector3(0.0f, 0.0f, 0.0f), true);
+		torque_.fill(Vector3(0.0f, 0.0f, 0.0f), true);
 	}
 
 	// Bulk Copy Helper: Host -> Device (Structure of Arrays)

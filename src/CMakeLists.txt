@@ -216,10 +216,13 @@ if(USE_SYCL_ACPP OR USE_SYCL_ICPX)
 
     # Explicit linking for Intel DPC++ runtime libraries
     if(USE_SYCL_ICPX AND CMAKE_CXX_COMPILER MATCHES "icpx")
-        # Find Intel OneAPI SYCL installation directory
-        get_filename_component(ICPX_BIN_DIR "${CMAKE_CXX_COMPILER}" DIRECTORY)
-        get_filename_component(ICPX_INSTALL_DIR "${ICPX_BIN_DIR}" DIRECTORY)
-        set(ICPX_LIB_DIR "${ICPX_INSTALL_DIR}/lib")
+        if(DEFINED ICPX_ROOT)
+            set(ICPX_LIB_DIR "${ICPX_ROOT}/lib")
+        else()
+            get_filename_component(ICPX_BIN_DIR "${CMAKE_CXX_COMPILER}" DIRECTORY)
+            get_filename_component(ICPX_INSTALL_DIR "${ICPX_BIN_DIR}" DIRECTORY)
+            set(ICPX_LIB_DIR "${ICPX_INSTALL_DIR}/lib")
+        endif()
 
         # Find and link the essential Intel DPC++ SYCL runtime libraries
         find_library(SYCL_LIB NAMES "sycl" PATHS "${ICPX_LIB_DIR}" NO_DEFAULT_PATH)

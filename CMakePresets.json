@@ -25,10 +25,11 @@
             "generator": "Ninja",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Release",
-                "CMAKE_CXX_COMPILER": "/scratch/projects/compilers/intel26.0/compiler/2026.0/bin/icpx",
+                "CMAKE_CXX_COMPILER": "${sourceDir}/cmake/stampede-sycl-tools/icpx",
+                "ICPX_ROOT": "/scratch/projects/compilers/intel26.0/compiler/2026.0",
                 "USE_SYCL_ICPX": "ON",
                 "CMAKE_CXX_EXTENSIONS": "OFF",
-                "CMAKE_CXX_FLAGS": "-I/opt/apps/gcc/16.1.0/include/c++/16.1.0 -O3",
+                "CMAKE_CXX_FLAGS": "-I/opt/apps/gcc/16.1.0/include/c++/16.1.0 -O3 -DSG_SIZE=32",
                 "SYCL_DEVICE_TYPE": "2"
             },
             "environment": {

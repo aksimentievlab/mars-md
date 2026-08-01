@@ -13,6 +13,7 @@
 #include "Interactions/Nonbonded/RigidBodyParticleGridBatch.h"
 #include "Objects/DeviceParticleManager.h"
 #include "Objects/DeviceRigidBodyManager.h"
+#include "Backend/Events.h"
 #include "Types/BaseGrid.h"
 #include <utility>
 
@@ -126,10 +127,11 @@ TEST_CASE("RBParticleGridBatch: single particle sampling a single RB's potential
 	force_config.problem_size = kerneldim3{blocks_per_candidate * threads_per_block, 1, 1};
 	force_config.shared_memory = 2 * threads_per_block * sizeof(Vector3);
 	force_config.sync = true;
-	launch_kernel_with_workitem(res, force_config, force).wait();
+	Event evt=launch_kernel_with_workitem(res, force_config, force);
+	evt.wait();
 
 	HostParticleData particle_result;
-	particles.copy_to_host(particle_result, 1);
+	particles.copy_to_host(particle_result, 1, /*need_energy=*/true);
 	HostRigidBodyData rb_result;
 	bodies.copy_to_host(rb_result, 1);
 

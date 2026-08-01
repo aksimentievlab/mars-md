@@ -12,7 +12,7 @@
 #include "Objects/DeviceParticleManager.h"
 #include "Objects/ParticleProperties.h"
 #include "System/PeriodicBox.h"
-
+#include "Backend/Events.h"
 #include "../Object_gen.h"
 using namespace ARBD;
 using Catch::Approx;
@@ -83,6 +83,7 @@ TEST_CASE("Harmonic Bond Force - Equilibrium Distance", "[force][bonded][bond]")
 
 	DeviceParticle particles(2, res);
 	particles.copy_from_host(host_data, 2);
+	particles.clear_forces();
 
 	// Bond parameters: k=100, r0=1.0
 	// Expected force = 0 (at equilibrium)
@@ -111,7 +112,7 @@ TEST_CASE("Harmonic Bond Force - Equilibrium Distance", "[force][bonded][bond]")
 	launch_kernel(res, config, bond_computer);
 
 	HostParticleData result;
-	particles.copy_to_host(result, 2);
+	particles.copy_to_host(result, 2, /*need_energy=*/true);
 
 	// At equilibrium, forces should be zero
 	REQUIRE(result.force[0].x == Approx(0.0f).epsilon(0.01f));
@@ -129,6 +130,7 @@ TEST_CASE("Morse Bond Force - Two Particles", "[force][bonded][bond][morse]") {
 
 	DeviceParticle particles(2, res);
 	particles.copy_from_host(host_data, 2);
+	particles.clear_forces();
 
 	// Morse bond parameters: D0=10, a=2.0, r0=1.0
 	// Force = 2*D0*a*exp(-a(r-r0))*[1-exp(-a(r-r0))]
@@ -155,10 +157,11 @@ TEST_CASE("Morse Bond Force - Two Particles", "[force][bonded][bond][morse]") {
 											pbox_buffer.data(),
 											false,
 											1);
-	launch_kernel(res, config, bond_computer);
+	Event evt=launch_kernel(res, config, bond_computer);
+	evt.wait();
 
 	HostParticleData result;
-	particles.copy_to_host(result, 2);
+	particles.copy_to_host(result, 2, /*need_energy=*/true);
 
 	// Calculate expected force manually. Force = -2*D0*a*exp_term*(1-exp_term)
 	// (negative of what this comment previously had - see
@@ -207,6 +210,7 @@ TEST_CASE("Bond Force - Periodic Boundary Conditions", "[force][bonded][bond][pb
 
 	DeviceParticle particles(2, res);
 	particles.copy_from_host(host_data, 2);
+	particles.clear_forces();
 
 	// Bond: k=100, r0=1.0
 	// With PBC, distance = 1.0, so force should be 0
@@ -235,7 +239,7 @@ TEST_CASE("Bond Force - Periodic Boundary Conditions", "[force][bonded][bond][pb
 	launch_kernel(res, config, bond_computer);
 
 	HostParticleData result;
-	particles.copy_to_host(result, 2);
+	particles.copy_to_host(result, 2, /*need_energy=*/true);
 
 	// With PBC, the minimum image distance is 1.0 (equilibrium), so force = 0
 	REQUIRE(result.force[0].x == Approx(0.0f).epsilon(0.1f));

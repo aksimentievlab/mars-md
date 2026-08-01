@@ -70,9 +70,10 @@ class DeviceParticle {
 	// zero it. These clear_*() methods are called every step (e.g. before force
 	// accumulation) and must zero in place instead, or the buffer would be freed
 	// after the first call and every subsequent access would read/write a dangling
-	// pointer.
+	// pointer. Force clearing is synchronous because force kernels run on the
+	// compute queue while this buffer uses the memory queue.
 	void clear_forces() {
-		ForceEnergy_.fill(Vector3(0.0f, 0.0f, 0.0f));
+		ForceEnergy_.fill(Vector3(0.0f, 0.0f, 0.0f), true);
 	}
 	void clear_orientations() {
 		orient_.fill(Vector3(0.0f, 0.0f, 0.0f));

@@ -430,6 +430,14 @@ class Buffer {
 			active_stream = resource_.get_stream(stream_type_);
 		}
 
+		// SYCL uses separate in-order queues (Compute vs Memory). A blocking
+		// memcpy on the memory queue does not wait for writers on other queues,
+		// unlike CUDA's synchronous cudaMemcpy. Drain all queues first so sync
+		// readback matches CUDA semantics and sees completed kernel output.
+		if (sync && resource_.type() == ResourceType::SYCL) {
+			resource_.synchronize_streams();
+		}
+
 		Policy::copy_to_host(host_dst, device_ptr_, num_elements * sizeof(T), active_stream, sync);
 #if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__) && !defined(__METAL_VERSION__)
 		LOGTRACE("Copied {} bytes to host from {} ({}sync)",
@@ -532,6 +540,10 @@ class Buffer {
 
 	void fill(T value, bool sync = false) {
 		Policy::fill(device_ptr_, value, count_, stream_, sync);
+		// Make synchronous clears visible to kernels on other SYCL queues.
+		if (sync && resource_.type() == ResourceType::SYCL) {
+			resource_.synchronize_streams();
+		}
 	}
 
 	/**

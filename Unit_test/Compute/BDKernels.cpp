@@ -7,9 +7,17 @@
 #include "PatchOperation/Integrator.h"
 #include "PatchOperation/Patch.h"
 #include "System/PeriodicBox.h"
+#include <filesystem>
 
 using namespace ARBD;
 using Catch::Approx;
+
+namespace {
+std::string bond_table_path() {
+	return (std::filesystem::path(__FILE__).parent_path() / "bond-19.190-3.800.dat").string();
+}
+} // namespace
+
 TEST_CASE("RandomTest", "[free][random]") {
 	const int N = 100000;
 	std::vector<float> samples_x, samples_y, samples_z;
@@ -143,8 +151,7 @@ TEST_CASE("BondedForcesTest", "[free][bonded]") {
 	// Real bond table from the mpipi_k18 repro case - reproduces the exact
 	// CUDA_ERROR_ILLEGAL_ADDRESS crash seen in Patch::calculate_bonded_forces
 	// at much smaller scale (2 particles, 1 bond) for fast iteration.
-	const std::string bond_file =
-		"/data/storage01/pinyili2/sims/fig2e/mpipi_k18/potentials/bond-19.190-3.800.dat";
+	const std::string bond_file = bond_table_path();
 
 	TablesRegistry tables_registry;
 	int function_index = tables_registry.get_or_load_bond(bond_file);
@@ -248,8 +255,7 @@ TEST_CASE("DirectTabulatedBondKernelTest", "[free][bonded][direct]") {
 	initialize_backend_once();
 	Resource res(Global::single_resource_id);
 
-	const std::string bond_file =
-		"/data/storage01/pinyili2/sims/fig2e/mpipi_k18/potentials/bond-19.190-3.800.dat";
+	const std::string bond_file = bond_table_path();
 	TablesRegistry tables_registry;
 	int function_index = tables_registry.get_or_load_bond(bond_file);
 	std::vector<Resource> resources = {res};
@@ -319,8 +325,7 @@ TEST_CASE("DeviceBondedInteractionsDirectTest", "[free][bonded][dbi]") {
 	initialize_backend_once();
 	Resource res(Global::single_resource_id);
 
-	const std::string bond_file =
-		"/data/storage01/pinyili2/sims/fig2e/mpipi_k18/potentials/bond-19.190-3.800.dat";
+	const std::string bond_file = bond_table_path();
 	TablesRegistry tables_registry;
 	int function_index = tables_registry.get_or_load_bond(bond_file);
 
@@ -330,12 +335,9 @@ TEST_CASE("DeviceBondedInteractionsDirectTest", "[free][bonded][dbi]") {
 	// matching the real crash) versus just 1 (this test previously) changes
 	// anything about the bond kernel's behavior.
 	{
-		std::vector<std::string> nb_files;
-		std::string dir = "/data/storage01/pinyili2/sims/fig2e/mpipi_k18/potentials/";
 		// Reuse the single real bond file's contents as a stand-in Y-table
 		// for all 190 nonbonded slots - only the table *count*/memory layout
 		// matters for this test, not the nonbonded physics.
-		int type_id = 0;
 		for (int i = 0; i < 19; ++i) {
 			for (int j = i; j < 19; ++j) {
 				tables_registry.load_pair_nonbonded(i, j, bond_file);
