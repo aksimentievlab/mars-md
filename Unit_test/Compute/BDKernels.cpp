@@ -212,10 +212,11 @@ TEST_CASE("BondedForcesTest", "[free][bonded]") {
 													device_types,
 													empty_grid_views,
 													tables_registry,
-													0,
-													10.0f,
-													0.0f,
-													1);
+													/*resource_idx=*/0,
+													/*cutoff=*/10.0f,
+													/*interaction_cutoff=*/10.0f,
+													/*step=*/0,
+													/*rebuild_period=*/1);
 	nb_evt.wait();
 	std::cout << "calculate_nonbonded_forces returned successfully" << std::endl;
 

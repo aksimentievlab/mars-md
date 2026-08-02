@@ -15,4 +15,16 @@ template Event launch_cuda_kernel(const Resource& resource,
 								  const KernelConfig& config,
 								  ZOrderNeighborKernel kernel_func);
 
+// Exact 27-cell neighbor search and its cell-range builder. Both are launched
+// from ZOrderPairlist.cpp, a host-only translation unit, so without these
+// explicit instantiations the compiler would emit the non-CUDA stub from
+// KernelHelper.cuh and every pairlist build would throw NotImplementedError.
+template Event launch_cuda_kernel(const Resource& resource,
+								  const KernelConfig& config,
+								  BuildCellRangesKernel kernel_func);
+
+template Event launch_cuda_kernel(const Resource& resource,
+								  const KernelConfig& config,
+								  ZOrderCellNeighborKernel kernel_func);
+
 } // namespace ARBD

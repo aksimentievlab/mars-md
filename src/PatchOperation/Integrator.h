@@ -71,4 +71,38 @@ Event launch_BAOAB(const Resource& resource,
 	return evt;
 }
 
+/**
+ * @brief Launch the closing half-kick of BAOAB.
+ *
+ * BAOAB is B-A-O-A-B. launch_BAOAB above performs only B-A-O-A; the final
+ * momentum half-kick needs the force evaluated at the *new* positions, so it
+ * cannot be folded into that kernel and has to be launched separately once the
+ * next force evaluation has run. Without it each step delivers half the
+ * intended impulse, which biases the dynamics toward an effectively weaker
+ * potential.
+ */
+template<typename T>
+Event launch_BAOAB_LastUpdate(const Resource& resource,
+							  ParticleView particle_view,
+							  const ParticleTypeView particle_types,
+							  const Vector3& box_size,
+							  float timestep,
+							  size_t current_step,
+							  float kT,
+							  idx_t num_particles,
+							  uint64_t base_seed,
+							  uint32_t base_ctr) {
+	KernelConfig config = KernelConfig::for_1d(num_particles, resource);
+	BAOAB_LastUpdate<T> baoab_last(particle_view,
+								   particle_types,
+								   box_size,
+								   timestep,
+								   current_step,
+								   kT,
+								   num_particles,
+								   base_seed,
+								   base_ctr);
+	return launch_kernel(resource, config, baoab_last);
+}
+
 } // namespace ARBD

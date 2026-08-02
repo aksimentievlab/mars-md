@@ -70,6 +70,11 @@ struct TabulatedNonBondedComputer {
 	const PeriodicBox* pbox;
 	bool get_energy;
 	idx_t num_pairs;
+	/// Squared *interaction* cutoff. The pair list is built at the interaction
+	/// cutoff plus a skin, so a substantial fraction of the pairs it contains
+	/// lie beyond the interaction range and must be rejected here rather than
+	/// evaluated. A non-positive value disables the check.
+	float cutoff_squared;
 
 	// Constructor
 	TabulatedNonBondedComputer(DEVICE_PTR(const int2) indices,
@@ -85,11 +90,13 @@ struct TabulatedNonBondedComputer {
 							   idx_t n_excl_particles,
 							   const PeriodicBox* box,
 							   bool energy,
-							   idx_t n_pairs)
+							   idx_t n_pairs,
+							   float cutoff_sq)
 		: particle_indices(indices), positions(pos), force_energy(fe), type_ids(type_id_arr),
 		  pairwise_table_matrix(table_matrix), pairwise_form_matrix(form_matrix), tables(tabs),
 		  num_particle_types(n_types), excl_offsets(excl_off), excl_neighbors(excl_nbr),
-		  num_excl_particles(n_excl_particles), pbox(box), get_energy(energy), num_pairs(n_pairs) {}
+		  num_excl_particles(n_excl_particles), pbox(box), get_energy(energy), num_pairs(n_pairs),
+		  cutoff_squared(cutoff_sq) {}
 
 	// Kernel operator
 	DEVICE void operator()(idx_t i) const {
@@ -97,6 +104,26 @@ struct TabulatedNonBondedComputer {
 			return;
 
 		const int2& indices = particle_indices[i];
+
+		// Phase 0: Reject pairs outside the interaction cutoff.
+		//
+		// The pair list is deliberately built at a larger radius (interaction
+		// cutoff + skin) so it stays valid for several steps between rebuilds,
+		// so it necessarily contains pairs that do not interact. At a 35 A
+		// cutoff with a 10 A skin those are (45^3-35^3)/45^3 = 53% of its
+		// entries. Evaluating them is not merely wasted work: the tabulated
+		// potentials end at the interaction cutoff, so a lookup past that point
+		// is out of range and contributes a spurious interaction. This check
+		// must therefore live here - the pair list cannot do it, since removing
+		// the skin is exactly what would force a rebuild every step.
+		//
+		// Done before the exclusion scan and the type-pair lookup because it
+		// rejects the largest fraction of pairs for the least work.
+		CalcDistance geom = CalcDistance::compute(positions, indices, pbox);
+		if (geom.distance < 1e-6f)
+			return;
+		if (cutoff_squared > 0.0f && geom.distance * geom.distance > cutoff_squared)
+			return;
 
 		// Phase 1: Skip excluded pairs (bonded neighbors etc.).
 		// Scan only particle `indices.x`'s excluded-partner list (CSR), which is
@@ -123,11 +150,6 @@ struct TabulatedNonBondedComputer {
 			return;
 		if (static_cast<InteractionForm>(pairwise_form_matrix[matrix_idx]) !=
 			InteractionForm::Tabulated)
-			return;
-
-		// Phase 3: Compute geometry
-		CalcDistance geom = CalcDistance::compute(positions, indices, pbox);
-		if (geom.distance < 1e-6f)
 			return;
 
 		// Phase 4: Lookup force from tabulated potential
@@ -164,7 +186,8 @@ inline Event launch_pairwise_nonbonded(const Resource& resource,
 									   idx_t num_excl_particles,
 									   const PeriodicBox* pbox,
 									   bool get_energy,
-									   idx_t num_pairs) {
+									   idx_t num_pairs,
+									   float cutoff_squared) {
 	if (num_pairs == 0)
 		return Event(nullptr, resource);
 
@@ -183,7 +206,8 @@ inline Event launch_pairwise_nonbonded(const Resource& resource,
 										num_excl_particles,
 										pbox,
 										get_energy,
-										num_pairs);
+										num_pairs,
+										cutoff_squared);
 
 	return launch_kernel(resource, config, computer);
 }

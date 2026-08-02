@@ -108,7 +108,14 @@ if(USE_SYCL_ICPX OR USE_SYCL_ACPP)
     separate_arguments(SYCL_LINK_FLAGS_LIST UNIX_COMMAND "${SYCL_LINK_FLAGS}")
     target_link_options("lib${PROJECT_NAME}" PUBLIC ${SYCL_LINK_FLAGS_LIST})
 endif()
-target_link_libraries("lib${PROJECT_NAME}" PUBLIC nanovdb)
+# Only link the NanoVDB target when it was actually created (see BUILD_NANOVDB
+# in the top-level CMakeLists). Referencing it unconditionally makes CMake fall
+# back to a raw "-lnanovdb" link flag when the target does not exist, which
+# fails at link time. Sparse-grid support in Types/ uses the vendored,
+# header-only PNanoVDB.h and needs no library.
+if(BUILD_NANOVDB AND TARGET nanovdb)
+    target_link_libraries("lib${PROJECT_NAME}" PUBLIC nanovdb)
+endif()
 
 # Make the library depend on Metal shaders if Metal is enabled
 if(USE_METAL AND TARGET metal_shaders_main)

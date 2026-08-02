@@ -54,8 +54,14 @@ class SimSystem {
 	}
 
 	void set_temperature(float temp) {
-		temperature_.format = Temperature::Format::Value;
-		temperature_.value = temp;
+		// Assign a whole Temperature rather than poking the fields: the
+		// constructor is what derives kT from the value. Setting `value` alone
+		// left `kT` at whatever the default construction produced
+		// (298.15 K), so the configured temperature never reached the
+		// integrators - every run was thermostatted at 298.15 K regardless of
+		// the `temperature` directive, and changing it had no effect at all.
+		// Matches the BaseGrid overload below, which was already correct.
+		temperature_ = Temperature(temp);
 	}
 	void set_base_seed(size_t seed) {
 		LOGINFO("SimSystem: Setting base seed to {}", seed);

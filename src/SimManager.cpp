@@ -380,6 +380,7 @@ void SimManager::execute_force_calculation(size_t step) {
 			sys_.get_tables_registry(),
 			resource_idx,
 			static_cast<float>(sys_.get_pairlist_cutoff()),
+			static_cast<float>(sys_.get_cutoff()),
 			step,
 			static_cast<size_t>(sys_.get_neighbor_list_rebuild_period()),
 			0.0f,

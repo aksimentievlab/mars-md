@@ -154,6 +154,15 @@ void ConfigParser::parse_parameters(const Reader& reader) {
 		sim_system_ref_->set_temperature(reader.parseValue<float>(key));
 	}
 
+	// The `seed` directive was previously not parsed at all, so every run used
+	// SimSystem's built-in default regardless of what the input file asked for -
+	// two runs of the same config were bit-identical, and users had no way to
+	// generate independent replicas.
+	if (hasParameterVariant(reader, "seed", "seed")) {
+		std::string key = findParameterVariant(reader, "seed", "seed");
+		sim_system_ref_->set_base_seed(static_cast<size_t>(reader.parseValue<long long>(key)));
+	}
+
 	if (hasParameterVariant(reader, "cutoff", "cutoff")) {
 		std::string key = findParameterVariant(reader, "cutoff", "cutoff");
 		sim_system_ref_->set_cutoff(Length(reader.parseValue<float>(key)));

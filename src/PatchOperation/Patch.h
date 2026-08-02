@@ -58,8 +58,22 @@ class Patch {
 		  PairlistBuilderType pairlist_type = PairlistBuilderType::ZOrder)
 		: patch_id_(patch_id), capacity_(capacity), resource_(resource),
 		  particles_(capacity, resource), device_bonded_(resource) {
-		// Estimate max pairs: assume average of ~50 neighbors per particle
-		size_t estimated_max_pairs = capacity * 50;
+		// Estimate stored pairs per particle. Each pair is recorded once, keyed
+		// on the lower particle index, so this is roughly half the mean neighbor
+		// count within the pairlist cutoff (interaction cutoff plus skin).
+		//
+		// The previous value of 50 was far too low for dense condensed-phase
+		// systems: a coarse-grained cytoplasm at production density carries
+		// ~295 neighbors inside a 45 A pairlist cutoff, i.e. ~148 stored pairs
+		// per particle, so the list overflowed and was silently truncated -
+		// which removes real interactions and corrupts the physics. 300 leaves
+		// roughly 2x headroom above that. The cost is memory: at 8 bytes per
+		// pair this reserves capacity * 2.4 kB, so a 1M-particle patch holds a
+		// ~2.5 GB pairlist. Ideally this would be derived from the actual
+		// number density and cutoff rather than fixed; until then ZOrderPairlist
+		// logs an error and clamps if the estimate is still exceeded.
+		constexpr size_t kEstimatedPairsPerParticle = 300;
+		size_t estimated_max_pairs = capacity * kEstimatedPairsPerParticle;
 		pairlist_ = create_pairlist(pairlist_type, resource, capacity, estimated_max_pairs);
 		initialize_spatial_structures();
 	}
@@ -91,6 +105,17 @@ class Patch {
 	 * @param sim_box Pointer to system boundary conditions (not owned)
 	 */
 	void set_periodic_box(const PeriodicBox* sim_box);
+
+	/**
+	 * @brief Set the run-wide RNG seed (SimSystem::get_base_seed()).
+	 *
+	 * Without this the integrators derive their Philox seed from the patch id
+	 * alone, so the configured seed is discarded and every run of a given input
+	 * draws the identical random sequence.
+	 */
+	void set_base_seed(uint64_t seed) {
+		base_seed_ = seed;
+	}
 
 	/**
 	 * @brief Get a device-resident pointer to the periodic box, or nullptr if unset
@@ -195,6 +220,11 @@ class Patch {
 	 *        interaction cutoff + pairlistDistance), not just the raw interaction
 	 *        cutoff, since pairs found at one rebuild are reused for rebuild_period
 	 *        steps and particles can drift in the meantime.
+	 * @param interaction_cutoff The radius beyond which pairs do not interact
+	 *        (SimSystem::get_cutoff(), i.e. `cutoff` above minus the skin). The
+	 *        force kernel rejects pairs beyond this, which the pairlist cannot
+	 *        do for it - the skin is precisely what lets the list outlive a
+	 *        single step. Pass <= 0 to evaluate every pair in the list.
 	 * @param step Current simulation step (1-indexed, matches SimManager's loop)
 	 * @param rebuild_period Rebuild the pairlist every `rebuild_period` steps (mirrors
 	 *        legacy's decompPeriod - see SimSystem::neighbor_list_rebuild_period),
@@ -209,6 +239,7 @@ class Patch {
 									 const TablesRegistry& tables_registry,
 									 size_t resource_idx,
 									 float cutoff,
+									 float interaction_cutoff,
 									 size_t step,
 									 size_t rebuild_period,
 									 float electric_field = 0.0f,
@@ -544,6 +575,7 @@ class Patch {
 	// Core Patch Properties
 	//================================================================================
 	patch_t patch_id_;		  ///< Unique patch identifier
+	uint64_t base_seed_{0};	  ///< Run-wide RNG seed (see set_base_seed)
 	idx_t capacity_;		  ///< Maximum particle storage capacity
 	idx_t particle_count_{0}; ///< Current number of active particles
 	Resource resource_;		  ///< Computational resource (GPU/CPU)

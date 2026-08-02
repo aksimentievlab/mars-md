@@ -193,6 +193,41 @@ class ZOrderPairlist : public Pairlist {
 
 	// Adaptive search range optimization
 	DeviceBuffer<uint32_t> adaptive_search_ranges_; ///< Per-particle adaptive search ranges
+
+	/// Largest coarse-cell resolution used by the neighbor search, as bits per
+	/// dimension. Capping this bounds the cell arrays at 8^7 = 2M entries;
+	/// exceeding the cap only makes cells wider than the cutoff, which costs
+	/// extra candidates to scan but never misses a pair.
+	static constexpr int kMaxCoarseBits = 7;
+	/// Initial allocation for the cell index, grown on demand.
+	static constexpr size_t kInitialCoarseCells = 4096;
+
+	/// Coarse-cell index over the Morton-sorted array, used by the exact
+	/// 27-cell neighbor search. Sized 8^coarse_bits_ and rebuilt each pass.
+	DeviceBuffer<uint32_t> cell_begin_;
+	DeviceBuffer<uint32_t> cell_end_;
+	int coarse_bits_ = 0;			  ///< Coarse cells per dimension = 2^coarse_bits_
+	Vector3 box_len_{0.0f};			  ///< Periodic box lengths for minimum-image tests
+	bool periodic_ = false;			  ///< Whether to wrap cells and use minimum image
+	Vector3 last_box_extent_{0.0f};	  ///< Extent of the box used for the last Morton encoding
+
+  public:
+	/**
+	 * @brief Declare the simulation box periodic for neighbor finding.
+	 *
+	 * When set, the 27-cell stencil wraps at the grid edges and displacements
+	 * use the minimum image convention, so pairs spanning a periodic boundary
+	 * are enumerated. Without this, such pairs are silently absent from the
+	 * pairlist even though the force kernel would apply minimum image to them.
+	 *
+	 * @param box_len Periodic box lengths; pass a zero vector to disable.
+	 */
+	void set_periodic_box(const Vector3& box_len) {
+		box_len_ = box_len;
+		periodic_ = (box_len.x > 0.0f && box_len.y > 0.0f && box_len.z > 0.0f);
+	}
+
+  private:
 	bool use_adaptive_ranges_;						///< Whether to use adaptive search ranges
 	bool use_hierarchical_search_;					///< Whether to use hierarchical Morton search
 

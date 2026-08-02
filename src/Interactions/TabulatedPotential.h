@@ -30,10 +30,32 @@ struct TabulatedPotential {
 				home += static_cast<int>(table->size);
 			}
 		} else {
-			if (home < 0)
+			// Past the end of the table the potential is held at its final
+			// value, so the force there is zero. Matches legacy ARBD's
+			// TabulatedPotential::compute, which returns
+			// `EnergyForce(v0[n-1], Vector3(0.0f))` for `home >= n` and yields
+			// `du = 0` in the final bin.
+			//
+			// Clamping `home` alone (the previous behaviour here) is not
+			// enough: `w` keeps growing with `dx`, so `dU*w + U0` below
+			// linearly extrapolates the last bin's slope instead of holding the
+			// endpoint value, and the returned force stays at that slope rather
+			// than falling to zero. For a nonbonded table that ends at the
+			// interaction cutoff, every out-of-range pair then acquires a
+			// spurious constant force and an unbounded energy - a non-decaying
+			// long-range interaction applied to whatever fraction of the pair
+			// list lies beyond the cutoff.
+			if (home >= static_cast<int>(table->size) - 1) {
+				return ScalarForceEnergy{
+					Vec2<arbd_real>{arbd_real(0), table->pot[table->size - 1]}};
+			}
+			// Below the table, clamp the index but keep the fractional weight,
+			// so the first bin's slope still applies. Legacy does the same
+			// (`home = home < 0 ? 0 : home`). Returning zero force here instead
+			// would delete the repulsive core that keeps particles apart.
+			if (home < 0) {
 				home = 0;
-			if (home >= static_cast<int>(table->size) - 1)
-				home = static_cast<int>(table->size) - 2;
+			}
 		}
 
 		int home1 = table->is_periodic ? (home + 1) % static_cast<int>(table->size) : home + 1;

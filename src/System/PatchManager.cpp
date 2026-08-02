@@ -92,6 +92,7 @@ void PatchManager::initialize_from_plan(const DecompositionPlan& plan,
 			std::make_unique<Patch>(static_cast<patch_t>(pid), estimated_particles_per_patch, res);
 		patch->set_bounds(min_b, max_b);
 		patch->set_periodic_box(&sim_system_.get_boundary_conditions());
+		patch->set_base_seed(static_cast<uint64_t>(sim_system_.get_base_seed()));
 		patch->set_halo_thickness(static_cast<float>(cutoff));
 
 		// Create and set device particle types for this patch
@@ -143,6 +144,7 @@ void PatchManager::initialize_local_patches(idx_t estimated_particles, const Len
 	auto patch = std::make_unique<Patch>(0, estimated_particles, res);
 	patch->set_bounds(min_bounds, max_bounds);
 	patch->set_periodic_box(&sim_system_.get_boundary_conditions());
+	patch->set_base_seed(static_cast<uint64_t>(sim_system_.get_base_seed()));
 	patch->set_halo_thickness(static_cast<float>(cutoff));
 
 	// Create and set device particle types for this patch
@@ -478,6 +480,11 @@ PatchManager::compute_nonbonded_forces(const NonBondedInteractions& interactions
 												  tables_registry,
 												  resource_idx,
 												  cutoff,
+												  // `cutoff` is the pairlist radius (interaction
+												  // cutoff + skin); the force kernel needs the
+												  // interaction cutoff itself so it can reject
+												  // the skin pairs.
+												  static_cast<float>(sim_system_.get_cutoff()),
 												  step,
 												  rebuild_period,
 												  electric_field,

@@ -15,6 +15,7 @@
 #include "Interactions/Nonbonded/Pairwise.h"
 #include "Interactions/Nonbonded/PmfKernels.h"
 #include "PatchOperation/Integrator.h"
+#include "PatchOperation/PairListKernels/ZOrderPairlist.h"
 #include "PatchOperation/Pairlist.h"
 namespace ARBD {
 
@@ -25,6 +26,25 @@ void Patch::set_periodic_box(const PeriodicBox* sim_box) {
 		periodic_box_device_.copy_from_host(std::vector<PeriodicBox>{*sim_box});
 	} else {
 		periodic_box_device_ = DeviceBuffer<PeriodicBox>();
+	}
+
+	// The pairlist needs the box too, not just the force kernel. Without it,
+	// neighbor finding treats the domain as open: pairs separated by less than
+	// the cutoff across a periodic face are never enumerated, so those
+	// interactions are missing even though the force kernel would have applied
+	// the minimum image convention to them. For a box only ~18 cutoffs wide
+	// that affects a substantial fraction of the particles.
+	if (auto* zpl = dynamic_cast<ZOrderPairlist*>(pairlist_.get())) {
+		const bool fully_periodic =
+			sim_box && sim_box->is_periodic(0) && sim_box->is_periodic(1) && sim_box->is_periodic(2);
+		if (fully_periodic) {
+			const auto bs = sim_box->get_box_size();
+			zpl->set_periodic_box(Vector3(bs.x, bs.y, bs.z));
+		} else {
+			// Mixed or open boundaries: fall back to non-periodic neighbor
+			// finding rather than wrapping in directions that are not periodic.
+			zpl->set_periodic_box(Vector3(0.0f, 0.0f, 0.0f));
+		}
 	}
 }
 
@@ -57,6 +77,7 @@ Event Patch::calculate_nonbonded_forces(const NonBondedInteractions& interaction
 										const TablesRegistry& tables_registry,
 										size_t resource_idx,
 										float cutoff,
+										float interaction_cutoff,
 										size_t step,
 										size_t rebuild_period,
 										float electric_field,
@@ -131,7 +152,10 @@ Event Patch::calculate_nonbonded_forces(const NonBondedInteractions& interaction
 									device_bonded_.num_excl_particles(),
 									pbox,
 									compute_energy,
-									pairlist_->get_num_pairs());
+									pairlist_->get_num_pairs(),
+									interaction_cutoff > 0.0f
+										? interaction_cutoff * interaction_cutoff
+										: 0.0f);
 
 	return evt;
 }
@@ -229,16 +253,26 @@ Event Patch::integrate_motion(float dt,
 		sim_box = *periodic_box_;
 	}
 
-	// Generate RNG seeds for deterministic, reproducible random numbers
-	// base_seed: unique per patch to avoid correlation between patches
-	// base_ctr: varies per timestep to ensure different random numbers each step
-	// Within a timestep, each particle gets base_ctr + idx for uniqueness
-	// Using large multiplier for base_seed to ensure no overlap between patches
-	uint64_t base_seed = static_cast<uint64_t>(patch_id_) * 1000000ULL;
-	// Use step number as counter offset, scaled to avoid overflow
-	// Each step advances counter by max_particles to ensure no overlap
-	// Assuming max 1M particles per patch, we use step * 1000000
-	uint32_t base_ctr = static_cast<uint32_t>(step * 1000000ULL);
+	// Derive the Philox stream key. Philox takes a 64-bit seed and a 32-bit
+	// counter, so everything that must vary independently goes in the seed and
+	// the counter carries the particle index alone.
+	//
+	// This replaces two defects. First, the seed was `patch_id_ * 1000000`,
+	// which discarded the configured seed entirely - every run of a given input
+	// drew the identical random sequence, and `seed` in the config file had no
+	// effect. Second, the counter was `step * 1000000` truncated to 32 bits,
+	// which wraps: 4295 * 10^6 mod 2^32 = 32704, so steps s and s+4295 started
+	// only 32704 apart and, with 304910 particles drawing consecutive counters,
+	// overlapped across 89% of their range and reused draws.
+	//
+	// Mixing with the golden-ratio constant decorrelates neighbouring seeds and
+	// steps; patch_id occupies the high half so patches never collide.
+	uint64_t base_seed = (static_cast<uint64_t>(base_seed_) * 0x9E3779B97F4A7C15ULL) ^
+						 (static_cast<uint64_t>(patch_id_) << 32) ^
+						 (static_cast<uint64_t>(step) * 0xBF58476D1CE4E5B9ULL);
+	// Counter is the particle index (added in the kernels), so it cannot
+	// overflow for any patch that fits in memory.
+	uint32_t base_ctr = 0;
 
 	// Get particle type view if available
 	ParticleTypeView particle_type_view;
@@ -274,6 +308,35 @@ Event Patch::integrate_motion(float dt,
 				 particle_count_,
 				 dt,
 				 kT);
+
+		// BAOAB is B-A-O-A-B, but launch_BAOAB only performs B-A-O-A: the
+		// closing half-kick needs the force at the *new* positions, which does
+		// not exist until the next force evaluation has run. Apply it here, at
+		// the top of the following step, immediately before that step's opening
+		// half-kick - the two use the same force and together form the full
+		// kick of the standard merged-kick formulation.
+		//
+		// This was previously never launched at all (BAOAB_LastUpdate was
+		// defined and instantiated but had no launch site), so every step
+		// delivered only half the intended impulse while the O-step noise was
+		// applied in full. The result was an effectively weakened potential:
+		// the engine could not hold a condensed phase and drifted toward a
+		// dilute one regardless of temperature.
+		//
+		// Skipped on the first step, which has no predecessor to complete.
+		if (step > 1) {
+			launch_BAOAB_LastUpdate<float>(resource_,
+										   particle_view,
+										   particle_type_view,
+										   sim_box.get_box_size(),
+										   dt,
+										   step,
+										   kT,
+										   particle_count_,
+										   base_seed,
+										   base_ctr)
+				.wait();
+		}
 
 		evt = launch_BAOAB<float>(resource_,
 								  particle_view,
