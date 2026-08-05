@@ -82,6 +82,9 @@ add_compile_definitions(_GLIBCXX23_CONSTEXPR=)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Find threading library for use across the project
+# Prefer -pthread over -lpthread: it sets the compile-time flags (_REENTRANT)
+# as well as the link flag, which is what gcc and icpx both expect.
+set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 include_directories(${CMAKE_SOURCE_DIR}/extern)
 
