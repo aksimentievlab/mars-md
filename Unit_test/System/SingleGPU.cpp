@@ -31,12 +31,7 @@ TEST_CASE("SimSystem Single Resource Optimization", "[SimSystem][SingleResource]
 		sim_system.set_num_steps(100);
 		sim_system.set_estimated_particles(1000);
 
-		// Note: We don't set a decomposer for single resource case
-		// This should work without throwing an error
-
-		// Create a simple system state for testing
 		SystemState state(sim_system);
-		// Add some test particles
 		HostParticleData test_particles;
 		test_particles.resize(100);
 		for (size_t i = 0; i < test_particles.size(); ++i) {

@@ -17,10 +17,13 @@ namespace ARBD {
 
 enum class TabulatedType { NonBondedPair, Bond, Angle, Dihedral, Default };
 
+// Holds tabulated data as read from disk. Deliberately carries no notion of
+// periodicity: whether a table wraps follows from the interaction kind using
+// it, and is set where the device-side TabulatedPotential is built
+// (DeviceBondedInteraction::link_tables).
 struct Table {
 	std::string name;
 	TabulatedType type;
-	bool is_periodic{false};
 	arbd_real step_size{0.0};
 	arbd_real start{0.0};
 
@@ -28,7 +31,6 @@ struct Table {
 	std::vector<arbd_real> Y;
 	Table(TabulatedType type) : type(type) {
 		if (type == TabulatedType::Dihedral) {
-			is_periodic = true;
 			start = -constants::PI;
 		}
 	}
@@ -124,8 +126,8 @@ struct Table {
 
 		Y = std::move(y_values);
 		start = start_;
-		step_size = stop.has_value() ? (*stop - start) / static_cast<arbd_real>(Y.size() - 1)
-									  : *step_size_;
+		step_size =
+			stop.has_value() ? (*stop - start) / static_cast<arbd_real>(Y.size() - 1) : *step_size_;
 
 		X.resize(Y.size());
 		for (size_t i = 0; i < X.size(); ++i) {
@@ -156,8 +158,13 @@ class TablesRegistry {
 				: resolve_file_path(std::string(file_name), std::string(config_file_path));
 		table.read_file(resolved_path, name);
 		angle_functions_.push_back(std::move(table));
-		angle_name_to_idx_[name] = static_cast<int>(angle_functions_.size());
-		return angle_name_to_idx_.size();
+		// Index of the table just appended, i.e. size()-1 - mirrors
+		// get_or_load_dihedral. Using size() (and returning the *map's* size)
+		// made every angle index one too large, so a system with N angle tables
+		// indexed element N of an N-element device array: an out-of-bounds read
+		// in TabulatedAngleComputer for every angle using the last table.
+		angle_name_to_idx_[name] = static_cast<int>(angle_functions_.size() - 1);
+		return angle_name_to_idx_[name];
 	}
 
 	HOST int get_or_load_bond(std::string_view file_name, std::string_view config_file_path = "") {
@@ -175,8 +182,12 @@ class TablesRegistry {
 				? std::string(file_name)
 				: resolve_file_path(std::string(file_name), std::string(config_file_path));
 		table.read_file(resolved_path, name);
-		bond_name_to_idx_[name] = static_cast<int>(bond_name_to_idx_.size());
+		// push_back first, then size()-1 - same shape as the angle/dihedral
+		// loaders. The previous form assigned bond_name_to_idx_.size() while
+		// operator[] was itself inserting into that map, so it was correct only
+		// because C++17 sequences the right operand of `=` before the left.
 		bond_functions_.push_back(std::move(table));
+		bond_name_to_idx_[name] = static_cast<int>(bond_functions_.size() - 1);
 		return bond_name_to_idx_[name];
 	}
 
@@ -193,7 +204,6 @@ class TablesRegistry {
 				? std::string(file_name)
 				: resolve_file_path(std::string(file_name), std::string(config_file_path));
 		table.read_file(resolved_path, name);
-		table.is_periodic = true;
 		dihedral_functions_.push_back(std::move(table));
 		dihedral_name_to_idx_[name] = static_cast<int>(dihedral_functions_.size() - 1);
 		return dihedral_name_to_idx_[name];

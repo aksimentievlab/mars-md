@@ -103,7 +103,7 @@ HOST DEVICE inline void atomic_add(T* ptr, T value) {
  *
  * SYCL branch explicitly specifies address_space::global_space, matching
  * every existing counter/slot-allocation atomic_ref in this codebase (e.g.
- * ZOrderNeighborKernel::pair_count, AdaptiveKernels.h) - the default
+ * ZOrderCellNeighborKernel::pair_count, AdaptiveKernels.h) - the default
  * (generic_space) silently misbehaves for USM device pointers on at least
  * the CUDA backend of SYCL (nvptx64-nvidia-cuda), even though it happens to
  * work for atomic_add()'s per-component float adds above.

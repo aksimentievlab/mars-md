@@ -44,7 +44,7 @@
 #endif
 
 namespace Global {
-static short single_resource_id = 0; // For testing, we use a single resource id
+static short single_resource_id = 2; // For testing, we use a single resource id
 static std::vector<short> device_ids = {0, 1};
 }
 

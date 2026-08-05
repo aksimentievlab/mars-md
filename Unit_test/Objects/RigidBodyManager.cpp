@@ -5,13 +5,13 @@
  *        batched across RB instances via the SoA views from Phase 2.
  */
 
+#include "System/RigidBodyManager.h"
 #include "../catch_boiler.h"
-#include "Constants.h"
 #include "Backend/Events.h"
+#include "Constants.h"
 #include "IO/DxIO.h"
 #include "Objects/DeviceParticleManager.h"
 #include "Objects/Grid.h"
-#include "Objects/RigidBodyManager.h"
 #include "Objects/RigidBodyProperties.h"
 #include <filesystem>
 
@@ -139,8 +139,7 @@ TEST_CASE("RigidBodyManager::add_langevin_forces perturbs force/torque",
 
 	// A body at rest with zero prior force/torque should pick up a nonzero
 	// random kick from the Langevin thermostat (RBAddLangevinKernel).
-	REQUIRE((result.force[0].x != 0.0f || result.force[0].y != 0.0f ||
-			 result.force[0].z != 0.0f));
+	REQUIRE((result.force[0].x != 0.0f || result.force[0].y != 0.0f || result.force[0].z != 0.0f));
 }
 
 namespace {
@@ -242,7 +241,10 @@ TEST_CASE("RigidBodyManager: prepare_grid_grid_dispatch + compute_grid_grid_forc
 	REQUIRE(mgr.force_pairs().size() == 1);
 
 	mgr.prepare_grid_grid_dispatch(grid_manager, /*grid_resource_idx=*/0);
-	mgr.compute_grid_grid_forces(grid_manager, /*grid_resource_idx=*/0, /*step=*/0, /*cutoff=*/1000.0f)
+	mgr.compute_grid_grid_forces(grid_manager,
+								 /*grid_resource_idx=*/0,
+								 /*step=*/0,
+								 /*cutoff=*/1000.0f)
 		.wait();
 
 	REQUIRE_FALSE(mgr.grid_grid_worklist_overflowed());

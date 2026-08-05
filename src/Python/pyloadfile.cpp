@@ -265,7 +265,6 @@ void init_pyloadfile(py::module_& m) {
 		.def(py::init<TabulatedType>(), py::arg("type") = TabulatedType::Default)
 		.def_readwrite("name", &Table::name)
 		.def_readwrite("type", &Table::type)
-		.def_readwrite("is_periodic", &Table::is_periodic)
 		.def_readwrite("step_size", &Table::step_size)
 		.def_readwrite("start", &Table::start)
 		.def_readwrite("X", &Table::X)

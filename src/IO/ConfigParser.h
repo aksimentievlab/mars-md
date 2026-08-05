@@ -117,6 +117,18 @@ class ConfigParser {
 	void parse_parameters(const Reader& reader);
 	void apply_defaults();
 	void get_elements(const Reader& reader);
+
+	/**
+	 * @brief Append every rigid-body instance's attached-particle template to
+	 *        init_particles_, after all regular particles.
+	 *
+	 * Runs once, after every particle and rigidBody block is parsed and after
+	 * inputRBCoordinates has placed each instance, so that regular particles
+	 * occupy [0, num_regular) and all attached particles follow contiguously -
+	 * the layout legacy ARBD uses, and the one that keeps BondConfigReader's
+	 * raw integer indices predictable.
+	 */
+	void fold_in_attached_particles();
 #ifdef USE_PYTHON
 	void parse_dictionary(const std::map<std::string, pybind11::object>& config_dict);
 #endif

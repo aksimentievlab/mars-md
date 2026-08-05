@@ -108,6 +108,9 @@ if(USE_SYCL_ICPX OR USE_SYCL_ACPP)
     separate_arguments(SYCL_LINK_FLAGS_LIST UNIX_COMMAND "${SYCL_LINK_FLAGS}")
     target_link_options("lib${PROJECT_NAME}" PUBLIC ${SYCL_LINK_FLAGS_LIST})
 endif()
+# used by SimManager 
+target_link_libraries("lib${PROJECT_NAME}" PUBLIC Threads::Threads)
+
 # Only link the NanoVDB target when it was actually created (see BUILD_NANOVDB
 # in the top-level CMakeLists). Referencing it unconditionally makes CMake fall
 # back to a raw "-lnanovdb" link flag when the target does not exist, which

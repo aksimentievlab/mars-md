@@ -225,7 +225,7 @@ class DeviceBondedInteractions {
 												 : arbd_real(0);
 			pot.size = static_cast<unsigned int>(table.Y.size());
 			pot.start = table.start;
-			pot.is_periodic = false;
+			pot.is_periodic = true;
 
 			angle_pots.push_back(pot);
 		}
@@ -385,7 +385,7 @@ class DeviceBondedInteractions {
 	// chain) instead of scanning/searching all exclusions.
 	DeviceBuffer<int> excl_offsets_;   // size num_excl_particles_ + 1
 	DeviceBuffer<int> excl_neighbors_; // size 2 * num_exclusions_
-	idx_t num_excl_particles_{0};      // number of particles covered by excl_offsets_
+	idx_t num_excl_particles_{0};	   // number of particles covered by excl_offsets_
 
 	// === RESTRAINTS ===
 	DeviceBuffer<int> restraint_particle_ids_;

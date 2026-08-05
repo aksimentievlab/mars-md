@@ -381,7 +381,7 @@ class ColvarsManager {
 
 	void initialize_grids() {
 		// Initialize any PMF/histogram grids
-		// Uses your BaseGrid system
+		// Uses BaseGrid system
 	}
 
   public:

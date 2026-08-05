@@ -200,6 +200,17 @@ void SimManager::init() {
 		rigid_body_manager_->prepare_grid_grid_dispatch(sys_.get_grid_manager(), 0);
 		rigid_body_manager_->prepare_particle_grid_dispatch(sys_.get_rigid_body_types(),
 															sys_state_.get_num_particles());
+		// Uses the AoS instance list rather than SystemState's SoA copy: the
+		// attached_start/attached_count ranges ConfigParser assigned live on
+		// RigidBodyIO and have no HostRigidBodyData counterpart. Index and
+		// RigidBodyIO::id agree (ConfigParser numbers instances sequentially),
+		// which is what lets rb_id double as the device-array index.
+		rigid_body_manager_->prepare_attached_particles(
+			sys_.get_rigid_body_types(),
+			pending_initial_rigid_bodies_,
+			sys_.get_patch_manager() ? sys_.get_patch_manager()->get_patches().size() : 1);
+		rigid_body_manager_->prepare_cosmetic_atoms(sys_.get_rigid_body_types(),
+													pending_initial_rigid_bodies_);
 		LOGINFO("SimManager: Rigid body manager initialized with {} bodies",
 				sys_state_.get_num_rigid_bodies());
 
@@ -210,6 +221,19 @@ void SimManager::init() {
 			LOGWARN("SimManager: only Langevin/DLM rigid-body dynamics is implemented; "
 					"ignoring the configured rigid body algorithm");
 		}
+	}
+
+	// Structure files describing the trajectory this run is about to write.
+	// Emitted here, before any frame exists, so the DCD always has a matching
+	// PSF/PDB on disk even if the run is interrupted. Non-fatal: a failure to
+	// write a visualization file must not abort an otherwise valid simulation.
+	try {
+		write_psf();
+		write_pdb();
+	} catch (const std::exception& e) {
+		LOGWARN("SimManager: could not write structure files ({}) - the simulation will still run, "
+				"but the trajectory will have no matching PSF/PDB",
+				e.what());
 	}
 
 	LOGINFO("SimManager: Initialization completed");
@@ -275,6 +299,10 @@ void SimManager::run() {
 	const float elapsed = wkf_timer_time(timer0_.timer);
 
 	report_performance(elapsed, num_steps);
+	// The final restart carries momenta, and the last step's closing half-kick
+	// is still outstanding - without this the file would resume the run from a
+	// half-step momentum treated as a whole-step one.
+	settle_momenta_for_output(num_steps);
 	write_final_restart();
 
 	// Cleanup IMD
@@ -331,6 +359,18 @@ void SimManager::execute_force_calculation(size_t step) {
 	// grid-grid/particle-RB -> RB Langevin (see the RB force block below).
 	if (rigid_body_manager_) {
 		rigid_body_manager_->bodies().clear_forces();
+
+		// Attached particles are slaved to their bodies, so their positions
+		// must be refreshed from the state the previous step's RB integration
+		// left behind - before the pairlist and force kernels below read them.
+		if (rigid_body_manager_->has_attached_particles()) {
+			auto& patches = patch_mgr->get_patches();
+			if (!patches.empty()) {
+				rigid_body_manager_
+					->sync_attached_particle_positions(patches.front()->get_particles().view())
+					.wait();
+			}
+		}
 	}
 
 	const auto& resources = sys_.get_resources();
@@ -349,9 +389,7 @@ void SimManager::execute_force_calculation(size_t step) {
 			}
 		}
 
-		// Particle types are static for the whole run - build the device
-		// table once per resource instead of re-allocating (13 device
-		// buffers) and re-uploading it on every step.
+		// Particle types are static for the whole run
 		if (!device_particle_types_cache_[resource_idx]) {
 			device_particle_types_cache_[resource_idx] =
 				std::make_unique<DeviceParticleTypes>(sys_.get_particle_types(),
@@ -406,6 +444,20 @@ void SimManager::execute_force_calculation(size_t step) {
 	// Patch::calculate_bonded_forces's own documented limitation), then RB
 	// Langevin - legacy step order.
 	if (rigid_body_manager_) {
+		// Attached particles have now accumulated their full nonbonded+bonded
+		// force. That force never moves them (the integrators skip them);
+		// it acts on the parent body instead, so fold it into the body's net
+		// force/torque before the Langevin term and the integration below.
+		if (rigid_body_manager_->has_attached_particles()) {
+			auto& patches = patch_mgr->get_patches();
+			if (!patches.empty()) {
+				rigid_body_manager_
+					->reduce_attached_particle_forces(
+						std::as_const(patches.front()->get_particles()).view())
+					.wait();
+			}
+		}
+
 		Event grid_evt =
 			rigid_body_manager_->compute_grid_grid_forces(grid_manager,
 														  0,
@@ -494,9 +546,52 @@ void SimManager::synchronize_multi_resource() {
 // Output Handling
 //================================================================================
 
+void SimManager::settle_momenta_for_output(size_t step) {
+	// BAOAB defers its closing half-kick to the top of the next step (see
+	// Patch::finish_deferred_kick), so right now every particle's momentum is
+	// half a kick behind its position. Positions are unaffected, but momentum
+	// DCD frames, restart files and kinetic energies read that momentum and
+	// would record - and, on restart, resume from - a half-step value.
+	//
+	// Pay the kick before reading. It needs the force at the current positions,
+	// which nothing has evaluated yet, so re-run the force calculation first;
+	// the next step would have recomputed exactly this anyway, so the cost is
+	// one extra force evaluation per output frame (~0.1% at outputPeriod 1000).
+	// finish_deferred_kick() clears the pending flag, so the next step applies
+	// only its opening half-kick and the total impulse is unchanged.
+	PatchManager* patch_mgr = sys_.get_patch_manager();
+	if (!patch_mgr) {
+		return;
+	}
+
+	bool any_pending = false;
+	for (auto& patch : patch_mgr->get_patches()) {
+		any_pending = any_pending || patch->has_deferred_kick();
+	}
+	if (!any_pending) {
+		return;
+	}
+
+	execute_force_calculation(step);
+	const float timestep = sys_.get_timestep();
+	for (auto& patch : patch_mgr->get_patches()) {
+		patch->finish_deferred_kick(timestep).wait();
+	}
+}
+
 void SimManager::handle_output(size_t step) {
 	const size_t output_period = static_cast<size_t>(sys_.get_output_period());
 	const size_t energy_output_period = static_cast<size_t>(sys_.get_energy_output_period());
+
+	const bool trajectory_due = output_period > 0 && step % output_period == 0;
+	const bool energy_due = energy_output_period > 0 && step % energy_output_period == 0;
+
+	// Only needed when something about to be written reads momentum: the
+	// momentum trajectory, or the energy report and the restart files it
+	// refreshes. A positions-only DCD frame does not.
+	if ((trajectory_due && momentum_dcd_writer_) || energy_due) {
+		settle_momenta_for_output(step);
+	}
 
 	// Trajectory output
 	if (output_period > 0 && step % output_period == 0) {
@@ -512,6 +607,10 @@ void SimManager::handle_output(size_t step) {
 			// Write with generic trajectory writer
 			// traj_writer_->write_frame(step);
 		}
+
+		// Plaintext rigid-body trajectory, for direct comparison against v1's
+		// "<name>.0.rb-traj". Independent of the DCD writers above.
+		write_rb_traj_frame(step);
 
 		wkf_timer_stop(timerS_.timer);
 	}
@@ -542,15 +641,26 @@ void SimManager::write_dcd_frame(size_t step) {
 	// Gather global state from patches
 	gather_particle_data_from_patches();
 	if (sys_state_.prepare_for_dcd_output()) {
-		// 3. Get positions for DCD writing
+		// Frame layout is [regular particles][attached particles][cosmetic
+		// atoms]. The first two blocks are exactly the global particle array -
+		// ConfigParser appends attached particles after all regular ones - so
+		// this is "every real particle, then the visualization-only remainder".
+		// A PSF describing this trajectory must use the same order.
 		const auto& positions = sys_state_.get_global_positions();
+		std::vector<Vector3> frame(positions.begin(), positions.end());
+		if (rigid_body_manager_ && rigid_body_manager_->num_cosmetic_atoms() > 0) {
+			// Placed on the device from the bodies' current transforms; this is
+			// the only work in the step that touches these atoms.
+			rigid_body_manager_->compute_cosmetic_positions().wait();
+			rigid_body_manager_->copy_cosmetic_positions_to_host(frame);
+		}
 
 		const auto& periodicity = sys_.get_boundary_conditions().get_periodicity();
 		const bool with_unitcell = periodicity[0] || periodicity[1] || periodicity[2];
 
 		if (!dcd_header_written_) {
 			const int nsavc = std::max(1, static_cast<int>(sys_.get_output_period()));
-			dcd_writer_->writeHeader(static_cast<int>(positions.size()),
+			dcd_writer_->writeHeader(static_cast<int>(frame.size()),
 									 1,
 									 nsavc,
 									 nsavc,
@@ -558,6 +668,10 @@ void SimManager::write_dcd_frame(size_t step) {
 									 sys_.get_timestep(),
 									 with_unitcell);
 			dcd_header_written_ = true;
+			LOGINFO("SimManager: DCD has {} atom(s) = {} particle(s) + {} cosmetic",
+					frame.size(),
+					positions.size(),
+					frame.size() - positions.size());
 		}
 
 		// The header's with_unitcell flag promises an extra block on every
@@ -567,11 +681,234 @@ void SimManager::write_dcd_frame(size_t step) {
 		if (with_unitcell) {
 			const Vector3 box = sys_.get_boundary_conditions().get_box_size();
 			const std::vector<double> unitcell{box.x, 0.0, box.y, 0.0, 0.0, box.z};
-			dcd_writer_->writeStep(positions, unitcell);
+			dcd_writer_->writeStep(frame, unitcell);
 		} else {
-			dcd_writer_->writeStep(positions);
+			dcd_writer_->writeStep(frame);
 		}
 	}
+}
+
+void SimManager::build_structure_view() {
+	if (structure_view_) {
+		return; // atom set is fixed for the run
+	}
+	structure_view_ = std::make_unique<PsfPdbStructure>();
+	PsfPdbStructure& s = *structure_view_;
+
+	const Vector3 box = sys_.get_boundary_conditions().get_box_size();
+	s.box_dimensions = box;
+	s.has_cryst1 = true;
+
+	// --- Block 1+2: the global particle array (regular, then attached) -------
+	const HostParticleData& particles = sys_state_.get_global_particles();
+	const auto& ptypes = sys_.get_particle_types();
+	const size_t num_particles = particles.size();
+
+	s.atoms.reserve(num_particles);
+	// Zero particles is not itself an error - a rigid-body-only system still
+	// has cosmetic template atoms worth writing - so the emptiness check waits
+	// until both blocks below have been built (see the end of this function).
+	for (size_t i = 0; i < num_particles; ++i) {
+		const int tid = particles.type_id[i];
+		const bool known = tid >= 0 && static_cast<size_t>(tid) < ptypes.size();
+
+		PdbAtomRecord a;
+		a.serial = static_cast<int>(i) + 1;
+		a.name = known ? ptypes[tid].name : "X";
+		a.resname = a.name;
+		a.type_name = a.name;
+		a.mass = known ? ptypes[tid].mass : 1.0f;
+		a.charge = known ? ptypes[tid].charge : 0.0f;
+		a.resid = static_cast<int>(i) + 1;
+		a.chain = "A";
+		// An attached particle is tagged so it can be selected in VMD and told
+		// apart from free particles of the same type.
+		const bool is_attached =
+			i < particles.attached_rigid_body_id.size() && particles.attached_rigid_body_id[i] >= 0;
+		a.segname = is_attached ? "ATT" : "SYS";
+		a.position = i < particles.pos.size() ? particles.pos[i] : Vector3(0.0f);
+		s.atoms.push_back(std::move(a));
+	}
+
+	// Real bonded topology: indices are already into the global particle array.
+	for (const Bond& b : sys_state_.get_bonded_interactions().get_bonds()) {
+		s.bonds.emplace_back(b.ind1, b.ind2);
+	}
+
+	// --- Block 3: cosmetic template atoms -----------------------------------
+	// Also build, per instance, template-atom index -> global index, so the
+	// template's own bonds can be emitted in this file's numbering. Attached
+	// atoms map back into block 2; cosmetic ones into the tail being appended.
+	const auto& rtypes = sys_.get_rigid_body_types();
+	for (const RigidBodyIO& rb : pending_initial_rigid_bodies_) {
+		if (rb.type_id < 0 || static_cast<size_t>(rb.type_id) >= rtypes.size()) {
+			continue;
+		}
+		const RigidBodyType& type = rtypes[rb.type_id];
+		std::vector<int> template_to_global(type.template_particles.size(), -1);
+
+		for (size_t t = 0; t < type.template_particles.size(); ++t) {
+			const CosmeticParticle& c = type.template_particles[t];
+			if (c.attached_particle_index >= 0) {
+				template_to_global[t] = rb.attached_start + c.attached_particle_index;
+				continue;
+			}
+			template_to_global[t] = static_cast<int>(s.atoms.size());
+
+			PdbAtomRecord a;
+			a.serial = static_cast<int>(s.atoms.size()) + 1;
+			a.name = c.name.empty() ? c.resname : c.name;
+			a.resname = c.resname;
+			a.type_name = c.type_name.empty() ? c.resname : c.type_name;
+			a.resid = c.resid;
+			a.chain = "R";
+			// Distinct from the attached particles' "ATT" so cosmetic atoms can
+			// be hidden or coloured separately; the rigid body's own id keeps
+			// instances apart.
+			a.segname = "RB" + std::to_string(rb.id);
+			a.mass = 0.0f;	 // no physics
+			a.charge = 0.0f; // no physics
+			// Placed at t=0 by this instance's transform; write_pdb refreshes it.
+			a.position = rb.orientation * c.body_frame_position + rb.position;
+			s.atoms.push_back(std::move(a));
+		}
+
+		for (const int2& b : type.template_bonds) {
+			if (b.x < 0 || b.y < 0 || static_cast<size_t>(b.x) >= template_to_global.size() ||
+				static_cast<size_t>(b.y) >= template_to_global.size()) {
+				continue;
+			}
+			const int g1 = template_to_global[b.x];
+			const int g2 = template_to_global[b.y];
+			if (g1 >= 0 && g2 >= 0) {
+				s.bonds.emplace_back(g1, g2);
+			}
+		}
+	}
+
+	// Nothing at all to describe. Throwing rather than warning-and-returning:
+	// these writers are called explicitly (including from Python), so a silent
+	// no-op just looks like a broken writer, and leaving structure_view_ set but
+	// empty would cache that emptiness for the rest of the run.
+	if (s.atoms.empty()) {
+		structure_view_.reset();
+		throw Exception(ExceptionType::RuntimeError,
+						SourceLocation(),
+						"SimManager: no particles or rigid-body template atoms to write - was "
+						"init() called, and does the system actually contain anything?");
+	}
+}
+
+void SimManager::refresh_structure_positions() {
+	if (!structure_view_) {
+		return;
+	}
+	PsfPdbStructure& s = *structure_view_;
+
+	gather_particle_data_from_patches();
+	std::vector<Vector3> frame;
+	if (sys_state_.prepare_for_dcd_output()) {
+		const auto& positions = sys_state_.get_global_positions();
+		frame.assign(positions.begin(), positions.end());
+	}
+	if (rigid_body_manager_ && rigid_body_manager_->num_cosmetic_atoms() > 0) {
+		rigid_body_manager_->compute_cosmetic_positions().wait();
+		rigid_body_manager_->copy_cosmetic_positions_to_host(frame);
+	}
+
+	const size_t n = std::min(frame.size(), s.atoms.size());
+	for (size_t i = 0; i < n; ++i) {
+		s.atoms[i].position = frame[i];
+	}
+	if (frame.size() != s.atoms.size()) {
+		LOGWARN("SimManager: structure has {} atom(s) but the current frame has {} - "
+				"only the overlap was refreshed",
+				s.atoms.size(),
+				frame.size());
+	}
+}
+
+void SimManager::write_psf(const std::string& path) {
+	build_structure_view();
+	const std::string out = path.empty() ? sys_.get_output_name() + ".psf" : path;
+	structure_view_->write_psf(out);
+	LOGINFO("SimManager: wrote PSF '{}' ({} atoms, {} bonds)",
+			out,
+			structure_view_->atoms.size(),
+			structure_view_->bonds.size());
+}
+
+void SimManager::write_pdb(const std::string& path) {
+	build_structure_view();
+	refresh_structure_positions();
+	const std::string out = path.empty() ? sys_.get_output_name() + ".pdb" : path;
+	structure_view_->write_pdb(out, sys_.get_boundary_conditions().get_box_size());
+	LOGINFO("SimManager: wrote PDB '{}' ({} atoms)", out, structure_view_->atoms.size());
+}
+
+void SimManager::write_rb_traj_frame(size_t step) {
+	if (!rigid_body_manager_ || rigid_body_manager_->size() == 0) {
+		return;
+	}
+
+	const idx_t count = rigid_body_manager_->size();
+	HostRigidBodyData rb;
+	rb.resize(static_cast<size_t>(count));
+	rigid_body_manager_->bodies().copy_to_host(rb, count);
+
+	if (!rb_traj_file_.is_open()) {
+		// "<name>.0.rb-traj" - the "0" is v1's replica-index artifact, kept for
+		// output compatibility (same reasoning as the momentum DCD's name).
+		const std::string path = sys_.get_output_name() + ".0.rb-traj";
+		rb_traj_file_.open(path);
+		if (!rb_traj_file_) {
+			throw Exception(ExceptionType::FileIoError,
+							SourceLocation(),
+							"SimManager: could not open rigid-body trajectory file '%s'",
+							path.c_str());
+		}
+		rb_traj_file_ << "# RigidBody trajectory file\n";
+		rb_traj_file_ << "#$LABELS step RigidBodyKey"
+						 " posX  posY  posZ"
+						 " rotXX rotXY rotXZ"
+						 " rotYX rotYY rotYZ"
+						 " rotZX rotZY rotZZ"
+						 " velX  velY  velZ"
+						 " angVelX angVelY angVelZ\n";
+		LOGINFO("SimManager: writing rigid-body trajectory to '{}'", path);
+	}
+
+	// v1 keys a body as "<typeName>#<index within that type>", numbering each
+	// type's instances from 0 independently.
+	const auto& types = sys_.get_rigid_body_types();
+	std::unordered_map<int, int> seen_per_type;
+
+	for (idx_t i = 0; i < count; ++i) {
+		const int type_id = rb.type_id[i];
+		const int instance = seen_per_type[type_id]++;
+		const std::string type_name = (type_id >= 0 && static_cast<size_t>(type_id) < types.size())
+										  ? types[type_id].name
+										  : std::string("RB");
+
+		const Vector3& p = rb.position[i];
+		const Matrix3& o = rb.orientation[i];
+		const Vector3& mom = rb.momentum[i];
+		const Vector3& ang = rb.angular_momentum[i];
+
+		// Position at the stream's default precision, everything after it at 10
+		// significant digits - exactly v1's printData() formatting.
+		rb_traj_file_ << std::setprecision(6) << step << " " << type_name << "#" << instance << " "
+					  << p.x << " " << p.y << " " << p.z;
+		// v1's legend is row-major (rotXX rotXY rotXZ | rotYX ...), while Matrix3
+		// stores columns (ex/ey/ez) - so row r of the output reads component r
+		// across all three column vectors, not one column vector.
+		rb_traj_file_ << std::setprecision(10) << " " << o.ex().x << " " << o.ey().x << " "
+					  << o.ez().x << " " << o.ex().y << " " << o.ey().y << " " << o.ez().y << " "
+					  << o.ex().z << " " << o.ey().z << " " << o.ez().z << " " << mom.x << " "
+					  << mom.y << " " << mom.z << " " << ang.x << " " << ang.y << " " << ang.z
+					  << "\n";
+	}
+	rb_traj_file_.flush();
 }
 
 void SimManager::write_momentum_dcd_frame(size_t step) {

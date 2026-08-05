@@ -1,4 +1,5 @@
 #pragma once
+#include "Objects/DeviceParticle.h" // ParticleFlags
 #include "System/Reservoir.h"
 #include "Types/BaseGridDevice.h"
 #include "Types/Types.h"
@@ -6,11 +7,6 @@
 
 // Host side
 namespace ARBD {
-enum ParticleFlags : uint32_t {
-	FLAG_NONE = 0,
-	FLAG_DUMMY = 1 << 0,
-	FLAG_ACTIVE = 1 << 1,
-};
 /**
  * @brief Atom group definition for collective variables
  */
@@ -59,17 +55,8 @@ class ParticleType {
 	// --- Grid IDs ---
 	int diffusion_grid_id = -1;
 	int3 force_grid_id = {-1, -1, -1}; // 3d grid
-	// Per-type scale for the x/y/z force grids, parallel to force_grid_id.
-	// Legacy applied this once at load time (Configuration.cpp's
-	// partForceGridScale -> forceXGrid->scale()), which worked because each
-	// ParticleType owned its own BaseGrid copy. arbd2v's GridManager dedups
-	// grids by filename, so two types sharing a force grid file share one
-	// grid_id - baking a scale into the grid data would apply both types'
-	// scales to that shared grid. Hence a runtime per-type factor instead,
-	// matching pmf_scale and RigidBodyType's *_grid_scale vectors.
 	Vector3 force_grid_scale = {1.0f, 1.0f, 1.0f};
-
-	std::string pmf_grid_name = "";
+	std::vector<std::string> rigid_body_potential_keys;
 	std::string diffusion_grid_name = "";
 	std::array<std::string, 3> force_grid_names = {"", "", ""};
 
@@ -83,12 +70,7 @@ class ParticleType {
 		  pmf_grids(src.pmf_grids), pmf_grid_names(src.pmf_grid_names),
 		  diffusion_grid_id(src.diffusion_grid_id), force_grid_id(src.force_grid_id),
 		  force_grid_scale(src.force_grid_scale),
-		  // These *_name fields used to be omitted here, so every copy silently
-		  // reset them to "". That matters because declaring this copy ctor
-		  // suppresses the implicit move ctor, so ConfigParser's
-		  // `push_back(std::move(ptype))` actually calls *this* - the grid names
-		  // parsed from the config were being dropped on the way into
-		  // SimSystem's particle-type vector.
+		  rigid_body_potential_keys(src.rigid_body_potential_keys),
 		  diffusion_grid_name(src.diffusion_grid_name), force_grid_names(src.force_grid_names),
 		  reservoir(src.reservoir ? std::make_unique<Reservoir>(*src.reservoir) : nullptr) {}
 	ParticleType(const std::string& name,
@@ -102,10 +84,12 @@ class ParticleType {
 				 std::vector<GridTerm> pmf_grids,
 				 int diffusion_grid_id,
 				 int3 force_grid_ids,
+				 std::vector<std::string> rigid_body_potential_keys,
 				 std::unique_ptr<Reservoir> reservoir)
 		: name(name), mass(mass), charge(charge), radius(radius), eps(eps), diffusion(diffusion),
 		  mu(mu), pmf_smd_freq(pmf_smd_freq), pmf_grids(std::move(pmf_grids)),
 		  diffusion_grid_id(diffusion_grid_id), force_grid_id(force_grid_ids),
+		  rigid_body_potential_keys(std::move(rigid_body_potential_keys)),
 		  reservoir(reservoir ? std::make_unique<Reservoir>(*reservoir) : nullptr) {}
 };
 // ============================================================================
@@ -153,7 +137,7 @@ struct HostParticleData {
 	std::vector<uint32_t> flags;
 
 	std::vector<bool> is_active;
-	std::vector<bool> is_dummy;
+	std::vector<bool> is_dummy; // position and momentum are not updated by integrator.
 	std::vector<int> colvars_group_id;
 	std::vector<int> group_id;
 	std::vector<int> attached_rigid_body_id;
@@ -170,6 +154,8 @@ struct HostParticleData {
 				flags[i] |= ParticleFlags::FLAG_DUMMY;
 			if (is_active[i])
 				flags[i] |= ParticleFlags::FLAG_ACTIVE;
+			if (i < attached_rigid_body_id.size() && attached_rigid_body_id[i] >= 0)
+				flags[i] |= ParticleFlags::FLAG_RB_ATTACHED;
 		}
 	}
 	void unpack_flags() {

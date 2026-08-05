@@ -27,22 +27,19 @@ void Patch::set_periodic_box(const PeriodicBox* sim_box) {
 	} else {
 		periodic_box_device_ = DeviceBuffer<PeriodicBox>();
 	}
-
-	// The pairlist needs the box too, not just the force kernel. Without it,
-	// neighbor finding treats the domain as open: pairs separated by less than
-	// the cutoff across a periodic face are never enumerated, so those
-	// interactions are missing even though the force kernel would have applied
-	// the minimum image convention to them. For a box only ~18 cutoffs wide
-	// that affects a substantial fraction of the particles.
+	// Periodicity is passed per axis. Falling back to fully non-periodic
+	// neighbor finding whenever any axis is open (as this used to do) drops
+	// exactly the cross-face pairs on the axes that *are* periodic, while the
+	// force kernel goes on applying minimum image to them - the same class of
+	// silently missing interactions the stencil was written to eliminate.
 	if (auto* zpl = dynamic_cast<ZOrderPairlist*>(pairlist_.get())) {
-		const bool fully_periodic =
-			sim_box && sim_box->is_periodic(0) && sim_box->is_periodic(1) && sim_box->is_periodic(2);
-		if (fully_periodic) {
+		if (sim_box) {
 			const auto bs = sim_box->get_box_size();
-			zpl->set_periodic_box(Vector3(bs.x, bs.y, bs.z));
+			zpl->set_periodic_box(Vector3(sim_box->is_periodic(0) ? bs.x : 0.0f,
+										  sim_box->is_periodic(1) ? bs.y : 0.0f,
+										  sim_box->is_periodic(2) ? bs.z : 0.0f),
+								  sim_box->get_origin());
 		} else {
-			// Mixed or open boundaries: fall back to non-periodic neighbor
-			// finding rather than wrapping in directions that are not periodic.
 			zpl->set_periodic_box(Vector3(0.0f, 0.0f, 0.0f));
 		}
 	}
@@ -55,8 +52,6 @@ void Patch::set_periodic_box(const PeriodicBox* sim_box) {
 void Patch::ensure_bonded_topology_ready(const BondedInteractions& interactions,
 										 const TablesRegistry& tables_registry,
 										 size_t resource_idx) {
-	// Build the device-side bonded topology/table arrays once; bonded
-	// topology doesn't change during the run, so this is cached across steps.
 	if (!bonded_device_data_prepared_) {
 		device_bonded_.copy_from_host(interactions);
 		device_bonded_.link_tables(tables_registry, resource_idx);
@@ -92,10 +87,6 @@ Event Patch::calculate_nonbonded_forces(const NonBondedInteractions& interaction
 		return Event(nullptr, resource_);
 	}
 
-	// Exclusions must be ready before the pairwise kernel runs below - this
-	// function runs before calculate_bonded_forces() every step (see
-	// SimManager::execute_force_calculation), so bonded topology can't rely
-	// on that call having happened yet. Idempotent, cheap after the first call.
 	ensure_bonded_topology_ready(bonded_interactions, tables_registry, resource_idx);
 
 	const ParticleView particle_view = particles_.view();
@@ -129,33 +120,54 @@ Event Patch::calculate_nonbonded_forces(const NonBondedInteractions& interaction
 		pairwise_nb_device_data_prepared_ = true;
 	}
 
-	// Rebuild the neighbor list every rebuild_period steps (mirrors legacy's
-	// decompPeriod gating: `s % decompPeriod == 0`), not every call - always
-	// rebuilds on step == 1 since the pairlist starts out empty. Pairs found
-	// at the last rebuild are reused (with cutoff/pairlist skin) on the steps
-	// in between.
-	if (rebuild_period == 0 || (step - 1) % rebuild_period == 0) {
+	// Rebuild the neighbor list every rebuild_period steps
+	bool rebuild = (rebuild_period == 0 || (step - 1) % rebuild_period == 0);
+
+	// The period alone is not a correctness criterion. A pair absent from the
+	// list was more than `cutoff` apart when it was built, so it can only come
+	// inside the interaction cutoff if the two particles each move more than
+	// half the skin. Once any particle has done so the list may be missing real
+	// interactions, and waiting for the configured period to elapse simply
+	// drops them - which is the same failure mode as an under-enumerated
+	// stencil, just intermittent. Check the actual displacement and rebuild
+	// early if it exceeds the skin the list was built with.
+	// This matters for the systems this engine targets: on the 305k-particle
+	// cytoplasm benchmark, mean displacement over a 1000-step rebuild interval
+	// (~11 A) already exceeds the configured 10 A skin.
+	const float skin = cutoff - interaction_cutoff;
+	if (!rebuild && skin > 0.0f && particle_count_ > 0) {
+		rebuild =
+			pairlist_->needs_update(particles_.pos(), particles_.pos(), particle_count_, skin);
+		if (rebuild) {
+			LOGTRACE("Patch {}: rebuilding pairlist early at step {} - displacement exceeded "
+					 "half the {} A skin",
+					 patch_id_,
+					 step,
+					 skin);
+		}
+	}
+
+	if (rebuild) {
 		pairlist_->build_pairlist(particles_.pos(), particle_count_, cutoff);
 	}
 
-	evt = launch_pairwise_nonbonded(resource_,
-									pairlist_->get_neighbor_pairs().data(),
-									particle_view.pos,
-									particle_view.ForceEnergy,
-									particle_view.type_id,
-									device_pair_nb_->pairwise_table_matrix(),
-									device_pair_nb_->pairwise_form_matrix(),
-									device_pair_nb_->nonbonded_potentials(),
-									device_pair_nb_->num_particle_types(),
-									device_bonded_.exclusion_offsets(),
-									device_bonded_.exclusion_neighbors(),
-									device_bonded_.num_excl_particles(),
-									pbox,
-									compute_energy,
-									pairlist_->get_num_pairs(),
-									interaction_cutoff > 0.0f
-										? interaction_cutoff * interaction_cutoff
-										: 0.0f);
+	evt = launch_pairwise_nonbonded(
+		resource_,
+		pairlist_->get_neighbor_pairs().data(),
+		particle_view.pos,
+		particle_view.ForceEnergy,
+		particle_view.type_id,
+		device_pair_nb_->pairwise_table_matrix(),
+		device_pair_nb_->pairwise_form_matrix(),
+		device_pair_nb_->nonbonded_potentials(),
+		device_pair_nb_->num_particle_types(),
+		device_bonded_.exclusion_offsets(),
+		device_bonded_.exclusion_neighbors(),
+		device_bonded_.num_excl_particles(),
+		pbox,
+		compute_energy,
+		pairlist_->get_num_pairs(),
+		interaction_cutoff > 0.0f ? interaction_cutoff * interaction_cutoff : 0.0f);
 
 	return evt;
 }
@@ -191,43 +203,43 @@ Event Patch::calculate_bonded_forces(const BondedInteractions& interactions,
 	if (device_bonded_.num_bonds() > 0) {
 		LOGTRACE("Patch {}: Computing {} bonds", patch_id_, device_bonded_.num_bonds());
 		evt = launch_tabulated_bonds(resource_,
-									device_bonded_.bond_indices(),
-									particle_view.pos,
-									particle_view.ForceEnergy,
-									device_bonded_.bond_potentials(),
-									device_bonded_.bond_table_indices(),
-									device_bonded_.bond_forms(),
-									pbox,
-									get_energy,
-									device_bonded_.num_bonds());
+									 device_bonded_.bond_indices(),
+									 particle_view.pos,
+									 particle_view.ForceEnergy,
+									 device_bonded_.bond_potentials(),
+									 device_bonded_.bond_table_indices(),
+									 device_bonded_.bond_forms(),
+									 pbox,
+									 get_energy,
+									 device_bonded_.num_bonds());
 	}
 
 	if (device_bonded_.num_angles() > 0) {
 		LOGTRACE("Patch {}: Computing {} angles", patch_id_, device_bonded_.num_angles());
 		evt = launch_tabulated_angles(resource_,
-									 device_bonded_.angle_indices(),
-									 particle_view.pos,
-									 particle_view.ForceEnergy,
-									 device_bonded_.angle_potentials(),
-									 device_bonded_.angle_table_indices(),
-									 device_bonded_.angle_forms(),
-									 pbox,
-									 get_energy,
-									 device_bonded_.num_angles());
+									  device_bonded_.angle_indices(),
+									  particle_view.pos,
+									  particle_view.ForceEnergy,
+									  device_bonded_.angle_potentials(),
+									  device_bonded_.angle_table_indices(),
+									  device_bonded_.angle_forms(),
+									  pbox,
+									  get_energy,
+									  device_bonded_.num_angles());
 	}
 
 	if (device_bonded_.num_dihedrals() > 0) {
 		LOGTRACE("Patch {}: Computing {} dihedrals", patch_id_, device_bonded_.num_dihedrals());
 		evt = launch_tabulated_dihedrals(resource_,
-										device_bonded_.dihedral_indices(),
-										particle_view.pos,
-										particle_view.ForceEnergy,
-										device_bonded_.dihedral_potentials(),
-										device_bonded_.dihedral_table_indices(),
-										device_bonded_.dihedral_forms(),
-										pbox,
-										get_energy,
-										device_bonded_.num_dihedrals());
+										 device_bonded_.dihedral_indices(),
+										 particle_view.pos,
+										 particle_view.ForceEnergy,
+										 device_bonded_.dihedral_potentials(),
+										 device_bonded_.dihedral_table_indices(),
+										 device_bonded_.dihedral_forms(),
+										 pbox,
+										 get_energy,
+										 device_bonded_.num_dihedrals());
 	}
 
 	return evt;
@@ -256,15 +268,6 @@ Event Patch::integrate_motion(float dt,
 	// Derive the Philox stream key. Philox takes a 64-bit seed and a 32-bit
 	// counter, so everything that must vary independently goes in the seed and
 	// the counter carries the particle index alone.
-	//
-	// This replaces two defects. First, the seed was `patch_id_ * 1000000`,
-	// which discarded the configured seed entirely - every run of a given input
-	// drew the identical random sequence, and `seed` in the config file had no
-	// effect. Second, the counter was `step * 1000000` truncated to 32 bits,
-	// which wraps: 4295 * 10^6 mod 2^32 = 32704, so steps s and s+4295 started
-	// only 32704 apart and, with 304910 particles drawing consecutive counters,
-	// overlapped across 89% of their range and reused draws.
-	//
 	// Mixing with the golden-ratio constant decorrelates neighbouring seeds and
 	// steps; patch_id occupies the high half so patches never collide.
 	uint64_t base_seed = (static_cast<uint64_t>(base_seed_) * 0x9E3779B97F4A7C15ULL) ^
@@ -323,8 +326,9 @@ Event Patch::integrate_motion(float dt,
 		// the engine could not hold a condensed phase and drifted toward a
 		// dilute one regardless of temperature.
 		//
-		// Skipped on the first step, which has no predecessor to complete.
-		if (step > 1) {
+		// Skipped on the first step, which has no predecessor to complete, and
+		// when an output flush already applied it (see finish_deferred_kick).
+		if (deferred_kick_pending_) {
 			launch_BAOAB_LastUpdate<float>(resource_,
 										   particle_view,
 										   particle_type_view,
@@ -336,7 +340,12 @@ Event Patch::integrate_motion(float dt,
 										   base_seed,
 										   base_ctr)
 				.wait();
+			deferred_kick_pending_ = false;
 		}
+
+		// The kick this step's B-A-O-A now owes will be paid at the top of the
+		// next step (or earlier, by an output flush).
+		deferred_kick_pending_ = true;
 
 		evt = launch_BAOAB<float>(resource_,
 								  particle_view,
@@ -358,6 +367,34 @@ Event Patch::integrate_motion(float dt,
 	}
 
 	return evt;
+}
+
+Event Patch::finish_deferred_kick(float dt) {
+	if (!deferred_kick_pending_) {
+		return Event(nullptr, resource_);
+	}
+	deferred_kick_pending_ = false;
+
+	PeriodicBox sim_box;
+	if (periodic_box_) {
+		sim_box = *periodic_box_;
+	}
+
+	// BAOAB_LastUpdate reads only position-independent state (momentum, force,
+	// mass), so it needs neither a temperature nor an RNG stream - the O-step
+	// noise was already applied by the B-A-O-A kernel. Passing zeros here is
+	// therefore not a shortcut that could bias the dynamics.
+	return launch_BAOAB_LastUpdate<float>(resource_,
+										  particles_.view(),
+										  particle_types_ ? particle_types_->view()
+														  : ParticleTypeView{},
+										  sim_box.get_box_size(),
+										  dt,
+										  /*current_step=*/0,
+										  /*kT=*/0.0f,
+										  particle_count_,
+										  /*base_seed=*/0,
+										  /*base_ctr=*/0);
 }
 
 //================================================================================

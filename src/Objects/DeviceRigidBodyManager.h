@@ -13,9 +13,21 @@ class DeviceRigidBody {
 		  type_id_(capacity, resource), position_(capacity, resource),
 		  orientation_(capacity, resource), momentum_(capacity, resource),
 		  angular_momentum_(capacity, resource), force_(capacity, resource),
-		  torque_(capacity, resource) {}
+		  torque_(capacity, resource), external_force_(capacity, resource),
+		  external_torque_(capacity, resource) {
+		// Zeroed once here, not per step: an external load persists until its
+		// owner (e.g. the scuff-em coupling) overwrites it, so a system with no
+		// external source must read zeros rather than uninitialized device memory.
+		external_force_.fill(Vector3(0.0f));
+		external_torque_.fill(Vector3(0.0f));
+	}
 
 	// Get View for Kernels
+	//
+	// Every pointer in RigidBodyView must be supplied here: the view is an
+	// aggregate, so any field left off the end is value-initialized to nullptr
+	// and the first kernel to touch it faults on the device. external_force/
+	// external_torque are read unconditionally by RBLangevinForceKernel.
 	RigidBodyView view() {
 		return {id_.data(),
 				type_id_.data(),
@@ -24,7 +36,9 @@ class DeviceRigidBody {
 				momentum_.data(),
 				angular_momentum_.data(),
 				force_.data(),
-				torque_.data()};
+				torque_.data(),
+				external_force_.data(),
+				external_torque_.data()};
 	}
 
 	ConstRigidBodyView view() const {
@@ -35,7 +49,9 @@ class DeviceRigidBody {
 				momentum_.data(),
 				angular_momentum_.data(),
 				force_.data(),
-				torque_.data()};
+				torque_.data(),
+				external_force_.data(),
+				external_torque_.data()};
 	}
 
 	// Getters for raw buffers (if needed for copy/reorder)
@@ -62,6 +78,15 @@ class DeviceRigidBody {
 	}
 	DeviceBuffer<Vector3>& torque() {
 		return torque_;
+	}
+	// Written by whatever supplies an external load (scuff-em plasmonic forces);
+	// deliberately not cleared by clear_forces(), so a value written here holds
+	// until it is overwritten.
+	DeviceBuffer<Vector3>& external_force() {
+		return external_force_;
+	}
+	DeviceBuffer<Vector3>& external_torque() {
+		return external_torque_;
 	}
 
 	// Management
@@ -132,6 +157,13 @@ class DeviceRigidBody {
 	DeviceBuffer<Vector3> angular_momentum_;
 	DeviceBuffer<Vector3> force_;
 	DeviceBuffer<Vector3> torque_;
+	// Persistent per-body external load (e.g. plasmonic forces from scuff-em).
+	// Kept separate from force_/torque_ precisely because those are zeroed every
+	// step by clear_forces(), whereas an external load must persist until
+	// whoever owns it rewrites it. Zero-initialized, so systems with no external
+	// source behave exactly as before.
+	DeviceBuffer<Vector3> external_force_;
+	DeviceBuffer<Vector3> external_torque_;
 };
 
 class DeviceRigidBodyTypes {

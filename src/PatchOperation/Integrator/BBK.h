@@ -8,6 +8,8 @@
 #include "Types/Vector3.h"
 
 namespace ARBD {
+
+// Needs work.
 struct BBKIntegrate {
 	DEVICE void operator()(idx_t idx,
 						   Vector3* positions,
@@ -28,7 +30,6 @@ struct BBKIntegrate {
 
 		const ParticleType& pt = particle_types[type];
 		float mass = pt.mass;
-		float gamma = pt.transDamping.x;
 	}
 };
 } // namespace ARBD

@@ -483,11 +483,6 @@ class SMDManager {
 		float theta0 = dihedral.getCurrentDihedralAngle(timestep);
 		float k = dihedral.getSpringConstant();
 		int4 particles = dihedral.getParticles();
-
-		// Calculate dihedral angle and forces
-		// This is a simplified implementation - full dihedral calculation
-		// would involve proper angle calculation and force distribution
-
 		// TODO: Implement full dihedral force calculation
 		LOGDEBUG("SMDDihedral: Computing dihedral force for particles %d-%d-%d-%d",
 				 particles.x,

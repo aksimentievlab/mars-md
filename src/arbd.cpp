@@ -326,6 +326,8 @@ int main(int argc, char* argv[]) {
 	ARBD::SimManager manager(sys);
 	manager.set_initial_particles(parser.get_init_particles());
 	manager.set_bonded_interactions(parser.get_init_bonded_interactions());
+
+	manager.set_initial_rigid_bodies(parser.get_init_rigid_bodies());
 	manager.init();
 	manager.run();
 

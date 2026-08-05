@@ -18,7 +18,7 @@ namespace ARBD {
  *        RBParticleGridBuildKernel.
  */
 struct RBParticleGridWork {
-	Matrix3 basis_inv;  // (R_rb * grid.basis).inverse() - lab-frame, world->grid-local
+	Matrix3 basis_inv;	// (R_rb * grid.basis).inverse() - lab-frame, world->grid-local
 	Vector3 origin_lab; // R_rb * grid.origin + rb.position
 	float scale;		// GridTerm::scale for this candidate's grid term
 	int grid_id;
@@ -122,14 +122,24 @@ struct RBParticleGridForceKernel {
 			const Vector3 pos = particles.pos[p];
 			const Vector3 local = w.basis_inv.transform(pos - w.origin_lab);
 			const Matrix3 identity(1.0f);
-			const GridSample<float> sample =
-				(w.scheme == 0)
-					? sample_grid_linear(
-						  grid.data, local, Vector3(0.0f), identity, identity, grid.dimensions, grid.boundary_condition)
-					: sample_grid_cubic(
-						  grid.data, local, Vector3(0.0f), identity, identity, grid.dimensions, grid.boundary_condition);
+			const GridSample<float> sample = (w.scheme == 0)
+												 ? sample_grid_linear(grid.data,
+																	  local,
+																	  Vector3(0.0f),
+																	  identity,
+																	  identity,
+																	  grid.dimensions,
+																	  grid.boundary_condition)
+												 : sample_grid_cubic(grid.data,
+																	 local,
+																	 Vector3(0.0f),
+																	 identity,
+																	 identity,
+																	 grid.dimensions,
+																	 grid.boundary_condition);
 
-			const Vector3 force_lab = w.basis_inv.transpose().transform(sample.gradient * (-w.scale));
+			const Vector3 force_lab =
+				w.basis_inv.transpose().transform(sample.gradient * (-w.scale));
 			Vector3 fe = force_lab;
 			fe.t = w.scale * sample.value;
 			atomic_add(&particles.ForceEnergy[p], fe);
@@ -170,8 +180,8 @@ extern template Event launch_cuda_kernel(const Resource& resource,
 										 const KernelConfig& config,
 										 RBParticleGridBuildKernel kernel_func);
 extern template Event launch_cuda_kernel_with_workitem(const Resource& resource,
-														const KernelConfig& config,
-														RBParticleGridForceKernel kernel_func);
+													   const KernelConfig& config,
+													   RBParticleGridForceKernel kernel_func);
 } // namespace ARBD
 #endif
 

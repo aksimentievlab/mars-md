@@ -96,16 +96,6 @@ HOST DEVICE inline void grid_grid_voxel_force_torque(const BaseGridView<float>& 
  * @brief Grid-grid force/torque kernel: one thread per rho voxel, block-wide
  * shared-memory reduction, atomicAdd into a single (force+energy, torque)
  * accumulator per grid pair.
- *
- * Ported from legacy's computeGridGridForce/common_computeGridGridForce,
- * which is a genuine block-reduction kernel (extern __shared__ + __syncthreads
- * tree reduction + cross-block atomicAdd), unlike PmfKernels.h's
- * ComputePMFKernel (independent per-thread output, no reduction) - so this
- * uses launch_kernel_with_workitem instead of launch_kernel, and operator()
- * is templated on the WorkItem type so the same functor compiles against
- * both CUDA::WorkItem and SYCL::WorkItem (see Backend/CUDA/KernelHelper.cuh,
- * Backend/SYCL/SYCLKernels.h).
- *
  * Caller must set KernelConfig::shared_memory = 2 * block_size.x *
  * sizeof(Vector3) (force+energy array and torque array, one Vector3 each per
  * thread) and block_size.x to a power of two (legacy used 128).
@@ -154,9 +144,9 @@ struct ComputeGridGridForceKernel {
 				// (torque[tid].t is always 0 and unused, but summed too for
 				// consistency/robustness against future use.)
 				force[tid] += force[tid + offset];
-				force[tid].t += force[tid + offset].t;
+				force[tid].t += force[tid + offset].t; // energy
 				torque[tid] += torque[tid + offset];
-				torque[tid].t += torque[tid + offset].t;
+				torque[tid].t += torque[tid + offset].t; // torque energy
 			}
 			item.barrier();
 		}

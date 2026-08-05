@@ -5,9 +5,9 @@
 #include <vector>
 
 short single_resource_id = Global::single_resource_id;
+
 using namespace ARBD;
 using namespace Tests;
-
 Resource single_resource(single_resource_id);
 void generate_random_data_drs(const Resource& device,
 							  std::vector<uint32_t>& data,
@@ -103,10 +103,10 @@ TEST_CASE("DeviceRadixSort Key-Value Pairs - Small", "[deviceradix][sort][pairs]
 	}
 }
 
-TEST_CASE("DeviceRadixSort Key-Value Pairs - Medium", "[deviceradix][sort][pairs][medium]") {
+TEST_CASE("DeviceRadixSort Key-Value Pairs", "[deviceradix][sort][pairs][medium]") {
 	initialize_backend_once();
 	Resource device = single_resource;
-	const size_t size = 1024 * 1024*1024; // 1G elements
+	const size_t size = 1024 * 1024 * 1024; // 1G elements
 
 	SECTION("Sort 1G elements") {
 		std::vector<uint32_t> h_keys(size);
@@ -149,7 +149,8 @@ TEST_CASE("DeviceRadixSort Key-Value Pairs - Medium", "[deviceradix][sort][pairs
 		auto end = std::chrono::high_resolution_clock::now();
 		auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
 
-		std::cout << "Sorted " << size / (1024 * 1024 * 1024) << "G elements in " << duration.count() << " ms" << std::endl;
+		std::cout << "Sorted " << size / (1024 * 1024 * 1024) << "G elements in "
+				  << duration.count() << " ms on Device " << device.id() << std::endl;
 
 		std::vector<uint32_t> h_sorted_keys(size);
 		d_keys.copy_to_host(h_sorted_keys.data(), size);

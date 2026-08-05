@@ -37,6 +37,10 @@ struct BAOABIntegrate {
 	KERNEL_FUNC void operator()(idx_t idx) const {
 		if (idx >= num_particles)
 			return;
+		// Rigid-body attached particles are positioned by their parent body,
+		// not integrated - see ParticleFlags::FLAG_RB_ATTACHED.
+		if (particle_view.flags[idx] & ParticleFlags::FLAG_RB_ATTACHED)
+			return;
 
 		// 1. Load Particle State
 		Vector3 pos = particle_view.pos[idx];
@@ -135,6 +139,10 @@ struct BAOAB_LastUpdate {
 
 	KERNEL_FUNC void operator()(idx_t idx) const {
 		if (idx >= num_particles)
+			return;
+		// Rigid-body attached particles are positioned by their parent body,
+		// not integrated - see ParticleFlags::FLAG_RB_ATTACHED.
+		if (particle_view.flags[idx] & ParticleFlags::FLAG_RB_ATTACHED)
 			return;
 
 		Vector3 pos = particle_view.pos[idx];

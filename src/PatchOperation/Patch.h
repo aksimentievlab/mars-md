@@ -307,6 +307,34 @@ class Patch {
 						   size_t step = 0);
 
 	/**
+	 * @brief Apply BAOAB's outstanding closing half-kick, if one is pending.
+	 *
+	 * BAOAB is B-A-O-A-B and the closing B needs the force at the *new*
+	 * positions, so integrate_motion() defers it and merges it into the next
+	 * step's opening kick. That is exact for the trajectory, but it means that
+	 * between steps the stored momentum is a half-step behind the stored
+	 * position: p lacks 0.5*dt*F(x). Positions are unaffected, so trajectory
+	 * output is correct either way, but anything that reads momentum - the
+	 * momentum DCD, restart files, kinetic energy - would record that half-step
+	 * value and, on restart, resume treating it as a whole-step momentum.
+	 *
+	 * Callers must therefore evaluate forces at the current positions first,
+	 * then call this, then read momentum. The pending flag makes it idempotent
+	 * and stops the next integrate_motion() from applying the kick twice.
+	 *
+	 * @param dt Timestep, matching the one integrate_motion() was called with
+	 * @return Event for async GPU execution; a no-op event if nothing is pending
+	 */
+	Event finish_deferred_kick(float dt);
+
+	/**
+	 * @brief Whether a BAOAB closing half-kick is outstanding (see finish_deferred_kick)
+	 */
+	bool has_deferred_kick() const {
+		return deferred_kick_pending_;
+	}
+
+	/**
 	 * @brief
 	 *
 	 */
@@ -576,6 +604,7 @@ class Patch {
 	//================================================================================
 	patch_t patch_id_;		  ///< Unique patch identifier
 	uint64_t base_seed_{0};	  ///< Run-wide RNG seed (see set_base_seed)
+	bool deferred_kick_pending_{false}; ///< BAOAB closing half-kick owed (see finish_deferred_kick)
 	idx_t capacity_;		  ///< Maximum particle storage capacity
 	idx_t particle_count_{0}; ///< Current number of active particles
 	Resource resource_;		  ///< Computational resource (GPU/CPU)

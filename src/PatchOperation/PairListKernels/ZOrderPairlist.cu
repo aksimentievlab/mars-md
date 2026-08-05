@@ -10,11 +10,6 @@
 // instead of C++ files where they would get stub implementations
 namespace ARBD {
 
-// ZOrderNeighborKernel instantiation
-template Event launch_cuda_kernel(const Resource& resource,
-								  const KernelConfig& config,
-								  ZOrderNeighborKernel kernel_func);
-
 // Exact 27-cell neighbor search and its cell-range builder. Both are launched
 // from ZOrderPairlist.cpp, a host-only translation unit, so without these
 // explicit instantiations the compiler would emit the non-CUDA stub from

@@ -163,6 +163,20 @@ class ZOrderSort {
 	float compute_max_displacement(const DeviceBuffer<Vector3>& current_positions,
 								   size_t num_particles) const;
 
+	/**
+	 * @brief Record the current positions as the reference for displacement tracking
+	 *
+	 * compute_max_displacement() measures against whatever this last stored, so
+	 * a pairlist must call it whenever it rebuilds. Until it does, the reference
+	 * buffer holds its uninitialised construction value and every displacement
+	 * query is meaningless.
+	 *
+	 * @param positions Positions to snapshot
+	 * @param num_particles Number of particles
+	 */
+	void update_positions_incremental(const DeviceBuffer<Vector3>& positions,
+									  size_t num_particles);
+
   private:
 	Resource resource_;
 	size_t max_particles_;
@@ -289,13 +303,6 @@ class ZOrderSort {
 							   size_t num_particles,
 							   const Vector3& box_min,
 							   const Vector3& box_max);
-
-	/**
-	 * @brief Update positions without full resort (Pairlist mode)
-	 * @param positions New particle positions
-	 * @param num_particles Number of particles
-	 */
-	void update_positions_incremental(const DeviceBuffer<Vector3>& positions, size_t num_particles);
 };
 
 // Template implementation

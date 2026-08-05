@@ -10,6 +10,7 @@
  * @copyright Copyright (c) 2025
  */
 
+#include <fstream>
 #include <future>
 #include <iostream>
 
@@ -22,17 +23,16 @@
 #include "Backend/Resource.h"
 #include "IO/ConfigParser.h"
 #include "IO/DcdWriter.h"
+#include "IO/PsfPdbIO.h"
 #include "IO/TrajectoryWriter.h"
 #include "IO/WKFUtils.h"
 #include "Objects/DeviceParticleManager.h"
-#include "Objects/RigidBodyManager.h"
+#include "System/RigidBodyManager.h"
 #include "System/SimSystem.h"
 #include "System/SystemState.h"
 
 // Q: what is our parallel heirarchy?
-// A: depends!
-
-// Serial/openMP, MPI-only, Single-GPU, or NVSHMEM
+// A: Serial/openMP, MPI-only, Single-GPU, or NVSHMEM
 
 // 1 Patch per MPI rank or GPU
 // Patches should work independently with syncronization mediated by SimManager
@@ -131,6 +131,34 @@ class SimManager {
 	void run();
 
 	/**
+	 * @brief Write a PSF describing the trajectory this run produces.
+	 *
+	 * Atom order matches write_dcd_frame() exactly:
+	 *   [regular particles][attached particles][cosmetic atoms]
+	 * so the PSF and DCD load together in VMD. The first two blocks are the
+	 * global particle array (ConfigParser appends attached particles after all
+	 * regular ones); the tail is the rigid bodies' visualization-only template
+	 * atoms, instance-major then template order.
+	 *
+	 * Bonds are the real bonded topology plus, per rigid-body instance, its
+	 * template's own bonds remapped into this numbering - the latter purely
+	 * cosmetic, so a body draws as a molecule rather than a cloud of dots.
+	 *
+	 * Call after init(); the structure is fixed for the run.
+	 * @param path Output file; defaults to "<outputName>.psf".
+	 */
+	void write_psf(const std::string& path = "");
+
+	/**
+	 * @brief Write a PDB snapshot of the current positions.
+	 *
+	 * Same atom order and topology as write_psf(); usable as the companion
+	 * structure file for the DCD, or as a coordinate snapshot on its own.
+	 * @param path Output file; defaults to "<outputName>.pdb".
+	 */
+	void write_pdb(const std::string& path = "");
+
+	/**
 	 * @brief Get timing information
 	 */
 	float get_total_time() const {
@@ -179,6 +207,7 @@ class SimManager {
 	//================================================================================
 	std::unique_ptr<TrajectoryWriter> traj_writer_;
 	std::unique_ptr<DcdWriter> dcd_writer_;
+	std::unique_ptr<PsfPdbStructure> structure_view_;
 	bool dcd_header_written_{false};
 
 	// Momentum trajectory (Langevin dynamics only, mirrors legacy ARBD's
@@ -186,6 +215,10 @@ class SimManager {
 	// kept for output compatibility, not an actual replica count).
 	std::unique_ptr<DcdWriter> momentum_dcd_writer_;
 	bool momentum_dcd_header_written_{false};
+
+	// Legacy plaintext rigid-body trajectory (see write_rb_traj_frame). Held
+	// open for the run and flushed per frame, mirroring v1's trajFile.
+	std::ofstream rb_traj_file_;
 	bool has_momentum_output_{false};
 	bool has_rigid_bodies_{false};
 
@@ -241,6 +274,17 @@ class SimManager {
 	 */
 	void handle_output(size_t step);
 
+	/**
+	 * @brief Bring momenta up to the current step before anything reads them
+	 *
+	 * BAOAB's closing half-kick is deferred to the next step, so between steps
+	 * momentum trails position by half a kick. Call this before writing the
+	 * momentum trajectory, the restart files, or kinetic energy. Re-evaluates
+	 * forces at the current positions (the kick needs them) and is a no-op for
+	 * integrators that defer nothing.
+	 */
+	void settle_momenta_for_output(size_t step);
+
 	//================================================================================
 	// Output Methods
 	//================================================================================
@@ -267,6 +311,30 @@ class SimManager {
 	 *       must be called only after write_dcd_frame() within the same output step.
 	 */
 	void write_momentum_dcd_frame(size_t step);
+
+	/**
+	 * @brief Write one frame of the legacy plaintext rigid-body trajectory.
+	 *
+	 * Byte-format-compatible with ARBD v1's "<name>.0.rb-traj" so runs can be
+	 * diffed directly against a v1 reference. One line per rigid body per
+	 * output step:
+	 *   step  <type>#<i>  pos(3)  orientation(9, row-major)  momentum(3)  angular_momentum(3)
+	 * The last six columns are labelled vel/angVel by v1's own legend, but v1
+	 * writes raw momenta there (RigidBody::getVelocity() returns `momentum`,
+	 * its division by mass commented out), so this does the same.
+	 */
+	void write_rb_traj_frame(size_t step);
+
+	/**
+	 * @brief Populate structure_view_ with the trajectory's atoms and bonds.
+	 *
+	 * Built once and cached: the atom set is fixed for the run. Only the
+	 * positions are refreshed (by write_pdb) on later calls.
+	 */
+	void build_structure_view();
+
+	/// Refresh structure_view_'s coordinates from the current state.
+	void refresh_structure_positions();
 
 	/**
 	 * @brief Compute and append kinetic/potential energy for this step

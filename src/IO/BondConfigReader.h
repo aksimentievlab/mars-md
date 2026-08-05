@@ -23,7 +23,6 @@ class BondConfigReader {
 		: bonded_interactions_(bonded_interactions), tables_registry_(tables_registry) {}
 
 	HOST void read_file(std::string_view fileName, std::string_view config_file_path = "") {
-#ifdef HOST_GUARD
 		config_file_path_ = config_file_path;
 		std::string resolved_path =
 			config_file_path.empty()
@@ -42,7 +41,6 @@ class BondConfigReader {
 				parse_exclude_line(value);
 			}
 		}
-#endif
 	}
 
   private:

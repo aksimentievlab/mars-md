@@ -74,6 +74,17 @@ void init_pysim(py::module_& m) {
 			 py::call_guard<py::gil_scoped_release>(),
 			 "Run the main simulation loop (releases the GIL - this blocks for the "
 			 "full simulation)")
+		.def("write_psf",
+			 &SimManager::write_psf,
+			 py::arg("path") = "",
+			 "Write a PSF matching the DCD's atom order "
+			 "([regular][attached][cosmetic]). Call after init(). "
+			 "Defaults to '<outputName>.psf'.")
+		.def("write_pdb",
+			 &SimManager::write_pdb,
+			 py::arg("path") = "",
+			 "Write a PDB snapshot of the current positions, same atom order and "
+			 "topology as write_psf(). Defaults to '<outputName>.pdb'.")
 		.def("get_total_time", &SimManager::get_total_time)
 		.def("get_io_time", &SimManager::get_io_time)
 		.def("get_energy_time", &SimManager::get_energy_time)

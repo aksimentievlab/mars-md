@@ -3,6 +3,8 @@
 #include "ARBDLogger.h"
 #include "IO/BondConfigReader.h"
 #include "IO/Reader.h"
+#include "IO/RigidBodyCoordReader.h"
+#include "IO/RigidBodyVisualize.h"
 #include "Objects/Grid.h"
 #include "SimParam.h"
 #include "Types/Types.h"
@@ -380,6 +382,104 @@ static void apply_pmf_grid_list(const std::string& key,
 	}
 }
 
+/**
+ * @brief One deferred rigidBody grid scale line: which grid, and the value.
+ * @details An empty `grid_key` means the line gave a bare value, which applies
+ *          to every grid of that kind (the particle-block gridFileScale form).
+ */
+struct RbGridScale {
+	std::string grid_key;
+	float value;
+};
+
+/// Parse a rigidBody scale line: `<gridKey> <value>` or a bare `<value>`.
+static bool parse_rb_grid_scale(const std::string& value,
+								const std::string& config_key,
+								RbGridScale& out) {
+	const auto toks = tokenize(value);
+	try {
+		if (toks.size() == 1) {
+			out = RbGridScale{{}, std::stof(toks[0])};
+			return true;
+		}
+		if (toks.size() == 2) {
+			out = RbGridScale{toks[0], std::stof(toks[1])};
+			return true;
+		}
+	} catch (const std::exception&) {
+		LOGWARN("{}: could not parse a numeric scale from '{}' - ignoring", config_key, value);
+		return false;
+	}
+	LOGWARN("{}: expected '<gridKey> <value>' or '<value>', got '{}' - ignoring",
+			config_key,
+			value);
+	return false;
+}
+
+/**
+ * @brief Apply rigidBody grid scale lines, which may be keyed or positional.
+ * @details Legacy scalePotentialGrid/scaleDensityGrid/scalePMF take
+ *          `<gridKey> <value>` and apply the value to the grid registered under
+ *          that key (RigidBodyType.cu addScaleFactor). Deferred until the block
+ *          is fully parsed so these keys may appear either side of the grid
+ *          they scale.
+ */
+template<typename Assign>
+static void apply_rb_grid_scales(const std::string& config_key,
+								 const std::vector<RbGridScale>& scales,
+								 std::vector<GridTerm>& terms,
+								 const std::vector<std::string>& grid_keys,
+								 Assign&& assign) {
+	for (const RbGridScale& s : scales) {
+		if (terms.empty()) {
+			LOGWARN("{} given but this rigidBody type has no matching grid entries - ignoring",
+					config_key);
+			continue;
+		}
+		if (s.grid_key.empty()) {
+			for (auto& term : terms) {
+				assign(term, s.value);
+			}
+			continue;
+		}
+		const auto it = std::find(grid_keys.begin(), grid_keys.end(), s.grid_key);
+		if (it == grid_keys.end()) {
+			LOGWARN("{}: no grid registered under key '{}' for this rigidBody type - ignoring",
+					config_key,
+					s.grid_key);
+			continue;
+		}
+		assign(terms[static_cast<size_t>(std::distance(grid_keys.begin(), it))], s.value);
+	}
+}
+
+/**
+ * @brief Parse one rigidBody grid line into (key, filename).
+ * @details Legacy syntax is `<gridKey> <file>` (RigidBodyType.cu addGrid), where
+ *          the key is the logical name two types must share to be paired for a
+ *          grid-grid force - deliberately independent of the filename. A bare
+ *          `<file>` is also accepted, with the filename doubling as the key.
+ *          Returns false if the line has neither shape.
+ */
+static bool parse_rb_grid_entry(const std::string& value,
+								const std::string& config_key,
+								std::string& out_key,
+								std::string& out_file) {
+	const auto toks = tokenize(value);
+	if (toks.size() == 1) {
+		out_key = toks[0];
+		out_file = toks[0];
+		return true;
+	}
+	if (toks.size() == 2) {
+		out_key = toks[0];
+		out_file = toks[1];
+		return true;
+	}
+	LOGWARN("{}: expected '<gridKey> <file>' or '<file>', got '{}' - ignoring", config_key, value);
+	return false;
+}
+
 /// Parse one gridFileBoundaryConditions token; <0 means "keep the grid's own".
 static int parse_boundary_condition(std::string tok) {
 	std::transform(tok.begin(), tok.end(), tok.begin(), [](unsigned char c) {
@@ -488,11 +588,6 @@ void ConfigParser::get_elements(const Reader& reader) {
 		return key == "particle" || key == "rigidBody"; // Extend with other block headers as needed
 	};
 
-	// Keys recognized as fields of a "particle" block. The inner loop below
-	// must stop as soon as it sees anything outside this set - otherwise it
-	// silently swallows top-level directives (inputParticles, inputBonds,
-	// tabulatedFile, ...) that follow the last particle block, since it only
-	// used to break on the next "particle" header.
 	static const std::unordered_set<std::string_view> particle_field_keys = {
 		"num",
 		"diffusion",
@@ -513,19 +608,27 @@ void ConfigParser::get_elements(const Reader& reader) {
 		"grid_file_scale_slope",
 		"gridFileSMD",
 		"grid_file_smd",
+		"rigidBodyPotential",
+		"rigid_body_potential_key",
 	};
 
-	// Keys recognized as fields of a "rigidBody" block. One instance is
-	// created per block (position/orientation/momentum/angularMomentum
-	// inline) rather than particle-style "num" + a separate coordinate file -
-	// rigid bodies are few, matching legacy Configtodo.cpp's actual keys.
 	static const std::unordered_set<std::string_view> rigid_body_field_keys = {
 		"mass",
+		"num",
 		"inertia",
 		"transDamping",
 		"trans_damping",
 		"rotDamping",
 		"rot_damping",
+		"inputPsf",
+		"input_psf",
+		"inputPdb",
+		"input_pdb",
+		// Point in the template PDB's own frame that becomes this type's body
+		// origin; load() subtracts it to get body-frame offsets. Per-type, so
+		// every instance shares it - see the fold-in pass below.
+		"referencePoint",
+		"reference_point",
 		"densityGrid",
 		"density_grid",
 		"potentialGrid",
@@ -545,10 +648,10 @@ void ConfigParser::get_elements(const Reader& reader) {
 		"angular_momentum",
 	};
 
-	// When the file also supplies explicit per-particle data, that data is
-	// authoritative and the "num"-based placeholders below (created at the
-	// origin, with no real position) must be skipped - otherwise particles
-	// end up duplicated: N placeholders plus the N real ones from the file.
+	// Set by the top-level inputRBCoordinates key, applied after the loop (see
+	// there for why it cannot be handled inline).
+	std::string rb_coordinates_file;
+
 	const bool has_explicit_particle_source =
 		std::any_of(params.begin(), params.end(), [](const auto& kv) {
 			const auto& k = kv.first;
@@ -570,6 +673,7 @@ void ConfigParser::get_elements(const Reader& reader) {
 			std::vector<std::string> pending_pmf_scale;
 			std::vector<std::string> pending_pmf_scale_slope;
 			std::vector<std::string> pending_pmf_bc;
+			std::vector<std::string> pending_rigid_body_potential_key;
 
 			// Consume following field lines until next header
 			++i;
@@ -627,8 +731,6 @@ void ConfigParser::get_elements(const Reader& reader) {
 					ptype.mass = std::stof(v);
 				} else if (check_key("gridFile", "grid_file")) {
 					LOGDEBUG("gridFile/grid_file: {}", v);
-					// Legacy takes a whitespace-separated list here, one PMF grid
-					// per token, each summed into the force with its own scale.
 					for (const auto& fname : tokenize(v)) {
 						GridKey grid_key =
 							sim_system_ref_->get_grid_manager().add_dense_grid(fname);
@@ -718,22 +820,22 @@ void ConfigParser::get_elements(const Reader& reader) {
 				} else if (check_key("gridFileSMD", "grid_file_smd")) {
 					LOGDEBUG("gridFileSMD/grid_file_smd: {}", v);
 					ptype.pmf_smd_freq = std::stoi(v);
+				} else if (check_key("rigidBodyPotential", "rigid_body_potential")) {
+					LOGDEBUG("rigidBodyPotential/rigid_body_potential: {}", v);
+					ptype.rigid_body_potential_keys.push_back(v);
 				} else {
-					// Recognized but not yet wired into ParticleType storage in this branch
 					(void)0;
 				}
 			}
-
 			apply_pmf_grid_list("gridFileScale",
 								pending_pmf_scale,
 								ptype.pmf_grids,
 								[](GridTerm& t, const std::string& s) { t.scale = std::stof(s); });
-			apply_pmf_grid_list("gridFileScaleSlope",
-								pending_pmf_scale_slope,
-								ptype.pmf_grids,
-								[](GridTerm& t, const std::string& s) {
-									t.scale_slope = std::stof(s);
-								});
+			apply_pmf_grid_list(
+				"gridFileScaleSlope",
+				pending_pmf_scale_slope,
+				ptype.pmf_grids,
+				[](GridTerm& t, const std::string& s) { t.scale_slope = std::stof(s); });
 			apply_pmf_grid_list("gridFileBoundaryConditions",
 								pending_pmf_bc,
 								ptype.pmf_grids,
@@ -764,12 +866,22 @@ void ConfigParser::get_elements(const Reader& reader) {
 			rb_io.orientation = Matrix3(1.0f);
 
 			// Deferred like particle's gridFileScale/gridFileScaleSlope - these
-			// keys may appear before or after the grid list they scale, and
-			// each of the three grid lists (density/potential/pmf) is scaled
-			// independently.
-			std::vector<std::string> pending_density_scale;
-			std::vector<std::string> pending_potential_scale;
-			std::vector<std::string> pending_pmf_scale;
+			// keys may appear before or after the grid they scale, and each of
+			// the three grid lists (density/potential/pmf) is scaled
+			// independently. One entry per config line, not one per token: a
+			// type normally scales several grids with one `<gridKey> <value>`
+			// line each, so these keys legitimately repeat within a block.
+			std::vector<RbGridScale> pending_density_scale;
+			std::vector<RbGridScale> pending_potential_scale;
+			std::vector<RbGridScale> pending_pmf_scale;
+
+			// Attached/cosmetic particle template. Deferred to the end of the
+			// block because referencePoint may appear either side of the file
+			// keys, and load() needs all three at once.
+			int instance_count = 1;
+			std::string template_pdb;
+			std::string template_psf;
+			Vector3 reference_point{};
 
 			++i;
 			for (; i < params.size(); ++i) {
@@ -782,6 +894,19 @@ void ConfigParser::get_elements(const Reader& reader) {
 
 				if (k == "mass") {
 					rbtype.mass = std::stof(v);
+				} else if (k == "num") {
+					instance_count = std::stoi(v);
+					if (instance_count < 0) {
+						throw_value_error("rigidBody '%s': num must be >= 0, got '%s'",
+										  name.c_str(),
+										  v.c_str());
+					}
+				} else if (check_key("inputPdb", "input_pdb")) {
+					template_pdb = resolve_file_path(v, file_name_);
+				} else if (check_key("inputPsf", "input_psf")) {
+					template_psf = resolve_file_path(v, file_name_);
+				} else if (check_key("referencePoint", "reference_point")) {
+					reference_point = parse_vector3(v);
 				} else if (k == "inertia") {
 					rbtype.inertia = parse_vector3(v);
 				} else if (check_key("transDamping", "trans_damping")) {
@@ -789,45 +914,57 @@ void ConfigParser::get_elements(const Reader& reader) {
 				} else if (check_key("rotDamping", "rot_damping")) {
 					rbtype.rot_damping = parse_vector3(v);
 				} else if (check_key("densityGrid", "density_grid")) {
-					// Grid identity here doubles as the pairing key (Phase 3's
-					// RigidBodyForcePairList matches a density grid against a
-					// potential grid by name): two rigidBody types meant to
-					// interact simply reference the same grid file.
-					for (const auto& fname : tokenize(v)) {
-						GridKey grid_key = sim_system_ref_->get_grid_manager().add_dense_grid(fname);
+					// Legacy syntax is `<gridKey> <file>`: the key is the logical
+					// name two types must share to be paired for a grid-grid
+					// force, independent of which file each one loads. A bare
+					// `<file>` still works, with the filename doubling as the key.
+					std::string gkey, gfile;
+					if (parse_rb_grid_entry(v, "densityGrid", gkey, gfile)) {
+						GridKey grid_key =
+							sim_system_ref_->get_grid_manager().add_dense_grid(gfile);
 						if (grid_key.is_valid()) {
 							rbtype.density_grids.push_back(GridTerm{grid_key.grid_id});
-							rbtype.density_grid_keys.push_back(fname);
+							rbtype.density_grid_keys.push_back(gkey);
 						} else {
-							LOGWARN("Failed to load rigid body density grid file '{}'", fname);
+							LOGWARN("Failed to load rigid body density grid file '{}'", gfile);
 						}
 					}
 				} else if (check_key("potentialGrid", "potential_grid")) {
-					for (const auto& fname : tokenize(v)) {
-						GridKey grid_key = sim_system_ref_->get_grid_manager().add_dense_grid(fname);
+					std::string gkey, gfile;
+					if (parse_rb_grid_entry(v, "potentialGrid", gkey, gfile)) {
+						GridKey grid_key =
+							sim_system_ref_->get_grid_manager().add_dense_grid(gfile);
 						if (grid_key.is_valid()) {
 							rbtype.potential_grids.push_back(GridTerm{grid_key.grid_id});
-							rbtype.potential_grid_keys.push_back(fname);
+							rbtype.potential_grid_keys.push_back(gkey);
 						} else {
-							LOGWARN("Failed to load rigid body potential grid file '{}'", fname);
+							LOGWARN("Failed to load rigid body potential grid file '{}'", gfile);
 						}
 					}
 				} else if (check_key("pmf", "pmf_grid")) {
-					for (const auto& fname : tokenize(v)) {
-						GridKey grid_key = sim_system_ref_->get_grid_manager().add_dense_grid(fname);
+					std::string gkey, gfile;
+					if (parse_rb_grid_entry(v, "pmf", gkey, gfile)) {
+						GridKey grid_key =
+							sim_system_ref_->get_grid_manager().add_dense_grid(gfile);
 						if (grid_key.is_valid()) {
 							rbtype.pmf_grids.push_back(GridTerm{grid_key.grid_id});
-							rbtype.pmf_keys.push_back(fname);
+							rbtype.pmf_keys.push_back(gkey);
 						} else {
-							LOGWARN("Failed to load rigid body pmf grid file '{}'", fname);
+							LOGWARN("Failed to load rigid body pmf grid file '{}'", gfile);
 						}
 					}
 				} else if (check_key("densityGridScale", "density_grid_scale")) {
-					pending_density_scale = tokenize(v);
+					RbGridScale s;
+					if (parse_rb_grid_scale(v, "densityGridScale", s))
+						pending_density_scale.push_back(s);
 				} else if (check_key("potentialGridScale", "potential_grid_scale")) {
-					pending_potential_scale = tokenize(v);
+					RbGridScale s;
+					if (parse_rb_grid_scale(v, "potentialGridScale", s))
+						pending_potential_scale.push_back(s);
 				} else if (check_key("pmfScale", "pmf_grid_scale")) {
-					pending_pmf_scale = tokenize(v);
+					RbGridScale s;
+					if (parse_rb_grid_scale(v, "pmfScale", s))
+						pending_pmf_scale.push_back(s);
 				} else if (k == "position") {
 					rb_io.position = parse_vector3(v);
 				} else if (k == "orientation") {
@@ -843,28 +980,63 @@ void ConfigParser::get_elements(const Reader& reader) {
 				}
 			}
 
-			apply_pmf_grid_list("densityGridScale",
-								pending_density_scale,
-								rbtype.density_grids,
-								[](GridTerm& t, const std::string& s) { t.scale = std::stof(s); });
-			apply_pmf_grid_list("potentialGridScale",
-								pending_potential_scale,
-								rbtype.potential_grids,
-								[](GridTerm& t, const std::string& s) { t.scale = std::stof(s); });
-			apply_pmf_grid_list("pmfScale",
-								pending_pmf_scale,
-								rbtype.pmf_grids,
-								[](GridTerm& t, const std::string& s) { t.scale = std::stof(s); });
+			apply_rb_grid_scales("densityGridScale",
+								 pending_density_scale,
+								 rbtype.density_grids,
+								 rbtype.density_grid_keys,
+								 [](GridTerm& t, float s) { t.scale = s; });
+			apply_rb_grid_scales("potentialGridScale",
+								 pending_potential_scale,
+								 rbtype.potential_grids,
+								 rbtype.potential_grid_keys,
+								 [](GridTerm& t, float s) { t.scale = s; });
+			apply_rb_grid_scales("pmfScale",
+								 pending_pmf_scale,
+								 rbtype.pmf_grids,
+								 rbtype.pmf_keys,
+								 [](GridTerm& t, float s) { t.scale = s; });
+
+			// Attached/cosmetic particles come from a PDB+PSF template pair.
+			// load() resolves every atom's resname against the already-declared
+			// ParticleTypes, so particle blocks must precede rigidBody blocks;
+			// fail with that explanation rather than the raw "unknown resname".
+			if (!template_pdb.empty() || !template_psf.empty()) {
+				if (template_pdb.empty() || template_psf.empty()) {
+					throw_value_error("rigidBody '%s': inputPdb and inputPsf must be given "
+									  "together (got only one)",
+									  name.c_str());
+				}
+				if (sim_system_ref_->get_particle_types().empty()) {
+					throw_value_error("rigidBody '%s': inputPdb/inputPsf need particle types to "
+									  "resolve atom resnames against, but none are declared yet - "
+									  "move the particle blocks above this rigidBody block",
+									  name.c_str());
+				}
+				RigidBodyPdbPsfReader::load(rbtype,
+											template_pdb,
+											template_psf,
+											reference_point,
+											sim_system_ref_->get_particle_types());
+			}
 
 			// Insertion order here is exactly what assign_rigid_body_type_ids()
 			// later assigns as RigidBodyType::id, so this is safe to resolve
 			// immediately (unlike ParticleIO, which defers via type_name since
 			// its data can arrive from a separate file, not necessarily in
 			// insertion order).
-			rb_io.id = static_cast<int>(init_rigid_bodies_.size());
-			rb_io.type_id = static_cast<int>(sim_system_ref_->get_rigid_body_types().size());
+			const int type_id = static_cast<int>(sim_system_ref_->get_rigid_body_types().size());
 			sim_system_ref_->get_rigid_body_types().push_back(std::move(rbtype));
-			init_rigid_bodies_.push_back(rb_io);
+
+			// One type, `num` instances. They share the block's position/
+			// orientation/momentum here; inputRBCoordinates (a top-level key,
+			// applied after all blocks are parsed) overwrites them per instance
+			// when present, matching legacy loadRBCoordinates.
+			for (int n = 0; n < instance_count; ++n) {
+				RigidBodyIO inst = rb_io;
+				inst.id = static_cast<int>(init_rigid_bodies_.size());
+				inst.type_id = type_id;
+				init_rigid_bodies_.push_back(inst);
+			}
 			continue; // i already at next header or end
 		}
 
@@ -919,12 +1091,74 @@ void ConfigParser::get_elements(const Reader& reader) {
 							  init_particles_,
 							  file_name_,
 							  sim_system_ref_->get_particle_types());
+		} else if (key == "inputRBCoordinates" || key == "input_rb_coordinates") {
+			// Deferred: this file supplies one line per rigid-body instance
+			// across every type, so it can only be applied once all rigidBody
+			// blocks have been seen - regardless of where the key appears.
+			rb_coordinates_file = resolve_file_path(value, file_name_);
 		} else if (key == "rigidBodyGridGridPeriod" || key == "rigid_body_grid_grid_period") {
 			sim_system_ref_->set_rb_update_period(std::stoi(value));
 		}
 
 		++i;
 	}
+
+	if (!rb_coordinates_file.empty()) {
+		RigidBodyCoordReader::load(init_rigid_bodies_, rb_coordinates_file);
+	}
+
+	fold_in_attached_particles();
+}
+
+void ConfigParser::fold_in_attached_particles() {
+	const auto& types = sim_system_ref_->get_rigid_body_types();
+
+	size_t total_attached = 0;
+	for (const RigidBodyIO& rb : init_rigid_bodies_) {
+		if (rb.type_id >= 0 && static_cast<size_t>(rb.type_id) < types.size()) {
+			total_attached += types[rb.type_id].attached_particle.size();
+		}
+	}
+	if (total_attached == 0) {
+		return;
+	}
+
+	const size_t num_regular = init_particles_.size();
+	init_particles_.reserve(num_regular + total_attached);
+
+	// Instance order here is exactly declaration order (type-major,
+	// instance-minor), which is also the order RigidBodyCoordReader consumed -
+	// so instance i's range lines up with the coordinates it was given.
+	for (RigidBodyIO& rb : init_rigid_bodies_) {
+		if (rb.type_id < 0 || static_cast<size_t>(rb.type_id) >= types.size()) {
+			continue;
+		}
+		const RigidBodyType& type = types[rb.type_id];
+		if (type.attached_particle.empty()) {
+			continue;
+		}
+
+		rb.attached_start = static_cast<int>(init_particles_.size());
+		rb.attached_count = static_cast<int>(type.attached_particle.size());
+
+		for (const ParticleIO& tmpl : type.attached_particle) {
+			ParticleIO p = tmpl;
+			p.id = static_cast<int>(init_particles_.size());
+			p.attached_rigid_body_id = rb.id;
+			// tmpl.position is the body-frame offset that
+			// RigidBodyPdbPsfReader::load() derived from the template PDB;
+			// place it in the world using this instance's own transform. The
+			// per-step sync kernel recomputes exactly this, so the only job
+			// here is to make step 0 consistent before the first sync runs.
+			p.position = rb.orientation * tmpl.position + rb.position;
+			init_particles_.push_back(p);
+		}
+	}
+
+	LOGINFO("ConfigParser: {} regular particle(s) + {} rigid-body attached particle(s) = {} total",
+			num_regular,
+			total_attached,
+			init_particles_.size());
 }
 
 #ifdef USE_PYTHON
@@ -938,6 +1172,12 @@ void ConfigParser::parse_dictionary(const std::map<std::string, pybind11::object
 				sim_system_ref_->set_cutoff(Length(pybind11::cast<float>(value)));
 			} else if (key == "timestep") {
 				sim_system_ref_->set_timestep(pybind11::cast<float>(value));
+			} else if (key == "seed") {
+				// Must mirror the text-config path above; without it every
+				// Python-driven run falls back to SimSystem's default seed, so
+				// replicas launched from a script are bit-identical to each
+				// other however they set `seed`.
+				sim_system_ref_->set_base_seed(pybind11::cast<long long>(value));
 			} else if (key == "num_steps" || key == "steps") {
 				sim_system_ref_->set_num_steps(pybind11::cast<int>(value));
 			} else if (key == "output_period") {

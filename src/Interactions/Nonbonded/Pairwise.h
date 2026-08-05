@@ -44,7 +44,7 @@ struct SoftcoreForceKernel {
  *
  * `particle_indices` comes from a Pairlist (see Pairlist.h) - already filtered
  * by cutoff, and already remapped to original particle indices (see
- * ZOrderNeighborKernel). Exclusions are a flat, unsorted list (bonded
+ * ZOrderCellNeighborKernel). Exclusions are a flat, unsorted list (bonded
  * neighbors etc., see DeviceBondedInteractions::exclusion_pairs()) - checked
  * via a linear scan per pair, which is fine for the small exclusion counts
  * bonded topology produces; a sorted-range merge (as legacy's excludeMap

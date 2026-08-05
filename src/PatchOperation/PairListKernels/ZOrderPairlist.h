@@ -207,24 +207,37 @@ class ZOrderPairlist : public Pairlist {
 	DeviceBuffer<uint32_t> cell_begin_;
 	DeviceBuffer<uint32_t> cell_end_;
 	int coarse_bits_ = 0;			  ///< Coarse cells per dimension = 2^coarse_bits_
-	Vector3 box_len_{0.0f};			  ///< Periodic box lengths for minimum-image tests
-	bool periodic_ = false;			  ///< Whether to wrap cells and use minimum image
+	Vector3 box_len_{0.0f};			  ///< Per-axis periodic length; <= 0 marks an open axis
+	Vector3 box_origin_{0.0f};		  ///< Lower corner of the periodic box
 	Vector3 last_box_extent_{0.0f};	  ///< Extent of the box used for the last Morton encoding
 
   public:
 	/**
-	 * @brief Declare the simulation box periodic for neighbor finding.
+	 * @brief Declare which axes of the simulation box are periodic.
 	 *
-	 * When set, the 27-cell stencil wraps at the grid edges and displacements
-	 * use the minimum image convention, so pairs spanning a periodic boundary
-	 * are enumerated. Without this, such pairs are silently absent from the
-	 * pairlist even though the force kernel would apply minimum image to them.
+	 * On a periodic axis the 27-cell stencil wraps at the grid edges and
+	 * displacements use the minimum image convention, so pairs spanning that
+	 * boundary are enumerated. Without this, such pairs are silently absent
+	 * from the pairlist even though the force kernel would apply minimum image
+	 * to them.
 	 *
-	 * @param box_len Periodic box lengths; pass a zero vector to disable.
+	 * Periodicity is per axis, so mixed boundary conditions are handled
+	 * directly. Treating a partly periodic box as fully open would drop exactly
+	 * the cross-face pairs the force kernel still wraps.
+	 *
+	 * The origin matters as much as the length: on a periodic axis the Morton
+	 * encoding box is forced to [origin, origin + length) rather than the
+	 * particle bounding box, because wrapping a cell index modulo the grid is
+	 * only geometrically correct when the encoded extent *is* the periodic
+	 * extent. See build_pairlist.
+	 *
+	 * @param box_len Per-axis periodic lengths; a zero component marks that
+	 *        axis open, and a zero vector disables periodicity entirely.
+	 * @param box_origin Lower corner of the periodic box (PeriodicBox::get_origin()).
 	 */
-	void set_periodic_box(const Vector3& box_len) {
+	void set_periodic_box(const Vector3& box_len, const Vector3& box_origin = Vector3(0.0f)) {
 		box_len_ = box_len;
-		periodic_ = (box_len.x > 0.0f && box_len.y > 0.0f && box_len.z > 0.0f);
+		box_origin_ = box_origin;
 	}
 
   private:

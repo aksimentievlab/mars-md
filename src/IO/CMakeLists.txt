@@ -4,6 +4,7 @@
 list(APPEND LIB_SOURCES
     IO/ConfigParser.cpp
     IO/DxIO.cpp
+    IO/PsfPdbIO.cpp
     IO/vmdsock.cpp
     IO/imd.cpp
     IO/WKFUtils.cpp
@@ -18,6 +19,7 @@ list(APPEND HOST_ONLY_HEADERS
     IO/TrajectoryWriter.h
     IO/FileHandle.h
     IO/BondConfigReader.h
+    IO/PsfPdbIO.h
     #IO/NanoVDBIO.h
 )
 

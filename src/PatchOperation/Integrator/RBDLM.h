@@ -15,7 +15,7 @@ namespace ARBD {
  * @brief Port of legacy RigidBody::addLangevin onto SoA RigidBodyView.
  */
 template<typename TemperatureType = float>
-struct RBAddLangevinKernel {
+struct RBLangevinForceKernel {
 	RigidBodyView rb;
 	RigidBodyTypeView types;
 	float timestep;
@@ -24,13 +24,13 @@ struct RBAddLangevinKernel {
 	uint64_t base_seed;
 	size_t current_step;
 
-	RBAddLangevinKernel(RigidBodyView rb_view,
-						RigidBodyTypeView type_view,
-						float dt,
-						TemperatureType temp,
-						idx_t n,
-						uint64_t seed,
-						size_t step)
+	RBLangevinForceKernel(RigidBodyView rb_view,
+						  RigidBodyTypeView type_view,
+						  float dt,
+						  TemperatureType temp,
+						  idx_t n,
+						  uint64_t seed,
+						  size_t step)
 		: rb(rb_view), types(type_view), timestep(dt), kT(temp), num_rb(n), base_seed(seed),
 		  current_step(step) {}
 
@@ -45,33 +45,60 @@ struct RBAddLangevinKernel {
 		const Vector3 rot_damping = types.rot_damping[type];
 		const Matrix3 orientation = rb.orientation[idx];
 
+		// Six independent standard normals: legacy draws two separate
+		// gaussian_vector()s for the force and the torque. The previous version
+		// built w2 from two of w1's own components, correlating the random force
+		// with the random torque.
+		//
+		// draw_float4() returns values in [0,1); log(0) is -inf, which would
+		// make the whole trajectory NaN, so the radius argument is clamped away
+		// from zero. The bias is ~1 ulp and only on a ~2^-32 tail.
 		openrand::Philox rng(base_seed + current_step, static_cast<uint32_t>(idx));
-		const openrand::float4 uniform = rng.draw_float4();
-		const float r1 = sqrtf(-2.0f * logf(uniform.x));
-		const float theta1 = 2.0f * 3.1415926535f * uniform.y;
-		const float r2 = sqrtf(-2.0f * logf(uniform.z));
-		const float theta2 = 2.0f * 3.1415926535f * uniform.w;
-		const Vector3 w1(r1 * cosf(theta1), r1 * sinf(theta1), r2 * cosf(theta2));
-		const Vector3 w2(r1 * sinf(theta1), r2 * cosf(theta2), r2 * sinf(theta2));
+		auto gaussian_pair = [](float u_r, float u_theta, float& a, float& b) {
+			const float r = sqrtf(-2.0f * logf(fmaxf(u_r, 1e-20f)));
+			const float theta = 2.0f * 3.1415926535f * u_theta;
+			a = r * cosf(theta);
+			b = r * sinf(theta);
+		};
+		const openrand::float4 u0 = rng.draw_float4();
+		const openrand::float4 u1 = rng.draw_float4();
+		float g[8];
+		gaussian_pair(u0.x, u0.y, g[0], g[1]);
+		gaussian_pair(u0.z, u0.w, g[2], g[3]);
+		gaussian_pair(u1.x, u1.y, g[4], g[5]);
+		gaussian_pair(u1.z, u1.w, g[6], g[7]);
+		const Vector3 w1(g[0], g[1], g[2]);
+		const Vector3 w2(g[3], g[4], g[5]);
 
-		const Vector3 trans_coeff =
-			Vector3::element_sqrt(2.0f * kT * mass * trans_damping / timestep);
-		const Vector3 rot_coeff = Vector3::element_sqrt(
-			2.0f * kT * Vector3::element_mult(inertia, rot_damping) / timestep);
+		// Legacy scales the damping coefficients once at setup
+		// (RigidBodyType::setDampingCoeffs) and every later use in addLangevin
+		// sees the scaled value. arbd2 stores them unscaled, so apply it here -
+		// and to BOTH terms, or the fluctuation/dissipation balance is wrong and
+		// the bodies heat without bound. Scale on the right (Vector3 * float):
+		// the free float * Vector3 overload takes its scalar by reference, which
+		// ODR-uses the constexpr and leaves it undefined in device code.
+		//
+		// kT is legacy's `Temp` exactly - RigidBody.cu:28 computes it as
+		// temperature * 0.0019872065, i.e. kT in kcal/mol, not Kelvin.
+		const Vector3 trans_damp = trans_damping * constants::langevin_damping_unit;
+		const Vector3 rot_damp = rot_damping * constants::langevin_damping_unit;
 
-		Vector3 f =
-			Vector3::element_mult(trans_coeff, w1) -
-			Vector3::element_mult(trans_damping, orientation.transpose() * rb.momentum[idx]) *
-				constants::langevin_damp_scale;
+		const Vector3 trans_coeff = Vector3::element_sqrt(2.0f * kT * mass * trans_damp / timestep);
+		const Vector3 rot_coeff =
+			Vector3::element_sqrt(2.0f * kT * Vector3::element_mult(inertia, rot_damp) / timestep);
+
+		Vector3 f = Vector3::element_mult(trans_coeff, w1) -
+					Vector3::element_mult(trans_damp, orientation.transpose() * rb.momentum[idx]) *
+						constants::langevin_damp_scale;
 		Vector3 torq = Vector3::element_mult(rot_coeff, w2) -
-					   Vector3::element_mult(rot_damping, rb.angular_momentum[idx]) *
+					   Vector3::element_mult(rot_damp, rb.angular_momentum[idx]) *
 						   constants::langevin_damp_scale;
 
 		f = orientation * f;
 		torq = orientation * torq;
 
-		rb.force[idx] += f;
-		rb.torque[idx] += torq;
+		rb.force[idx] += f + rb.external_force[idx];
+		rb.torque[idx] += torq + rb.external_torque[idx];
 	}
 };
 
@@ -105,6 +132,11 @@ struct RBIntegrateDLMKernel {
 		const Vector3 inertia = types.inertia[type];
 
 		if (substep == 0 || substep == 2) {
+			// external_force/torque are NOT added here: RBLangevinForceKernel has
+			// already folded them into rb.force/rb.torque during the force
+			// accumulation phase (legacy does the same, adding constantForce in
+			// RigidBodyController::updateForces rather than in integrateDLM).
+			// Adding them again here double-counted every external contribution.
 			rb.momentum[idx] += 0.5f * timestep * rb.force[idx] * constants::impulse_to_momentum;
 			rb.angular_momentum[idx] += 0.5f * timestep *
 										(rb.orientation[idx].transpose() * rb.torque[idx]) *
@@ -141,10 +173,10 @@ struct RBIntegrateDLMKernel {
 
 #ifdef USE_CUDA
 namespace ARBD {
-extern template struct RBAddLangevinKernel<float>;
+extern template struct RBLangevinForceKernel<float>;
 extern template Event launch_cuda_kernel(const Resource& resource,
 										 const KernelConfig& config,
-										 RBAddLangevinKernel<float> kernel_func);
+										 RBLangevinForceKernel<float> kernel_func);
 extern template Event launch_cuda_kernel(const Resource& resource,
 										 const KernelConfig& config,
 										 RBIntegrateDLMKernel kernel_func);
@@ -154,7 +186,7 @@ extern template Event launch_cuda_kernel(const Resource& resource,
 #ifdef USE_SYCL
 #include <sycl/sycl.hpp>
 template<>
-struct sycl::is_device_copyable<ARBD::RBAddLangevinKernel<float>> : std::true_type {};
+struct sycl::is_device_copyable<ARBD::RBLangevinForceKernel<float>> : std::true_type {};
 template<>
 struct sycl::is_device_copyable<ARBD::RBIntegrateDLMKernel> : std::true_type {};
 #endif

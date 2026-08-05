@@ -13,6 +13,8 @@ struct RigidBodyView {
 	DEVICE_PTR(Vector3) __restrict__ angular_momentum;
 	DEVICE_PTR(Vector3) __restrict__ force;
 	DEVICE_PTR(Vector3) __restrict__ torque;
+	DEVICE_PTR(Vector3) __restrict__ external_force;
+	DEVICE_PTR(Vector3) __restrict__ external_torque;
 
 	/// DLM body-frame rotation step (legacy RigidBody::applyRotation).
 	HOST DEVICE void apply_body_frame_rotation(idx_t idx, const Matrix3& R) const {
@@ -31,6 +33,8 @@ struct ConstRigidBodyView {
 	CONSTANT_PTR(Vector3) __restrict__ angular_momentum;
 	CONSTANT_PTR(Vector3) __restrict__ force;
 	CONSTANT_PTR(Vector3) __restrict__ torque;
+	CONSTANT_PTR(Vector3) __restrict__ external_force;
+	CONSTANT_PTR(Vector3) __restrict__ external_torque;
 };
 
 // A type's density/potential/pmf grid lists are variable length (unlike

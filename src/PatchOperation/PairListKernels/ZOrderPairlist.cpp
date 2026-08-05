@@ -47,6 +47,35 @@ void ZOrderPairlist::build_pairlist(const DeviceBuffer<Vector3>& positions,
 	// Step 1: Determine bounding box
 	Vector3 box_min, box_max;
 	get_bounding_box(positions, num_particles, box_min, box_max);
+
+	// On a periodic axis the Morton encoding box must be the *simulation* box,
+	// not the particle bounding box. Two things depend on it:
+	//
+	//   - The neighbour stencil wraps cell indices modulo the grid, which
+	//     asserts that cell n-1 is physically adjacent to cell 0. That is only
+	//     true when the encoded extent equals the periodic extent; if particles
+	//     occupy less than the full box the wrap joins two cells that are not
+	//     in fact neighbours, and real cross-boundary pairs go missing.
+	//   - The coarse cell width is (encoded extent)/2^m while m below is chosen
+	//     against the same extent. Deriving one from the box and the other from
+	//     the bounding box let cells come out narrower than the cutoff, which
+	//     silently breaks the guarantee that 27 cells cover the cutoff sphere.
+	//
+	// Open axes keep the bounding box: there is nothing to wrap, and a tight
+	// box gives finer cells for the same m.
+	if (box_len_.x > 0.0f) {
+		box_min.x = box_origin_.x;
+		box_max.x = box_origin_.x + box_len_.x;
+	}
+	if (box_len_.y > 0.0f) {
+		box_min.y = box_origin_.y;
+		box_max.y = box_origin_.y + box_len_.y;
+	}
+	if (box_len_.z > 0.0f) {
+		box_min.z = box_origin_.z;
+		box_max.z = box_origin_.z + box_len_.z;
+	}
+
 	LOGTRACE("Bounding box: [{:.6f}, {:.6f}, {:.6f}] to [{:.6f}, {:.6f}, {:.6f}]",
 			 box_min.x,
 			 box_min.y,
@@ -76,9 +105,13 @@ void ZOrderPairlist::build_pairlist(const DeviceBuffer<Vector3>& positions,
 	LOGTRACE("Found neighbors using sorted order");
 	resource_.synchronize_streams();
 
-	LOGTRACE("Updated internal state");
-	// ZOrderSort in Pairlist mode handles position tracking automatically
-	LOGTRACE("ZOrderSort in Pairlist mode handles position tracking automatically");
+	// Snapshot the positions this list was built from, so needs_update() can
+	// later measure how far particles have drifted since. Nothing else called
+	// update_positions_incremental(), which left the reference buffer at its
+	// uninitialised construction value and made needs_update() report a
+	// meaningless displacement.
+	sorter_.update_positions_incremental(positions, num_particles);
+
 	auto end_time = std::chrono::high_resolution_clock::now();
 	last_build_time_ms_ = std::chrono::duration<double, std::milli>(end_time - start_time).count();
 	LOGTRACE("Z-order pairlist built in {:.2f} ms", last_build_time_ms_);
@@ -139,9 +172,15 @@ void ZOrderPairlist::find_neighbors_zorder(size_t num_particles) {
 	}();
 	int m = 0;
 	if (cutoff > 0.0f) {
-		const float min_extent = std::min({box_len_.x > 0.0f ? box_len_.x : last_box_extent_.x,
-										   box_len_.y > 0.0f ? box_len_.y : last_box_extent_.y,
-										   box_len_.z > 0.0f ? box_len_.z : last_box_extent_.z});
+		// Size the cells against the extent Morton encoding actually used. It
+		// is the only extent the cell width is a fraction of, so mixing in the
+		// periodic box here (as this once did) can make cells narrower than the
+		// cutoff whenever the particles do not fill the box - and a cell
+		// narrower than the cutoff is not covered by a 27-cell stencil, so
+		// pairs are missed. build_pairlist already forces the two to agree on
+		// periodic axes; this keeps them agreeing on open ones.
+		const float min_extent =
+			std::min({last_box_extent_.x, last_box_extent_.y, last_box_extent_.z});
 		if (min_extent > 0.0f) {
 			m = static_cast<int>(std::floor(std::log2(min_extent / cutoff)));
 		}
@@ -180,8 +219,7 @@ void ZOrderPairlist::find_neighbors_zorder(size_t num_particles) {
 									max_pairs_,
 									m,
 									shift,
-									box_len_,
-									periodic_};
+									box_len_};
 
 	Event launch_event = launch_kernel(resource_, config, kernel);
 	launch_event.wait();
@@ -190,20 +228,24 @@ void ZOrderPairlist::find_neighbors_zorder(size_t num_particles) {
 	//
 	// The kernel refuses to write past max_pairs_, but the atomic counter keeps
 	// climbing, so the raw value reports how many pairs *would* have been
-	// stored. Publishing that unclamped is unsafe: consumers iterate
-	// neighbor_pairs_[0, num_pairs_) and would read past the allocation. Clamp
-	// it, and make the truncation loud rather than silent - a truncated pair
-	// list drops real interactions and changes the physics.
+	// stored. Overflow is fatal, not a warning: the pairs that fit are whichever
+	// ones happened to win the atomic race, so the list is a nondeterministic
+	// subset of the true neighbours. Every subsequent step is then computing a
+	// different physical system, and the run has no scientific value - failing
+	// here costs the user a job, continuing costs them a trajectory they might
+	// trust. (Logging and clamping is what this used to do.)
 	uint32_t num_pairs;
 	pair_count_.copy_to_host(&num_pairs, 1, true);
 	if (num_pairs > max_pairs_) {
-		LOGERROR("Pairlist capacity exceeded: {} pairs found but capacity is {}. "
-				 "The pairlist has been truncated and {} interactions are missing; "
-				 "results will be incorrect. Increase the pairlist pair capacity.",
-				 num_pairs,
-				 max_pairs_,
-				 num_pairs - max_pairs_);
-		num_pairs = static_cast<uint32_t>(max_pairs_);
+		ARBD_Exception(ExceptionType::ValueError,
+					   "Pairlist capacity exceeded: {} pairs found for {} particles but capacity "
+					   "is {}, so {} interactions would be dropped. Raise the per-particle pair "
+					   "estimate (Patch.h, kEstimatedPairsPerParticle) or shorten the pairlist "
+					   "cutoff; continuing would silently simulate a different system.",
+					   num_pairs,
+					   num_particles,
+					   max_pairs_,
+					   num_pairs - max_pairs_);
 	}
 	num_pairs_ = num_pairs;
 	LOGDEBUG("pair_count AFTER kernel: {}", num_pairs);

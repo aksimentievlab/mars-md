@@ -10,8 +10,8 @@
  * than a real GridManager, matching the style of Interactions/Pmf.cpp.
  */
 
-#include "../catch_boiler.h"
 #include "Objects/RigidBodyForcePairs.h"
+#include "../catch_boiler.h"
 #include <unordered_map>
 
 using namespace ARBD;
@@ -53,11 +53,10 @@ std::vector<RigidBodyType> two_type_config() {
 TEST_CASE("RigidBodyForcePairList: grid-key matching reproduces legacy pairing",
 		  "[rigidbody][forcepairs]") {
 	const std::vector<RigidBodyType> types = two_type_config();
-	const auto grid_format =
-		make_format_table({{100, GridFormat::Dense},
-						   {101, GridFormat::Dense},
-						   {200, GridFormat::Dense},
-						   {300, GridFormat::Dense}});
+	const auto grid_format = make_format_table({{100, GridFormat::Dense},
+												{101, GridFormat::Dense},
+												{200, GridFormat::Dense},
+												{300, GridFormat::Dense}});
 
 	RigidBodyForcePairList pairs;
 	pairs.build(types, grid_format, /*update_period=*/4);
@@ -77,13 +76,13 @@ TEST_CASE("RigidBodyForcePairList: grid-key matching reproduces legacy pairing",
 			CHECK(p.type_i == 0);
 			CHECK(p.type_j == 1);
 			CHECK(p.grid_id_rho == 100); // Protein's "Elec" density
-			CHECK(p.grid_id_u == 200);	  // Membrane's "Elec" potential
+			CHECK(p.grid_id_u == 200);	 // Membrane's "Elec" potential
 		} else {
 			found_pmf_pair = true;
 			CHECK(p.type_i == 0);
 			CHECK(p.type_j == 0);
 			CHECK(p.grid_id_rho == 100); // Protein's "Elec" density
-			CHECK(p.grid_id_u == 300);	  // Protein's "Elec" pmf
+			CHECK(p.grid_id_u == 300);	 // Protein's "Elec" pmf
 		}
 	}
 	CHECK(found_type_pair);
@@ -118,11 +117,10 @@ TEST_CASE("RigidBodyForcePairList: format-uniformity check fires on a mismatched
 	// Protein's "Elec" density (100) is Dense, Membrane's "Elec" potential
 	// (200) is (hypothetically) Sparse - the type-type pair must throw before
 	// ever reaching the PMF pass.
-	const auto grid_format =
-		make_format_table({{100, GridFormat::Dense},
-						   {101, GridFormat::Dense},
-						   {200, GridFormat::Sparse},
-						   {300, GridFormat::Dense}});
+	const auto grid_format = make_format_table({{100, GridFormat::Dense},
+												{101, GridFormat::Dense},
+												{200, GridFormat::Sparse},
+												{300, GridFormat::Dense}});
 
 	RigidBodyForcePairList pairs;
 	REQUIRE_THROWS_AS(pairs.build(types, grid_format), ARBD::Exception);

@@ -46,8 +46,7 @@ class Pairlist {
 	Pairlist(const Resource& resource, size_t max_particles, size_t max_pairs)
 		: resource_(resource), max_particles_(max_particles), max_pairs_(max_pairs),
 		  num_particles_(0), num_pairs_(0), cutoff_(0.0f), cutoff_squared_(0.0f),
-		  neighbor_pairs_(max_pairs, resource), pair_distances_(max_pairs, resource),
-		  pair_count_(1, resource) {
+		  neighbor_pairs_(max_pairs, resource), pair_count_(1, resource) {
 		uint32_t zero = 0;
 		pair_count_.copy_from_host(&zero, 1, true);
 	}
@@ -101,13 +100,6 @@ class Pairlist {
 	}
 
 	/**
-	 * @brief Get the pair distances (optional, may be empty)
-	 */
-	const DeviceBuffer<float>& get_pair_distances() const {
-		return pair_distances_;
-	}
-
-	/**
 	 * @brief Get current number of pairs
 	 */
 	size_t get_num_pairs() const {
@@ -140,7 +132,6 @@ class Pairlist {
 		max_particles_ = new_max_particles;
 		max_pairs_ = new_max_pairs;
 		neighbor_pairs_.resize(max_pairs_);
-		pair_distances_.resize(max_pairs_);
 	}
 
 	/**
@@ -179,10 +170,17 @@ class Pairlist {
 	float cutoff_;
 	float cutoff_squared_;
 
-	// Core pairlist data
-	DeviceBuffer<int2> neighbor_pairs_;	 ///< Neighbor particle pairs (i, j)
-	DeviceBuffer<float> pair_distances_; ///< Optional distances for each pair
-	DeviceBuffer<uint32_t> pair_count_;	 ///< Atomic counter for pair generation
+	// Core pairlist data.
+	//
+	// There is deliberately no per-pair distance array. One used to be
+	// allocated alongside neighbor_pairs_ and was never written or read by any
+	// builder or consumer; at the default capacity that is 4 bytes x 307M pairs
+	// = 1.2 GB of device memory reserved for nothing. Recomputing a distance in
+	// the force kernel is cheaper than the bandwidth to fetch a stored one, so
+	// if a consumer ever needs it, it should recompute rather than reinstate
+	// this.
+	DeviceBuffer<int2> neighbor_pairs_;	///< Neighbor particle pairs (i, j)
+	DeviceBuffer<uint32_t> pair_count_;	///< Atomic counter for pair generation
 
 	/**
 	 * @brief Update internal state after pairlist build

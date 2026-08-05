@@ -11,3 +11,12 @@
 # Tests only passed in CUDA:
 
 # Tests only passed in SYCL: Types/basegrid_device_test.cpp
+
+###
+Please change single_resource_id to whichever gpu is not busy.
+```
+namespace Global {
+static short single_resource_id = 6; // For testing, we use a single resource id
+static std::vector<short> device_ids = {0, 1};
+}
+```

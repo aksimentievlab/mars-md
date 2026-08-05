@@ -3,6 +3,7 @@
 #include "Interactions/Nonbonded/GridGridKernels.h"
 #include "Interactions/Nonbonded/Pairwise.h"
 #include "Interactions/Nonbonded/PmfKernels.h"
+#include "Interactions/Nonbonded/RigidBodyAttachedParticles.h"
 #include "Interactions/Nonbonded/RigidBodyGridBatch.h"
 #include "Interactions/Nonbonded/RigidBodyParticleGridBatch.h"
 #include "System/PeriodicBox.h"
@@ -63,5 +64,15 @@ template Event launch_cuda_kernel(const Resource& resource,
 template Event launch_cuda_kernel_with_workitem(const Resource& resource,
 												const KernelConfig& config,
 												RBParticleGridForceKernel kernel_func);
+
+// Attached particles (RigidBodyAttachedParticles.h): per-step position slaving
+// and the block-reduction of their forces back onto the parent body.
+template Event launch_cuda_kernel(const Resource& resource,
+								  const KernelConfig& config,
+								  RBSyncAttachedPositionsKernel kernel_func);
+
+template Event launch_cuda_kernel_with_workitem(const Resource& resource,
+												const KernelConfig& config,
+												RBReduceAttachedForcesKernel kernel_func);
 
 } // namespace ARBD

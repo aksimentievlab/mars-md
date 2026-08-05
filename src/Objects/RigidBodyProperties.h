@@ -11,18 +11,17 @@
 #include <vector>
 
 namespace ARBD {
+// not real particles, only using for dcd output visualization.
+struct CosmeticParticle {
+	std::string name, resname, segname, type_name;
+	int resid;
+	Vector3 body_frame_position;
+	int attached_particle_index = -1;
+};
 
 struct RigidBodyIO {
 	int id;
 	int type_id;
-	// Set directly by ConfigParser at parse time (insertion order into
-	// SimSystem::get_rigid_body_types() - see SystemState::
-	// set_init_rigid_body_data()'s comment). `type_name` is an alternate,
-	// deferred-resolution path for callers that don't already know the
-	// numeric id (e.g. the Python bindings - RigidBody.type_name mirrors
-	// ParticleIO.type_name): when non-empty, set_init_rigid_body_data()
-	// resolves it via SimSystem::get_rigid_body_type_id() and overwrites
-	// type_id, exactly like ParticleIO::type_name already does for particles.
 	std::string type_name;
 	Vector3 position;
 	Matrix3 orientation;
@@ -30,30 +29,32 @@ struct RigidBodyIO {
 	Vector3 angular_momentum;
 	Vector3 force;
 	Vector3 torque;
+	Vector3 external_force;
+	Vector3 external_torque;
 
 	bool is_dummy = false;
 	bool has_orientation = false;
-	RigidBodyIO& operator=(const RigidBodyIO& src) {
-		id = src.id;
-		type_id = src.type_id;
-		type_name = src.type_name;
-		position = src.position;
-		orientation = src.orientation;
-		momentum = src.momentum;
-		angular_momentum = src.angular_momentum;
-		force = src.force;
-		torque = src.torque;
-		is_dummy = src.is_dummy;
-		has_orientation = src.has_orientation;
-		return *this;
-	}
+
+	// Half-open range [attached_start, attached_start + attached_count) into the
+	// global particle array holding this instance's copy of its type's
+	// attached-particle template. Assigned by ConfigParser's post-parse fold-in
+	// pass, which appends every instance's copy after all regular particles
+	// (legacy layout: regular [0,num), then all attached contiguous).
+	// attached_count == 0 means the type declared no attached particles.
+	int attached_start = -1;
+	int attached_count = 0;
+
+	// Defaulted rather than hand-written: the hand-written version had to be
+	// extended by hand for every new member and silently dropped any that were
+	// forgotten - the same trap ParticleIO's operator= comment documents.
+	RigidBodyIO& operator=(const RigidBodyIO& src) = default;
 };
 
 class RigidBodyType {
   public:
 	std::string name;
-	int id = -1; // Default to invalid, will be set after initialization
-	float mass = 1.0f; // Avoid divide-by-zero if missed
+	int id = -1;						  // Default to invalid, will be set after initialization
+	float mass = 1.0f;					  // Avoid divide-by-zero if missed
 	Vector3 inertia = {1.0f, 1.0f, 1.0f}; // Avoid divide-by-zero if missed
 	Vector3 trans_damping = {0.0f, 0.0f, 0.0f};
 	Vector3 rot_damping = {0.0f, 0.0f, 0.0f};
@@ -73,6 +74,8 @@ class RigidBodyType {
 	uint32_t pmf_smd_freq = 0;
 
 	std::vector<ParticleIO> attached_particle;
+	std::vector<CosmeticParticle> template_particles;
+	std::vector<int2> template_bonds;
 	// One GridTerm (grid_id + scale + scale_slope + boundary_condition) per
 	// referenced grid - mirrors ParticleType::pmf_grids (see Types/GridTerm.h)
 	// instead of separate parallel id/scale arrays, since a grid-force kernel

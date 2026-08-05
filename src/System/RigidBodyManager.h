@@ -8,10 +8,12 @@
 #include "Backend/Kernels.h"
 #include "Backend/KernelConfig.h"
 #include "Backend/Resource.h"
+#include "Interactions/Nonbonded/RigidBodyAttachedParticles.h"
 #include "Interactions/Nonbonded/RigidBodyGridBatch.h"
 #include "Interactions/Nonbonded/RigidBodyParticleGridBatch.h"
 #include "Objects/DeviceParticle.h"
 #include "Objects/DeviceRigidBodyManager.h"
+#include "Objects/RigidBodyCosmeticsKernel.h"
 #include "Objects/Grid.h"
 #include "Objects/RigidBodyForcePairs.h"
 #include "PatchOperation/Integrator/RBDLM.h"
@@ -90,7 +92,7 @@ class RigidBodyManager {
 		ensure_initialized();
 		const idx_t n = bodies_->size();
 		KernelConfig config = KernelConfig::for_1d(n, compute_resource());
-		RBAddLangevinKernel<float> kernel(
+		RBLangevinForceKernel<float> kernel(
 			bodies_->view(), types_->view(), dt, kT, n, base_seed, step);
 		return launch_kernel(compute_resource(), config, kernel);
 	}
@@ -444,6 +446,224 @@ class RigidBodyManager {
 	}
 
 	/**
+	 * @brief Build the static attached-particle table (see
+	 *        Interactions/Nonbonded/RigidBodyAttachedParticles.h).
+	 *
+	 * Attached particles are ordinary particles that happen to be rigidly
+	 * slaved to a body: they sit in the patch's particle array and take part in
+	 * every force path unchanged. All this table records is which particle
+	 * belongs to which body and where on that body it sits - static for the run
+	 * (bond breaking/formation is a separate, future feature), so it is built
+	 * once here rather than rebuilt per step.
+	 *
+	 * @param types Rigid body types, for each type's attached-particle template
+	 * @param bodies Per-instance state carrying the attached_start/attached_count
+	 *        ranges ConfigParser assigned during its fold-in pass
+	 * @param num_patches Patch count, purely to reject the multi-patch case:
+	 *        particle_index entries are indices into one patch's arrays. This is
+	 *        the same single-patch assumption compute_particle_rb_forces()
+	 *        already makes. Generalizing means promoting attached_rigid_body_id
+	 *        and the body-frame offset into DeviceParticle/ParticleView so each
+	 *        patch can sync and reduce its own share.
+	 */
+	void prepare_attached_particles(const std::vector<RigidBodyType>& types,
+									const std::vector<RigidBodyIO>& bodies,
+									size_t num_patches = 1,
+									idx_t threads_per_block = 128) {
+		ensure_initialized();
+		attached_threads_per_block_ = threads_per_block;
+
+		std::vector<RBAttachedParticle> attached;
+		std::vector<int> range_start;
+		std::vector<int> range_count;
+		std::vector<int> block_rb_id;
+
+		for (const RigidBodyIO& rb : bodies) {
+			if (rb.attached_count <= 0) {
+				continue;
+			}
+			if (rb.type_id < 0 || static_cast<size_t>(rb.type_id) >= types.size()) {
+				throw_value_error("RigidBodyManager: rigid body %d has attached particles but an "
+								  "out-of-range type_id %d",
+								  rb.id,
+								  rb.type_id);
+			}
+			const auto& templ = types[rb.type_id].attached_particle;
+			if (static_cast<int>(templ.size()) != rb.attached_count) {
+				throw_value_error("RigidBodyManager: rigid body %d claims %d attached particle(s) "
+								  "but its type declares %zu",
+								  rb.id,
+								  rb.attached_count,
+								  templ.size());
+			}
+
+			range_start.push_back(static_cast<int>(attached.size()));
+			range_count.push_back(rb.attached_count);
+			block_rb_id.push_back(rb.id);
+			for (int k = 0; k < rb.attached_count; ++k) {
+				RBAttachedParticle a{};
+				a.body_offset = templ[k].position; // body-frame, from the PDB template
+				a.particle_index = rb.attached_start + k;
+				a.rb_id = rb.id;
+				attached.push_back(a);
+			}
+		}
+
+		num_attached_ = static_cast<idx_t>(attached.size());
+		num_attached_blocks_ = static_cast<idx_t>(block_rb_id.size());
+		if (num_attached_ == 0) {
+			return;
+		}
+
+		if (num_patches != 1) {
+			throw Exception(ExceptionType::NotImplementedError,
+							SourceLocation(),
+							"RigidBodyManager: rigid-body attached particles currently require a "
+							"single patch (got %zu) - their particle indices are patch-local",
+							num_patches);
+		}
+
+		attached_ = DeviceBuffer<RBAttachedParticle>(num_attached_, compute_resource());
+		attached_.copy_from_host(attached.data(), attached.size());
+		attached_range_start_ = DeviceBuffer<int>(num_attached_blocks_, compute_resource());
+		attached_range_start_.copy_from_host(range_start.data(), range_start.size());
+		attached_range_count_ = DeviceBuffer<int>(num_attached_blocks_, compute_resource());
+		attached_range_count_.copy_from_host(range_count.data(), range_count.size());
+		attached_block_rb_id_ = DeviceBuffer<int>(num_attached_blocks_, compute_resource());
+		attached_block_rb_id_.copy_from_host(block_rb_id.data(), block_rb_id.size());
+	}
+
+	/** @brief Whether any rigid body has attached particles. */
+	bool has_attached_particles() const {
+		return num_attached_ > 0;
+	}
+
+	/**
+	 * @brief Build the static table of visualization-only template atoms.
+	 *
+	 * The complement of prepare_attached_particles(): template atoms whose
+	 * CosmeticParticle::attached_particle_index is negative, i.e. those that
+	 * never became real particles. They carry no physics, so all that is stored
+	 * is where they sit on their body.
+	 *
+	 * Ordered instance-major, then template order - the order they occupy in the
+	 * trajectory, and the order a PSF describing that trajectory must use.
+	 */
+	void prepare_cosmetic_atoms(const std::vector<RigidBodyType>& types,
+								const std::vector<RigidBodyIO>& bodies) {
+		ensure_initialized();
+
+		std::vector<Vector3> body_offset;
+		std::vector<int> rb_id;
+		for (const RigidBodyIO& rb : bodies) {
+			if (rb.type_id < 0 || static_cast<size_t>(rb.type_id) >= types.size()) {
+				continue;
+			}
+			for (const CosmeticParticle& c : types[rb.type_id].template_particles) {
+				if (c.attached_particle_index >= 0) {
+					continue; // real particle; the trajectory already has it
+				}
+				body_offset.push_back(c.body_frame_position);
+				rb_id.push_back(rb.id);
+			}
+		}
+
+		num_cosmetic_ = static_cast<idx_t>(body_offset.size());
+		if (num_cosmetic_ == 0) {
+			return;
+		}
+		cosmetic_body_offset_ = DeviceBuffer<Vector3>(num_cosmetic_, compute_resource());
+		cosmetic_body_offset_.copy_from_host(body_offset.data(), body_offset.size());
+		cosmetic_rb_id_ = DeviceBuffer<int>(num_cosmetic_, compute_resource());
+		cosmetic_rb_id_.copy_from_host(rb_id.data(), rb_id.size());
+		cosmetic_positions_ = DeviceBuffer<Vector3>(num_cosmetic_, compute_resource());
+	}
+
+	/** @brief Number of visualization-only template atoms across all bodies. */
+	idx_t num_cosmetic_atoms() const {
+		return num_cosmetic_;
+	}
+
+	/**
+	 * @brief Recompute cosmetic atom positions from current body transforms.
+	 *
+	 * Launched on StreamType::Optional: this is output-only work, so it may
+	 * overlap the next step's physics rather than serializing behind it. Wait
+	 * on the returned Event before calling copy_cosmetic_positions_to_host().
+	 */
+	Event compute_cosmetic_positions() {
+		ensure_initialized();
+		if (num_cosmetic_ == 0) {
+			return Event(nullptr, compute_resource());
+		}
+		RBCosmeticParticleView view{cosmetic_body_offset_.data(), cosmetic_rb_id_.data()};
+		RBCosmeticPositionsKernel kernel{std::as_const(*bodies_).view(),
+										 view,
+										 cosmetic_positions_.data(),
+										 num_cosmetic_};
+		KernelConfig config = KernelConfig::for_1d(num_cosmetic_, compute_resource());
+		config.explicit_queue = compute_resource().get_stream(StreamType::Optional);
+		return launch_kernel(compute_resource(), config, kernel);
+	}
+
+	/** @brief Drain the last compute_cosmetic_positions() result to the host. */
+	void copy_cosmetic_positions_to_host(std::vector<Vector3>& out) const {
+		if (num_cosmetic_ == 0) {
+			return;
+		}
+		const size_t offset = out.size();
+		out.resize(offset + static_cast<size_t>(num_cosmetic_));
+		cosmetic_positions_.copy_to_host(out.data() + offset,
+										 static_cast<size_t>(num_cosmetic_),
+										 true);
+	}
+
+	/**
+	 * @brief Rewrite attached-particle positions from their parent bodies.
+	 *
+	 * Must run before the step's force calculation: the pairlist and every
+	 * force kernel read these positions.
+	 */
+	Event sync_attached_particle_positions(ParticleView particles) {
+		ensure_initialized();
+		if (num_attached_ == 0) {
+			return Event(nullptr, compute_resource());
+		}
+		RBSyncAttachedPositionsKernel kernel{
+			std::as_const(*bodies_).view(), particles, attached_.data(), num_attached_};
+		KernelConfig config = KernelConfig::for_1d(num_attached_, compute_resource());
+		return launch_kernel(compute_resource(), config, kernel);
+	}
+
+	/**
+	 * @brief Reduce attached-particle forces into their parent bodies' net
+	 *        force and torque.
+	 *
+	 * Must run after all particle forces are complete (nonbonded *and* bonded)
+	 * and before the rigid-body integration that consumes force/torque.
+	 */
+	Event reduce_attached_particle_forces(ConstParticleView particles) {
+		ensure_initialized();
+		if (num_attached_ == 0) {
+			return Event(nullptr, compute_resource());
+		}
+		RBReduceAttachedForcesKernel kernel{bodies_->view(),
+											particles,
+											attached_.data(),
+											attached_range_start_.data(),
+											attached_range_count_.data(),
+											attached_block_rb_id_.data(),
+											attached_threads_per_block_};
+		KernelConfig config;
+		config.dim = 1;
+		config.block_size = {attached_threads_per_block_, 1, 1};
+		config.grid_size = {num_attached_blocks_, 1, 1};
+		config.problem_size = {num_attached_blocks_ * attached_threads_per_block_, 1, 1};
+		config.shared_memory = 2 * attached_threads_per_block_ * sizeof(Vector3);
+		return launch_kernel_with_workitem(compute_resource(), config, kernel);
+	}
+
+	/**
 	 * @brief Broadcast RB position/orientation to non-compute resources.
 	 *
 	 * No-op while resources_.size() == 1 (architecture decision #3) - real
@@ -508,6 +728,25 @@ class RigidBodyManager {
 	DeviceBuffer<unsigned int> grid_grid_work_count_;
 	DeviceBuffer<unsigned int> grid_grid_total_blocks_;
 	DeviceBuffer<unsigned int> grid_grid_overflow_;
+
+	// Attached-particle state (see prepare_attached_particles). Static for the
+	// run: which particle belongs to which body never changes.
+	idx_t attached_threads_per_block_{128};
+	idx_t num_attached_{0};		  // total attached particles across all bodies
+	idx_t num_attached_blocks_{0}; // == number of bodies that have any
+	DeviceBuffer<RBAttachedParticle> attached_;
+	DeviceBuffer<int> attached_range_start_;
+	DeviceBuffer<int> attached_range_count_;
+	DeviceBuffer<int> attached_block_rb_id_;
+
+	// Visualization-only template atoms (see prepare_cosmetic_atoms). Stored
+	// SoA to match RBCosmeticParticleView. Static for the run;
+	// cosmetic_positions_ is the per-output-period scratch the trajectory
+	// writer drains - it is never read by any physics kernel.
+	idx_t num_cosmetic_{0};
+	DeviceBuffer<Vector3> cosmetic_body_offset_;
+	DeviceBuffer<int> cosmetic_rb_id_;
+	DeviceBuffer<Vector3> cosmetic_positions_;
 
 	// Phase 4.3 batched particle-RB dispatch state (see prepare_particle_grid_dispatch).
 	bool particle_grid_dispatch_ready_{false};

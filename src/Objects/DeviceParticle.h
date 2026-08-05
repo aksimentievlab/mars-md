@@ -4,6 +4,27 @@
 #include "Types/Types.h"
 #include "Types/Vector3.h"
 namespace ARBD {
+
+/**
+ * @brief Bit flags stored in ParticleView::flags.
+ *
+ * Defined here rather than in ParticleProperties.h so device-side kernels
+ * (integrators in particular) can test them without pulling in the host-side
+ * particle/reservoir headers.
+ */
+enum ParticleFlags : uint32_t {
+	FLAG_NONE = 0,
+	FLAG_DUMMY = 1 << 0,
+	FLAG_ACTIVE = 1 << 1,
+	// Rigidly slaved to a parent rigid body: the integrators skip it, and
+	// RigidBodyManager rewrites its position from the body's transform every
+	// step instead. It still takes part in every force path (pairlist,
+	// nonbonded, bonded) like any other particle - the force it accumulates is
+	// reduced into the parent body's net force/torque rather than moving it.
+	// Set from ParticleIO::attached_rigid_body_id in pack_flags().
+	FLAG_RB_ATTACHED = 1 << 2,
+};
+
 struct ParticleView {
 	DEVICE_PTR(int) __restrict__ id;
 	DEVICE_PTR(int) __restrict__ type_id;
