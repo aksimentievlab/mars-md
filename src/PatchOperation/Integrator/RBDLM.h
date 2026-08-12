@@ -45,10 +45,6 @@ struct RBLangevinForceKernel {
 		const Vector3 rot_damping = types.rot_damping[type];
 		const Matrix3 orientation = rb.orientation[idx];
 
-		// Six independent standard normals: legacy draws two separate
-		// gaussian_vector()s for the force and the torque. The previous version
-		// built w2 from two of w1's own components, correlating the random force
-		// with the random torque.
 		//
 		// draw_float4() returns values in [0,1); log(0) is -inf, which would
 		// make the whole trajectory NaN, so the radius argument is clamped away
@@ -70,14 +66,6 @@ struct RBLangevinForceKernel {
 		const Vector3 w1(g[0], g[1], g[2]);
 		const Vector3 w2(g[3], g[4], g[5]);
 
-		// Legacy scales the damping coefficients once at setup
-		// (RigidBodyType::setDampingCoeffs) and every later use in addLangevin
-		// sees the scaled value. arbd2 stores them unscaled, so apply it here -
-		// and to BOTH terms, or the fluctuation/dissipation balance is wrong and
-		// the bodies heat without bound. Scale on the right (Vector3 * float):
-		// the free float * Vector3 overload takes its scalar by reference, which
-		// ODR-uses the constexpr and leaves it undefined in device code.
-		//
 		// kT is legacy's `Temp` exactly - RigidBody.cu:28 computes it as
 		// temperature * 0.0019872065, i.e. kT in kcal/mol, not Kelvin.
 		const Vector3 trans_damp = trans_damping * constants::langevin_damping_unit;
@@ -132,11 +120,6 @@ struct RBIntegrateDLMKernel {
 		const Vector3 inertia = types.inertia[type];
 
 		if (substep == 0 || substep == 2) {
-			// external_force/torque are NOT added here: RBLangevinForceKernel has
-			// already folded them into rb.force/rb.torque during the force
-			// accumulation phase (legacy does the same, adding constantForce in
-			// RigidBodyController::updateForces rather than in integrateDLM).
-			// Adding them again here double-counted every external contribution.
 			rb.momentum[idx] += 0.5f * timestep * rb.force[idx] * constants::impulse_to_momentum;
 			rb.angular_momentum[idx] += 0.5f * timestep *
 										(rb.orientation[idx].transpose() * rb.torque[idx]) *

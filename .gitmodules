@@ -23,6 +23,6 @@
 [submodule "extern/random/OpenRAND"]
 	path = extern/random/OpenRAND
 	url = https://github.com/msu-sparta/OpenRAND.git
-[submodule "arbdmodel"]
-	path = arbdmodel
-	url = git@gitlab.engr.illinois.edu:tbgl/tools/arbdmodel.git
+[submodule "extern/scuff-em"]
+	path = extern/scuff-em
+	url = https://github.com/HomerReid/scuff-em.git

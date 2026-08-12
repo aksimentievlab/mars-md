@@ -72,6 +72,7 @@ class RigidBodyType {
 	float pmf_scale = 1.0f;
 	float pmf_scale_slope = 0.0f;
 	uint32_t pmf_smd_freq = 0;
+	bool is_plasmonic = false;
 
 	std::vector<ParticleIO> attached_particle;
 	std::vector<CosmeticParticle> template_particles;

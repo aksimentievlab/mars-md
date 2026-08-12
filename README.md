@@ -16,23 +16,32 @@ This development branch of ARBD focuses on scaling simulations to larger systems
 - **Scalability**: Handle larger molecular systems efficiently
 - **Maintainability**: Clean, modular codebase for easier development
 
-> ⚠️ **Development Status**: This is an alpha version under active development. Many features are not yet functional.
+>**Development Status**: This is an alpha version under active development. Many features are not yet functional.
 
 ## Requirements
 
 ### Linux (CUDA)
 - **Operating System**: Linux workstation with CUDA-compatible GPU
-- **Build Tools**: 
+- **Build Tools**:
   - CMake ≥ 3.25
-  - GCC ≥ 4.9 or Clang
+  - GCC ≥ 14.9
 - **CUDA Toolkit**: CUDA ≥ 12.0
 - **Compute Capability**: NVIDIA GPU with compute capability ≥ 2.0 (developed and tested on 6.0+)
+
+### Linux (SYCL-intel)
+- **Operating System**: Linux workstation with Intel pvc
+- **Build Tools**:
+  - CMake ≥ 3.25
+  - GCC ≥ 14.9
+  - Intel oneAPI ≥ 25.1
+- **CUDA Toolkit**: CUDA ≥ 12.0
+- **Compute Capability**:
 
 ### Other Systems
 - **Operating System**: macOS with Apple Silicon (M1/M2/M3)
 - **Build Tools**: CMake, Homebrew
 - **Parallel Computing**: OpenMP and OpenCL support
-- **SYCL**: AdaptiveCpp (ACPP) (recommanded for Mac) or Intel DPC++ 
+- **SYCL**: AdaptiveCpp (ACPP) (recommanded for Mac) or Intel DPC++
 
 ## Building
 
@@ -95,13 +104,19 @@ We welcome contributions! Please feel free to submit issues, feature requests, o
 ARBD2 is developed by the [Aksimentiev Group](http://bionano.physics.illinois.edu) at the University of Illinois at Urbana-Champaign.
 
 **Core Development Team:**
-- **Christopher Maffeo** - Lead Developer ([cmaffeo2@illinois.edu](mailto:cmaffeo2@illinois.edu))
-- **Pin-Yi Li** - Developer ([pinyili2@illinois.edu](mailto:pinyili2@illinois.edu))
-- **Han-yi Chou** - Developer
+- **Pin-Yi Li** -Lead Developer ([pinyili2@illinois.edu](mailto:pinyili2@illinois.edu))
+- **Christopher Maffeo** - Developer ([cmaffeo2@illinois.edu](mailto:cmaffeo2@illinois.edu))
+**Past Contributors:**
+- **Jeffrey Comer**
+- **Max Belkin**
+- **Terrance Howard**
+- **Han-yi Chou**
+- **Emmanual Guzman**
+- **Justin Dufresne**
 
 ## Support
 
-For questions, problems, or suggestions, please contact Chris Maffeo at [cmaffeo2@illinois.edu](mailto:cmaffeo2@illinois.edu).
+For questions, problems, or suggestions, please contact Pin-Yi Li [pinyili2@illinois.edu](mailto:pinyili2@illinois.edu) or Chris Maffeo at [cmaffeo2@illinois.edu](mailto:cmaffeo2@illinois.edu).
 
 ## License
 

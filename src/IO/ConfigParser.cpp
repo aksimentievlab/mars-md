@@ -393,9 +393,8 @@ struct RbGridScale {
 };
 
 /// Parse a rigidBody scale line: `<gridKey> <value>` or a bare `<value>`.
-static bool parse_rb_grid_scale(const std::string& value,
-								const std::string& config_key,
-								RbGridScale& out) {
+static bool
+parse_rb_grid_scale(const std::string& value, const std::string& config_key, RbGridScale& out) {
 	const auto toks = tokenize(value);
 	try {
 		if (toks.size() == 1) {
@@ -606,6 +605,8 @@ void ConfigParser::get_elements(const Reader& reader) {
 		"grid_file_scale",
 		"gridFileScaleSlope",
 		"grid_file_scale_slope",
+		"gridFileBoundaryConditions",
+		"grid_file_boundary_conditions",
 		"gridFileSMD",
 		"grid_file_smd",
 		"rigidBodyPotential",
