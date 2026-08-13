@@ -6,7 +6,8 @@ TAGS
 .dir-locals.el
 BD_example*
 runBrownCUDA
-arbd
+*.bak
+*.BAK
 *.tar
 build
 .DS_Store
@@ -16,7 +17,7 @@ doxy
 .clangd
 .cursorignore
 .cursor
-*.dx
 CLAUDE.md
 *.diff
 *.dcd
+arbdmodel*
