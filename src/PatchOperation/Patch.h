@@ -235,7 +235,7 @@ class Patch {
 	Event calculate_nonbonded_forces(const NonBondedInteractions& interactions,
 									 const BondedInteractions& bonded_interactions,
 									 const DeviceParticleTypes& particle_types,
-									 const DeviceBuffer<BaseGridView<float>>& grid_views,
+									 const DeviceBuffer<BaseGridView<arbd_real>>& grid_views,
 									 const TablesRegistry& tables_registry,
 									 size_t resource_idx,
 									 float cutoff,
@@ -492,7 +492,7 @@ class Patch {
 	 * @return Event for async packing and number of particles packed
 	 */
 	std::pair<Event, idx_t>
-	pack_halo_particles(DeviceBuffer<float>& send_buffer, int direction, float halo_width);
+	pack_halo_particles(DeviceBuffer<arbd_real>& send_buffer, int direction, float halo_width);
 
 	/**
 	 * @brief Unpack received halo particles from neighbor
@@ -500,7 +500,7 @@ class Patch {
 	 * @param particle_count Number of particles to unpack
 	 * @return Event for async unpacking
 	 */
-	Event unpack_halo_particles(const DeviceBuffer<float>& recv_buffer, idx_t particle_count);
+	Event unpack_halo_particles(const DeviceBuffer<arbd_real>& recv_buffer, idx_t particle_count);
 
 	/**
 	 * @brief Sort particles using pairlist's spatial sorting (e.g., Z-order curve)

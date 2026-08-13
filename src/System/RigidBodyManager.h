@@ -5,16 +5,16 @@
 #pragma once
 #include "ARBDException.h"
 #include "Backend/Events.h"
-#include "Backend/Kernels.h"
 #include "Backend/KernelConfig.h"
+#include "Backend/Kernels.h"
 #include "Backend/Resource.h"
 #include "Interactions/Nonbonded/RigidBodyAttachedParticles.h"
 #include "Interactions/Nonbonded/RigidBodyGridBatch.h"
 #include "Interactions/Nonbonded/RigidBodyParticleGridBatch.h"
 #include "Objects/DeviceParticle.h"
 #include "Objects/DeviceRigidBodyManager.h"
-#include "Objects/RigidBodyCosmeticsKernel.h"
 #include "Objects/Grid.h"
+#include "Objects/RigidBodyCosmeticsKernel.h"
 #include "Objects/RigidBodyForcePairs.h"
 #include "PatchOperation/Integrator/RBDLM.h"
 #include "System/PeriodicBox.h"
@@ -29,23 +29,19 @@ namespace ARBD {
 /**
  * @brief Owns all rigid-body device state and drives its per-step physics.
  *
- * Global and non-spatially-decomposed - not a Patch subtype (architecture
- * decision #2): force-pairing is by grid-key match, not proximity, and an
+ * Global and non-spatially-decomposed: force-pairing is by grid-key match, not proximity, and an
  * RB's density grid sometimes spans multiple patches. Lives beside
  * PatchManager rather than inside it.
  *
  * Takes a resource vector + compute_resource_idx even though only
- * resources.size() == 1 is exercised today (architecture decision #3) - the
+ * resources.size() == 1 is exercised today: the
  * grid-grid math itself stays centralized on compute_resource(); a second
  * resource would only need position/orientation broadcast for grid-particle
  * forces, via broadcast_state_to_resources().
  *
- * Batched grid-grid dispatch (Phase 4.1) is implemented via
+ * Batched grid-grid dispatch is implemented via
  * prepare_grid_grid_dispatch()/compute_grid_grid_forces() (see
- * Interactions/Nonbonded/RigidBodyGridBatch.h). Particle-RB grids (4.3) and
- * attached-particle position sync (needs Phase 5's config-parsed per-particle
- * body-frame offsets, which don't exist yet) are deliberately not part of
- * this skeleton.
+ * Interactions/Nonbonded/RigidBodyGridBatch.h).
  */
 class RigidBodyManager {
   public:
@@ -56,9 +52,9 @@ class RigidBodyManager {
 		}
 		if (compute_resource_idx_ >= resources_.size()) {
 			throw_value_error("RigidBodyManager: compute_resource_idx %zu out of range for %zu "
-							   "resource(s)",
-							   compute_resource_idx_,
-							   resources_.size());
+							  "resource(s)",
+							  compute_resource_idx_,
+							  resources_.size());
 		}
 	}
 
@@ -92,8 +88,8 @@ class RigidBodyManager {
 		ensure_initialized();
 		const idx_t n = bodies_->size();
 		KernelConfig config = KernelConfig::for_1d(n, compute_resource());
-		RBLangevinForceKernel<float> kernel(
-			bodies_->view(), types_->view(), dt, kT, n, base_seed, step);
+		RBLangevinForceKernel<float>
+			kernel(bodies_->view(), types_->view(), dt, kT, n, base_seed, step);
 		return launch_kernel(compute_resource(), config, kernel);
 	}
 
@@ -167,7 +163,8 @@ class RigidBodyManager {
 		for (size_t p = 0; p < pairs.size(); ++p) {
 			const RigidBodyGridPair& gp = pairs[p];
 			const idx_t rho_size = grid_manager.get_dense_grid(gp.grid_id_rho).size();
-			const idx_t blocks_per_candidate = (rho_size + threads_per_block - 1) / threads_per_block;
+			const idx_t blocks_per_candidate =
+				(rho_size + threads_per_block - 1) / threads_per_block;
 
 			const auto& type_i_instances = instances_by_type[gp.type_i];
 			if (gp.is_pmf) {
@@ -207,7 +204,8 @@ class RigidBodyManager {
 		grid_grid_overflow_ = DeviceBuffer<unsigned int>(1, compute_resource());
 		if (!candidates.empty()) {
 			candidate_pairs_.copy_from_host(candidates.data(), candidates.size());
-			candidate_pair_idx_.copy_from_host(candidate_pair_idx.data(), candidate_pair_idx.size());
+			candidate_pair_idx_.copy_from_host(candidate_pair_idx.data(),
+											   candidate_pair_idx.size());
 		}
 
 		grid_grid_dispatch_ready_ = true;
@@ -239,9 +237,9 @@ class RigidBodyManager {
 		ensure_initialized();
 		if (!grid_grid_dispatch_ready_) {
 			throw Exception(ExceptionType::RuntimeError,
-							 SourceLocation(),
-							 "RigidBodyManager: prepare_grid_grid_dispatch() must be called "
-							 "before compute_grid_grid_forces()");
+							SourceLocation(),
+							"RigidBodyManager: prepare_grid_grid_dispatch() must be called "
+							"before compute_grid_grid_forces()");
 		}
 		if (num_candidates_ == 0) {
 			return Event(nullptr, compute_resource());
@@ -251,7 +249,8 @@ class RigidBodyManager {
 		grid_grid_work_count_.copy_from_host(&zero, 1, true);
 		grid_grid_overflow_.copy_from_host(&zero, 1, true);
 
-		const BaseGridView<float>* grid_views = grid_manager.get_device_grid_views(grid_resource_idx).data();
+		const BaseGridView<arbd_real>* grid_views =
+			grid_manager.get_device_grid_views(grid_resource_idx).data();
 
 		// All three kernels share the GridCompute stream (architecture
 		// decision, todo.md Phase 4.2): they already saturate the GPU, so
@@ -260,25 +259,26 @@ class RigidBodyManager {
 		void* grid_stream = compute_resource().get_stream(StreamType::GridCompute);
 
 		RBGridCullKernel cull{std::as_const(*bodies_).view(),
-							 candidate_pairs_.data(),
-							 candidate_pair_idx_.data(),
-							 device_grid_pairs_.data(),
-							 grid_views,
-							 num_candidates_,
-							 cutoff * cutoff,
-							 step,
-							 grid_grid_threads_per_block_,
-							 scheme,
-							 grid_grid_work_.data(),
-							 grid_grid_work_count_.data(),
-							 num_candidates_,
-							 grid_grid_overflow_.data()};
+							  candidate_pairs_.data(),
+							  candidate_pair_idx_.data(),
+							  device_grid_pairs_.data(),
+							  grid_views,
+							  num_candidates_,
+							  cutoff * cutoff,
+							  step,
+							  grid_grid_threads_per_block_,
+							  scheme,
+							  grid_grid_work_.data(),
+							  grid_grid_work_count_.data(),
+							  num_candidates_,
+							  grid_grid_overflow_.data()};
 		KernelConfig cull_config = KernelConfig::for_1d(num_candidates_, compute_resource());
 		cull_config.explicit_queue = grid_stream;
 		launch_kernel(compute_resource(), cull_config, cull);
 
-		RBGridPrefixSumKernel scan{
-			grid_grid_work_.data(), grid_grid_work_count_.data(), grid_grid_total_blocks_.data()};
+		RBGridPrefixSumKernel scan{grid_grid_work_.data(),
+								   grid_grid_work_count_.data(),
+								   grid_grid_total_blocks_.data()};
 		KernelConfig scan_config = KernelConfig::for_1d(1, compute_resource());
 		scan_config.explicit_queue = grid_stream;
 		launch_kernel(compute_resource(), scan_config, scan);
@@ -365,16 +365,22 @@ class RigidBodyManager {
 
 		particle_grid_num_candidates_ = static_cast<idx_t>(cand_rb_id.size());
 
-		const idx_t capacity = particle_grid_num_candidates_ > 0 ? particle_grid_num_candidates_ : 1;
+		const idx_t capacity =
+			particle_grid_num_candidates_ > 0 ? particle_grid_num_candidates_ : 1;
 		particle_grid_candidate_rb_id_ = DeviceBuffer<int>(capacity, compute_resource());
 		particle_grid_candidate_grid_id_ = DeviceBuffer<int>(capacity, compute_resource());
-		particle_grid_candidate_scale_ = DeviceBuffer<float>(capacity, compute_resource());
+		particle_grid_candidate_scale_ = DeviceBuffer<arbd_real>(capacity, compute_resource());
 		particle_grid_work_ = DeviceBuffer<RBParticleGridWork>(capacity, compute_resource());
 		if (!cand_rb_id.empty()) {
-			particle_grid_candidate_rb_id_.copy_from_host(cand_rb_id.data(), cand_rb_id.size(), true);
-			particle_grid_candidate_grid_id_.copy_from_host(
-				cand_grid_id.data(), cand_grid_id.size(), true);
-			particle_grid_candidate_scale_.copy_from_host(cand_scale.data(), cand_scale.size(), true);
+			particle_grid_candidate_rb_id_.copy_from_host(cand_rb_id.data(),
+														  cand_rb_id.size(),
+														  true);
+			particle_grid_candidate_grid_id_.copy_from_host(cand_grid_id.data(),
+															cand_grid_id.size(),
+															true);
+			particle_grid_candidate_scale_.copy_from_host(cand_scale.data(),
+														  cand_scale.size(),
+														  true);
 		}
 
 		particle_grid_dispatch_ready_ = true;
@@ -401,26 +407,26 @@ class RigidBodyManager {
 		ensure_initialized();
 		if (!particle_grid_dispatch_ready_) {
 			throw Exception(ExceptionType::RuntimeError,
-							 SourceLocation(),
-							 "RigidBodyManager: prepare_particle_grid_dispatch() must be called "
-							 "before compute_particle_rb_forces()");
+							SourceLocation(),
+							"RigidBodyManager: prepare_particle_grid_dispatch() must be called "
+							"before compute_particle_rb_forces()");
 		}
 		if (particle_grid_num_candidates_ == 0 || particle_grid_blocks_per_candidate_ == 0) {
 			return Event(nullptr, compute_resource());
 		}
 
-		const BaseGridView<float>* grid_views =
+		const BaseGridView<arbd_real>* grid_views =
 			grid_manager.get_device_grid_views(grid_resource_idx).data();
 		void* grid_stream = compute_resource().get_stream(StreamType::GridCompute);
 
 		RBParticleGridBuildKernel build{std::as_const(*bodies_).view(),
-									   particle_grid_candidate_rb_id_.data(),
-									   particle_grid_candidate_grid_id_.data(),
-									   particle_grid_candidate_scale_.data(),
-									   particle_grid_num_candidates_,
-									   grid_views,
-									   scheme,
-									   particle_grid_work_.data()};
+										particle_grid_candidate_rb_id_.data(),
+										particle_grid_candidate_grid_id_.data(),
+										particle_grid_candidate_scale_.data(),
+										particle_grid_num_candidates_,
+										grid_views,
+										scheme,
+										particle_grid_work_.data()};
 		KernelConfig build_config =
 			KernelConfig::for_1d(particle_grid_num_candidates_, compute_resource());
 		build_config.explicit_queue = grid_stream;
@@ -433,7 +439,8 @@ class RigidBodyManager {
 										particle_grid_num_particles_,
 										particle_grid_blocks_per_candidate_,
 										particle_grid_threads_per_block_};
-		const idx_t total_blocks = particle_grid_num_candidates_ * particle_grid_blocks_per_candidate_;
+		const idx_t total_blocks =
+			particle_grid_num_candidates_ * particle_grid_blocks_per_candidate_;
 		KernelConfig force_config;
 		force_config.dim = 1;
 		force_config.block_size = {particle_grid_threads_per_block_, 1, 1};
@@ -629,8 +636,10 @@ class RigidBodyManager {
 		if (num_attached_ == 0) {
 			return Event(nullptr, compute_resource());
 		}
-		RBSyncAttachedPositionsKernel kernel{
-			std::as_const(*bodies_).view(), particles, attached_.data(), num_attached_};
+		RBSyncAttachedPositionsKernel kernel{std::as_const(*bodies_).view(),
+											 particles,
+											 attached_.data(),
+											 num_attached_};
 		KernelConfig config = KernelConfig::for_1d(num_attached_, compute_resource());
 		return launch_kernel(compute_resource(), config, kernel);
 	}
@@ -704,8 +713,8 @@ class RigidBodyManager {
 	void ensure_initialized() const {
 		if (!bodies_ || !types_) {
 			throw Exception(ExceptionType::RuntimeError,
-							 SourceLocation(),
-							 "RigidBodyManager: initialize() must be called before use");
+							SourceLocation(),
+							"RigidBodyManager: initialize() must be called before use");
 		}
 	}
 
@@ -732,7 +741,7 @@ class RigidBodyManager {
 	// Attached-particle state (see prepare_attached_particles). Static for the
 	// run: which particle belongs to which body never changes.
 	idx_t attached_threads_per_block_{128};
-	idx_t num_attached_{0};		  // total attached particles across all bodies
+	idx_t num_attached_{0};		   // total attached particles across all bodies
 	idx_t num_attached_blocks_{0}; // == number of bodies that have any
 	DeviceBuffer<RBAttachedParticle> attached_;
 	DeviceBuffer<int> attached_range_start_;
@@ -756,7 +765,7 @@ class RigidBodyManager {
 	idx_t particle_grid_num_candidates_{0};
 	DeviceBuffer<int> particle_grid_candidate_rb_id_;
 	DeviceBuffer<int> particle_grid_candidate_grid_id_;
-	DeviceBuffer<float> particle_grid_candidate_scale_;
+	DeviceBuffer<arbd_real> particle_grid_candidate_scale_;
 	DeviceBuffer<RBParticleGridWork> particle_grid_work_;
 };
 

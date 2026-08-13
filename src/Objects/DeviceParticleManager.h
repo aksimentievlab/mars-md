@@ -165,13 +165,13 @@ class DeviceParticle {
 class DeviceParticleTypes {
   public:
 	DeviceParticleTypes(const std::vector<ParticleType>& types, const Resource& res) {
-		mass_ = DeviceBuffer<float>(types.size(), res);
-		charge_ = DeviceBuffer<float>(types.size(), res);
-		radius_ = DeviceBuffer<float>(types.size(), res);
-		eps_ = DeviceBuffer<float>(types.size(), res);
+		mass_ = DeviceBuffer<arbd_real>(types.size(), res);
+		charge_ = DeviceBuffer<arbd_real>(types.size(), res);
+		radius_ = DeviceBuffer<arbd_real>(types.size(), res);
+		eps_ = DeviceBuffer<arbd_real>(types.size(), res);
 		diffusion_ = DeviceBuffer<Vector3>(types.size(), res);
 		trans_damping_ = DeviceBuffer<Vector3>(types.size(), res);
-		mu_ = DeviceBuffer<float>(types.size(), res);
+		mu_ = DeviceBuffer<arbd_real>(types.size(), res);
 		pmf_smd_freq_ = DeviceBuffer<uint32_t>(types.size(), res);
 		pmf_grid_offset_ = DeviceBuffer<int>(types.size(), res);
 		pmf_grid_count_ = DeviceBuffer<int>(types.size(), res);
@@ -245,13 +245,13 @@ class DeviceParticleTypes {
 		force_grid_id_.copy_from_host(force_grid_id.data(), types.size());
 		force_grid_scale_.copy_from_host(force_grid_scale.data(), types.size());
 	}
-	DeviceBuffer<float>& mass() {
+	DeviceBuffer<arbd_real>& mass() {
 		return mass_;
 	}
-	DeviceBuffer<float>& charge() {
+	DeviceBuffer<arbd_real>& charge() {
 		return charge_;
 	}
-	DeviceBuffer<float>& radius() {
+	DeviceBuffer<arbd_real>& radius() {
 		return radius_;
 	}
 	DeviceBuffer<Vector3>& trans_damping() {
@@ -260,7 +260,7 @@ class DeviceParticleTypes {
 	DeviceBuffer<Vector3>& diffusion() {
 		return diffusion_;
 	}
-	DeviceBuffer<float>& mu() {
+	DeviceBuffer<arbd_real>& mu() {
 		return mu_;
 	}
 	DeviceBuffer<uint32_t>& pmf_smd_freq() {
@@ -325,13 +325,13 @@ class DeviceParticleTypes {
 	}
 
   private:
-	DeviceBuffer<float> mass_;
-	DeviceBuffer<float> charge_;
-	DeviceBuffer<float> radius_;
-	DeviceBuffer<float> eps_;
+	DeviceBuffer<arbd_real> mass_;
+	DeviceBuffer<arbd_real> charge_;
+	DeviceBuffer<arbd_real> radius_;
+	DeviceBuffer<arbd_real> eps_;
 	DeviceBuffer<Vector3> diffusion_;
 	DeviceBuffer<Vector3> trans_damping_;
-	DeviceBuffer<float> mu_;
+	DeviceBuffer<arbd_real> mu_;
 	DeviceBuffer<uint32_t> pmf_smd_freq_;
 	// offset+count per type into the flat pmf_grid_terms_ table (same layout as
 	// DeviceRigidBodyTypes' grid_terms_).

@@ -5,15 +5,15 @@
  * Tests bonded and non-bonded force kernels
  */
 
+#include "../Objects/Object_gen.h"
 #include "../catch_boiler.h"
+#include "Backend/Events.h"
 #include "Backend/Kernels.h"
 #include "Backend/Resource.h"
 #include "Interactions/Bonded/BondComputer.h"
 #include "Objects/DeviceParticleManager.h"
 #include "Objects/ParticleProperties.h"
 #include "System/PeriodicBox.h"
-#include "Backend/Events.h"
-#include "../Object_gen.h"
 using namespace ARBD;
 using Catch::Approx;
 
@@ -157,7 +157,7 @@ TEST_CASE("Morse Bond Force - Two Particles", "[force][bonded][bond][morse]") {
 											pbox_buffer.data(),
 											false,
 											1);
-	Event evt=launch_kernel(res, config, bond_computer);
+	Event evt = launch_kernel(res, config, bond_computer);
 	evt.wait();
 
 	HostParticleData result;
@@ -244,18 +244,4 @@ TEST_CASE("Bond Force - Periodic Boundary Conditions", "[force][bonded][bond][pb
 	// With PBC, the minimum image distance is 1.0 (equilibrium), so force = 0
 	REQUIRE(result.force[0].x == Approx(0.0f).epsilon(0.1f));
 	REQUIRE(result.force[1].x == Approx(0.0f).epsilon(0.1f));
-}
-
-// ============================================================================
-// TABULATED POTENTIAL TESTS (if needed)
-// ============================================================================
-
-TEST_CASE("Tabulated Bond Force - Lookup", "[force][bonded][tabulated][!mayfail]") {
-	// This test requires TabulatedPotential to be set up
-	// Mark as [!mayfail] since it depends on table initialization
-
-	initialize_backend_once();
-	Resource res(Global::single_resource_id);
-
-	WARN("Tabulated bond force test not fully implemented - requires table setup");
 }

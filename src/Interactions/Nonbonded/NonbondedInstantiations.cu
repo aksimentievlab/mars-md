@@ -28,7 +28,7 @@ template Event launch_cuda_kernel(const Resource& resource,
 								  int* type_ids,
 								  Vector3* forces,
 								  ParticleTypeView types,
-								  const BaseGridView<float>* grid_configs,
+								  const BaseGridView<arbd_real>* grid_configs,
 								  idx_t num_particles);
 
 // Grid-grid RB force kernel is a block-reduction kernel (see GridGridKernels.h),
@@ -36,10 +36,31 @@ template Event launch_cuda_kernel(const Resource& resource,
 template Event launch_cuda_kernel_with_workitem(const Resource& resource,
 												const KernelConfig& config,
 												ComputeGridGridForceKernel kernel_func,
-												const BaseGridView<float> rho,
-												const BaseGridView<float> u,
+												const BaseGridView<arbd_real> rho,
+												const BaseGridView<arbd_real> u,
 												Vector3* ret_force_energy,
 												Vector3* ret_torque);
+
+// Elementwise grid mutation (GridGridKernels.h).
+template Event launch_cuda_kernel(const Resource& resource,
+								  const KernelConfig& config,
+								  ZeroGridKernel<arbd_real> kernel_func);
+
+template Event launch_cuda_kernel(const Resource& resource,
+								  const KernelConfig& config,
+								  ScaleGridKernel<arbd_real> kernel_func);
+
+template Event launch_cuda_kernel(const Resource& resource,
+								  const KernelConfig& config,
+								  ShiftGridKernel<arbd_real> kernel_func);
+
+template Event launch_cuda_kernel(const Resource& resource,
+								  const KernelConfig& config,
+								  MultiplyGridKernel<arbd_real> kernel_func);
+
+template Event launch_cuda_kernel(const Resource& resource,
+								  const KernelConfig& config,
+								  ConvolveGridKernel<arbd_real> kernel_func);
 
 // Phase 4.1 batched RB grid-grid dispatch (RigidBodyGridBatch.h): cull +
 // worklist build, prefix sum, and the batched block-reduction force kernel.

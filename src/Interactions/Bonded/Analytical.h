@@ -27,11 +27,12 @@ struct AnalyticalForceComputer<0> {
 	}
 };
 
-// Morse potential: V(r) = D0*[1-exp(-a(r-r0))]^2
-// Force: F = -dV/dr = -2*D0*a*exp(-a(r-r0))*[1-exp(-a(r-r0))]
-// (negative for r>r0: attractive, pulling the stretched bond back together -
-// same sign convention as AnalyticalForceComputer<0>'s -k*(distance-r0))
-// Parameters: [D0, a, r0]
+/*Morse potential: V(r) = D0*[1-exp(-a(r-r0))]^2
+ * Force: F = -dV/dr = -2*D0*a*exp(-a(r-r0))*[1-exp(-a(r-r0))]
+ * (negative for r>r0: attractive, pulling the stretched bond back together -
+ * same sign convention as AnalyticalForceComputer<0>'s -k*(distance-r0))
+ * Parameters: [D0, a, r0]
+ */
 template<>
 struct AnalyticalForceComputer<1> {
 	static constexpr int NUM_PARAMS = 3;

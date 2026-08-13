@@ -1,6 +1,6 @@
-#include "../Object_gen.h"
 #include "../catch_boiler.h"
 #include "Backend/Resource.h"
+#include "Object_gen.h"
 #include "Objects/DeviceParticleManager.h"
 #include "Objects/ParticleProperties.h"
 using namespace ARBD;

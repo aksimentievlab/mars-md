@@ -180,8 +180,8 @@ bool Manager::validate_communication(const Resource& resource) {
 
 	try {
 		// Create test buffers
-		DeviceBuffer<float> send_buffer(test_size, 0);
-		DeviceBuffer<float> recv_buffer(test_size, 0);
+		DeviceBuffer<arbd_real> send_buffer(test_size, 0);
+		DeviceBuffer<arbd_real> recv_buffer(test_size, 0);
 
 		// Initialize send buffer with rank-specific pattern
 		std::vector<float> host_data(test_size);

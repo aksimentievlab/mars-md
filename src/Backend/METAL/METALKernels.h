@@ -71,12 +71,12 @@ inline MetalGridConfig calculate_metal_grid_config(idx_t thread_count,
  * // Prepare Metal resource and buffers
  * Resource metal_res(ResourceType::METAL, 0);
  * constexpr idx_t n = 16;
- * std::vector<Vector3_t<float>> host_a(n), host_b(n), host_out(n);
+ * std::vector<Vector3_t<arbd_real>> host_a(n), host_b(n), host_out(n);
  * for (idx_t i = 0; i < n; ++i) {
- *     host_a[i] = Vector3_t<float>(float(i), float(i+1), float(i+2));
- *     host_b[i] = Vector3_t<float>(float(2*i), float(2*i+1), float(2*i+2));
+ *     host_a[i] = Vector3_t<arbd_real>(float(i), float(i+1), float(i+2));
+ *     host_b[i] = Vector3_t<arbd_real>(float(2*i), float(2*i+1), float(2*i+2));
  * }
- * DeviceBuffer<Vector3_t<float>> buf_a(n), buf_b(n), buf_out(n);
+ * DeviceBuffer<Vector3_t<arbd_real>> buf_a(n), buf_b(n), buf_out(n);
  * buf_a.copy_from_host(host_a.data(), n);
  * buf_b.copy_from_host(host_b.data(), n);
  *
@@ -106,9 +106,9 @@ inline MetalGridConfig calculate_metal_grid_config(idx_t thread_count,
  *
  * Resource metal_res(ResourceType::METAL, 0);
  * constexpr idx_t n = 4;
- * std::vector<Matrix3_t<float>> host_a(n), host_b(n), host_out(n);
+ * std::vector<Matrix3_t<arbd_real>> host_a(n), host_b(n), host_out(n);
  * for (idx_t i = 0; i < n; ++i) {
- *     Matrix3_t<float> m1, m2;
+ *     Matrix3_t<arbd_real> m1, m2;
  *     m1.ex().x = float(i + 1); m1.ex().y = float(i + 2); m1.ex().z = float(i + 3);
  *     m1.ey().x = float(i + 4); m1.ey().y = float(i + 5); m1.ey().z = float(i + 6);
  *     m1.ez().x = float(i + 7); m1.ez().y = float(i + 8); m1.ez().z = float(i + 9);
@@ -117,7 +117,7 @@ inline MetalGridConfig calculate_metal_grid_config(idx_t thread_count,
  * 6)); m2.ez().x = float(2 * (i + 7)); m2.ez().y = float(2 * (i + 8)); m2.ez().z = float(2 * (i +
  * 9)); host_a[i] = m1; host_b[i] = m2;
  * }
- * DeviceBuffer<Matrix3_t<float>> buf_a(n), buf_b(n), buf_out(n);
+ * DeviceBuffer<Matrix3_t<arbd_real>> buf_a(n), buf_b(n), buf_out(n);
  * buf_a.copy_from_host(host_a.data(), n);
  * buf_b.copy_from_host(host_b.data(), n);
  *

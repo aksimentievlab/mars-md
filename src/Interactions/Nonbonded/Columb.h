@@ -20,6 +20,77 @@ struct ColumbPotential {
 };
 
 // ============================================================================
+// Debye-Huckel (screened Coulomb)
+// ============================================================================
+/**
+ * @brief Screened Coulomb: U = A exp(-r/lambda) / r, A = COULOMB qi qj / eps
+ * @param screen_length Debye length lambda (Angstrom)
+ * @param epsilon Relative dielectric
+ */
+struct DebyeHuckelPotential {
+	arbd_real screen_length = arbd_real(10);
+	arbd_real epsilon = arbd_real(80);
+
+	DEVICE ScalarForceEnergy compute(arbd_real distance, arbd_real qi, arbd_real qj) const {
+		const arbd_real inv_r = arbd_real(1) / distance;
+		const arbd_real a = qi * qj * constants::COULOMB / epsilon;
+		const arbd_real screen = math::exp(-distance / screen_length);
+		const arbd_real energy = a * screen * inv_r;
+		// F = -dU/dr = A exp(-r/l) (1/r^2 + 1/(l r))
+		const arbd_real force = energy * (inv_r + arbd_real(1) / screen_length);
+		return ScalarForceEnergy{float2{force, energy}};
+	}
+};
+
+// ============================================================================
+// ONC electrostatics (distance-dependent sigmoidal dielectric)
+// ============================================================================
+/**
+ * @brief U = COULOMB qi qj exp(-kappa r) / (eps(r) r), with
+ *        eps(r) = Sz (1 - (r/z)^2 e^(r/z) / (e^(r/z) - 1)^2)
+ * @param kappa Inverse screening length (1/Angstrom)
+ * @param sz Bulk dielectric plateau
+ * @param z Sigmoid width (Angstrom)
+ * @note eps(0) is singular; distance is floored at MIN_DISTANCE, matching the
+ *       reference implementation's d = 1e-2 guard.
+ */
+struct OncElecPotential {
+	static constexpr arbd_real MIN_DISTANCE = arbd_real(1e-2);
+
+	arbd_real kappa = arbd_real(0.1);
+	arbd_real sz = arbd_real(80);
+	arbd_real z = arbd_real(6.86);
+
+	/// @brief Sigmoidal dielectric eps(r)
+	DEVICE arbd_real dielectric(arbd_real r) const {
+		const arbd_real e = math::exp(r / z);
+		const arbd_real d = e - arbd_real(1);
+		return sz * (arbd_real(1) - (r * r) / (z * z) * e / (d * d));
+	}
+
+	/// @brief d(eps)/dr
+	DEVICE arbd_real dielectric_deriv(arbd_real r) const {
+		const arbd_real e = math::exp(r / z);
+		const arbd_real inv_d = arbd_real(1) / (e - arbd_real(1));
+		return -sz * r / (z * z) * e * inv_d * inv_d *
+			   (arbd_real(2) + r / z - arbd_real(2) * r / z * e * inv_d);
+	}
+
+	DEVICE ScalarForceEnergy compute(arbd_real distance, arbd_real qi, arbd_real qj) const {
+		const arbd_real r = distance < MIN_DISTANCE ? MIN_DISTANCE : distance;
+		const arbd_real a = qi * qj * constants::COULOMB;
+		const arbd_real screen = math::exp(-kappa * r);
+		const arbd_real eps = dielectric(r);
+		const arbd_real energy = a * screen / (eps * r);
+		// F = -dU/dr = A exp(-kr) [ k/(eps r) + (eps' r + eps)/(eps^2 r^2) ]
+		const arbd_real eps_p = dielectric_deriv(r);
+		const arbd_real force =
+			a * screen * (kappa / (eps * r) + (eps_p * r + eps) / (eps * eps * r * r));
+		return ScalarForceEnergy{float2{force, energy}};
+	}
+};
+
+// ============================================================================
 // Columb Force Kernel
 // ============================================================================
 struct ColumbForceKernel {
@@ -71,4 +142,8 @@ template<>
 struct sycl::is_device_copyable<ARBD::ColumbPotential> : std::true_type {};
 template<>
 struct sycl::is_device_copyable<ARBD::ColumbForceKernel> : std::true_type {};
+template<>
+struct sycl::is_device_copyable<ARBD::DebyeHuckelPotential> : std::true_type {};
+template<>
+struct sycl::is_device_copyable<ARBD::OncElecPotential> : std::true_type {};
 #endif

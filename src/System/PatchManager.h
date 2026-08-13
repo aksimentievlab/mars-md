@@ -52,8 +52,8 @@ class PatchManager {
 		int neighbor_rank = -1;					  ///< MPI rank of neighbor patch
 		int neighbor_patch_id = -1;				  ///< Patch ID of neighbor
 		std::array<int, 3> direction = {0, 0, 0}; ///< Direction vector to neighbor
-		DeviceBuffer<float> send_buffer;		  ///< Buffer for outgoing data
-		DeviceBuffer<float> recv_buffer;		  ///< Buffer for incoming data
+		DeviceBuffer<arbd_real> send_buffer;		  ///< Buffer for outgoing data
+		DeviceBuffer<arbd_real> recv_buffer;		  ///< Buffer for incoming data
 		idx_t max_halo_particles = 0;			  ///< Maximum expected halo particles
 		bool active = false;					  ///< Whether this neighbor connection is active
 

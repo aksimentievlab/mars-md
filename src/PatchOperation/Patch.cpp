@@ -68,7 +68,7 @@ void Patch::ensure_bonded_topology_ready(const BondedInteractions& interactions,
 Event Patch::calculate_nonbonded_forces(const NonBondedInteractions& interactions,
 										const BondedInteractions& bonded_interactions,
 										const DeviceParticleTypes& particle_types,
-										const DeviceBuffer<BaseGridView<float>>& grid_views,
+										const DeviceBuffer<BaseGridView<arbd_real>>& grid_views,
 										const TablesRegistry& tables_registry,
 										size_t resource_idx,
 										float cutoff,
@@ -402,7 +402,7 @@ Event Patch::finish_deferred_kick(float dt) {
 //================================================================================
 
 std::pair<Event, idx_t>
-Patch::pack_halo_particles(DeviceBuffer<float>& send_buffer, int direction, float halo_width) {
+Patch::pack_halo_particles(DeviceBuffer<arbd_real>& send_buffer, int direction, float halo_width) {
 	// Ensure halo buffers are allocated
 	if (!halo_buffers_) {
 		halo_buffers_ = std::make_unique<HaloBuffers>(resource_, capacity_);
@@ -430,7 +430,7 @@ Patch::pack_halo_particles(DeviceBuffer<float>& send_buffer, int direction, floa
 	return {Event(nullptr, resource_), packed_count};
 }
 
-Event Patch::unpack_halo_particles(const DeviceBuffer<float>& recv_buffer, idx_t particle_count) {
+Event Patch::unpack_halo_particles(const DeviceBuffer<arbd_real>& recv_buffer, idx_t particle_count) {
 	// Ensure halo buffers are allocated
 	if (!halo_buffers_) {
 		halo_buffers_ = std::make_unique<HaloBuffers>(resource_, capacity_);

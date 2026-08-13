@@ -126,7 +126,7 @@ class Configuration {
 
 	// Output variables
 	Vector3 sysDim;
-	BaseGrid<float>* sys;
+	BaseGrid<arbd_real>* sys;
 	Vector3 origin, size, basis1, basis2, basis3;
 
 	bool loadedCoordinates;
@@ -203,9 +203,9 @@ class Configuration {
 	int numberFluctPeriod;
 	int decompPeriod;
 	int numCapFactor;
-	BaseGrid<float>* kTGrid;
-	BaseGrid<float>* tGrid;
-	BaseGrid<float>* sigmaT;
+	BaseGrid<arbd_real>* kTGrid;
+	BaseGrid<arbd_real>* tGrid;
+	BaseGrid<arbd_real>* sigmaT;
 	unsigned long randomSeed;
 
 	// Other parameters.
@@ -244,8 +244,8 @@ class Configuration {
 	bool readRestraintsFromFile;
 	String** partGridFile;
 	float** partGridFileScale;
-	std::map<std::string, BaseGrid<float>> part_grid_dictionary;
-	std::map<std::string, BaseGrid<float>*> part_grid_dictionary_d;
+	std::map<std::string, BaseGrid<arbd_real>> part_grid_dictionary;
+	std::map<std::string, BaseGrid<arbd_real>*> part_grid_dictionary_d;
 	std::vector<std::vector<String>> partRigidBodyGrid;
 	String* partDiffusionGridFile;
 	String* partForceXGridFile;

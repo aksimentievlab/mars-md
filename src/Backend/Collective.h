@@ -71,7 +71,7 @@ class Collectives {
 	}
 	// Performance comparison helper
 	void benchmark_backends() {
-		DeviceBuffer<float> test_buffer(1024 * 1024); // 1M floats
+		DeviceBuffer<arbd_real> test_buffer(1024 * 1024); // 1M floats
 
 		// Test MPI
 		auto start = std::chrono::high_resolution_clock::now();

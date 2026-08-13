@@ -81,7 +81,7 @@ struct Configuration {
 	std::unordered_map<std::string, int>
 		fname_tab_dictionary{}; // Filename -> tabulated function ID
 	std::unordered_map<std::string, int> fname_grid_dictionary{}; // Filename -> grid ID
-	std::unordered_map<int, std::vector<BaseGrid<float>>>
+	std::unordered_map<int, std::vector<BaseGrid<arbd_real>>>
 		grid_id_dictionary{}; // Grid ID -> loaded grids
 
 	// Initial Objects

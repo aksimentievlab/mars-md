@@ -4,12 +4,15 @@
  * @brief Host-side nonbonded interaction definitions
  */
 
+#include "Backend/Kernels.h"
 #include "BondedInteraction.h"
 #include "Header.h"
 #include "IO/Reader.h"
+#include "Interactions/Nonbonded/GridGridKernels.h"
 #include "Objects/DeviceParticle.h"
 #include "Objects/ParticleProperties.h"
 #include "SimParam.h"
+#include "Types/BaseGrid.h"
 
 namespace ARBD {
 namespace AnalyticalNameList {
@@ -152,4 +155,51 @@ class NonBondedInteractions {
 	std::vector<PairNonBonded> pair_nonbonded_{};
 	std::vector<LongRangeNonBonded> long_range_nonbonded_{};
 };
+
+/// How a convolution's output is normalized.
+enum class ConvolutionNormalization {
+	VoxelSum, ///< sum(rho*K); matches the reference gen_pot tool
+	Volume	  ///< sum(rho*K) * density cell volume
+};
+
+/**
+ * @brief Convolve a density grid with a kernel grid on the device
+ * @param density Source grid; its boundary condition governs the stencil taps
+ * @param kernel Convolution kernel, centered on voxel (n-1)/2 per axis
+ * @param resource Device to run on
+ * @param norm Output normalization
+ * @return New grid with density's geometry, holding the convolution
+ * @note Kernel dimensions must not exceed density's. See NonBondedInteraction.md.
+ */
+template<typename T>
+BaseGrid<T> convolve_grids(const BaseGrid<T>& density,
+						   const BaseGrid<T>& kernel,
+						   const Resource& resource = Resource{},
+						   ConvolutionNormalization norm = ConvolutionNormalization::VoxelSum) {
+	if (kernel.nx() > density.nx() || kernel.ny() > density.ny() || kernel.nz() > density.nz()) {
+		throw_value_error("convolve_grids: kernel (%zu,%zu,%zu) exceeds density (%zu,%zu,%zu)",
+						  kernel.nx(),
+						  kernel.ny(),
+						  kernel.nz(),
+						  density.nx(),
+						  density.ny(),
+						  density.nz());
+	}
+
+	BaseGrid<T> out(density.basis(), density.origin(), density.nx(), density.ny(), density.nz());
+	const T scale = (norm == ConvolutionNormalization::Volume) ? density.get_cell_volume() : T{1};
+
+	ConvolveGridKernel<T> k{density.get_device_view(resource),
+							kernel.get_device_view(resource),
+							out.get_mutable_device_view(resource),
+							scale};
+
+	KernelConfig config = KernelConfig::for_1d(out.size(), resource);
+	config.sync = true;
+	launch_kernel(resource, config, k);
+
+	out.sync_from_device(resource);
+	return out;
+}
+
 } // namespace ARBD

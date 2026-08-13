@@ -257,3 +257,5 @@ using device_id_t = unsigned short;
 using grid_t = size_t; // grid ids
 using morton_t = uint32_t;
 using coord_t = uint32_t;
+using arbd_int = int;
+using arbd_real = float;

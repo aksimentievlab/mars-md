@@ -129,7 +129,7 @@ template<typename DeviceParticle>
 class CutoffAMRElectrostatics : public LongRangeElectrostatics {
   private:
 	// AMR hierarchy using your BaseGrid system
-	std::vector<std::unique_ptr<BaseGrid<float>>> amr_levels_;
+	std::vector<std::unique_ptr<BaseGrid<arbd_real>>> amr_levels_;
 	std::vector<std::unique_ptr<BaseGrid<int>>> particle_count_grids_;
 
 	// Adaptive parameters
@@ -206,12 +206,12 @@ class CutoffAMRElectrostatics : public LongRangeElectrostatics {
   private:
 	void initialize_amr_hierarchy() {
 		// Create initial coarse grid
-		Matrix3_t<float> basis = Matrix3_t<float>(config_.cutoff_distance,
+		Matrix3_t<arbd_real> basis = Matrix3_t<arbd_real>(config_.cutoff_distance,
 												  config_.cutoff_distance,
 												  config_.cutoff_distance);
 		Vector3 origin(-50.0f, -50.0f, -50.0f); // System-dependent
 
-		auto coarse_grid = std::make_unique<BaseGrid<float>>(basis, origin, 32, 32, 32);
+		auto coarse_grid = std::make_unique<BaseGrid<arbd_real>>(basis, origin, 32, 32, 32);
 		amr_levels_.push_back(std::move(coarse_grid));
 
 		auto count_grid = std::make_unique<BaseGrid<int>>(basis, origin, 32, 32, 32);
@@ -292,8 +292,8 @@ class CutoffAMRElectrostatics : public LongRangeElectrostatics {
 template<typename DeviceParticle>
 class PPPMElectrostatics : public LongRangeElectrostatics {
   private:
-	std::unique_ptr<BaseGrid<float>> charge_grid_;
-	std::unique_ptr<BaseGrid<float>> potential_grid_;
+	std::unique_ptr<BaseGrid<arbd_real>> charge_grid_;
+	std::unique_ptr<BaseGrid<arbd_real>> potential_grid_;
 	std::unique_ptr<BaseGrid<Vector3>> electric_field_grid_;
 
 	// Ewald parameters
@@ -383,8 +383,8 @@ class PPPMElectrostatics : public LongRangeElectrostatics {
 					   -static_cast<float>(ny) / 2,
 					   -static_cast<float>(nz) / 2);
 
-		charge_grid_ = std::make_unique<BaseGrid<float>>(basis, origin, nx, ny, nz);
-		potential_grid_ = std::make_unique<BaseGrid<float>>(basis, origin, nx, ny, nz);
+		charge_grid_ = std::make_unique<BaseGrid<arbd_real>>(basis, origin, nx, ny, nz);
+		potential_grid_ = std::make_unique<BaseGrid<arbd_real>>(basis, origin, nx, ny, nz);
 		electric_field_grid_ = std::make_unique<BaseGrid<Vector3>>(basis, origin, nx, ny, nz);
 	}
 

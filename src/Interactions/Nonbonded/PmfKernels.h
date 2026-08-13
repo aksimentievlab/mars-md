@@ -7,9 +7,8 @@ namespace ARBD {
 
 namespace pmf_detail {
 
-HOST DEVICE inline GridSample<float> sample_pmf_grid(const BaseGridView<float>& grid,
-												   const Vector3& pos,
-												   int scheme) {
+HOST DEVICE inline GridSample<arbd_real>
+sample_pmf_grid(const BaseGridView<arbd_real>& grid, const Vector3& pos, int scheme) {
 	if (scheme == 0) {
 		return sample_grid_linear(grid.data,
 								  pos,
@@ -28,9 +27,8 @@ HOST DEVICE inline GridSample<float> sample_pmf_grid(const BaseGridView<float>& 
 							 grid.boundary_condition);
 }
 
-HOST DEVICE inline float sample_force_grid_value(const BaseGridView<float>& grid,
-												 const Vector3& pos,
-												 int scheme) {
+HOST DEVICE inline float
+sample_force_grid_value(const BaseGridView<arbd_real>& grid, const Vector3& pos, int scheme) {
 	if (scheme == 0) {
 		return interpolate_grid_point(grid.data,
 									  pos,
@@ -39,23 +37,36 @@ HOST DEVICE inline float sample_force_grid_value(const BaseGridView<float>& grid
 									  grid.dimensions,
 									  grid.boundary_condition);
 	}
-	return grid.interpolate(pos);
+	return sample_grid_cubic(grid.data,
+							 pos,
+							 grid.origin,
+							 grid.basis,
+							 grid.basis_inv,
+							 grid.dimensions,
+							 grid.boundary_condition)
+		.value;
 }
 
 } // namespace pmf_detail
 
 /**
  * @brief Position-dependent forces from legacy GrandBrownTown.cuh
- *
- * scheme: 0 = linear interpolation, 1 = cubic (legacy: !scheme vs scheme)
+ * @param pos: position of the particle
+ * @param type_id: type id of the particle
+ * @param types: particle type view
+ * @param grid_configs: grid configurations
+ * @param electric_field: electric field
+ * @param scheme: 0 = linear interpolation, 1 = cubic (legacy: !scheme vs scheme)
+ * @param get_energy: whether to get the energy
  */
-HOST DEVICE inline Vector3 compute_position_dependent_force(const Vector3& pos,
-															int type_id,
-															const ParticleTypeView types,
-															const BaseGridView<float>* grid_configs,
-															float electric_field,
-															int scheme,
-															bool get_energy = false) {
+HOST DEVICE inline Vector3
+compute_position_dependent_force(const Vector3& pos,
+								 int type_id,
+								 const ParticleTypeView types,
+								 const BaseGridView<arbd_real>* grid_configs,
+								 float electric_field,
+								 int scheme,
+								 bool get_energy = false) {
 	const float charge = types.charge[type_id];
 	Vector3 force(0.0f, 0.0f, charge * electric_field);
 
@@ -69,19 +80,12 @@ HOST DEVICE inline Vector3 compute_position_dependent_force(const Vector3& pos,
 			const GridTerm term = types.pmf_grid_terms[k];
 			if (!term.is_valid())
 				continue;
-			BaseGridView<float> pmf_grid = grid_configs[term.grid_id];
+			BaseGridView<arbd_real> pmf_grid = grid_configs[term.grid_id];
 			if (pmf_grid.data == nullptr)
 				continue;
-			// Legacy keys boundary conditions per (type, grid), not per grid, so
-			// a term may override the one baked into the shared grid view.
 			if (term.boundary_condition >= 0)
 				pmf_grid.boundary_condition = term.boundary_condition;
-
-			// sample_pmf_grid() already computes both .gradient (for force)
-			// and .value (for energy) in a single grid interpolation, so
-			// tracking energy here costs nothing extra - unlike the pairwise/
-			// bonded kernels' get_energy, this isn't gating an extra atomic.
-			const GridSample<float> sample = pmf_detail::sample_pmf_grid(pmf_grid, pos, scheme);
+			const GridSample<arbd_real> sample = pmf_detail::sample_pmf_grid(pmf_grid, pos, scheme);
 			force += sample.gradient * (-term.scale);
 			if (get_energy) {
 				force.t += term.scale * sample.value;
@@ -91,27 +95,26 @@ HOST DEVICE inline Vector3 compute_position_dependent_force(const Vector3& pos,
 
 	const int3 force_grid_id = types.force_grid_id[type_id];
 	if (grid_configs != nullptr) {
-		// Legacy baked this scale into the grid data at load time
-		// (Configuration.cpp's forceXGrid->scale()); arbd2v applies it here
-		// instead because GridManager shares one grid_id across every type
-		// referencing the same file - see ParticleType::force_grid_scale.
 		const Vector3 force_grid_scale = types.force_grid_scale[type_id];
 		if (force_grid_id.x >= 0) {
-			const BaseGridView<float>& grid = grid_configs[force_grid_id.x];
+			const BaseGridView<arbd_real>& grid = grid_configs[force_grid_id.x];
 			if (grid.data != nullptr) {
-				force.x += force_grid_scale.x * pmf_detail::sample_force_grid_value(grid, pos, scheme);
+				force.x +=
+					force_grid_scale.x * pmf_detail::sample_force_grid_value(grid, pos, scheme);
 			}
 		}
 		if (force_grid_id.y >= 0) {
-			const BaseGridView<float>& grid = grid_configs[force_grid_id.y];
+			const BaseGridView<arbd_real>& grid = grid_configs[force_grid_id.y];
 			if (grid.data != nullptr) {
-				force.y += force_grid_scale.y * pmf_detail::sample_force_grid_value(grid, pos, scheme);
+				force.y +=
+					force_grid_scale.y * pmf_detail::sample_force_grid_value(grid, pos, scheme);
 			}
 		}
 		if (force_grid_id.z >= 0) {
-			const BaseGridView<float>& grid = grid_configs[force_grid_id.z];
+			const BaseGridView<arbd_real>& grid = grid_configs[force_grid_id.z];
 			if (grid.data != nullptr) {
-				force.z += force_grid_scale.z * pmf_detail::sample_force_grid_value(grid, pos, scheme);
+				force.z +=
+					force_grid_scale.z * pmf_detail::sample_force_grid_value(grid, pos, scheme);
 			}
 		}
 	}
@@ -129,7 +132,7 @@ struct ComputePMFKernel {
 								const int* __restrict__ type_ids,
 								Vector3* __restrict__ forces,
 								const ParticleTypeView types,
-								const BaseGridView<float>* __restrict__ grid_configs,
+								const BaseGridView<arbd_real>* __restrict__ grid_configs,
 								idx_t num_particles) const {
 
 		const idx_t idx = static_cast<idx_t>(i);
@@ -142,19 +145,17 @@ struct ComputePMFKernel {
 		// One thread per particle - forces[idx] is only ever written by this
 		// thread, so this is a plain read-modify-write, not an atomic like
 		// the pairwise/bonded kernels' get_energy accumulation.
-		forces[idx] += compute_position_dependent_force(
-			pos, type_id, types, grid_configs, electric_field, scheme, get_energy);
+		forces[idx] += compute_position_dependent_force(pos,
+														type_id,
+														types,
+														grid_configs,
+														electric_field,
+														scheme,
+														get_energy);
 	}
 };
 
 } // namespace ARBD
-
-// Explicit template instantiation declaration to prevent host instantiation.
-// Unlike the launch_* helpers elsewhere, this kernel is launched with a
-// trailing argument pack (see Patch::calculate_nonbonded_forces), so the
-// declaration must spell out those arguments exactly as launch_kernel
-// forwards them through get_buffer_pointer(). Real definition lives in
-// Nonbonded/NonbondedInstantiations.cu.
 #ifdef USE_CUDA
 #include "Backend/CUDA/KernelHelper.cuh"
 namespace ARBD {
@@ -165,7 +166,7 @@ extern template Event launch_cuda_kernel(const Resource& resource,
 										 int* type_ids,
 										 Vector3* forces,
 										 ParticleTypeView types,
-										 const BaseGridView<float>* grid_configs,
+										 const BaseGridView<arbd_real>* grid_configs,
 										 idx_t num_particles);
 } // namespace ARBD
 #endif

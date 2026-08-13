@@ -22,7 +22,6 @@ list(APPEND HOST_DEVICE_HEADERS
 )
 
 list(APPEND HOST_ONLY_HEADERS
-    Types/Array.h
     Types/BaseGrid.h
 )
 

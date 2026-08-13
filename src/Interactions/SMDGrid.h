@@ -25,7 +25,7 @@ class SMDGrid {
 	 * @param scale_slope Rate of change of grid scale
 	 * @param smd_freq Frequency of SMD operations
 	 */
-	SMDGrid(std::shared_ptr<BaseGrid<float>> base_grid,
+	SMDGrid(std::shared_ptr<BaseGrid<arbd_real>> base_grid,
 			float scale_slope = 0.0f,
 			float smd_freq = 0.0f)
 		: base_grid_(base_grid), scale_slope_(scale_slope), smd_freq_(smd_freq),
@@ -135,7 +135,7 @@ class SMDGrid {
 	 * @brief Get the base grid
 	 * @return Shared pointer to base grid
 	 */
-	std::shared_ptr<BaseGrid<float>> getBaseGrid() const {
+	std::shared_ptr<BaseGrid<arbd_real>> getBaseGrid() const {
 		return base_grid_;
 	}
 
@@ -146,7 +146,7 @@ class SMDGrid {
 	 * @param smd_freq Frequency of SMD operations
 	 * @return Shared pointer to new SMDGrid
 	 */
-	static std::shared_ptr<SMDGrid> createFromBaseGrid(std::shared_ptr<BaseGrid<float>> base_grid,
+	static std::shared_ptr<SMDGrid> createFromBaseGrid(std::shared_ptr<BaseGrid<arbd_real>> base_grid,
 													   float scale_slope = 0.0f,
 													   float smd_freq = 0.0f) {
 		return std::make_shared<SMDGrid>(base_grid, scale_slope, smd_freq);
@@ -211,7 +211,7 @@ class SMDGrid {
 	}
 
   private:
-	std::shared_ptr<BaseGrid<float>> base_grid_;
+	std::shared_ptr<BaseGrid<arbd_real>> base_grid_;
 	float scale_slope_;
 	float smd_freq_;
 	float current_scale_;

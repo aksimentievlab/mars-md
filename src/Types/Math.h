@@ -87,6 +87,22 @@ HOST DEVICE inline T floor(T x) {
 		return ::floor(x);
 }
 
+template<typename T>
+HOST DEVICE inline T exp(T x) {
+	if constexpr (sizeof(T) == sizeof(float))
+		return ::expf(x);
+	else
+		return ::exp(x);
+}
+
+template<typename T>
+HOST DEVICE inline T log(T x) {
+	if constexpr (sizeof(T) == sizeof(float))
+		return ::logf(x);
+	else
+		return ::log(x);
+}
+
 #elif defined(__METAL_VERSION__)
 // Metal Shading Language
 using metal::acos;

@@ -16,3 +16,5 @@ doxy
 .clangd
 .cursorignore
 .cursor
+*.dx
+CLAUDE.md

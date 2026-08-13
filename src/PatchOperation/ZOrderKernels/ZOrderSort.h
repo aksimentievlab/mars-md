@@ -215,7 +215,7 @@ class ZOrderSort {
 
 	// Displacement tracking buffers (Pairlist mode only)
 	DeviceBuffer<Vector3> old_positions_;		   ///< Previous positions for displacement tracking
-	mutable DeviceBuffer<float> max_displacement_; ///< Device-side maximum displacement
+	mutable DeviceBuffer<arbd_real> max_displacement_; ///< Device-side maximum displacement
 	mutable DeviceBuffer<uint32_t> invalid_count_; ///< Count of invalid Morton codes
 
 	/**

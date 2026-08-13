@@ -179,7 +179,7 @@ class DeviceBondedInteractions {
 			restraint_particle_ids_.copy_from_host(rest_ids.data(), num_restraints_);
 			restraint_positions_ = DeviceBuffer<Vector3>(num_restraints_, resource_);
 			restraint_positions_.copy_from_host(rest_pos.data(), num_restraints_);
-			restraint_spring_constants_ = DeviceBuffer<float>(num_restraints_, resource_);
+			restraint_spring_constants_ = DeviceBuffer<arbd_real>(num_restraints_, resource_);
 			restraint_spring_constants_.copy_from_host(rest_k.data(), num_restraints_);
 		}
 	}
@@ -390,7 +390,7 @@ class DeviceBondedInteractions {
 	// === RESTRAINTS ===
 	DeviceBuffer<int> restraint_particle_ids_;
 	DeviceBuffer<Vector3> restraint_positions_;
-	DeviceBuffer<float> restraint_spring_constants_;
+	DeviceBuffer<arbd_real> restraint_spring_constants_;
 	idx_t num_restraints_{0};
 };
 

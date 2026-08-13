@@ -24,10 +24,10 @@ ZOrderPairlist::ZOrderPairlist(const Resource& resource, size_t max_particles, s
 	sorter_.enable_smart_updates(true);
 	sorter_.set_displacement_thresholds(0.05f, 0.1f); // validation_threshold, update_threshold
 
-	LOGINFO("Created ZOrderPairlist with capacity {} particles, {} pairs on {}",
-			max_particles_,
-			max_pairs_,
-			resource_.toString());
+	LOGDEBUG("Created ZOrderPairlist with capacity {} particles, {} pairs on {}",
+			 max_particles_,
+			 max_pairs_,
+			 resource_.toString());
 }
 
 void ZOrderPairlist::build_pairlist(const DeviceBuffer<Vector3>& positions,

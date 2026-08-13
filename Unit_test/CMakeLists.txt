@@ -12,17 +12,22 @@ add_executable(arbd_unit_tests
     ${CMAKE_CURRENT_LIST_DIR}/Backend/backend_buffer_tests.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Types/vector3_tests.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Types/basegrid_device_tests.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Types/grid_boundary_tests.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Types/grid_arithmetic_tests.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Objects/Particles.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Objects/RigidBodies.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Objects/RigidBodyForcePairs.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Objects/RigidBodyManager.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/TestParticle.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Objects/TestParticle.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Compute/BDKernels.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Interactions/Forces.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Interactions/GridGrid.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Interactions/RigidBodyGridBatch.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Interactions/RigidBodyParticleGridBatch.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Interactions/Pmf.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Interactions/ScreenedPotentials.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Interactions/Convolution.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Interactions/GenPotGolden.cpp
     ${CMAKE_CURRENT_LIST_DIR}/IO/RigidBodyConfigParsing.cpp
     ${CMAKE_CURRENT_LIST_DIR}/System/SingleGPU.cpp
     ${CMAKE_CURRENT_LIST_DIR}/System/SinglePatchSimulation.cpp
@@ -101,3 +106,31 @@ if(USE_MPI)
                 $<TARGET_FILE:arbd_unit_tests> [mpi] ${MPIEXEC_POSTFLAGS})
     set_tests_properties(unit_mpi_2ranks PROPERTIES LABELS "mpi")
 endif()
+
+# Handle both user comma lists, space lists, and CMake native semicolon lists safely
+string(REPLACE ";" "," UNIT_TEST_DEVICE_ARRAY_PP "${UNIT_TEST_DEVICE_ARRAY}")
+string(REPLACE " " "," UNIT_TEST_DEVICE_ARRAY_PP "${UNIT_TEST_DEVICE_ARRAY_PP}")
+
+if(NOT "${UNIT_TEST_DEVICE_ID}" STREQUAL "")
+    set(UNIT_TEST_DEVICE_ID_DEFINE "#define UNIT_TEST_DEVICE_ID ${UNIT_TEST_DEVICE_ID}")
+else()
+    set(UNIT_TEST_DEVICE_ID_DEFINE "// UNIT_TEST_DEVICE_ID unset: catch_boiler.h uses device_ids[0]")
+endif()
+
+# Generated header instead of -D: nvcc splits -D values on commas, so a
+# command-line list expands to a bogus second macro name.
+configure_file(
+    ${CMAKE_CURRENT_LIST_DIR}/unit_test_config.h.in
+    ${CMAKE_CURRENT_BINARY_DIR}/generated/unit_test_config.h
+    @ONLY
+)
+
+add_library(unit_test_config INTERFACE)
+target_include_directories(unit_test_config INTERFACE
+    ${CMAKE_CURRENT_BINARY_DIR}/generated
+)
+
+# The rest of your target links remain the same
+target_link_libraries(arbd_unit_tests PRIVATE unit_test_config)
+target_link_libraries(arbd_zorder_tests PRIVATE unit_test_config)
+message(STATUS "Unit tests: available resources={${UNIT_TEST_DEVICE_ARRAY_PP}}")

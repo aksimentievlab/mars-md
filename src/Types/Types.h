@@ -1,5 +1,4 @@
 #pragma once
-#include "Array.h"
 #include "Bitmask.h"
 #include "Header.h"
 #include "IndexList.h"
@@ -35,21 +34,20 @@ struct GridSample {
 	T value;
 	Vector3_t<T> gradient; // raw gradient (∂V/∂x); caller negates for force
 };
+// The two scalar types every other alias below is expressed in, so switching
+// the engine's precision is a change here rather than a sweep over each alias.
 
-using Vector3 = Vector3_t<float>;
-using Matrix3 = Matrix3_t<float>;
+using Vector3 = Vector3_t<arbd_real>;
+using Matrix3 = Matrix3_t<arbd_real>;
 using NeighborList = IndexList<morton_t, 27>;
 // For 3-component indices (Angles)
-using int3 = ARBD::Vector3_t<int>;
+using int3 = ARBD::Vector3_t<arbd_int>;
 // For 4-component indices (Dihedrals)
-using int4 = ARBD::Vector3_t<int>;
-using float4 = ARBD::Vector3_t<float>;
+using int4 = ARBD::Vector3_t<arbd_int>;
+using float4 = ARBD::Vector3_t<arbd_real>;
 
-using int2 = Vec2<int>;
-using float2 = Vec2<float>;
-
-using arbd_int = int;
-using arbd_real = float;
+using int2 = Vec2<arbd_int>;
+using float2 = Vec2<arbd_real>;
 
 /**
  * @brief Backend-agnostic atomic add operation

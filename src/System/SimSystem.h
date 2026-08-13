@@ -73,7 +73,7 @@ class SimSystem {
 		return global_seed_;
 	}
 
-	void set_temperature(const BaseGrid<float>& grid) {
+	void set_temperature(const BaseGrid<arbd_real>& grid) {
 		temperature_ = Temperature(grid);
 	}
 

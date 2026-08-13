@@ -79,7 +79,7 @@ struct BiasDefinition {
  * Uses BaseGrid
  */
 struct ColvarGrid {
-	std::unique_ptr<BaseGrid<float>> grid;
+	std::unique_ptr<BaseGrid<arbd_real>> grid;
 	std::vector<int> colvar_ids; // Which CVs define dimensions
 	std::string name;
 
@@ -87,7 +87,7 @@ struct ColvarGrid {
 	enum Type { PMF, Histogram, Gradient, Count } type;
 
 	ColvarGrid(const Matrix3& basis, const Vector3& origin, idx_t nx, idx_t ny, idx_t nz)
-		: grid(std::make_unique<BaseGrid<float>>(basis, origin, nx, ny, nz)) {}
+		: grid(std::make_unique<BaseGrid<arbd_real>>(basis, origin, nx, ny, nz)) {}
 };
 
 /**
@@ -106,7 +106,7 @@ class ColvarsManager {
 	// Buffers for GPU operations
 	DeviceBuffer<Vector3> positions_;
 	DeviceBuffer<Vector3> cv_forces_;
-	DeviceBuffer<float> cv_values_;
+	DeviceBuffer<arbd_real> cv_values_;
 
 	// Configuration
 	struct Config {
@@ -268,7 +268,7 @@ class ColvarsManager {
 				return; // Single-threaded for now
 
 			// Calculate COMs
-			Vector3_t<float> com1(0, 0, 0), com2(0, 0, 0);
+			Vector3_t<arbd_real> com1(0, 0, 0), com2(0, 0, 0);
 			for (idx_t i = 0; i < n1; ++i) {
 				com1 += pos[g1[i]];
 			}
@@ -376,7 +376,7 @@ class ColvarsManager {
 
 		positions_ = DeviceBuffer<Vector3>(total_atoms, resource_);
 		cv_forces_ = DeviceBuffer<Vector3>(total_atoms, resource_);
-		cv_values_ = DeviceBuffer<float>(colvars_.size(), resource_);
+		cv_values_ = DeviceBuffer<arbd_real>(colvars_.size(), resource_);
 	}
 
 	void initialize_grids() {

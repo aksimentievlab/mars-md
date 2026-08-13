@@ -394,13 +394,13 @@ void write_average_profile(const BaseGrid<T>& grid, std::string_view filename, i
 }
 
 // Explicit template instantiations for common types
-template void write_grid<float>(const BaseGrid<float>&, std::string_view);
-template void write_grid<float>(const BaseGrid<float>&, std::string_view, std::string_view);
-template void write_dx_format<float>(const BaseGrid<float>&, const FileHandle&, std::string_view);
-template void write_data_format<float>(const BaseGrid<float>&, const FileHandle&);
-template BaseGrid<float> read_from_file<float>(std::string_view);
-template void read_dx_format<float>(BaseGrid<float>&, const FileHandle&);
-template void write_average_profile<float>(const BaseGrid<float>&, std::string_view, int);
+template void write_grid<float>(const BaseGrid<arbd_real>&, std::string_view);
+template void write_grid<float>(const BaseGrid<arbd_real>&, std::string_view, std::string_view);
+template void write_dx_format<float>(const BaseGrid<arbd_real>&, const FileHandle&, std::string_view);
+template void write_data_format<float>(const BaseGrid<arbd_real>&, const FileHandle&);
+template BaseGrid<arbd_real> read_from_file<float>(std::string_view);
+template void read_dx_format<float>(BaseGrid<arbd_real>&, const FileHandle&);
+template void write_average_profile<float>(const BaseGrid<arbd_real>&, std::string_view, int);
 
 } // namespace DXReader
 

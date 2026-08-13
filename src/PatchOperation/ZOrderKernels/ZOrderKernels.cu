@@ -24,7 +24,7 @@ template Event launch_cuda_kernel(const Resource& resource,
 
 template Event launch_cuda_kernel(const Resource& resource,
 								  const KernelConfig& config,
-								  ReorderDataKernel<Vector3_t<float>> kernel_func);
+								  ReorderDataKernel<Vector3_t<arbd_real>> kernel_func);
 
 template Event launch_cuda_kernel(const Resource& resource,
 								  const KernelConfig& config,

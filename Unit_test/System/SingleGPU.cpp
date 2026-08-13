@@ -6,6 +6,7 @@
 short single_resource_id = Global::single_resource_id;
 using namespace ARBD;
 using namespace Tests;
+
 std::vector<Resource> device_resources = {Resource(0), Resource(1)};
 std::vector<Resource> single_resource_list = {Resource(single_resource_id)};
 /**
@@ -22,6 +23,7 @@ TEST_CASE("SimSystem Single Resource Optimization", "[SimSystem][SingleResource]
 	SECTION("Single resource system bypasses decomposer") {
 		// Create SimSystem with single resource
 		SimSystem sim_system(single_resource_list);
+		std::cout << "Single resource using device id: " << single_resource_id << std::endl;
 
 		// Configure basic simulation parameters
 		sim_system.set_box_size(100.0f, 100.0f, 100.0f);

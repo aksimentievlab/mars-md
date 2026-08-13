@@ -55,7 +55,7 @@ namespace {
  * @param spacing Per-axis grid spacing (dx, dy, dz); use `basis` instead for
  *        a non-orthogonal grid.
  */
-BaseGrid<float> grid_from_numpy(py::array_t<float, py::array::c_style | py::array::forcecast> values,
+BaseGrid<arbd_real> grid_from_numpy(py::array_t<float, py::array::c_style | py::array::forcecast> values,
 								Vector3 origin,
 								Vector3 spacing) {
 	py::buffer_info info = values.request();
@@ -71,7 +71,7 @@ BaseGrid<float> grid_from_numpy(py::array_t<float, py::array::c_style | py::arra
 	const auto nz = static_cast<idx_t>(info.shape[2]);
 
 	Matrix3 basis(spacing.x, spacing.y, spacing.z);
-	BaseGrid<float> grid(basis, origin, nx, ny, nz);
+	BaseGrid<arbd_real> grid(basis, origin, nx, ny, nz);
 	std::memcpy(grid.data(), info.ptr, static_cast<size_t>(info.size) * sizeof(float));
 	return grid;
 }
@@ -80,7 +80,7 @@ BaseGrid<float> grid_from_numpy(py::array_t<float, py::array::c_style | py::arra
  * @brief Same as grid_from_numpy, but for a non-orthogonal grid: takes a
  *        full basis matrix instead of per-axis spacing.
  */
-BaseGrid<float> grid_from_numpy_basis(
+BaseGrid<arbd_real> grid_from_numpy_basis(
 	py::array_t<float, py::array::c_style | py::array::forcecast> values,
 	Vector3 origin,
 	Matrix3 basis) {
@@ -96,7 +96,7 @@ BaseGrid<float> grid_from_numpy_basis(
 	const auto ny = static_cast<idx_t>(info.shape[1]);
 	const auto nz = static_cast<idx_t>(info.shape[2]);
 
-	BaseGrid<float> grid(basis, origin, nx, ny, nz);
+	BaseGrid<arbd_real> grid(basis, origin, nx, ny, nz);
 	std::memcpy(grid.data(), info.ptr, static_cast<size_t>(info.size) * sizeof(float));
 	return grid;
 }
@@ -105,7 +105,7 @@ BaseGrid<float> grid_from_numpy_basis(
  * @brief Grid values as a 3D numpy array, shape (nx, ny, nz), matching
  *        grid_from_numpy's expected layout.
  */
-py::array_t<float> grid_to_numpy(const BaseGrid<float>& grid) {
+py::array_t<float> grid_to_numpy(const BaseGrid<arbd_real>& grid) {
 	py::array_t<float> result({static_cast<py::ssize_t>(grid.nx()),
 							   static_cast<py::ssize_t>(grid.ny()),
 							   static_cast<py::ssize_t>(grid.nz())});
@@ -118,7 +118,7 @@ py::array_t<float> grid_to_numpy(const BaseGrid<float>& grid) {
 // part of its device-shared API), so the linear-index formula - z fastest,
 // x slowest, matching numpy's default C order for shape (nx, ny, nz) - is
 // duplicated here from its public nx()/ny()/nz() instead.
-idx_t grid_flat_index(const BaseGrid<float>& grid, py::tuple ijk) {
+idx_t grid_flat_index(const BaseGrid<arbd_real>& grid, py::tuple ijk) {
 	if (ijk.size() != 3)
 		throw py::index_error("Grid index must be a length-3 (ix, iy, iz) tuple");
 	const auto ix = ijk[0].cast<idx_t>();
@@ -160,12 +160,12 @@ void declare_loadfile(py::module& m) {
 		});
 
 	//========================================================================
-	// Grid - host-side dense grid data (BaseGrid<float>)
+	// Grid - host-side dense grid data (BaseGrid<arbd_real>)
 	//========================================================================
-	py::class_<BaseGrid<float>>(m, "Grid")
+	py::class_<BaseGrid<arbd_real>>(m, "Grid")
 		.def(py::init<>(), "Create an empty 1x1x1 grid")
 		.def(py::init([](Vector3 origin, Matrix3 basis, idx_t nx, idx_t ny, idx_t nz) {
-				 return BaseGrid<float>(basis, origin, nx, ny, nz);
+				 return BaseGrid<arbd_real>(basis, origin, nx, ny, nz);
 			 }),
 			 py::arg("origin"),
 			 py::arg("basis"),
@@ -194,28 +194,28 @@ void declare_loadfile(py::module& m) {
 					"Build a dense grid from a 3D numpy array with a full (possibly "
 					"non-orthogonal) basis matrix")
 		.def("to_numpy", &grid_to_numpy, "Grid values as a 3D numpy array, shape (nx, ny, nz)")
-		.def("nx", &BaseGrid<float>::nx)
-		.def("ny", &BaseGrid<float>::ny)
-		.def("nz", &BaseGrid<float>::nz)
-		.def("size", &BaseGrid<float>::size)
+		.def("nx", &BaseGrid<arbd_real>::nx)
+		.def("ny", &BaseGrid<arbd_real>::ny)
+		.def("nz", &BaseGrid<arbd_real>::nz)
+		.def("size", &BaseGrid<arbd_real>::size)
 		.def_property_readonly("origin",
-								static_cast<const Vector3& (BaseGrid<float>::*)() const>(
-									&BaseGrid<float>::origin))
+								static_cast<const Vector3& (BaseGrid<arbd_real>::*)() const>(
+									&BaseGrid<arbd_real>::origin))
 		.def_property_readonly(
 			"basis",
-			static_cast<const Matrix3& (BaseGrid<float>::*)() const>(&BaseGrid<float>::basis))
+			static_cast<const Matrix3& (BaseGrid<arbd_real>::*)() const>(&BaseGrid<arbd_real>::basis))
 		.def("__getitem__",
-			 [](const BaseGrid<float>& g, idx_t i) { return g[i]; })
+			 [](const BaseGrid<arbd_real>& g, idx_t i) { return g[i]; })
 		.def("__getitem__",
-			 [](const BaseGrid<float>& g, py::tuple ijk) { return g[grid_flat_index(g, ijk)]; })
+			 [](const BaseGrid<arbd_real>& g, py::tuple ijk) { return g[grid_flat_index(g, ijk)]; })
 		.def("__setitem__",
-			 [](BaseGrid<float>& g, idx_t i, float value) { g[i] = value; })
+			 [](BaseGrid<arbd_real>& g, idx_t i, float value) { g[i] = value; })
 		.def("__setitem__",
-			 [](BaseGrid<float>& g, py::tuple ijk, float value) {
+			 [](BaseGrid<arbd_real>& g, py::tuple ijk, float value) {
 				 g[grid_flat_index(g, ijk)] = value;
 			 })
-		.def("__len__", &BaseGrid<float>::size)
-		.def("__repr__", [](const BaseGrid<float>& g) {
+		.def("__len__", &BaseGrid<arbd_real>::size)
+		.def("__repr__", [](const BaseGrid<arbd_real>& g) {
 			return "Grid(nx=" + std::to_string(g.nx()) + ", ny=" + std::to_string(g.ny()) +
 				   ", nz=" + std::to_string(g.nz()) + ")";
 		});

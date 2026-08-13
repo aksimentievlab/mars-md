@@ -8,6 +8,30 @@
 
 namespace ARBD {
 
+/**
+ * @brief Gaussian: U = amp exp(-r^2/sigma^2), zero beyond cutoff
+ * @param amp Well depth at r=0
+ * @param sigma Width (Angstrom)
+ * @param cutoff_squared Squared truncation radius; <= 0 disables the cutoff
+ */
+struct GaussianPotential {
+	arbd_real amp = arbd_real(1);
+	arbd_real sigma = arbd_real(1);
+	arbd_real cutoff_squared = arbd_real(0);
+
+	DEVICE ScalarForceEnergy compute(arbd_real distance) const {
+		const arbd_real d2 = distance * distance;
+		if (cutoff_squared > arbd_real(0) && d2 > cutoff_squared) {
+			return ScalarForceEnergy{float2{arbd_real(0), arbd_real(0)}};
+		}
+		const arbd_real inv_s2 = arbd_real(1) / (sigma * sigma);
+		const arbd_real energy = amp * math::exp(-d2 * inv_s2);
+		// F = -dU/dr = 2 r U / sigma^2
+		const arbd_real force = arbd_real(2) * distance * energy * inv_s2;
+		return ScalarForceEnergy{float2{force, energy}};
+	}
+};
+
 struct SoftcoreForceKernel {
 	KERNEL_FUNC void operator()(ScalarForceEnergy force_energy,
 								const Vector3* positions,
@@ -41,18 +65,21 @@ struct SoftcoreForceKernel {
 
 /**
  * @brief Pairwise tabulated nonbonded force computer
- *
- * `particle_indices` comes from a Pairlist (see Pairlist.h) - already filtered
- * by cutoff, and already remapped to original particle indices (see
- * ZOrderCellNeighborKernel). Exclusions are a flat, unsorted list (bonded
- * neighbors etc., see DeviceBondedInteractions::exclusion_pairs()) - checked
- * via a linear scan per pair, which is fine for the small exclusion counts
- * bonded topology produces; a sorted-range merge (as legacy's excludeMap
- * does) would be needed to scale this to much larger systems.
- *
- * Table lookup mirrors DevicePairNonBondedInteractions: a flat
- * num_particle_types*num_particle_types matrix maps (type_i, type_j) to an
- * index into `tables` (-1 = no interaction for that type pair).
+ * @param particle_indices Particle indices
+ * @param positions Particle positions
+ * @param force_energy Particle force and energy
+ * @param type_ids Particle types
+ * @param pairwise_table_matrix Pairwise table matrix
+ * @param pairwise_form_matrix Pairwise form matrix
+ * @param tables Pairwise tables
+ * @param num_particle_types Number of particle types
+ * @param excl_offsets Exclusion offsets
+ * @param excl_neighbors Exclusion neighbors
+ * @param num_excl_particles Number of excluded particles
+ * @param pbox Periodic box
+ * @param get_energy Get energy
+ * @param num_pairs Number of pairs
+ * @param cutoff_squared Cutoff squared
  */
 struct TabulatedNonBondedComputer {
 	// Members
@@ -70,10 +97,6 @@ struct TabulatedNonBondedComputer {
 	const PeriodicBox* pbox;
 	bool get_energy;
 	idx_t num_pairs;
-	/// Squared *interaction* cutoff. The pair list is built at the interaction
-	/// cutoff plus a skin, so a substantial fraction of the pairs it contains
-	/// lie beyond the interaction range and must be rejected here rather than
-	/// evaluated. A non-positive value disables the check.
 	float cutoff_squared;
 
 	// Constructor
@@ -127,9 +150,8 @@ struct TabulatedNonBondedComputer {
 
 		// Phase 1: Skip excluded pairs (bonded neighbors etc.).
 		// Scan only particle `indices.x`'s excluded-partner list (CSR), which is
-		// ~degree(indices.x) entries (typically 1-2 for a linear polymer) rather
-		// than the whole exclusion set. Each exclusion is stored in both partners'
-		// lists, so checking one endpoint is sufficient. This keeps the per-pair
+		// ~degree(indices.x) entries rather than the whole exclusion set. Each exclusion is stored
+		// in both partners' lists, so checking one endpoint is sufficient. This keeps the per-pair
 		// exclusion test O(1) w.r.t. system size; the old full scan was O(N) per
 		// pair, i.e. O(N^2) per step, which made large systems appear to hang.
 		if (indices.x < static_cast<int>(num_excl_particles)) {
@@ -227,4 +249,6 @@ extern template Event launch_cuda_kernel(const Resource& resource,
 #include <sycl/sycl.hpp>
 template<>
 struct sycl::is_device_copyable<ARBD::TabulatedNonBondedComputer> : std::true_type {};
+template<>
+struct sycl::is_device_copyable<ARBD::GaussianPotential> : std::true_type {};
 #endif

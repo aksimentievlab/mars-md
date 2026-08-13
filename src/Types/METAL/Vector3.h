@@ -235,7 +235,7 @@ inline Vector3_t<size_t> index_to_ijk(size_t idx, Vector3_t<size_t> n) {
 }
 
 // Metal type aliases for common usage
-using MetalVector3 = Vector3_t<float>;
+using MetalVector3 = Vector3_t<arbd_real>;
 
 } // namespace ARBD
 #endif

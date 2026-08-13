@@ -1,9 +1,0 @@
-arbd.postprocess.pressure
-arbd.polymerase
-arbd.himem
-arbd.smd_bond
-arbd.smd_grid
-multiresolution grids?  namdnugrid
-
-On the fly (jit) implementaion via pybind. 
-

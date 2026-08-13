@@ -149,7 +149,7 @@ void ConfigParser::parse_parameters(const Reader& reader) {
 	if (hasParameterVariant(reader, "temperature_grid", "temperature_grid")) {
 		std::string key = findParameterVariant(reader, "temperature_grid", "temperature_grid");
 		std::string grid_file = reader.findValue(key);
-		BaseGrid<float> grid = DXReader::read_from_file<float>(grid_file);
+		BaseGrid<arbd_real> grid = DXReader::read_from_file<float>(grid_file);
 		sim_system_ref_->set_temperature(grid);
 	} else if (hasParameterVariant(reader, "temperature", "temperature")) {
 		std::string key = findParameterVariant(reader, "temperature", "temperature");

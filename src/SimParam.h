@@ -27,13 +27,13 @@ struct Temperature {
 	Format format;
 	float value; // Kelvin
 	float kT;
-	BaseGrid<float> temperature_grid;
+	BaseGrid<arbd_real> temperature_grid;
 
 	Temperature(float value = 298.15f) : value(value) {
 		format = Format::Value;
 		kT = value * constants::BOLTZMANN;
 	}
-	Temperature(BaseGrid<float> grid) : temperature_grid(grid) {
+	Temperature(BaseGrid<arbd_real> grid) : temperature_grid(grid) {
 		format = Format::Grid;
 		value = 0.0f; // No scalar value defined for grid.
 		kT = 0.0f;	  // No global kT, but for compatibility we set it to zero.

@@ -148,7 +148,7 @@ Matrix3_t<T> operator*(T s, Matrix3_t<T> m) {
 }
 
 // Common type aliases for Metal
-using MetalMatrix3 = Matrix3_t<float>;
+using MetalMatrix3 = Matrix3_t<arbd_real>;
 
 } // namespace ARBD
 #endif

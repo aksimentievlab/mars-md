@@ -50,7 +50,7 @@ struct RBGridCullKernel {
 	const int2* __restrict__ candidate_pairs;	// (rb_a, rb_b); rb_b == rb_a for is_pmf candidates
 	const int* __restrict__ candidate_pair_idx; // index into grid_pairs
 	const RigidBodyGridPair* __restrict__ grid_pairs;
-	const BaseGridView<float>* __restrict__ grid_views; // indexed by grid_id
+	const BaseGridView<arbd_real>* __restrict__ grid_views; // indexed by grid_id
 	idx_t num_candidates;
 	float cutoff_squared;
 	idx_t step;
@@ -82,8 +82,8 @@ struct RBGridCullKernel {
 		}
 
 		const Matrix3 R_a = rb.orientation[rb_a];
-		const BaseGridView<float> rho_grid = grid_views[gp.grid_id_rho];
-		const BaseGridView<float> u_grid = grid_views[gp.grid_id_u];
+		const BaseGridView<arbd_real> rho_grid = grid_views[gp.grid_id_rho];
+		const BaseGridView<arbd_real> u_grid = grid_views[gp.grid_id_u];
 
 		RBGridWork w;
 		w.rho_grid_id = gp.grid_id_rho;
@@ -185,7 +185,7 @@ struct RBGridBatchedForceKernel {
 	const RBGridWork* __restrict__ work;
 	const unsigned int* __restrict__ work_count;
 	const unsigned int* __restrict__ total_blocks;
-	const BaseGridView<float>* __restrict__ grid_views;
+	const BaseGridView<arbd_real>* __restrict__ grid_views;
 	idx_t block_size;
 
 	template<typename WorkItemT>
@@ -206,8 +206,8 @@ struct RBGridBatchedForceKernel {
 		Vector3 f_acc(0.0f);
 		Vector3 t_acc(0.0f);
 		if (active) {
-			const BaseGridView<float> rho = grid_views[w.rho_grid_id];
-			const BaseGridView<float> u = grid_views[w.u_grid_id];
+			const BaseGridView<arbd_real> rho = grid_views[w.rho_grid_id];
+			const BaseGridView<arbd_real> u = grid_views[w.u_grid_id];
 			const idx_t slice = block_id - w.block_offset;
 			const idx_t stride = block_size * w.num_blocks;
 			for (idx_t i = slice * block_size + tid; i < rho.size(); i += stride) {

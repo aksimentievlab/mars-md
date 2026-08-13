@@ -132,7 +132,7 @@ class PressureCalculator {
 	float pressure_output_period_;
 
 	// GPU memory for pressure calculation
-	std::unique_ptr<DeviceBuffer<float>> block_pressure_d_;
+	std::unique_ptr<DeviceBuffer<arbd_real>> block_pressure_d_;
 	std::vector<float> block_pressure_;
 
 	/**
@@ -140,7 +140,7 @@ class PressureCalculator {
 	 */
 	void allocateGPUMemory(short resource_id) {
 		// Allocate GPU memory for block pressure results
-		block_pressure_d_ = std::make_unique<DeviceBuffer<float>>(num_blocks_, resource_id);
+		block_pressure_d_ = std::make_unique<DeviceBuffer<arbd_real>>(num_blocks_, resource_id);
 	};
 	/**
 	 * @brief Launch pressure calculation kernel

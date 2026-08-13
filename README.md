@@ -51,12 +51,19 @@ Ensure you have the spdlog submodule initialized:
 ```bash
 git submodule update --init
 ```
+### Build Unit Tests
+
+Unit Test devices can be set as
+```bash
+cmake --preset tbgl-cuda-debug -DUNIT_TEST_DEVICE_ARRAY="0;1;2" -DUNIT_TEST_DEVICE_ID=0
+```
+Omit `-DUNIT_TEST_DEVICE_ID` to use the first id in `UNIT_TEST_DEVICE_ARRAY`.
 
 ### Linux with CUDA
 
-1. **Set CUDA Architecture** (especially important for CMake < 3.24.0):
+1. **Set CUDA Architecture**:
    ```bash
-   export CMAKE_CUDA_ARCHITECTURES="35;50;75;80"
+   export CMAKE_CUDA_ARCHITECTURES="80;90"
    ```
 
 2. **Configure and Build**:

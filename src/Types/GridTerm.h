@@ -47,7 +47,7 @@ enum class InterpolationOrder : uint8_t { Linear = 1, Cubic = 3 };
  *          than inlining a view here, for two reasons. It keeps the term
  *          format-agnostic - GridManager hands out one unified id space for
  *          dense and sparse grids, so the same term works once the PNanoVDB
- *          path lands, whereas an inlined BaseGridView<float> would have made
+ *          path lands, whereas an inlined BaseGridView<arbd_real> would have made
  *          this dense-only. And it decouples initialization order: views exist
  *          only after grids are uploaded, while terms are built when types are
  *          uploaded.

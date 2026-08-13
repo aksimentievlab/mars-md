@@ -26,11 +26,15 @@ option(USE_PYBIND "Build Python bindings" OFF)
 option(USE_METAL "Use Apple Silicon Metal" OFF)
 option(USE_MPI "Use MPI for distributed computing" OFF)
 
-option(SYCL_DEVICE_TYPE "Device type for SYCL builds, can be Nvidia (0), AMD (1) or Intel (2). Default is 0 (Nvidia)." 0)
-# Optional: override GPU arch for icpx SYCL targets (used when SYCL_DEVICE_TYPE is set)
+set(SYCL_DEVICE_TYPE 0 CACHE INTEGER "Device type for SYCL builds, can be Nvidia (0), AMD (1) or Intel (2). Default is 0 (Nvidia)." 0)
 set(SYCL_NVIDIA_GPU_ARCH "sm_80" CACHE STRING "NVIDIA GPU architecture for icpx SYCL (e.g. sm_80, sm_86, sm_89, sm_90). Used when SYCL_DEVICE_TYPE=0.")
 set(SYCL_AMD_ARCH "gfx906" CACHE STRING "AMD GPU architecture for icpx SYCL (e.g. gfx906, gfx908, gfx90a). Used when SYCL_DEVICE_TYPE=1.")
 set(SYCL_INTEL_GPU_DEVICE "pvc" CACHE STRING "Intel GPU device for icpx SYCL AOT (e.g. pvc, mtl-h, skl). Used when SYCL_DEVICE_TYPE=2. Empty = spir64_gen generic.")
+# --- Unit test options ---
+# UNIT_TEST_DEVICE_ID is optional: empty → catch_boiler.h uses device_ids[0]
+# List: -DUNIT_TEST_DEVICE_ARRAY="0,1,2"
+set(UNIT_TEST_DEVICE_ID "" CACHE STRING "Optional GPU id for single-resource unit tests")
+set(UNIT_TEST_DEVICE_ARRAY "0" CACHE STRING "GPU ids for multi-resource unit tests")
 
 # --- Backend Selection Validation ---
 # Ensure only one backend is selected
@@ -61,9 +65,6 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(BUILD_NANOVDB OFF)
-#if(USE_CUDA OR USE_SYCL_ACPP OR USE_SYCL_ICPX)
-#    set(BUILD_NANOVDB ON)
-#endif()
 
 if(BUILD_NANOVDB)
 set(NANOVDB_BUILD_TOOLS OFF CACHE BOOL "Disable NanoVDB tools")

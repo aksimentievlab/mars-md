@@ -26,14 +26,14 @@ ZOrderSort::ZOrderSort(const Resource& resource, size_t max_particles, ZOrderOpt
 		smart_updates_enabled_ = true;
 		max_displacement_.fill(0.0f);
 		invalid_count_.fill(0);
-		LOGINFO("Created ZOrderSort (Pairlist mode) with capacity for {} particles on {}",
-				max_particles_,
-				resource_.toString());
+		LOGDEBUG("Created ZOrderSort (Pairlist mode) with capacity for {} particles on {}",
+				 max_particles_,
+				 resource_.toString());
 	} else {
 		smart_updates_enabled_ = false;
-		LOGINFO("Created ZOrderSort (System mode) with capacity for {} particles on {}",
-				max_particles_,
-				resource_.toString());
+		LOGDEBUG("Created ZOrderSort (System mode) with capacity for {} particles on {}",
+				 max_particles_,
+				 resource_.toString());
 	}
 }
 

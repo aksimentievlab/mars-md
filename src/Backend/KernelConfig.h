@@ -14,11 +14,13 @@
 #ifdef USE_METAL
 #include "METAL/METALManager.h"
 #endif
-
-#ifdef USD_CPU
+#ifdef USE_CPU
 #include <thread>
 #endif
 
+#ifdef HOST_GUARD
+#include "ARBDLogger.h"
+#endif
 namespace ARBD {
 struct kerneldim3 {
 	idx_t x = 1, y = 1, z = 1;

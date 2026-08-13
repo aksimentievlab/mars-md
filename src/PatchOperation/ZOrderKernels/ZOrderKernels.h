@@ -198,7 +198,7 @@ extern template Event launch_cuda_kernel(const Resource& resource,
 										 ValidateZOrderKernel kernel_func);
 extern template Event launch_cuda_kernel(const Resource& resource,
 										 const KernelConfig& config,
-										 ReorderDataKernel<Vector3_t<float>> kernel_func);
+										 ReorderDataKernel<Vector3_t<arbd_real>> kernel_func);
 extern template Event launch_cuda_kernel(const Resource& resource,
 										 const KernelConfig& config,
 										 DisplacementKernel kernel_func);

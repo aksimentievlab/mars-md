@@ -11,7 +11,7 @@ namespace gridgrid_detail {
  * sampled through u's (potential) field, ported from legacy
  * RigidBody's ComputeGridGrid.cu common_computeGridGridForce.
  *
- * rho/u grids are ordinary BaseGridView<float> (see Types/BaseGridDevice.h) -
+ * rho/u grids are ordinary BaseGridView<arbd_real> (see Types/BaseGridDevice.h) -
  * unlike legacy's separate local-frame-only RigidBodyGrid, no extra grid type
  * is needed here. The lab-frame transform (rigid body orientation/position
  * combined with each grid's own static local origin/basis) is computed once
@@ -39,8 +39,8 @@ namespace gridgrid_detail {
  * work (see arbd2v/plan.md Phase 3+); this function only needs the offset
  * updated to include a wrapDiff() against a PeriodicBox when that lands.
  */
-HOST DEVICE inline void grid_grid_voxel_force_torque(const BaseGridView<float>& rho,
-													 const BaseGridView<float>& u,
+HOST DEVICE inline void grid_grid_voxel_force_torque(const BaseGridView<arbd_real>& rho,
+													 const BaseGridView<arbd_real>& u,
 													 const Matrix3& basis_rho,
 													 const Matrix3& basis_u_inv,
 													 const Vector3& origin_offset,
@@ -58,7 +58,7 @@ HOST DEVICE inline void grid_grid_voxel_force_torque(const BaseGridView<float>& 
 	const Vector3 u_local = basis_u_inv.transform(r_pos + origin_offset);
 
 	const Matrix3 identity(1.0f);
-	const GridSample<float> sample = (scheme == 0) ? sample_grid_linear(u.data,
+	const GridSample<arbd_real> sample = (scheme == 0) ? sample_grid_linear(u.data,
 																		u_local,
 																		Vector3(0.0f),
 																		identity,
@@ -110,8 +110,8 @@ struct ComputeGridGridForceKernel {
 	template<typename WorkItemT>
 	KERNEL_FUNC void operator()(size_t i,
 								WorkItemT& item,
-								const BaseGridView<float> rho,
-								const BaseGridView<float> u,
+								const BaseGridView<arbd_real> rho,
+								const BaseGridView<arbd_real> u,
 								Vector3* __restrict__ ret_force_energy,
 								Vector3* __restrict__ ret_torque) const {
 		Vector3* force = item.template get_shared_mem<Vector3>(0);
@@ -138,11 +138,6 @@ struct ComputeGridGridForceKernel {
 		item.barrier();
 		for (idx_t offset = block_size / 2; offset > 0; offset >>= 1) {
 			if (tid < offset) {
-				// Vector3_t::operator+= only adds x/y/z (see Types/Vector3.h) -
-				// it's not meant for accumulating the .t slot, which is exactly
-				// where energy is packed here, so it needs an explicit add.
-				// (torque[tid].t is always 0 and unused, but summed too for
-				// consistency/robustness against future use.)
 				force[tid] += force[tid + offset];
 				force[tid].t += force[tid + offset].t; // energy
 				torque[tid] += torque[tid + offset];
@@ -158,6 +153,119 @@ struct ComputeGridGridForceKernel {
 	}
 };
 
+/// @brief grid[i] = 0
+template<typename T>
+struct ZeroGridKernel {
+	BaseGridMutableView<T> grid;
+
+	KERNEL_FUNC void operator()(idx_t i) const {
+		if (i >= grid.size())
+			return;
+		grid.set(i, T{0});
+	}
+};
+
+/// @brief grid[i] *= factor
+template<typename T>
+struct ScaleGridKernel {
+	BaseGridMutableView<T> grid;
+	T factor;
+
+	KERNEL_FUNC void operator()(idx_t i) const {
+		if (i >= grid.size())
+			return;
+		grid.set(i, grid.get(i) * factor);
+	}
+};
+
+/// @brief grid[i] += value
+template<typename T>
+struct ShiftGridKernel {
+	BaseGridMutableView<T> grid;
+	T value;
+
+	KERNEL_FUNC void operator()(idx_t i) const {
+		if (i >= grid.size())
+			return;
+		grid.set(i, grid.get(i) + value);
+	}
+};
+
+/**
+ * @brief dest[i] *= src[i], elementwise
+ * @note Callers must check that dest and src agree in dimensions; the kernel
+ *       only guards its own bounds, mirroring how BaseGrid::multiply leaves the
+ *       size check to its own host-side precondition.
+ */
+template<typename T>
+struct MultiplyGridKernel {
+	BaseGridMutableView<T> dest;
+	BaseGridView<T> src;
+
+	KERNEL_FUNC void operator()(idx_t i) const {
+		if (i >= dest.size())
+			return;
+		dest.set(i, dest.get(i) * src[i]);
+	}
+};
+
+/**
+ * @brief Real-space convolution out = density (*) kernel
+ * @details One thread per output voxel, gathering over the kernel's stencil.
+ *          Taps use the density's own boundary condition, so a periodic density
+ *          reproduces the circular convolution an FFT would give.
+ * @param scale Applied to each output voxel; 1 sums raw voxel products, the
+ *        density's cell volume gives the volume integral.
+ * @note The kernel is centered on voxel (n-1)/2 per axis. Even dimensions shift
+ *       the result half a voxel - same caveat as arbdmodel's convolve helper.
+ */
+template<typename T>
+struct ConvolveGridKernel {
+	BaseGridView<T> density;
+	BaseGridView<T> kernel;
+	BaseGridMutableView<T> out;
+	T scale;
+
+	KERNEL_FUNC void operator()(idx_t i) const {
+		if (i >= out.size())
+			return;
+
+		const idx_t onz = out.nz();
+		const idx_t ony = out.ny();
+		const int iz = static_cast<int>(i % onz);
+		const int iy = static_cast<int>((i / onz) % ony);
+		const int ix = static_cast<int>(i / (onz * ony));
+
+		const int kx = static_cast<int>(kernel.nx());
+		const int ky = static_cast<int>(kernel.ny());
+		const int kz = static_cast<int>(kernel.nz());
+		const int cx = (kx - 1) / 2;
+		const int cy = (ky - 1) / 2;
+		const int cz = (kz - 1) / 2;
+
+		T sum = T{0};
+		for (int a = 0; a < kx; ++a) {
+			for (int b = 0; b < ky; ++b) {
+				for (int c = 0; c < kz; ++c) {
+					const T kv = kernel.data[c + b * kz + a * ky * kz];
+					if (kv == T{0})
+						continue;
+					// K is indexed at (x - y + c), i.e. the density tap runs
+					// backwards - convolution, not correlation. Identical for
+					// symmetric kernels, mirrored for asymmetric ones.
+					sum += kv * fetch_grid_value(density.data,
+												 ix + cx - a,
+												 iy + cy - b,
+												 iz + cz - c,
+												 density.dimensions,
+												 density.boundary_condition);
+				}
+			}
+		}
+		out.set(i, sum * scale);
+	}
+};
+
 } // namespace ARBD
 
 // Explicit template instantiation declaration to prevent host instantiation
@@ -169,10 +277,26 @@ namespace ARBD {
 extern template Event launch_cuda_kernel_with_workitem(const Resource& resource,
 													   const KernelConfig& config,
 													   ComputeGridGridForceKernel kernel_func,
-													   const BaseGridView<float> rho,
-													   const BaseGridView<float> u,
+													   const BaseGridView<arbd_real> rho,
+													   const BaseGridView<arbd_real> u,
 													   Vector3* ret_force_energy,
 													   Vector3* ret_torque);
+
+extern template Event launch_cuda_kernel(const Resource& resource,
+										 const KernelConfig& config,
+										 ZeroGridKernel<arbd_real> kernel_func);
+extern template Event launch_cuda_kernel(const Resource& resource,
+										 const KernelConfig& config,
+										 ScaleGridKernel<arbd_real> kernel_func);
+extern template Event launch_cuda_kernel(const Resource& resource,
+										 const KernelConfig& config,
+										 ShiftGridKernel<arbd_real> kernel_func);
+extern template Event launch_cuda_kernel(const Resource& resource,
+										 const KernelConfig& config,
+										 MultiplyGridKernel<arbd_real> kernel_func);
+extern template Event launch_cuda_kernel(const Resource& resource,
+										 const KernelConfig& config,
+										 ConvolveGridKernel<arbd_real> kernel_func);
 } // namespace ARBD
 #endif
 
@@ -180,4 +304,14 @@ extern template Event launch_cuda_kernel_with_workitem(const Resource& resource,
 #include <sycl/sycl.hpp>
 template<>
 struct sycl::is_device_copyable<ARBD::ComputeGridGridForceKernel> : std::true_type {};
+template<typename T>
+struct sycl::is_device_copyable<ARBD::ZeroGridKernel<T>> : std::true_type {};
+template<typename T>
+struct sycl::is_device_copyable<ARBD::ScaleGridKernel<T>> : std::true_type {};
+template<typename T>
+struct sycl::is_device_copyable<ARBD::ShiftGridKernel<T>> : std::true_type {};
+template<typename T>
+struct sycl::is_device_copyable<ARBD::MultiplyGridKernel<T>> : std::true_type {};
+template<typename T>
+struct sycl::is_device_copyable<ARBD::ConvolveGridKernel<T>> : std::true_type {};
 #endif

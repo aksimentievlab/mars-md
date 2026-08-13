@@ -739,8 +739,8 @@ void PatchManager::initialize_communication_buffers() {
 			if (!comm.active)
 				continue;
 			const Resource& res = patch_metadata_[pid].resource;
-			comm.send_buffer = DeviceBuffer<float>(max_halo * 8, res);
-			comm.recv_buffer = DeviceBuffer<float>(max_halo * 8, res);
+			comm.send_buffer = DeviceBuffer<arbd_real>(max_halo * 8, res);
+			comm.recv_buffer = DeviceBuffer<arbd_real>(max_halo * 8, res);
 			comm.max_halo_particles = max_halo;
 		}
 	}

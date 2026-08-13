@@ -6,43 +6,37 @@
 #include "Matrix3.h"
 #include "Types.h"
 #include "Vector3.h"
-
-namespace ARBD {
-
 /**
- * @brief Immutable device-side view of grid data
- * @details Lightweight POD struct safe for passing to CUDA/SYCL kernels by value.
- *          Contains only raw pointers and trivially copyable types.
- *          All operations are const and device-safe.
- *	@brief Boundary condition types for grid operations
- *
+ * @file BaseGridDevice.h
+ * @brief Device-side grid views and shared sampling helpers.
+ * @details GridGeometry<T> (geometry, no data), BaseGridView<T> (+ read-only
+ *          pointer), BaseGridMutableView<T> (+ writable pointer).
+ *          See BaseGridDevice.md.
+ */
+namespace ARBD {
+/**
+ * @brief Where a grid sits in space, plus the index math implied by that.
+ * @details POD, no data pointer. Shared base of both views.
  * @tparam T Grid value type (float/double)
  */
 template<typename T>
-struct BaseGridView {
-	// POD members only - safe for kernel parameters
-	CONSTANT_PTR(T) __restrict__ data; ///< Raw pointer to device grid data
-	Vector3_t<T> origin;			   ///< Grid origin in world space
-	Matrix3_t<T> basis;				   ///< Basis vectors (grid spacing)
-	Matrix3_t<T> basis_inv;			   ///< Cached inverse basis
-	Vector3_t<idx_t> dimensions;	   ///< Grid dimensions (nx, ny, nz)
+struct GridGeometry {
+	Vector3_t<T> origin;		 ///< Grid origin in world space
+	Matrix3_t<T> basis;			 ///< Basis vectors (grid spacing)
+	Matrix3_t<T> basis_inv;		 ///< Cached inverse basis
+	Vector3_t<idx_t> dimensions; ///< Grid dimensions (nx, ny, nz)
 	int grid_id;
-	int boundary_condition;
-	// 1- Dirichlet, 2- Neumann, 3- Periodic
+	int boundary_condition; ///< GridBoundaryCondition as int (see GridTerm.h)
+
 	/*===================*\
 	|  INDEX OPERATIONS   |
 	\*===================*/
 
-	/**
-	 * @brief Convert 3D indices to linear index
-	 */
+	/// @brief Convert 3D indices to linear index
 	HOST DEVICE constexpr idx_t index(idx_t ix, idx_t iy, idx_t iz) const noexcept {
 		return iz + iy * dimensions.z + ix * dimensions.y * dimensions.z;
 	}
 
-	/**
-	 * @brief Get grid dimensions
-	 */
 	HOST DEVICE constexpr idx_t nx() const noexcept {
 		return dimensions.x;
 	}
@@ -57,203 +51,144 @@ struct BaseGridView {
 	}
 
 	/*===================*\
-	|  VALUE ACCESS       |
-	\*===================*/
-
-	/**
-	 * @brief Direct indexed access (no bounds checking)
-	 */
-	HOST DEVICE constexpr T operator[](idx_t linear_idx) const noexcept {
-		return data[linear_idx];
-	}
-
-	HOST DEVICE constexpr T operator()(idx_t ix, idx_t iy, idx_t iz) const noexcept {
-		return data[index(ix, iy, iz)];
-	}
-
-	/*===================*\
 	|  SPATIAL QUERIES    |
 	\*===================*/
 
-	/**
-	 * @brief Transform world position to grid coordinates
-	 */
+	/// @brief Transform world position to grid coordinates
 	HOST DEVICE Vector3_t<T> world_to_grid(const Vector3_t<T>& world_pos) const noexcept {
 		return basis_inv.transform(world_pos - origin);
 	}
 
-	/**
-	 * @brief Transform grid coordinates to world position
-	 */
+	/// @brief Transform grid coordinates to world position
 	HOST DEVICE Vector3_t<T> grid_to_world(const Vector3_t<T>& grid_pos) const noexcept {
 		return basis.transform(grid_pos) + origin;
 	}
 
-	/**
-	 * @brief Trilinear interpolation at world position
-	 */
-	HOST DEVICE T interpolate(const Vector3_t<T>& world_pos) const noexcept {
-		const Vector3_t<T> grid_pos = world_to_grid(world_pos);
-
-		// Clamp to grid bounds
-		const T gx = clamp(grid_pos.x, T{0}, static_cast<T>(nx() - 1) - T{0.001});
-		const T gy = clamp(grid_pos.y, T{0}, static_cast<T>(ny() - 1) - T{0.001});
-		const T gz = clamp(grid_pos.z, T{0}, static_cast<T>(nz() - 1) - T{0.001});
-
-		const idx_t i0 = static_cast<idx_t>(gx);
-		const idx_t j0 = static_cast<idx_t>(gy);
-		const idx_t k0 = static_cast<idx_t>(gz);
-		const idx_t i1 = i0 + 1;
-		const idx_t j1 = j0 + 1;
-		const idx_t k1 = k0 + 1;
-
-		const T fx = gx - static_cast<T>(i0);
-		const T fy = gy - static_cast<T>(j0);
-		const T fz = gz - static_cast<T>(k0);
-
-		// Trilinear interpolation
-		const T c000 = (*this)(i0, j0, k0);
-		const T c100 = (*this)(i1, j0, k0);
-		const T c010 = (*this)(i0, j1, k0);
-		const T c110 = (*this)(i1, j1, k0);
-		const T c001 = (*this)(i0, j0, k1);
-		const T c101 = (*this)(i1, j0, k1);
-		const T c011 = (*this)(i0, j1, k1);
-		const T c111 = (*this)(i1, j1, k1);
-
-		const T c00 = c000 * (T{1} - fx) + c100 * fx;
-		const T c10 = c010 * (T{1} - fx) + c110 * fx;
-		const T c01 = c001 * (T{1} - fx) + c101 * fx;
-		const T c11 = c011 * (T{1} - fx) + c111 * fx;
-
-		const T c0 = c00 * (T{1} - fy) + c10 * fy;
-		const T c1 = c01 * (T{1} - fy) + c11 * fy;
-
-		return c0 * (T{1} - fz) + c1 * fz;
-	}
-
-	/**
-	 * @brief Nearest neighbor lookup
-	 */
-	HOST DEVICE T nearest(const Vector3_t<T>& world_pos) const noexcept {
-		const Vector3_t<T> grid_pos = world_to_grid(world_pos);
-		const idx_t ix = static_cast<idx_t>(grid_pos.x + T{0.5});
-		const idx_t iy = static_cast<idx_t>(grid_pos.y + T{0.5});
-		const idx_t iz = static_cast<idx_t>(grid_pos.z + T{0.5});
-
-		if (ix >= nx() || iy >= ny() || iz >= nz()) {
-			return T{0}; // Out of bounds
-		}
-
-		return (*this)(ix, iy, iz);
-	}
-
-	/**
-	 * @brief Compute gradient at world position (central differences)
-	 */
-	HOST DEVICE Vector3_t<T> gradient(const Vector3_t<T>& world_pos) const noexcept {
-		const Vector3_t<T> grid_pos = world_to_grid(world_pos);
-
-		// Check bounds for gradient calculation (need neighbors)
-		if (grid_pos.x < T{1} || grid_pos.x >= static_cast<T>(nx() - 1) || grid_pos.y < T{1} ||
-			grid_pos.y >= static_cast<T>(ny() - 1) || grid_pos.z < T{1} ||
-			grid_pos.z >= static_cast<T>(nz() - 1)) {
-			return Vector3_t<T>{T{0}, T{0}, T{0}};
-		}
-
-		const idx_t i = static_cast<idx_t>(grid_pos.x);
-		const idx_t j = static_cast<idx_t>(grid_pos.y);
-		const idx_t k = static_cast<idx_t>(grid_pos.z);
-
-		// Central differences in grid space
-		const T dx_grid = ((*this)(i + 1, j, k) - (*this)(i - 1, j, k)) / T{2};
-		const T dy_grid = ((*this)(i, j + 1, k) - (*this)(i, j - 1, k)) / T{2};
-		const T dz_grid = ((*this)(i, j, k + 1) - (*this)(i, j, k - 1)) / T{2};
-
-		// Transform gradient from grid space to world space
-		const Vector3_t<T> grad_grid(dx_grid, dy_grid, dz_grid);
-		return basis_inv.transpose().transform(grad_grid);
-	}
-
-  private:
 	HOST DEVICE static constexpr T clamp(T val, T min_val, T max_val) noexcept {
 		return val < min_val ? min_val : (val > max_val ? max_val : val);
 	}
 };
 
+// Declared ahead of the views because the view methods below forward to them;
+// the definitions follow the view definitions.
 template<typename T>
-struct ScaleGrid {
-	HOST DEVICE void operator()(T scale, T* grid_values) const {
-		grid_values = grid_values * scale;
+HOST DEVICE T interpolate_grid_point(CONSTANT_PTR(T) __restrict__ grid_values,
+									 const Vector3_t<T>& world_pos,
+									 const Vector3_t<T>& origin,
+									 const Matrix3_t<T>& basis_inv,
+									 const Vector3_t<idx_t>& dimensions,
+									 int boundary_condition);
+
+template<typename T>
+HOST DEVICE T get_value_nearest(CONSTANT_PTR(T) __restrict__ grid_values,
+								const Vector3_t<T>& world_pos,
+								const Vector3_t<T>& origin,
+								const Matrix3_t<T>& basis_inv,
+								const Vector3_t<idx_t>& dimensions,
+								int boundary_condition);
+
+template<typename T>
+HOST DEVICE Vector3_t<T> compute_gradient(CONSTANT_PTR(T) __restrict__ grid_values,
+										  const Vector3_t<T>& world_pos,
+										  const Vector3_t<T>& origin,
+										  const Matrix3_t<T>& basis,
+										  const Matrix3_t<T>& basis_inv,
+										  const Vector3_t<idx_t>& dimensions,
+										  int boundary_condition);
+
+/**
+ * @brief Immutable device-side view of grid data
+ * @details Lightweight POD safe for passing to CUDA/SYCL kernels by value.
+ *          All operations are const and device-safe.
+ */
+template<typename T>
+struct BaseGridView : GridGeometry<T> {
+	CONSTANT_PTR(T) __restrict__ data; ///< Read-only pointer to device grid data
+
+	/*===================*\
+	|  VALUE ACCESS       |
+	\*===================*/
+
+	/// @brief Direct indexed access (no bounds checking)
+	HOST DEVICE constexpr T operator[](idx_t linear_idx) const noexcept {
+		return data[linear_idx];
+	}
+
+	HOST DEVICE constexpr T operator()(idx_t ix, idx_t iy, idx_t iz) const noexcept {
+		return data[this->index(ix, iy, iz)];
+	}
+
+	/*===================*\
+	|  SAMPLING           |
+	\*===================*/
+	// Thin forwards to the shared free functions - see the file header for why
+	// these must not grow independent implementations.
+
+	/// @brief Trilinear interpolation at world position
+	HOST DEVICE T interpolate(const Vector3_t<T>& world_pos) const noexcept {
+		return interpolate_grid_point<T>(data,
+										 world_pos,
+										 this->origin,
+										 this->basis_inv,
+										 this->dimensions,
+										 this->boundary_condition);
+	}
+
+	/// @brief Nearest neighbor lookup
+	HOST DEVICE T nearest(const Vector3_t<T>& world_pos) const noexcept {
+		return get_value_nearest<T>(data,
+									world_pos,
+									this->origin,
+									this->basis_inv,
+									this->dimensions,
+									this->boundary_condition);
+	}
+
+	/// @brief Gradient at world position (central differences)
+	HOST DEVICE Vector3_t<T> gradient(const Vector3_t<T>& world_pos) const noexcept {
+		return compute_gradient<T>(data,
+								   world_pos,
+								   this->origin,
+								   this->basis,
+								   this->basis_inv,
+								   this->dimensions,
+								   this->boundary_condition);
 	}
 };
 
 /**
- * @brief Device-safe interpolation function (CUDA/SYCL compatible)
+ * @brief Writable device-side view of grid data
+ * @details Same geometry as BaseGridView but holds DEVICE_PTR(T), so grid
+ *          mutation kernels (zero/scale/shift/multiply, convolution output) can
+ *          write through it. Read access goes through const_view() so the
+ *          sampling helpers are never duplicated for the mutable case.
  */
 template<typename T>
-struct InterpolateGridPoint {
-	T operator()(CONSTANT_PTR(T) __restrict__ grid_values,
-				 const Vector3_t<T>& world_pos,
-				 const Vector3_t<T>& origin,
-				 const Matrix3_t<T>& basis_inv,
-				 const Vector3_t<idx_t>& dimensions,
-				 int boundary_condition) const {
-		// Transform world position to grid coordinates
-		const Vector3_t<T> grid_pos = basis_inv.transform(world_pos - origin);
+struct BaseGridMutableView : GridGeometry<T> {
+	DEVICE_PTR(T) __restrict__ data; ///< Writable pointer to device grid data
 
-		const idx_t nx = dimensions.x;
-		const idx_t ny = dimensions.y;
-		const idx_t nz = dimensions.z;
+	HOST DEVICE T get(idx_t linear_idx) const noexcept {
+		return data[linear_idx];
+	}
 
-		// Check bounds
-		if (grid_pos.x < 0 || grid_pos.x >= nx || grid_pos.y < 0 || grid_pos.y >= ny ||
-			grid_pos.z < 0 || grid_pos.z >= nz) {
-			return T{0};
-		}
+	HOST DEVICE T get(idx_t ix, idx_t iy, idx_t iz) const noexcept {
+		return data[this->index(ix, iy, iz)];
+	}
 
-		// Linear interpolation
-		const idx_t i0 = static_cast<idx_t>(grid_pos.x);
-		const idx_t j0 = static_cast<idx_t>(grid_pos.y);
-		const idx_t k0 = static_cast<idx_t>(grid_pos.z);
+	HOST DEVICE void set(idx_t linear_idx, T value) const noexcept {
+		data[linear_idx] = value;
+	}
 
-		const idx_t i1 = i0 + 1;
-		const idx_t j1 = j0 + 1;
-		const idx_t k1 = k0 + 1;
+	HOST DEVICE void set(idx_t ix, idx_t iy, idx_t iz, T value) const noexcept {
+		data[this->index(ix, iy, iz)] = value;
+	}
 
-		const T fx = grid_pos.x - static_cast<T>(i0);
-		const T fy = grid_pos.y - static_cast<T>(j0);
-		const T fz = grid_pos.z - static_cast<T>(k0);
-
-		// Get grid indices using consistent indexing
-		const idx_t idx000 = k0 + j0 * nz + i0 * ny * nz;
-		const idx_t idx001 = k1 + j0 * nz + i0 * ny * nz;
-		const idx_t idx010 = k0 + j1 * nz + i0 * ny * nz;
-		const idx_t idx011 = k1 + j1 * nz + i0 * ny * nz;
-		const idx_t idx100 = k0 + j0 * nz + i1 * ny * nz;
-		const idx_t idx101 = k1 + j0 * nz + i1 * ny * nz;
-		const idx_t idx110 = k0 + j1 * nz + i1 * ny * nz;
-		const idx_t idx111 = k1 + j1 * nz + i1 * ny * nz;
-
-		// Trilinear interpolation
-		const T v000 = grid_values[idx000];
-		const T v001 = grid_values[idx001];
-		const T v010 = grid_values[idx010];
-		const T v011 = grid_values[idx011];
-		const T v100 = grid_values[idx100];
-		const T v101 = grid_values[idx101];
-		const T v110 = grid_values[idx110];
-		const T v111 = grid_values[idx111];
-
-		const T v00 = v000 * (T{1} - fx) + v100 * fx;
-		const T v01 = v001 * (T{1} - fx) + v101 * fx;
-		const T v10 = v010 * (T{1} - fx) + v110 * fx;
-		const T v11 = v011 * (T{1} - fx) + v111 * fx;
-
-		const T v0 = v00 * (T{1} - fy) + v10 * fy;
-		const T v1 = v01 * (T{1} - fy) + v11 * fy;
-
-		return v0 * (T{1} - fz) + v1 * fz;
+	/// @brief Read-only view over the same grid, for the sampling helpers.
+	HOST DEVICE BaseGridView<T> const_view() const noexcept {
+		BaseGridView<T> v;
+		static_cast<GridGeometry<T>&>(v) = static_cast<const GridGeometry<T>&>(*this);
+		v.data = data;
+		return v;
 	}
 };
 
@@ -268,8 +203,45 @@ HOST DEVICE inline T fetch_grid_value_or_zero(CONSTANT_PTR(T) __restrict__ grid_
 											  int jz,
 											  const Vector3_t<idx_t>& dimensions) {
 	if (jx < 0 || jx >= static_cast<int>(dimensions.x) || jy < 0 ||
-		jy >= static_cast<int>(dimensions.y) || jz < 0 ||
-		jz >= static_cast<int>(dimensions.z)) {
+		jy >= static_cast<int>(dimensions.y) || jz < 0 || jz >= static_cast<int>(dimensions.z)) {
+		return T{0};
+	}
+	const idx_t idx = static_cast<idx_t>(jz) + static_cast<idx_t>(jy) * dimensions.z +
+					  static_cast<idx_t>(jx) * dimensions.y * dimensions.z;
+	return grid_values[idx];
+}
+
+/**
+ * @brief Map one out-of-range index per boundary condition.
+ * @return false if the tap lies outside the domain (Dirichlet)
+ */
+HOST DEVICE inline bool map_grid_index(int& j, idx_t n, int boundary_condition) {
+	const int ni = static_cast<int>(n);
+	if (j >= 0 && j < ni) {
+		return true;
+	}
+	if (boundary_condition == static_cast<int>(GridBoundaryCondition::Periodic)) {
+		j = ((j % ni) + ni) % ni;
+		return true;
+	}
+	if (boundary_condition == static_cast<int>(GridBoundaryCondition::Neumann)) {
+		j = j < 0 ? 0 : ni - 1; // zero derivative: replicate the edge value
+		return true;
+	}
+	return false; // Dirichlet, and anything unrecognized
+}
+
+/// @brief Fetch one tap honoring the grid's boundary condition.
+template<typename T>
+HOST DEVICE inline T fetch_grid_value(CONSTANT_PTR(T) __restrict__ grid_values,
+									  int jx,
+									  int jy,
+									  int jz,
+									  const Vector3_t<idx_t>& dimensions,
+									  int boundary_condition) {
+	if (!map_grid_index(jx, dimensions.x, boundary_condition) ||
+		!map_grid_index(jy, dimensions.y, boundary_condition) ||
+		!map_grid_index(jz, dimensions.z, boundary_condition)) {
 		return T{0};
 	}
 	const idx_t idx = static_cast<idx_t>(jz) + static_cast<idx_t>(jy) * dimensions.z +
@@ -294,29 +266,26 @@ HOST DEVICE T interpolate_grid_point(CONSTANT_PTR(T) __restrict__ grid_values,
 	const idx_t ny = dimensions.y;
 	const idx_t nz = dimensions.z;
 
-	// Check bounds
-	if (grid_pos.x < 0 || grid_pos.x >= nx || grid_pos.y < 0 || grid_pos.y >= ny ||
-		grid_pos.z < 0 || grid_pos.z >= nz) {
-		return T{0};
-	}
-
-	// Linear interpolation - zero-pad missing neighbors at grid edges (legacy convention).
-	const int i0 = static_cast<int>(grid_pos.x);
-	const int j0 = static_cast<int>(grid_pos.y);
-	const int k0 = static_cast<int>(grid_pos.z);
+	const int i0 = static_cast<int>(math::floor(grid_pos.x));
+	const int j0 = static_cast<int>(math::floor(grid_pos.y));
+	const int k0 = static_cast<int>(math::floor(grid_pos.z));
 
 	const T fx = grid_pos.x - static_cast<T>(i0);
 	const T fy = grid_pos.y - static_cast<T>(j0);
 	const T fz = grid_pos.z - static_cast<T>(k0);
 
-	const T v000 = fetch_grid_value_or_zero(grid_values, i0, j0, k0, dimensions);
-	const T v001 = fetch_grid_value_or_zero(grid_values, i0, j0, k0 + 1, dimensions);
-	const T v010 = fetch_grid_value_or_zero(grid_values, i0, j0 + 1, k0, dimensions);
-	const T v011 = fetch_grid_value_or_zero(grid_values, i0, j0 + 1, k0 + 1, dimensions);
-	const T v100 = fetch_grid_value_or_zero(grid_values, i0 + 1, j0, k0, dimensions);
-	const T v101 = fetch_grid_value_or_zero(grid_values, i0 + 1, j0, k0 + 1, dimensions);
-	const T v110 = fetch_grid_value_or_zero(grid_values, i0 + 1, j0 + 1, k0, dimensions);
-	const T v111 = fetch_grid_value_or_zero(grid_values, i0 + 1, j0 + 1, k0 + 1, dimensions);
+	const T v000 = fetch_grid_value(grid_values, i0, j0, k0, dimensions, boundary_condition);
+	const T v001 = fetch_grid_value(grid_values, i0, j0, k0 + 1, dimensions, boundary_condition);
+	const T v010 = fetch_grid_value(grid_values, i0, j0 + 1, k0, dimensions, boundary_condition);
+	const T v011 =
+		fetch_grid_value(grid_values, i0, j0 + 1, k0 + 1, dimensions, boundary_condition);
+	const T v100 = fetch_grid_value(grid_values, i0 + 1, j0, k0, dimensions, boundary_condition);
+	const T v101 =
+		fetch_grid_value(grid_values, i0 + 1, j0, k0 + 1, dimensions, boundary_condition);
+	const T v110 =
+		fetch_grid_value(grid_values, i0 + 1, j0 + 1, k0, dimensions, boundary_condition);
+	const T v111 =
+		fetch_grid_value(grid_values, i0 + 1, j0 + 1, k0 + 1, dimensions, boundary_condition);
 
 	const T v00 = v000 * (T{1} - fx) + v100 * fx;
 	const T v01 = v001 * (T{1} - fx) + v101 * fx;
@@ -342,19 +311,11 @@ HOST DEVICE T get_value_nearest(CONSTANT_PTR(T) __restrict__ grid_values,
 	// Transform to grid coordinates
 	const Vector3_t<T> grid_pos = basis_inv.transform(world_pos - origin);
 
-	// Find nearest grid point
-	const idx_t ix = static_cast<idx_t>(grid_pos.x + T{0.5});
-	const idx_t iy = static_cast<idx_t>(grid_pos.y + T{0.5});
-	const idx_t iz = static_cast<idx_t>(grid_pos.z + T{0.5});
+	const int ix = static_cast<int>(math::floor(grid_pos.x + T{0.5}));
+	const int iy = static_cast<int>(math::floor(grid_pos.y + T{0.5}));
+	const int iz = static_cast<int>(math::floor(grid_pos.z + T{0.5}));
 
-	// Wrap for periodic boundaries (simple modulo)
-	const idx_t wrapped_ix = ix % dimensions.x;
-	const idx_t wrapped_iy = iy % dimensions.y;
-	const idx_t wrapped_iz = iz % dimensions.z;
-
-	const idx_t linear_idx =
-		wrapped_iz + wrapped_iy * dimensions.z + wrapped_ix * dimensions.y * dimensions.z;
-	return grid_values[linear_idx];
+	return fetch_grid_value(grid_values, ix, iy, iz, dimensions, boundary_condition);
 }
 
 /**
@@ -374,27 +335,27 @@ HOST DEVICE Vector3_t<T> compute_gradient(CONSTANT_PTR(T) __restrict__ grid_valu
 	const idx_t ny = dimensions.y;
 	const idx_t nz = dimensions.z;
 
-	// Check if we're in bounds for gradient calculation
-	if (grid_pos.x < 1 || grid_pos.x >= nx - 1 || grid_pos.y < 1 || grid_pos.y >= ny - 1 ||
-		grid_pos.z < 1 || grid_pos.z >= nz - 1) {
+	// Dirichlet: no real neighbors at the edge, so keep the legacy zero.
+	if (boundary_condition == static_cast<int>(GridBoundaryCondition::Dirichlet) &&
+		(grid_pos.x < 1 || grid_pos.x >= nx - 1 || grid_pos.y < 1 || grid_pos.y >= ny - 1 ||
+		 grid_pos.z < 1 || grid_pos.z >= nz - 1)) {
 		return Vector3_t<T>{T{0}, T{0}, T{0}};
 	}
 
-	const idx_t i = static_cast<idx_t>(grid_pos.x);
-	const idx_t j = static_cast<idx_t>(grid_pos.y);
-	const idx_t k = static_cast<idx_t>(grid_pos.z);
+	const int i = static_cast<int>(math::floor(grid_pos.x));
+	const int j = static_cast<int>(math::floor(grid_pos.y));
+	const int k = static_cast<int>(math::floor(grid_pos.z));
 
 	// Central differences
-	const idx_t idx_xp = k + j * nz + (i + 1) * ny * nz;
-	const idx_t idx_xm = k + j * nz + (i - 1) * ny * nz;
-	const idx_t idx_yp = k + (j + 1) * nz + i * ny * nz;
-	const idx_t idx_ym = k + (j - 1) * nz + i * ny * nz;
-	const idx_t idx_zp = (k + 1) + j * nz + i * ny * nz;
-	const idx_t idx_zm = (k - 1) + j * nz + i * ny * nz;
-
-	const T dx_grid = (grid_values[idx_xp] - grid_values[idx_xm]) / T{2};
-	const T dy_grid = (grid_values[idx_yp] - grid_values[idx_ym]) / T{2};
-	const T dz_grid = (grid_values[idx_zp] - grid_values[idx_zm]) / T{2};
+	const T dx_grid = (fetch_grid_value(grid_values, i + 1, j, k, dimensions, boundary_condition) -
+					   fetch_grid_value(grid_values, i - 1, j, k, dimensions, boundary_condition)) /
+					  T{2};
+	const T dy_grid = (fetch_grid_value(grid_values, i, j + 1, k, dimensions, boundary_condition) -
+					   fetch_grid_value(grid_values, i, j - 1, k, dimensions, boundary_condition)) /
+					  T{2};
+	const T dz_grid = (fetch_grid_value(grid_values, i, j, k + 1, dimensions, boundary_condition) -
+					   fetch_grid_value(grid_values, i, j, k - 1, dimensions, boundary_condition)) /
+					  T{2};
 
 	// Transform gradient from grid space to world space
 	const Vector3_t<T> grad_grid(dx_grid, dy_grid, dz_grid);
@@ -465,7 +426,7 @@ HOST DEVICE GridSample<T> sample_grid_cubic(CONSTANT_PTR(T) __restrict__ grid_va
 			T v[4];
 			for (int ix = 0; ix < 4; ++ix) {
 				const int jx = homeX - 1 + ix;
-				v[ix] = fetch_grid_value_or_zero(grid_values, jx, jy, jz, dimensions);
+				v[ix] = fetch_grid_value(grid_values, jx, jy, jz, dimensions, boundary_condition);
 			}
 			dVdx_stage1[iy][iz] = catmull_rom_deriv(v[0], v[1], v[2], v[3], wx);
 			V_stage1[iy][iz] = catmull_rom_value(v[0], v[1], v[2], v[3], wx);
@@ -477,12 +438,21 @@ HOST DEVICE GridSample<T> sample_grid_cubic(CONSTANT_PTR(T) __restrict__ grid_va
 	T dVdy_stage2[4]; // d/dy, before z blend
 	T V_stage2[4];	  // value, blended along x and y
 	for (int iz = 0; iz < 4; ++iz) {
-		dVdx_stage2[iz] = catmull_rom_value(
-			dVdx_stage1[0][iz], dVdx_stage1[1][iz], dVdx_stage1[2][iz], dVdx_stage1[3][iz], wy);
-		dVdy_stage2[iz] = catmull_rom_deriv(
-			V_stage1[0][iz], V_stage1[1][iz], V_stage1[2][iz], V_stage1[3][iz], wy);
-		V_stage2[iz] = catmull_rom_value(
-			V_stage1[0][iz], V_stage1[1][iz], V_stage1[2][iz], V_stage1[3][iz], wy);
+		dVdx_stage2[iz] = catmull_rom_value(dVdx_stage1[0][iz],
+											dVdx_stage1[1][iz],
+											dVdx_stage1[2][iz],
+											dVdx_stage1[3][iz],
+											wy);
+		dVdy_stage2[iz] = catmull_rom_deriv(V_stage1[0][iz],
+											V_stage1[1][iz],
+											V_stage1[2][iz],
+											V_stage1[3][iz],
+											wy);
+		V_stage2[iz] = catmull_rom_value(V_stage1[0][iz],
+										 V_stage1[1][iz],
+										 V_stage1[2][iz],
+										 V_stage1[3][iz],
+										 wy);
 	}
 
 	// Stage 3: blend along z
@@ -512,10 +482,19 @@ HOST DEVICE GridSample<T> sample_grid_linear(CONSTANT_PTR(T) __restrict__ grid_v
 											 const Vector3_t<idx_t>& dimensions,
 											 int boundary_condition) {
 	GridSample<T> result;
-	result.value = interpolate_grid_point(
-		grid_values, world_pos, origin, basis_inv, dimensions, boundary_condition);
-	result.gradient = compute_gradient(
-		grid_values, world_pos, origin, basis, basis_inv, dimensions, boundary_condition);
+	result.value = interpolate_grid_point(grid_values,
+										  world_pos,
+										  origin,
+										  basis_inv,
+										  dimensions,
+										  boundary_condition);
+	result.gradient = compute_gradient(grid_values,
+									   world_pos,
+									   origin,
+									   basis,
+									   basis_inv,
+									   dimensions,
+									   boundary_condition);
 	return result;
 }
 
@@ -545,16 +524,6 @@ HOST DEVICE void get_neighbor_list_from_grid(CONSTANT_PTR(T) __restrict__ grid_v
 	const idx_t ny_val = dimensions.y;
 	const idx_t nz_val = dimensions.z;
 
-#if (!defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__))
-	LOGINFO("get_neighbor_list_from_grid: ix={}, iy={}, iz={}, nx={}, ny={}, nz={}",
-			ix,
-			iy,
-			iz,
-			nx_val,
-			ny_val,
-			nz_val);
-#endif
-
 	// Fill 3x3x3 neighborhood
 	for (int di = -1; di <= 1; ++di) {
 		for (int dj = -1; dj <= 1; ++dj) {
@@ -567,21 +536,6 @@ HOST DEVICE void get_neighbor_list_from_grid(CONSTANT_PTR(T) __restrict__ grid_v
 				const idx_t neighbor_idx = nk + nj * nz_val + ni * ny_val * nz_val;
 				const T value = grid_values[neighbor_idx];
 				neighbors.add(neighbor_idx);
-
-#if (!defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__))
-				if (di == -1 && dj == 0 && dk == 0) {
-					LOGINFO("left_neighbor: di={}, dj={}, dk={}, ni={}, nj={}, nk={}, "
-							"idx={}, value={}",
-							di,
-							dj,
-							dk,
-							ni,
-							nj,
-							nk,
-							neighbor_idx,
-							value);
-				}
-#endif
 			}
 		}
 	}
@@ -625,11 +579,21 @@ HOST DEVICE GridSample<T> sample_grid(CONSTANT_PTR(T) __restrict__ grid_values,
 									  int scheme) {
 	if constexpr (F == GridFormat::Dense) {
 		if (scheme == static_cast<int>(InterpolationOrder::Linear)) {
-			return sample_grid_linear(
-				grid_values, world_pos, origin, basis, basis_inv, dimensions, boundary_condition);
+			return sample_grid_linear(grid_values,
+									  world_pos,
+									  origin,
+									  basis,
+									  basis_inv,
+									  dimensions,
+									  boundary_condition);
 		}
-		return sample_grid_cubic(
-			grid_values, world_pos, origin, basis, basis_inv, dimensions, boundary_condition);
+		return sample_grid_cubic(grid_values,
+								 world_pos,
+								 origin,
+								 basis,
+								 basis_inv,
+								 dimensions,
+								 boundary_condition);
 	} else {
 		GridSample<T> zero{};
 		return zero;
@@ -641,5 +605,9 @@ HOST DEVICE GridSample<T> sample_grid(CONSTANT_PTR(T) __restrict__ grid_values,
 #ifdef USE_SYCL
 #include <sycl/sycl.hpp>
 template<typename T>
+struct sycl::is_device_copyable<ARBD::GridGeometry<T>> : std::true_type {};
+template<typename T>
 struct sycl::is_device_copyable<ARBD::BaseGridView<T>> : std::true_type {};
+template<typename T>
+struct sycl::is_device_copyable<ARBD::BaseGridMutableView<T>> : std::true_type {};
 #endif

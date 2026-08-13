@@ -6,7 +6,6 @@
  *        Multi-backend support (CUDA, SYCL, CPU) with clean separation
  *
  * @author Original: Jeff Comer <jcomer2@illinois.edu>
- * @author V2 Port: Pin-Yi Li with Claude 4.0 Sonnet
  *********************************************************************/
 #pragma once
 
@@ -61,7 +60,7 @@ void write_average_profile(const BaseGrid<T>&, std::string_view, int);
  * @param config Configuration for the grid
  * @param values Values stored in the grid
  */
-template<typename T = float>
+template<typename T = arbd_real>
 class BaseGrid {
   public:
 	using value_type = T;
@@ -72,17 +71,19 @@ class BaseGrid {
 	 * @brief Grid configuration structure for initialization
 	 */
 
-	// Boundary conditions aren't specific to dense storage - the sparse
-	// (PNanoVDB) path and GridTerm's per-(type,grid) override use the same
-	// three, so the enum lives in Types/GridTerm.h. Kept as a nested alias so
-	// existing BaseGrid<T>::BoundaryCondition spellings still work.
 	using BoundaryCondition = GridBoundaryCondition;
-
+	/**
+	 * @brief Grid configuration
+	 * @param origin Origin point of the grid
+	 * @param basis Basis vectors defining grid spacing
+	 * @param dimensions Grid dimensions (nx, ny, nz)
+	 * @param boundary Boundary condition
+	 */
 	struct Config {
 		Vector3_t<T> origin{0, 0, 0};		  ///< Origin point of the grid
 		Matrix3_t<T> basis{T(1)};			  ///< Basis vectors defining grid spacing
 		Vector3_t<idx_t> dimensions{1, 1, 1}; ///< Grid dimensions (nx, ny, nz)
-		BoundaryCondition boundary = BoundaryCondition::Periodic;
+		BoundaryCondition boundary = BoundaryCondition::Dirichlet;
 
 		/// Convert boundary condition to int for device use
 		constexpr int boundary_as_int() const noexcept {
@@ -99,18 +100,29 @@ class BaseGrid {
 	};
 
   private:
-	// Core grid data
 	Config config_;
-	Matrix3 basis_inv_; ///< Inverse of basis matrix (cached for performance)
-
-	// Host-side storage and device memory management
-
+	Matrix3 basis_inv_;		///< Inverse of basis matrix (cached for performance)
 	std::vector<T> values_; ///< Grid values in contiguous memory (host-only)
 	mutable std::unique_ptr<DeviceBuffer<T>>
 		device_buffer_; ///< Device memory managed via Buffer.h system (lazy initialization)
-
 	void update_derived_quantities() {
 		basis_inv_ = config_.basis.inverse();
+	}
+
+	/**
+	 * @brief Throw if @p other has a different element count
+	 * @param other Other grid
+	 * @param op Operation name
+	 */
+	void require_same_size(const BaseGrid& other, const char* op) const {
+		if (values_.size() != other.values_.size()) {
+			throw Exception(ExceptionType::ValueError,
+							SourceLocation(),
+							"BaseGrid::%s: Size mismatch (%zu vs %zu)",
+							op,
+							values_.size(),
+							other.values_.size());
+		}
 	}
 
   public:
@@ -120,18 +132,9 @@ class BaseGrid {
 
 	/**
 	 * @brief Default constructor - creates unit grid
-	 * @usage BaseGrid grid;
-	 * @usage BaseGrid grid(basis, origin, nx, ny, nz);
-	 * @usage BaseGrid grid(box_size, dx);
-	 * @usage BaseGrid grid(other);
-	 * @usage BaseGrid grid(std::move(other));
-	 * @usage BaseGrid grid(config);
-	 * @usage BaseGrid grid(std::move(config));
-	 * @usage BaseGrid grid(config, values);
 	 */
 	BaseGrid() : config_{}, values_(1, T{0}) {
 		update_derived_quantities();
-		LOGINFO("BaseGrid() - Default constructor");
 	}
 
 	/**
@@ -151,7 +154,7 @@ class BaseGrid {
 
 		values_.resize(config_.total_size(), T{0});
 		update_derived_quantities();
-		LOGINFO("BaseGrid({}, {}, {})", nx, ny, nz);
+		LOGDEBUG("BaseGrid({}, {}, {})", nx, ny, nz);
 	}
 
 	/**
@@ -175,7 +178,7 @@ class BaseGrid {
 		values_.resize(config_.total_size(), T{0});
 
 		update_derived_quantities();
-		LOGINFO("BaseGrid(box={}, dx={}) - Orthogonal constructor", box_size.length(), dx);
+		LOGDEBUG("BaseGrid(box={}, dx={}) - Orthogonal constructor", box_size.length(), dx);
 	}
 
 	/**
@@ -183,7 +186,6 @@ class BaseGrid {
 	 */
 	BaseGrid(const BaseGrid& other) : config_(other.config_), basis_inv_(other.basis_inv_) {
 		values_ = other.values_;
-		LOGINFO("BaseGrid - Copy");
 	}
 
 	/**
@@ -256,6 +258,20 @@ class BaseGrid {
 	const Config& config() const noexcept {
 		return config_;
 	}
+
+	/**
+	 * @brief Boundary condition applied when sampling outside the grid
+	 */
+	BoundaryCondition boundary() const noexcept {
+		return config_.boundary;
+	}
+
+	/**
+	 * @brief Set the boundary condition (default is Dirichlet)
+	 */
+	void set_boundary(BoundaryCondition bc) noexcept {
+		config_.boundary = bc;
+	}
 	const Vector3& origin() const noexcept {
 		return config_.origin;
 	}
@@ -269,7 +285,6 @@ class BaseGrid {
 	/*=======================*\
 	|  HOST-ONLY OPERATIONS   |
 	\*=======================*/
-	// Note: All methods below are host-only (require HOST_GUARD)
 
 	/**
 	 * @brief Access grid values (host-only - uses std::vector)
@@ -368,21 +383,42 @@ class BaseGrid {
 		return buffer.data();
 	}
 
+	/// @brief Geometry half of a device view, shared by both view flavors.
+	GridGeometry<T> device_geometry() const {
+		GridGeometry<T> geom;
+		geom.origin = config_.origin;
+		geom.basis = config_.basis;
+		geom.basis_inv = basis_inv_;
+		geom.dimensions = config_.dimensions;
+		geom.grid_id = -1; // Can be set by caller if needed
+		geom.boundary_condition = config_.boundary_as_int();
+		return geom;
+	}
+
 	/**
-	 * @brief Create device view for kernel use
+	 * @brief Create read-only device view for kernel use
 	 * @param resource Resource to get device data from (optional)
 	 * @return BaseGridView for device kernels
 	 */
 	BaseGridView<T> get_device_view(const Resource& resource = Resource{}) const {
 		auto& buffer = get_device_buffer(resource);
 		BaseGridView<T> view;
+		static_cast<GridGeometry<T>&>(view) = device_geometry();
 		view.data = buffer.data();
-		view.origin = config_.origin;
-		view.basis = config_.basis;
-		view.basis_inv = basis_inv_;
-		view.dimensions = config_.dimensions;
-		view.grid_id = -1; // Can be set by caller if needed
-		view.boundary_condition = config_.boundary_as_int();
+		return view;
+	}
+
+	/**
+	 * @brief Create writable device view, for grid-mutating kernels
+	 * @param resource Resource to get device data from (optional)
+	 * @return BaseGridMutableView for device kernels that write to the grid
+	 * @note Host values_ are stale until sync_from_device().
+	 */
+	BaseGridMutableView<T> get_mutable_device_view(const Resource& resource = Resource{}) const {
+		auto& buffer = get_device_buffer(resource);
+		BaseGridMutableView<T> view;
+		static_cast<GridGeometry<T>&>(view) = device_geometry();
+		view.data = buffer.data();
 		return view;
 	}
 
@@ -499,18 +535,175 @@ class BaseGrid {
 	 * @brief Element-wise multiplication with another grid (host-only)
 	 */
 	BaseGrid& multiply(const BaseGrid& other) {
-		if (values_.size() != other.values_.size()) {
-			throw Exception(ExceptionType::ValueError,
-							SourceLocation(),
-							"BaseGrid::multiply: Size mismatch (%zu vs %zu)",
-							values_.size(),
-							other.values_.size());
-		}
-
+		require_same_size(other, "multiply");
 		for (idx_t i = 0; i < values_.size(); ++i) {
 			values_[i] *= other.values_[i];
 		}
 		return *this;
+	}
+
+	/**
+	 * @brief Element-wise addition with another grid (host-only)
+	 */
+	BaseGrid& add(const BaseGrid& other) {
+		require_same_size(other, "add");
+		for (idx_t i = 0; i < values_.size(); ++i) {
+			values_[i] += other.values_[i];
+		}
+		return *this;
+	}
+
+	/**
+	 * @brief Element-wise subtraction of another grid (host-only)
+	 */
+	BaseGrid& subtract(const BaseGrid& other) {
+		require_same_size(other, "subtract");
+		for (idx_t i = 0; i < values_.size(); ++i) {
+			values_[i] -= other.values_[i];
+		}
+		return *this;
+	}
+
+	/**
+	 * @brief Volume integral, sum(v) * cell volume
+	 */
+	T integrate() const {
+		T sum = T{0};
+		for (const auto& v : values_)
+			sum += v;
+		return sum * get_cell_volume();
+	}
+
+	/**
+	 * @brief Smallest grid value
+	 */
+	T min() const {
+		return *std::min_element(values_.begin(), values_.end());
+	}
+
+	/**
+	 * @brief Largest grid value
+	 */
+	T max() const {
+		return *std::max_element(values_.begin(), values_.end());
+	}
+
+	/**
+	 * @brief True if any value is NaN or infinite
+	 */
+	bool has_non_finite() const {
+		for (const auto& v : values_) {
+			if (!std::isfinite(static_cast<double>(v)))
+				return true;
+		}
+		return false;
+	}
+
+	/**
+	 * @brief Trilinear resample onto new dimensions, preserving world extent
+	 * @param new_dims Target (nx, ny, nz), each >= 1
+	 * @note Edge taps clamp (Neumann) regardless of this grid's boundary
+	 *       condition, so a constant field resamples to the same constant.
+	 */
+	BaseGrid resample(const Vector3_t<idx_t>& new_dims) const {
+		if (new_dims.x < 1 || new_dims.y < 1 || new_dims.z < 1) {
+			throw Exception(ExceptionType::ValueError,
+							SourceLocation(),
+							"BaseGrid::resample: Invalid dimensions (%zu, %zu, %zu)",
+							new_dims.x,
+							new_dims.y,
+							new_dims.z);
+		}
+
+		Matrix3 new_basis(basis().ex() * (static_cast<T>(nx()) / static_cast<T>(new_dims.x)),
+						  basis().ey() * (static_cast<T>(ny()) / static_cast<T>(new_dims.y)),
+						  basis().ez() * (static_cast<T>(nz()) / static_cast<T>(new_dims.z)));
+		BaseGrid out(new_basis, origin(), new_dims.x, new_dims.y, new_dims.z);
+
+		for (idx_t ix = 0; ix < new_dims.x; ++ix) {
+			for (idx_t iy = 0; iy < new_dims.y; ++iy) {
+				for (idx_t iz = 0; iz < new_dims.z; ++iz) {
+					const Vector3 world = out.transform_to_world(
+						Vector3(static_cast<T>(ix), static_cast<T>(iy), static_cast<T>(iz)));
+					out.values_[out.index(ix, iy, iz)] =
+						interpolate_grid_point(values_.data(),
+											   world,
+											   config_.origin,
+											   basis_inv_,
+											   config_.dimensions,
+											   static_cast<int>(GridBoundaryCondition::Neumann));
+				}
+			}
+		}
+		return out;
+	}
+
+	/**
+	 * @brief Copy into a larger grid, padding with a constant
+	 * @param pad_lo Cells added on the low side of each axis
+	 * @param pad_hi Cells added on the high side of each axis
+	 * @param fill Value written to the added cells
+	 */
+	BaseGrid
+	pad(const Vector3_t<idx_t>& pad_lo, const Vector3_t<idx_t>& pad_hi, T fill = T{0}) const {
+		BaseGrid out(basis(),
+					 transform_to_world(Vector3(-static_cast<T>(pad_lo.x),
+												-static_cast<T>(pad_lo.y),
+												-static_cast<T>(pad_lo.z))),
+					 nx() + pad_lo.x + pad_hi.x,
+					 ny() + pad_lo.y + pad_hi.y,
+					 nz() + pad_lo.z + pad_hi.z);
+		std::fill(out.values_.begin(), out.values_.end(), fill);
+
+		for (idx_t ix = 0; ix < nx(); ++ix) {
+			for (idx_t iy = 0; iy < ny(); ++iy) {
+				for (idx_t iz = 0; iz < nz(); ++iz) {
+					out.values_[out.index(ix + pad_lo.x, iy + pad_lo.y, iz + pad_lo.z)] =
+						values_[index(ix, iy, iz)];
+				}
+			}
+		}
+		return out;
+	}
+
+	/**
+	 * @brief Extract a sub-box
+	 * @param lo Inclusive lower corner in grid indices
+	 * @param dims Extent of the crop; lo + dims must not exceed the grid
+	 */
+	BaseGrid crop(const Vector3_t<idx_t>& lo, const Vector3_t<idx_t>& dims) const {
+		if (dims.x < 1 || dims.y < 1 || dims.z < 1 || lo.x + dims.x > nx() ||
+			lo.y + dims.y > ny() || lo.z + dims.z > nz()) {
+			throw Exception(ExceptionType::ValueError,
+							SourceLocation(),
+							"BaseGrid::crop: (%zu,%zu,%zu)+(%zu,%zu,%zu) exceeds (%zu,%zu,%zu)",
+							lo.x,
+							lo.y,
+							lo.z,
+							dims.x,
+							dims.y,
+							dims.z,
+							nx(),
+							ny(),
+							nz());
+		}
+
+		BaseGrid out(basis(),
+					 transform_to_world(
+						 Vector3(static_cast<T>(lo.x), static_cast<T>(lo.y), static_cast<T>(lo.z))),
+					 dims.x,
+					 dims.y,
+					 dims.z);
+
+		for (idx_t ix = 0; ix < dims.x; ++ix) {
+			for (idx_t iy = 0; iy < dims.y; ++iy) {
+				for (idx_t iz = 0; iz < dims.z; ++iz) {
+					out.values_[out.index(ix, iy, iz)] =
+						values_[index(ix + lo.x, iy + lo.y, iz + lo.z)];
+				}
+			}
+		}
+		return out;
 	}
 
 	/**
@@ -726,7 +919,6 @@ class BaseGrid {
 	 * @brief Get 3x3x3 neighborhood around a grid point (host-only)
 	 */
 	NeighborList<T> get_neighbor_list(idx_t ix, idx_t iy, idx_t iz) const {
-		LOGINFO("get_neighbor_list: calling get_neighbor_list_from_grid");
 		return get_neighbor_list_from_grid(values_.data(), ix, iy, iz, config_.dimensions);
 	}
 
@@ -741,13 +933,13 @@ class BaseGrid {
 	 * @brief Get neighbor value at relative offset (host-only)
 	 */
 	T get_neighbor(idx_t ix, idx_t iy, idx_t iz, int di, int dj, int dk) const {
-		LOGINFO("get_neighbor on HOST: ix={}, iy={}, iz={}, di={}, dj={}, dk={}",
-				ix,
-				iy,
-				iz,
-				di,
-				dj,
-				dk);
+		LOGDEBUG("get_neighbor on HOST: ix={}, iy={}, iz={}, di={}, dj={}, dk={}",
+				 ix,
+				 iy,
+				 iz,
+				 di,
+				 dj,
+				 dk);
 		return get_neighbor_from_grid(values_.data(),
 									  ix,
 									  iy,
@@ -804,65 +996,7 @@ class BaseGrid {
 		return get_neighbor(data_ptr, ix, iy, iz, di, dj, dk);
 	}
 
-	/*================================*\
-	|  DEVICE-SAFE HELPER FUNCTIONS   |
-	\*================================*/
-
   public:
-	/**
-	 * @brief Device-safe interpolation function (CUDA/SYCL compatible)
-	 */
-	template<typename U>
-	friend U interpolate_grid_point(const U* grid_values,
-									const Vector3_t<U>& world_pos,
-									const Vector3_t<U>& origin,
-									const Matrix3_t<U>& basis_inv,
-									const Vector3_t<idx_t>& dimensions);
-
-	/**
-	 * @brief Device-safe nearest point sampling
-	 */
-	template<typename U>
-	friend U get_value_nearest(const U* grid_values,
-							   const Vector3_t<U>& world_pos,
-							   const Vector3_t<U>& origin,
-							   const Matrix3_t<U>& basis_inv,
-							   const Vector3_t<idx_t>& dimensions);
-
-	/**
-	 * @brief Device-safe gradient computation
-	 */
-	template<typename U>
-	friend Vector3_t<U> compute_gradient(const U* grid_values,
-										 const Vector3_t<U>& world_pos,
-										 const Vector3_t<U>& origin,
-										 const Matrix3_t<U>& basis,
-										 const Matrix3_t<U>& basis_inv,
-										 const Vector3_t<idx_t>& dimensions);
-
-	/**
-	 * @brief Device-safe neighbor list extraction
-	 */
-	template<typename U>
-	friend auto get_neighbor_list_from_grid(const U* grid_values,
-											idx_t ix,
-											idx_t iy,
-											idx_t iz,
-											const Vector3_t<idx_t>& dimensions);
-
-	/**
-	 * @brief Device-safe single neighbor access
-	 */
-	template<typename U>
-	friend U get_neighbor_from_grid(const U* grid_values,
-									idx_t ix,
-									idx_t iy,
-									idx_t iz,
-									int di,
-									int dj,
-									int dk,
-									const Vector3_t<idx_t>& dimensions);
-
 	/**
 	 * @brief Friend declarations for DXReader I/O functions
 	 */
@@ -882,7 +1016,6 @@ class BaseGrid {
 	friend void DXReader::write_average_profile(const BaseGrid<U>&, std::string_view, int);
 };
 
-// Type aliases for common usage
 using BaseGridf = BaseGrid<float>;
 using BaseGridd = BaseGrid<double>;
 

@@ -217,7 +217,7 @@ void init_pysystem(py::module_& m) {
 			"Set system temperature (constant value)")
 		.def(
 			"set_temperature_grid",
-			[](SimSystem& sys, const BaseGrid<float>& grid) { sys.set_temperature(grid); },
+			[](SimSystem& sys, const BaseGrid<arbd_real>& grid) { sys.set_temperature(grid); },
 			py::arg("grid"),
 			"Set system temperature (spatial grid)")
 		.def(
