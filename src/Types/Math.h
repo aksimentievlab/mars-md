@@ -19,6 +19,8 @@ using sycl::exp;
 using sycl::floor;
 using sycl::log;
 using sycl::sin;
+using sycl::sinh;
+using sycl::cosh;
 using sycl::sqrt;
 
 #elif defined(__CUDA_ARCH__)
@@ -103,6 +105,22 @@ HOST DEVICE inline T log(T x) {
 		return ::log(x);
 }
 
+template<typename T>
+HOST DEVICE inline T sinh(T x) {
+	if constexpr (sizeof(T) == sizeof(float))
+		return ::sinhf(x);
+	else
+		return ::sinh(x);
+}
+
+template<typename T>
+HOST DEVICE inline T cosh(T x) {
+	if constexpr (sizeof(T) == sizeof(float))
+		return ::coshf(x);
+	else
+		return ::cosh(x);
+}
+
 #elif defined(__METAL_VERSION__)
 // Metal Shading Language
 using metal::acos;
@@ -114,6 +132,8 @@ using metal::exp;
 using metal::floor;
 using metal::log;
 using metal::sin;
+using metal::sinh;
+using metal::cosh;
 using metal::sqrt;
 
 #else
@@ -127,6 +147,8 @@ using std::exp;
 using std::floor;
 using std::log;
 using std::sin;
+using std::sinh;
+using std::cosh;
 using std::sqrt;
 #endif
 
@@ -152,6 +174,37 @@ HOST DEVICE inline T safe_asin(T x) {
 	if (x > T(1))
 		x = T(1);
 	return asin(x);
+}
+
+// ============================================================================
+// Cancellation-free differences
+// ============================================================================
+
+/**
+ * @brief sinh(x) - x
+ * @details Direct subtraction loses ~3 significant digits below |x| ~ 1, where
+ *          sinh(x) -> x. Uses the series there instead.
+ */
+template<typename T>
+HOST DEVICE inline T sinh_minus_x(T x) {
+	if (x >= T(1) || x <= T(-1))
+		return sinh(x) - x;
+	const T w = x * x;
+	return x * w *
+		   (T(1.0 / 6) + w * (T(1.0 / 120) + w * (T(1.0 / 5040) + w * T(1.0 / 362880))));
+}
+
+/**
+ * @brief x cosh(x) - sinh(x)
+ * @details Same cancellation as sinh_minus_x; both terms tend to x.
+ */
+template<typename T>
+HOST DEVICE inline T x_cosh_minus_sinh(T x) {
+	if (x >= T(1) || x <= T(-1))
+		return x * cosh(x) - sinh(x);
+	const T w = x * x;
+	return x * w *
+		   (T(1.0 / 3) + w * (T(1.0 / 30) + w * (T(1.0 / 840) + w * T(1.0 / 45360))));
 }
 
 } // namespace math

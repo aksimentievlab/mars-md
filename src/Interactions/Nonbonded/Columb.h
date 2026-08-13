@@ -61,19 +61,25 @@ struct OncElecPotential {
 	arbd_real sz = arbd_real(80);
 	arbd_real z = arbd_real(6.86);
 
-	/// @brief Sigmoidal dielectric eps(r)
+	/// Below this, eps -> Sz v^2/3 and deps/dr -> Sz v/(3z); avoids 0/0 at r=0.
+	static constexpr arbd_real SMALL_V = arbd_real(1e-5);
+
+	/// @brief Sigmoidal dielectric, eps = Sz (sinh v - v)(sinh v + v)/sinh^2 v
 	DEVICE arbd_real dielectric(arbd_real r) const {
-		const arbd_real e = math::exp(r / z);
-		const arbd_real d = e - arbd_real(1);
-		return sz * (arbd_real(1) - (r * r) / (z * z) * e / (d * d));
+		const arbd_real v = r / (arbd_real(2) * z);
+		if (v < SMALL_V)
+			return sz * v * v / arbd_real(3);
+		const arbd_real s = math::sinh(v);
+		return sz * math::sinh_minus_x(v) * (s + v) / (s * s);
 	}
 
-	/// @brief d(eps)/dr
+	/// @brief d(eps)/dr = Sz v (v cosh v - sinh v) / (z sinh^3 v)
 	DEVICE arbd_real dielectric_deriv(arbd_real r) const {
-		const arbd_real e = math::exp(r / z);
-		const arbd_real inv_d = arbd_real(1) / (e - arbd_real(1));
-		return -sz * r / (z * z) * e * inv_d * inv_d *
-			   (arbd_real(2) + r / z - arbd_real(2) * r / z * e * inv_d);
+		const arbd_real v = r / (arbd_real(2) * z);
+		if (v < SMALL_V)
+			return sz * v / (arbd_real(3) * z);
+		const arbd_real s = math::sinh(v);
+		return sz * v * math::x_cosh_minus_sinh(v) / (z * s * s * s);
 	}
 
 	DEVICE ScalarForceEnergy compute(arbd_real distance, arbd_real qi, arbd_real qj) const {
