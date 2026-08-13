@@ -18,3 +18,5 @@ doxy
 .cursor
 *.dx
 CLAUDE.md
+*.diff
+*.dcd

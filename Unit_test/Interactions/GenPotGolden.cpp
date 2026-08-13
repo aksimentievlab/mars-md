@@ -1,11 +1,6 @@
 /**
  * @file GenPotGolden.cpp
  * @brief Compares convolve_grids against the reference gen_pot tool.
- * @details Opt-in: set ARBD_GENPOT_REF to a directory holding <stem>.Density.dx
- *          and <stem>.pot.dx, produced by
- *            gen_pot <stem>.Density.dx lenard_jones_repulsion input_CC <stem>.pot.dx
- *          with C6/C12 from ARBD_GENPOT_C6 / ARBD_GENPOT_C12.
- *          See GenPotGolden.md for the centering convention.
  */
 
 #include "../catch_boiler.h"
@@ -13,18 +8,13 @@
 #include "Interactions/NonBondedInteraction.h"
 #include "Types/BaseGrid.h"
 #include <cmath>
-#include <cstdlib>
+#include <filesystem>
 #include <string>
 
 using namespace ARBD;
 using Catch::Approx;
 
 namespace {
-
-const char* env_or(const char* k, const char* fallback) {
-	const char* v = std::getenv(k);
-	return (v && *v) ? v : fallback;
-}
 
 /// gen_pot's lenard_jones_repulsion_compute, verbatim (Kernel/*.c).
 double wca(double r2, double c6, double c12) {
@@ -72,22 +62,18 @@ double sum_of(const BaseGrid<arbd_real>& g) {
 
 } // namespace
 
-TEST_CASE("convolve_grids reproduces gen_pot's WCA potential", "[grid][convolution][.golden]") {
-	const char* dir = std::getenv("ARBD_GENPOT_REF");
-	if (!dir) {
-		SKIP("set ARBD_GENPOT_REF to the directory holding the gen_pot reference pair");
-	}
+TEST_CASE("convolve_grids reproduces gen_pot's WCA potential", "[grid][convolution]") {
+
 	initialize_backend_once();
 	Resource res(Global::single_resource_id);
 
-	const std::string stem = env_or("ARBD_GENPOT_STEM", "1ema.protein");
-	const double c6 = std::atof(env_or("ARBD_GENPOT_C6", "1228.8"));
-	const double c12 = std::atof(env_or("ARBD_GENPOT_C12", "2516582.4"));
+	const std::string stem =
+		(std::filesystem::path(__FILE__).parent_path() / "1ema.protein").string();
+	const double c6 = 1228.8;
+	const double c12 = 2516582.4;
 
-	const auto density =
-		DXReader::read_from_file<arbd_real>(std::string(dir) + "/" + stem + ".Density.dx");
-	const auto reference =
-		DXReader::read_from_file<arbd_real>(std::string(dir) + "/" + stem + ".pot.dx");
+	const auto density = DXReader::read_from_file<arbd_real>(stem + ".Density.dx");
+	const auto reference = DXReader::read_from_file<arbd_real>(stem + ".pot.dx");
 
 	REQUIRE(density.nx() == reference.nx());
 	REQUIRE(density.ny() == reference.ny());
@@ -110,8 +96,7 @@ TEST_CASE("convolve_grids reproduces gen_pot's WCA potential", "[grid][convoluti
 	// normalization and kernel amplitude from the centering convention.
 	const double sum_out = sum_of(out);
 	const double sum_ref = sum_of(reference);
-	INFO("sum(ours)=" << sum_out << " sum(gen_pot)=" << sum_ref
-					  << " ratio=" << sum_out / sum_ref);
+	INFO("sum(ours)=" << sum_out << " sum(gen_pot)=" << sum_ref << " ratio=" << sum_out / sum_ref);
 	REQUIRE(sum_out == Approx(sum_ref).epsilon(1e-4));
 
 	// Extremes should also match to within interpolation of the half-voxel offset.
