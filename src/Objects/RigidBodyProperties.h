@@ -3,8 +3,10 @@
 // Author: Pin-Yi Li <pinyili2@illinois.edu>
 // Metal does not support inheritance, so create a new class.
 #pragma once
+#include "ARBDException.h"
 #include "Header.h"
 #include "Objects/ParticleProperties.h"
+#include "SimParam.h"
 #include "Types/BaseGrid.h"
 #include "Types/GridTerm.h"
 #include "Types/Types.h"
@@ -53,24 +55,24 @@ struct RigidBodyIO {
 class RigidBodyType {
   public:
 	std::string name;
-	int id = -1;						  // Default to invalid, will be set after initialization
-	float mass = 1.0f;					  // Avoid divide-by-zero if missed
-	Vector3 inertia = {1.0f, 1.0f, 1.0f}; // Avoid divide-by-zero if missed
-	Vector3 trans_damping = {0.0f, 0.0f, 0.0f};
-	Vector3 rot_damping = {0.0f, 0.0f, 0.0f};
-	Vector3 trans_force_coeff = {0.0f, 0.0f, 0.0f};
-	Vector3 rot_torque_coeff = {0.0f, 0.0f, 0.0f};
-	float rot_diffusivity = 0.0f;
-	float rot_damping_coefficient = 0.0f;
-	float charge = 0.0f;
-	float radius = 0.0f;
-	float eps = 0.0f;
-	float diffusion = 0.0f;
-	float mu = 0.0f; // for Nose-Hoover Langevin dynamics
+	int id = -1;						// Default to invalid, will be set after initialization
+	arbd_real mass = 1.0f;				// Avoid divide-by-zero if missed
+	Vector3 inertia = Vector3(1, 1, 1); // Avoid divide-by-zero if missed
+	Vector3 trans_damping = Vector3(0., 0, 0); // Avoid divide-by-zero if missed
+	Vector3 rot_damping = Vector3(0, 0, 0);
+	Vector3 trans_force_coeff = Vector3(0, 0, 0);
+	Vector3 rot_torque_coeff = Vector3(0.0, 0.0, 0.0);
+	arbd_real rot_diffusivity = 0.0f;
+	arbd_real rot_damping_coefficient = 0.0f;
+	arbd_real charge = 0.0f;
+	arbd_real radius = 0.0f;
+	arbd_real eps = 0.0f;
+	arbd_real diffusion = 0.0f;
+	arbd_real mu = 0.0f; // for Nose-Hoover Langevin dynamics
 	int num_grid_files = 0;
-	// float meanPmf;
-	float pmf_scale = 1.0f;
-	float pmf_scale_slope = 0.0f;
+	// arbd_real meanPmf;
+	arbd_real pmf_scale = 1.0f;
+	arbd_real pmf_scale_slope = 0.0f;
 	uint32_t pmf_smd_freq = 0;
 	bool is_plasmonic = false;
 
@@ -94,6 +96,45 @@ class RigidBodyType {
 	std::vector<std::string> potential_grid_keys;
 	std::vector<std::string> density_grid_keys;
 	std::vector<std::string> pmf_keys;
+	/**
+	 * @brief Rejects coefficients the chosen integrator would divide by zero.
+	 * @param type Configured rigid-body integrator.
+	 * @throws Exception naming this type and the offending values.
+	 * @see RBBD.md
+	 */
+	void check_damping(IntegratorType type) const {
+		if (mass <= 0 || inertia.x <= 0 || inertia.y <= 0 || inertia.z <= 0) {
+			throw Exception(ExceptionType::DivideByZeroError,
+							SourceLocation(),
+							"rigid body type '%s': mass (%g) and inertia (%g %g %g) must all be "
+							"positive; every integrator divides by them",
+							name.c_str(),
+							static_cast<double>(mass),
+							static_cast<double>(inertia.x),
+							static_cast<double>(inertia.y),
+							static_cast<double>(inertia.z));
+		}
+
+		if (type != IntegratorType::Brownian) {
+			return;
+		}
+		if (trans_damping.x <= 0 || trans_damping.y <= 0 || trans_damping.z <= 0 ||
+			rot_damping.x <= 0 || rot_damping.y <= 0 || rot_damping.z <= 0) {
+			throw Exception(ExceptionType::DivideByZeroError,
+							SourceLocation(),
+							"rigid body type '%s': Brownian dynamics needs positive transDamping "
+							"(%g %g %g) and rotDamping (%g %g %g) - mobility is 1/(damping*mass), "
+							"which is undefined at zero. The defaults are zero, so both keys must "
+							"be set explicitly",
+							name.c_str(),
+							static_cast<double>(trans_damping.x),
+							static_cast<double>(trans_damping.y),
+							static_cast<double>(trans_damping.z),
+							static_cast<double>(rot_damping.x),
+							static_cast<double>(rot_damping.y),
+							static_cast<double>(rot_damping.z));
+		}
+	}
 };
 
 // ============================================================================
@@ -109,11 +150,11 @@ struct HostRigidBodyData {
 	std::vector<Vector3> force;
 	std::vector<Vector3> torque;
 
-	size_t size() const {
+	idx_t size() const {
 		return global_id.size();
 	}
 
-	void resize(size_t n) {
+	void resize(idx_t n) {
 		global_id.resize(n);
 		type_id.resize(n);
 		position.resize(n);
@@ -135,7 +176,7 @@ struct HostRigidBodyData {
 		torque.clear();
 	}
 
-	void reserve(size_t n) {
+	void reserve(idx_t n) {
 		global_id.reserve(n);
 		type_id.reserve(n);
 		position.reserve(n);
@@ -157,7 +198,7 @@ struct HostRigidBodyData {
 		torque.push_back(rb.torque);
 	}
 
-	void push_back(const HostRigidBodyData& rb, size_t idx) {
+	void push_back(const HostRigidBodyData& rb, idx_t idx) {
 		global_id.push_back(rb.global_id[idx]);
 		type_id.push_back(rb.type_id[idx]);
 		position.push_back(rb.position[idx]);
@@ -168,11 +209,11 @@ struct HostRigidBodyData {
 		torque.push_back(rb.torque[idx]);
 	}
 
-	void remove_swap(size_t idx) {
+	void remove_swap(idx_t idx) {
 		if (idx >= size())
 			return;
 
-		const size_t last = size() - 1;
+		const idx_t last = size() - 1;
 		if (idx < last) {
 			std::swap(global_id[idx], global_id[last]);
 			std::swap(type_id[idx], type_id[last]);

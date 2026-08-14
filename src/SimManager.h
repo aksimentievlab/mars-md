@@ -300,6 +300,12 @@ class SimManager {
 	void gather_particle_data_from_patches(bool need_energy = false);
 
 	/**
+	 * @brief Refresh SystemState's rigid-body SoA from the device.
+	 * @note No-op when there are no rigid bodies.
+	 */
+	void gather_rigid_body_data();
+
+	/**
 	 * @brief Write a single DCD trajectory frame
 	 * @param step Current simulation step
 	 */

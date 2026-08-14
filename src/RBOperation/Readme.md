@@ -1,1 +1,3 @@
-Compute Rigidbody dynamics
+# Compute Rigidbody dynamics
+
+## Plasmonic calculations from scuff-scatter

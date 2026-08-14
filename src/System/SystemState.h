@@ -145,13 +145,44 @@ class SystemState {
 			}
 			global_rigid_body_data_.push_back(rb);
 		}
+		rigid_bodies_synced_ = true;
 	}
 
 	/**
 	 * @brief Get complete global rigid-body data
+	 * @note Only current as of the last gather; check are_rigid_bodies_synced().
 	 */
 	const HostRigidBodyData& get_global_rigid_bodies() const {
 		return global_rigid_body_data_;
+	}
+
+	/**
+	 * @brief Mutable handle on the global rigid-body SoA, for gathering.
+	 * @note Call mark_rigid_bodies_synced() once the write lands.
+	 */
+	HostRigidBodyData& mutable_rigid_bodies() {
+		return global_rigid_body_data_;
+	}
+
+	/**
+	 * @brief Mark the host rigid-body SoA as current with the device.
+	 */
+	void mark_rigid_bodies_synced() {
+		rigid_bodies_synced_ = true;
+	}
+
+	/**
+	 * @brief Mark the host rigid-body SoA as stale (bodies integrated since).
+	 */
+	void invalidate_rigid_bodies() {
+		rigid_bodies_synced_ = false;
+	}
+
+	/**
+	 * @brief Whether the host rigid-body SoA reflects the current device state.
+	 */
+	bool are_rigid_bodies_synced() const {
+		return rigid_bodies_synced_;
 	}
 
 	/**
@@ -276,13 +307,12 @@ class SystemState {
 	HostParticleData global_particle_data_; // Always sorted by ID.
 	BondedInteractions bonded_interactions_;
 
-	// Rigid-body state (static instance count for the run - unlike particles,
-	// nothing migrates/reacts them yet, so no separate "changes every
-	// timestep" gathering path exists).
+	// Sized once, refreshed in place by RigidBodyManager::gather_to_host().
 	HostRigidBodyData global_rigid_body_data_;
 
 	// Metadata
-	bool state_synced_{false}; // Flag indicating if state is up-to-date
+	bool state_synced_{false};         // Particles, gathered from the patches
+	bool rigid_bodies_synced_{false};  // Bodies, gathered off DeviceRigidBody
 
 	//================================================================================
 	// Private Methods

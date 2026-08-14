@@ -21,17 +21,17 @@ struct BrownEnergyKernel {
 	ParticleTypeView& particle_type_view;
 
 	template<typename WorkItem>
-	DEVICE void operator()(size_t i,
-						   WorkItem& item,
-						   const Vector3* __restrict__ P_n,
-						   const int* __restrict__ type,
-						   float* __restrict__ vec_red,
-						   unsigned int n,
-						   unsigned int num,
-						   unsigned int num_rb_attached_particles,
-						   unsigned int num_replicas,
-						   unsigned int block_size,
-						   unsigned int grid_size) const {
+	KERNEL_FUNC void operator()(size_t i,
+								WorkItem& item,
+								const Vector3* __restrict__ P_n,
+								const int* __restrict__ type,
+								float* __restrict__ vec_red,
+								unsigned int n,
+								unsigned int num,
+								unsigned int num_rb_attached_particles,
+								unsigned int num_replicas,
+								unsigned int block_size,
+								unsigned int grid_size) const {
 
 		// Get shared memory for reduction
 		auto* sdata = item.template get_shared_mem<float>();

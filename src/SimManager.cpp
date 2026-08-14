@@ -218,12 +218,15 @@ void SimManager::init() {
 		LOGINFO("SimManager: Rigid body manager initialized with {} bodies",
 				sys_state_.get_num_rigid_bodies());
 
-		// RigidBodyManager only implements DLM/Langevin-style integration
-		// (Phase 4 never built Brownian/VelocityVerlet rigid-body integrators) -
-		// warn rather than silently ignoring a different configured algorithm.
-		if (sys_.get_rigid_body_algorithm() != IntegratorType::Langevin) {
-			LOGWARN("SimManager: only Langevin/DLM rigid-body dynamics is implemented; "
-					"ignoring the configured rigid body algorithm");
+		// Langevin/DLM and Brownian are implemented; VelocityVerlet is not, so
+		// warn rather than silently running something else.
+		const IntegratorType rb_algorithm = sys_.get_rigid_body_algorithm();
+		if (rb_algorithm == IntegratorType::VelocityVerlet) {
+			LOGWARN("SimManager: VelocityVerlet rigid-body dynamics is not implemented; "
+					"falling back to Langevin/DLM");
+		}
+		for (const RigidBodyType& rb_type : sys_.get_rigid_body_types()) {
+			rb_type.check_damping(rb_algorithm);
 		}
 	}
 
@@ -478,10 +481,18 @@ void SimManager::execute_force_calculation(size_t step) {
 		}
 		grid_evt.wait();
 
-		const Temperature& temperature = sys_.get_temperature_struct();
-		rigid_body_manager_
-			->add_langevin_forces(sys_.get_timestep(), temperature.kT, sys_.get_base_seed(), step)
-			.wait();
+		// The Brownian integrator is overdamped - it derives its own drag and
+		// noise from the damping coefficients, so a thermostat force here would
+		// double-count them.
+		if (sys_.get_rigid_body_algorithm() != IntegratorType::Brownian) {
+			const Temperature& temperature = sys_.get_temperature_struct();
+			rigid_body_manager_
+				->add_langevin_forces(sys_.get_timestep(),
+									  temperature.kT,
+									  sys_.get_base_seed(),
+									  step)
+				.wait();
+		}
 	}
 
 	if (step == 1) {
@@ -518,7 +529,19 @@ void SimManager::execute_integration(size_t step) {
 	}
 
 	if (rigid_body_manager_) {
-		rigid_body_manager_->integrate_motion(timestep, sys_.get_boundary_conditions()).wait();
+		if (sys_.get_rigid_body_algorithm() == IntegratorType::Brownian) {
+			const Temperature& temperature = sys_.get_temperature_struct();
+			rigid_body_manager_
+				->integrate_brownian(timestep,
+									 temperature.kT,
+									 sys_.get_base_seed(),
+									 step,
+									 sys_.get_boundary_conditions())
+				.wait();
+		} else {
+			rigid_body_manager_->integrate_motion(timestep, sys_.get_boundary_conditions()).wait();
+		}
+		sys_state_.invalidate_rigid_bodies();
 	}
 
 	current_step_ = step; // Update step counter for RNG state tracking
@@ -639,6 +662,14 @@ void SimManager::gather_particle_data_from_patches(bool need_energy) {
 	patch_mgr->gather_particles_to_state(sys_state_, need_energy);
 
 	sys_state_.mark_synced();
+}
+
+void SimManager::gather_rigid_body_data() {
+	if (!rigid_body_manager_ || rigid_body_manager_->size() == 0) {
+		return;
+	}
+	rigid_body_manager_->gather_to_host(sys_state_.mutable_rigid_bodies());
+	sys_state_.mark_rigid_bodies_synced();
 }
 
 void SimManager::write_dcd_frame(size_t step) {
@@ -856,9 +887,8 @@ void SimManager::write_rb_traj_frame(size_t step) {
 	}
 
 	const idx_t count = rigid_body_manager_->size();
-	HostRigidBodyData rb;
-	rb.resize(static_cast<size_t>(count));
-	rigid_body_manager_->bodies().copy_to_host(rb, count);
+	gather_rigid_body_data();
+	const HostRigidBodyData& rb = sys_state_.get_global_rigid_bodies();
 
 	if (!rb_traj_file_.is_open()) {
 		// "<name>.0.rb-traj" - the "0" is v1's replica-index artifact, kept for
@@ -981,11 +1011,15 @@ void SimManager::report_performance(float elapsed_time, size_t total_steps) {
 	std::cout << "=========================================" << std::endl;
 	std::cout << "SimManager: Performance Summary: " << std::endl;
 	std::cout << "  Total time:        " << elapsed_time << " s" << std::endl;
-	std::cout << "  Compute time:      " << compute_time << " s (" << compute_time / elapsed_time * 100 << "%)" << std::endl;
-	std::cout << "  I/O time:          " << io_time << " s (" << io_time / elapsed_time * 100 << "%)" << std::endl;
-	std::cout << "  Energy time:       " << energy_time << " s (" << energy_time / elapsed_time * 100 << "%)" << std::endl;
+	std::cout << "  Compute time:      " << compute_time << " s ("
+			  << compute_time / elapsed_time * 100 << "%)" << std::endl;
+	std::cout << "  I/O time:          " << io_time << " s (" << io_time / elapsed_time * 100
+			  << "%)" << std::endl;
+	std::cout << "  Energy time:       " << energy_time << " s ("
+			  << energy_time / elapsed_time * 100 << "%)" << std::endl;
 	std::cout << "  Steps/second:      " << steps_per_second << std::endl;
-	std::cout << "  ns/day (est):      " << (steps_per_second * sys_.get_timestep() * 86400.0f) / 1e6f << std::endl;
+	std::cout << "  ns/day (est):      "
+			  << (steps_per_second * sys_.get_timestep() * 86400.0f) / 1e6f << std::endl;
 	std::cout << "=========================================" << std::endl;
 }
 

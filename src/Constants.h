@@ -55,6 +55,24 @@ constexpr float langevin_damping_unit = 2.3900574e-9f;
 // langevin_damping_unit, so the effective drag scale is 2.3900574e-5.
 constexpr float langevin_damp_scale = 10000.0f;
 constexpr float velocity_scale = 1e4f;
+constexpr double ANGSTROM_TO_MICRON = 1.0e-4;
+constexpr double MICRON_TO_ANGSTROM = 1.0e4;
+constexpr const char* kAttachedSegnameMarker = "ATT";
+// marker in pdb file that will mark the attachement site.
 } // namespace constants
+/**
+ * @brief Unit conversions between SCUFF-EM's reporting units and ARBD's.
+ *
+ * SCUFF meshes are in microns, reports force in nanonewtons and torque in
+ * nanonewton*microns (see scuff-em applications/scuff-scatter/OutputModules.cc).
+ * ARBD uses Angstroms, kcal/mol/Angstrom and kcal/mol.
+ */
+namespace scuff_units {
+/// constants::PNPERKCALMOL is pN per (kcal/mol/Angstrom), so 1 nN = 1000/that.
+constexpr double NN_TO_KCAL_PER_MOL_ANGSTROM = 1000.0 / constants::PNPERKCALMOL;
+constexpr double NN_MICRON_TO_KCAL_PER_MOL =
+	NN_TO_KCAL_PER_MOL_ANGSTROM * constants::MICRON_TO_ANGSTROM;
+constexpr double lambda_nm_to_omega_rad_per_sec = 2.0 * constants::PI * 1.0e3;
+} // namespace scuff_units
 
 } // namespace ARBD

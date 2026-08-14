@@ -63,7 +63,7 @@ enum class DcdError : int {
  *
  * Example: Writing a DCD trajectory file
  *
- * @code
+ * @example
  * #include "IO/DcdWriter.h"
  * #include "Math/Vector3.h"
  * #include <vector>

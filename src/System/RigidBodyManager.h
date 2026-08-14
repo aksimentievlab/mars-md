@@ -16,6 +16,7 @@
 #include "Objects/Grid.h"
 #include "Objects/RigidBodyCosmeticsKernel.h"
 #include "Objects/RigidBodyForcePairs.h"
+#include "PatchOperation/Integrator/RBBD.h"
 #include "PatchOperation/Integrator/RBDLM.h"
 #include "System/PeriodicBox.h"
 #include <algorithm>
@@ -28,20 +29,7 @@ namespace ARBD {
 
 /**
  * @brief Owns all rigid-body device state and drives its per-step physics.
- *
- * Global and non-spatially-decomposed: force-pairing is by grid-key match, not proximity, and an
- * RB's density grid sometimes spans multiple patches. Lives beside
- * PatchManager rather than inside it.
- *
- * Takes a resource vector + compute_resource_idx even though only
- * resources.size() == 1 is exercised today: the
- * grid-grid math itself stays centralized on compute_resource(); a second
- * resource would only need position/orientation broadcast for grid-particle
- * forces, via broadcast_state_to_resources().
- *
- * Batched grid-grid dispatch is implemented via
- * prepare_grid_grid_dispatch()/compute_grid_grid_forces() (see
- * Interactions/Nonbonded/RigidBodyGridBatch.h).
+ * @see RigidBodyManager.md
  */
 class RigidBodyManager {
   public:
@@ -110,6 +98,23 @@ class RigidBodyManager {
 			evt = launch_kernel(compute_resource(), config, kernel);
 		}
 		return evt;
+	}
+
+	/**
+	 * @brief Port of legacy RigidBody::integrate - overdamped Brownian, one
+	 *        full step, no momentum.
+	 */
+	Event integrate_brownian(float dt,
+							 float kT,
+							 uint64_t base_seed,
+							 size_t step,
+							 const PeriodicBox& sim_box) {
+		ensure_initialized();
+		const idx_t n = bodies_->size();
+		KernelConfig config = KernelConfig::for_1d(n, compute_resource());
+		RBIntegrateBDKernel<float>
+			kernel(bodies_->view(), types_->view(), sim_box, dt, kT, n, base_seed, step);
+		return launch_kernel(compute_resource(), config, kernel);
 	}
 
 	/**
@@ -703,6 +708,18 @@ class RigidBodyManager {
 
 	idx_t size() const {
 		return bodies_ ? bodies_->size() : 0;
+	}
+
+	/**
+	 * @brief Refresh a host SoA from the device instance state.
+	 * @param host Destination, grown by DeviceRigidBody::copy_to_host if short.
+	 */
+	void gather_to_host(HostRigidBodyData& host) const {
+		const idx_t count = size();
+		if (count == 0) {
+			return;
+		}
+		bodies_->copy_to_host(host, count);
 	}
 
 	const Resource& compute_resource() const {

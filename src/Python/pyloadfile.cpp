@@ -27,14 +27,13 @@
   Sparse (.vdb/.nvdb) grids are intentionally not supported here yet:
   GridManager::add_sparse_grid (Objects/Grid.h) itself still raises
   NotImplementedError - the NanoVDB device path needs an offline
-  .dx -> .vdb -> .nvdb converter that doesn't exist yet (see todo.md's
-  Phase 4.1 design notes). Calling it from Python surfaces that same error.
+  .dx -> .vdb -> .nvdb converter that doesn't exist yet.
+	Calling it from Python surfaces that same error.
 */
 #include "Objects/Grid.h"
 #include "Objects/Tables.h"
 #include "PyTypeCasters.h"
 
-// pybind11 core
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>

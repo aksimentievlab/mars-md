@@ -4,12 +4,11 @@
 #include "../Objects/ParticleProperties.h"
 #include "../Objects/RigidBodyProperties.h"
 #include "../Types/Types.h"
+#include "Constants.h"
 #include "PsfPdbIO.h"
 #include <algorithm>
 
 namespace ARBD {
-
-inline constexpr const char* kAttachedSegnameMarker = "ATT";
 
 class RigidBodyPdbPsfReader {
   public:
@@ -18,7 +17,7 @@ class RigidBodyPdbPsfReader {
 					 const std::string& psf_path,
 					 const Vector3& reference_point,
 					 const std::vector<ParticleType>& known_particle_types,
-					 const std::string& attached_marker = kAttachedSegnameMarker) {
+					 const std::string& attached_marker = constants::kAttachedSegnameMarker) {
 
 		const PsfPdbStructure structure = PsfPdbStructure::from_psf_pdb(psf_path, pdb_path);
 

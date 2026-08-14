@@ -1,6 +1,7 @@
 #include "Backend/CUDA/KernelHelper.cuh"
 #include "PatchOperation/Integrator/BAOAB.h"
 #include "PatchOperation/Integrator/BD.h"
+#include "PatchOperation/Integrator/RBBD.h"
 #include "PatchOperation/Integrator/RBDLM.h"
 #include "Types/Types.h"
 #include <cuda_runtime.h>
@@ -15,6 +16,7 @@ template struct BDIntegrate<float>;
 template struct BAOABIntegrate<float>;
 template struct BAOAB_LastUpdate<float>;
 template struct RBLangevinForceKernel<float>;
+template struct RBIntegrateBDKernel<float>;
 // launch_cuda_kernel instantiations
 template Event launch_cuda_kernel(const Resource& resource,
 								  const KernelConfig& config,
@@ -34,5 +36,9 @@ template Event launch_cuda_kernel(const Resource& resource,
 template Event launch_cuda_kernel(const Resource& resource,
 								  const KernelConfig& config,
 								  RBIntegrateDLMKernel kernel_func);
+
+template Event launch_cuda_kernel(const Resource& resource,
+								  const KernelConfig& config,
+								  RBIntegrateBDKernel<float> kernel_func);
 
 } // namespace ARBD

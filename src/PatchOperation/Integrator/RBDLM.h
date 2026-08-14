@@ -85,8 +85,8 @@ struct RBLangevinForceKernel {
 		f = orientation * f;
 		torq = orientation * torq;
 
-		rb.force[idx] += f + rb.external_force[idx];
-		rb.torque[idx] += torq + rb.external_torque[idx];
+		rb.force[idx] += f;
+		rb.torque[idx] += torq;
 	}
 };
 
@@ -120,9 +120,11 @@ struct RBIntegrateDLMKernel {
 		const Vector3 inertia = types.inertia[type];
 
 		if (substep == 0 || substep == 2) {
-			rb.momentum[idx] += 0.5f * timestep * rb.force[idx] * constants::impulse_to_momentum;
+			const Vector3 force = rb.force[idx] + rb.external_force[idx];
+			const Vector3 torque = rb.torque[idx] + rb.external_torque[idx];
+			rb.momentum[idx] += 0.5f * timestep * force * constants::impulse_to_momentum;
 			rb.angular_momentum[idx] += 0.5f * timestep *
-										(rb.orientation[idx].transpose() * rb.torque[idx]) *
+										(rb.orientation[idx].transpose() * torque) *
 										constants::impulse_to_momentum;
 			return;
 		}
