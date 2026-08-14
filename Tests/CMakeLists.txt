@@ -77,7 +77,7 @@ if(BUILD_INTERACTIVE_TESTS)
 endif()
 
 if(BUILD_INTEGRATION_TESTS)
-    add_subdirectory(integration)
+    add_subdirectory(private_test)
     add_dependencies(all_comprehensive_tests integration_tests)
     message(STATUS "Integration tests enabled")
 endif()
