@@ -1,5 +1,6 @@
 #include "Backend/CUDA/KernelHelper.cuh"
 #include "Header.h"
+#include "Interactions/Nonbonded/AnalyticalPairKernels.h"
 #include "Interactions/Nonbonded/GridGridKernels.h"
 #include "Interactions/Nonbonded/Pairwise.h"
 #include "Interactions/Nonbonded/PmfKernels.h"
@@ -19,14 +20,19 @@ template Event launch_cuda_kernel(const Resource& resource,
 								  const KernelConfig& config,
 								  TabulatedNonBondedComputer kernel_func);
 
+// Every analytical nonbonded term shares one kernel, so this is the only
+// instantiation needed no matter how many terms are enabled
+// (AnalyticalPairKernels.h).
+template Event launch_cuda_kernel(const Resource& resource,
+								  const KernelConfig& config,
+								  AnalyticalPairKernel kernel_func);
+
 // Launched with a trailing argument pack from Patch::calculate_nonbonded_forces
 // (only when force/PMF grids are present), so the pack is spelled out here.
 template Event launch_cuda_kernel(const Resource& resource,
 								  const KernelConfig& config,
 								  ComputePMFKernel kernel_func,
-								  Vector3* positions,
-								  int* type_ids,
-								  Vector3* forces,
+								  ParticleView particles,
 								  ParticleTypeView types,
 								  const BaseGridView<arbd_real>* grid_configs,
 								  idx_t num_particles);
@@ -61,39 +67,5 @@ template Event launch_cuda_kernel(const Resource& resource,
 template Event launch_cuda_kernel(const Resource& resource,
 								  const KernelConfig& config,
 								  ConvolveGridKernel<arbd_real> kernel_func);
-
-// Phase 4.1 batched RB grid-grid dispatch (RigidBodyGridBatch.h): cull +
-// worklist build, prefix sum, and the batched block-reduction force kernel.
-template Event launch_cuda_kernel(const Resource& resource,
-								  const KernelConfig& config,
-								  RBGridCullKernel kernel_func);
-
-template Event launch_cuda_kernel(const Resource& resource,
-								  const KernelConfig& config,
-								  RBGridPrefixSumKernel kernel_func);
-
-template Event launch_cuda_kernel_with_workitem(const Resource& resource,
-												const KernelConfig& config,
-												RBGridBatchedForceKernel kernel_func);
-
-// Phase 4.3 batched particle-RB grid dispatch (RigidBodyParticleGridBatch.h):
-// transform build + the batched block-reduction force kernel.
-template Event launch_cuda_kernel(const Resource& resource,
-								  const KernelConfig& config,
-								  RBParticleGridBuildKernel kernel_func);
-
-template Event launch_cuda_kernel_with_workitem(const Resource& resource,
-												const KernelConfig& config,
-												RBParticleGridForceKernel kernel_func);
-
-// Attached particles (RigidBodyAttachedParticles.h): per-step position slaving
-// and the block-reduction of their forces back onto the parent body.
-template Event launch_cuda_kernel(const Resource& resource,
-								  const KernelConfig& config,
-								  RBSyncAttachedPositionsKernel kernel_func);
-
-template Event launch_cuda_kernel_with_workitem(const Resource& resource,
-												const KernelConfig& config,
-												RBReduceAttachedForcesKernel kernel_func);
 
 } // namespace ARBD

@@ -122,7 +122,7 @@ struct TabulatedNonBondedComputer {
 		  cutoff_squared(cutoff_sq) {}
 
 	// Kernel operator
-	DEVICE void operator()(idx_t i) const {
+	KERNEL_FUNC void operator()(idx_t i) const {
 		if (i >= num_pairs)
 			return;
 

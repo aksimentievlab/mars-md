@@ -46,8 +46,8 @@ TEST_CASE("Harmonic Bond Force - Two Particles", "[force][bonded][bond]") {
 	std::vector<ARBD::int2> bond = {{0, 1}};
 	bond_indices.copy_from_host(bond.data(), 1);
 
-	DeviceBuffer<float> params(2, res);
-	float params_array[2] = {100.0f, 1.0f}; // k=100, r0=1.0
+	DeviceBuffer<arbd_real> params(2, res);
+	arbd_real params_array[2] = {100.0f, 1.0f}; // k=100, r0=1.0
 	params.copy_from_host(params_array, 2);
 
 	PeriodicBox pbox_host(Vector3(100.0f, 100.0f, 100.0f));
@@ -91,8 +91,8 @@ TEST_CASE("Harmonic Bond Force - Equilibrium Distance", "[force][bonded][bond]")
 	ARBD::int2 bond{0, 1};
 	bond_indices.copy_from_host(&bond, 1);
 
-	DeviceBuffer<float> params(2, res);
-	float params_array[2] = {100.0f, 1.0f};
+	DeviceBuffer<arbd_real> params(2, res);
+	arbd_real params_array[2] = {100.0f, 1.0f};
 	params.copy_from_host(params_array, 2);
 
 	PeriodicBox pbox_host(Vector3(100.0f, 100.0f, 100.0f));
@@ -138,8 +138,8 @@ TEST_CASE("Morse Bond Force - Two Particles", "[force][bonded][bond][morse]") {
 	ARBD::int2 bond{0, 1};
 	bond_indices.copy_from_host(&bond, 1);
 
-	DeviceBuffer<float> params(3, res);
-	float params_array[3] = {10.0f, 2.0f, 1.0f}; // D0, a, r0
+	DeviceBuffer<arbd_real> params(3, res);
+	arbd_real params_array[3] = {10.0f, 2.0f, 1.0f}; // D0, a, r0
 	params.copy_from_host(params_array, 3);
 
 	PeriodicBox pbox_host(Vector3(100.0f, 100.0f, 100.0f));
@@ -218,8 +218,8 @@ TEST_CASE("Bond Force - Periodic Boundary Conditions", "[force][bonded][bond][pb
 	ARBD::int2 bond{0, 1};
 	bond_indices.copy_from_host(&bond, 1);
 
-	DeviceBuffer<float> params(2, res);
-	float p[2] = {100.0f, 1.0f};
+	DeviceBuffer<arbd_real> params(2, res);
+	arbd_real p[2] = {100.0f, 1.0f};
 	params.copy_from_host(p, 2);
 
 	PeriodicBox pbox_host(Vector3(10.0f, 10.0f, 10.0f));

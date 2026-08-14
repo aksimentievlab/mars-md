@@ -23,7 +23,7 @@ struct AnalyticalBondComputer {
 	DEVICE_PTR(const int2) particle_indices;
 	DEVICE_PTR(Vector3) positions;
 	DEVICE_PTR(Vector3) force_energy;
-	DEVICE_PTR(const float) params;
+	DEVICE_PTR(const arbd_real) params;
 	const PeriodicBox* pbox;
 	bool get_energy;
 	idx_t num_bonds;
@@ -32,7 +32,7 @@ struct AnalyticalBondComputer {
 	AnalyticalBondComputer(DEVICE_PTR(const int2) indices,
 						   DEVICE_PTR(Vector3) pos,
 						   DEVICE_PTR(Vector3) fe,
-						   DEVICE_PTR(const float) p,
+						   DEVICE_PTR(const arbd_real) p,
 						   const PeriodicBox* box,
 						   bool energy,
 						   idx_t n)
@@ -40,7 +40,7 @@ struct AnalyticalBondComputer {
 		  get_energy(energy), num_bonds(n) {}
 
 	// Kernel operator - called by launch_kernel
-	DEVICE void operator()(idx_t i) const {
+	KERNEL_FUNC void operator()(idx_t i) const {
 		if (i >= num_bonds)
 			return;
 
@@ -48,7 +48,7 @@ struct AnalyticalBondComputer {
 
 		// Phase 1: Compute geometry
 		BondGeometry geom = BondGeometry::compute(positions, indices, pbox);
-		if (geom.distance < 1e-6f)
+		if (geom.distance < arbd_real(1e-6))
 			return;
 
 		// Phase 2: Compute force using analytical formula
@@ -58,7 +58,7 @@ struct AnalyticalBondComputer {
 
 		// Phase 3: Apply forces
 		const Vector3 force = geom.unit_vector * fe.force_magnitude;
-		const float energy = fe.energy * 0.5f;
+		const arbd_real energy = fe.energy * arbd_real(0.5);
 
 		atomic_add(&force_energy[indices.x], -force);
 		atomic_add(&force_energy[indices.y], force);
@@ -107,7 +107,7 @@ struct TabulatedBondComputer {
 		  num_bonds(n) {}
 
 	// Kernel operator
-	DEVICE void operator()(idx_t i) const {
+	KERNEL_FUNC void operator()(idx_t i) const {
 		if (i >= num_bonds)
 			return;
 		if (static_cast<InteractionForm>(forms[i]) != InteractionForm::Tabulated)
@@ -117,7 +117,7 @@ struct TabulatedBondComputer {
 
 		// Phase 1: Compute geometry
 		BondGeometry geom = BondGeometry::compute(positions, indices, pbox);
-		if (geom.distance < 1e-6f)
+		if (geom.distance < arbd_real(1e-6))
 			return;
 
 		// Phase 2: Lookup force from tabulated potential
@@ -126,7 +126,7 @@ struct TabulatedBondComputer {
 
 		// Phase 3: Apply forces
 		const Vector3 force = geom.unit_vector * fe.force_magnitude;
-		const float energy = fe.energy * 0.5f;
+		const arbd_real energy = fe.energy * arbd_real(0.5);
 
 		atomic_add(&force_energy[indices.x], -force);
 		atomic_add(&force_energy[indices.y], force);
@@ -175,7 +175,7 @@ struct TabulatedAngleComputer {
 		  num_angles(n) {}
 
 	// Kernel operator
-	DEVICE void operator()(idx_t i) const {
+	KERNEL_FUNC void operator()(idx_t i) const {
 		if (i >= num_angles)
 			return;
 		if (static_cast<InteractionForm>(forms[i]) != InteractionForm::Tabulated)
@@ -190,14 +190,22 @@ struct TabulatedAngleComputer {
 		const ScalarForceEnergy fe =
 			TabulatedPotential::compute(geom.angle, &tables[table_indices[i]]);
 
-		// Phase 3: Apply forces
-		const Vector3 force1 = geom.ab.cross(geom.bc) * fe.force_magnitude;
-		const Vector3 force3 = geom.bc.cross(geom.ab) * fe.force_magnitude;
-		const float energy = fe.energy * 0.3333333333f;
+		// Phase 3: Apply forces (force1 on i, force3 on k; see BondComputer.md)
+		constexpr arbd_real sin_floor = arbd_real(1e-3);
+		const arbd_real sin_angle = geom.sin_angle > sin_floor ? geom.sin_angle : sin_floor;
+		const arbd_real dUdtheta = -fe.force_magnitude / sin_angle;
+		const arbd_real inv_ab = arbd_real(1) / math::sqrt(geom.ab.length2());
+		const arbd_real inv_bc = arbd_real(1) / math::sqrt(geom.bc.length2());
 
-		atomic_add(&force_energy[indices.x], -force1);
-		atomic_add(&force_energy[indices.y], force1 + force3);
-		atomic_add(&force_energy[indices.z], -force3);
+		const Vector3 force1 =
+			(dUdtheta * inv_ab) * (geom.ab * (geom.cos_angle * inv_ab) + geom.bc * inv_bc);
+		const Vector3 force3 =
+			-(dUdtheta * inv_bc) * (geom.bc * (geom.cos_angle * inv_bc) + geom.ab * inv_ab);
+		const arbd_real energy = fe.energy * arbd_real(1.0 / 3.0);
+
+		atomic_add(&force_energy[indices.x], force1);
+		atomic_add(&force_energy[indices.y], -(force1 + force3));
+		atomic_add(&force_energy[indices.z], force3);
 
 		if (get_energy) {
 			atomic_add(&force_energy[indices.x].t, energy);
@@ -244,7 +252,7 @@ struct TabulatedDihedralComputer {
 		  num_dihedrals(n) {}
 
 	// Kernel operator
-	DEVICE void operator()(idx_t i) const {
+	KERNEL_FUNC void operator()(idx_t i) const {
 		if (i >= num_dihedrals)
 			return;
 		if (static_cast<InteractionForm>(forms[i]) != InteractionForm::Tabulated)
@@ -255,17 +263,17 @@ struct TabulatedDihedralComputer {
 		// Phase 1: Compute geometry
 		DihedralGeometry geom = DihedralGeometry::compute(positions, indices, pbox);
 
-		// Phase 2: Lookup force from tabulated potential
+		// Phase 2: Lookup force from tabulated potential (see BondComputer.md)
 		const ScalarForceEnergy fe =
-			TabulatedPotential::compute(geom.dihedral_angle + BD_PI, &tables[table_indices[i]]);
+			TabulatedPotential::compute(geom.dihedral_angle, &tables[table_indices[i]]);
 
-		// Phase 3: Apply forces
+		// Phase 3: Apply forces (see BondComputer.md)
 		const Vector3 f1 = geom.f1 * fe.force_magnitude;
 		const Vector3 f2 = geom.f2 * fe.force_magnitude;
 		const Vector3 f3 = geom.f3 * fe.force_magnitude;
-		const float energy = fe.energy * 0.25f;
+		const arbd_real energy = fe.energy * arbd_real(0.25);
 
-		atomic_add(&force_energy[indices.x], -f1);
+		atomic_add(&force_energy[indices.x], f1);
 		atomic_add(&force_energy[indices.y], f2 - f1);
 		atomic_add(&force_energy[indices.z], f3 - f2);
 		atomic_add(&force_energy[indices.t], -f3);
@@ -375,7 +383,7 @@ inline Event launch_analytical_bonds(const Resource& resource,
 									 DEVICE_PTR(const int2) particle_indices,
 									 DEVICE_PTR(Vector3) positions,
 									 DEVICE_PTR(Vector3) force_energy,
-									 DEVICE_PTR(const float) params,
+									 DEVICE_PTR(const arbd_real) params,
 									 const PeriodicBox* pbox,
 									 bool get_energy,
 									 idx_t num_bonds) {

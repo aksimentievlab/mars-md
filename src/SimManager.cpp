@@ -151,9 +151,13 @@ void SimManager::init() {
 	}
 
 	// Load cached bonded interactions (from load_config or set_bonded_interactions)
+	// Exclusions ride in the same struct, so they must be part of the guard:
+	// a system with `inputExcludes` but no bonded terms otherwise loses every
+	// exclusion silently and evaluates bonded neighbours as nonbonded pairs.
 	if (pending_bonded_interactions_.get_num_bonds() > 0 ||
 		pending_bonded_interactions_.get_num_angles() > 0 ||
-		pending_bonded_interactions_.get_num_dihedrals() > 0) {
+		pending_bonded_interactions_.get_num_dihedrals() > 0 ||
+		!pending_bonded_interactions_.get_exclusions().empty()) {
 		sys_state_.update_bonded_interactions(pending_bonded_interactions_);
 		LOGINFO("SimManager: Loaded {} bonds, {} angles, {} dihedrals, {} exclusions into system "
 				"state",
@@ -974,22 +978,15 @@ void SimManager::report_performance(float elapsed_time, size_t total_steps) {
 	const float io_time = wkf_timer_time(timerS_.timer);
 	const float energy_time = wkf_timer_time(timerE_.timer);
 	const float compute_time = elapsed_time - io_time - energy_time;
-
-	LOGINFO("=========================================");
-	LOGINFO("SimManager: Performance Summary");
-	LOGINFO("=========================================");
-	LOGINFO("  Total time:        {:.2f} s", elapsed_time);
-	LOGINFO("  Compute time:      {:.2f} s ({:.1f}%)",
-			compute_time,
-			compute_time / elapsed_time * 100);
-	LOGINFO("  I/O time:          {:.2f} s ({:.1f}%)", io_time, io_time / elapsed_time * 100);
-	LOGINFO("  Energy time:       {:.2f} s ({:.1f}%)",
-			energy_time,
-			energy_time / elapsed_time * 100);
-	LOGINFO("  Steps/second:      {:.2f}", steps_per_second);
-	LOGINFO("  ns/day (est):      {:.2f}",
-			(steps_per_second * sys_.get_timestep() * 86400.0f) / 1e6f);
-	LOGINFO("=========================================");
+	std::cout << "=========================================" << std::endl;
+	std::cout << "SimManager: Performance Summary: " << std::endl;
+	std::cout << "  Total time:        " << elapsed_time << " s" << std::endl;
+	std::cout << "  Compute time:      " << compute_time << " s (" << compute_time / elapsed_time * 100 << "%)" << std::endl;
+	std::cout << "  I/O time:          " << io_time << " s (" << io_time / elapsed_time * 100 << "%)" << std::endl;
+	std::cout << "  Energy time:       " << energy_time << " s (" << energy_time / elapsed_time * 100 << "%)" << std::endl;
+	std::cout << "  Steps/second:      " << steps_per_second << std::endl;
+	std::cout << "  ns/day (est):      " << (steps_per_second * sys_.get_timestep() * 86400.0f) / 1e6f << std::endl;
+	std::cout << "=========================================" << std::endl;
 }
 
 //================================================================================

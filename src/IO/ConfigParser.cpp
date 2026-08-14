@@ -517,15 +517,19 @@ static void load_particles_file(const std::string& path,
 			p.position.x = std::stof(toks[3]);
 			p.position.y = std::stof(toks[4]);
 			p.position.z = std::stof(toks[5]);
-			p.momentum.x = std::stof(toks[6]);
-			p.momentum.y = std::stof(toks[7]);
-			p.momentum.z = std::stof(toks[8]);
+			// Momentum columns are optional: legacy writes 'ATOM id type x y z'
+			// (exactly the 6 tokens the guard above admits).
+			if (toks.size() >= 9) {
+				p.momentum.x = std::stof(toks[6]);
+				p.momentum.y = std::stof(toks[7]);
+				p.momentum.z = std::stof(toks[8]);
+			}
 			out.push_back(p);
 		}
 		if (line)
 			free(line);
 	} catch (const std::exception& e) {
-		LOGWARN("get_elements: Failed to read particles from '{}': {}", path, e.what());
+		throw_value_error("get_elements: Failed to read particles from '{}': {}", path, e.what());
 	}
 }
 

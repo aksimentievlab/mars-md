@@ -11,10 +11,10 @@ using BondGeometry = CalcDistance;
 // interactions
 
 struct AngleGeometry {
-	Vector3 ab, bc, ac; // Vectors
-	float angle;		// Computed angle
-	float cos_angle;	// Cosine of angle
-	float sin_angle;	// Sine of angle
+	Vector3 ab, bc, ac;	 ///< Vectors
+	arbd_real angle;	 ///< Computed angle
+	arbd_real cos_angle; ///< Cosine of angle
+	arbd_real sin_angle; ///< Sine of angle
 
 	KERNEL_FUNC static AngleGeometry
 	compute(const Vector3* positions, const int4& particle_indices, const PeriodicBox* pbox) {
@@ -24,30 +24,39 @@ struct AngleGeometry {
 		geom.ac = pbox->wrapDiff(positions[particle_indices.z] - positions[particle_indices.x]);
 
 		// Compute angle using law of cosines
-		float distab2 = geom.ab.length2();
-		float distbc2 = geom.bc.length2();
-		float distac2 = geom.ac.length2();
+		arbd_real distab2 = geom.ab.length2();
+		arbd_real distbc2 = geom.bc.length2();
+		arbd_real distac2 = geom.ac.length2();
 
-		geom.cos_angle =
-			(distab2 + distbc2 - distac2) * 0.5f / (math::sqrt(distab2) * math::sqrt(distbc2));
+		geom.cos_angle = (distab2 + distbc2 - distac2) * arbd_real(0.5) /
+						 (math::sqrt(distab2) * math::sqrt(distbc2));
 
 		// Clamp cosine to valid range
-		if (geom.cos_angle < -1.0f)
-			geom.cos_angle = -1.0f;
-		if (geom.cos_angle > 1.0f)
-			geom.cos_angle = 1.0f;
+		if (geom.cos_angle < arbd_real(-1.0))
+			geom.cos_angle = arbd_real(-1.0);
+		if (geom.cos_angle > arbd_real(1.0))
+			geom.cos_angle = arbd_real(1.0);
 
 		geom.angle = acos(geom.cos_angle);
-		geom.sin_angle = math::sqrt(1.0f - geom.cos_angle * geom.cos_angle);
+		geom.sin_angle = math::sqrt(arbd_real(1.0) - geom.cos_angle * geom.cos_angle);
 
 		return geom;
 	}
 };
 
+/**
+ * @brief Dihedral angle (IUPAC sign convention) and its Cartesian gradients
+ *
+ * @var DihedralGeometry::f1 @f$\partial\phi/\partial r_i@f$
+ * @var DihedralGeometry::f2 gradient combination for particle @f$j@f$
+ * @var DihedralGeometry::f3 @f$-\partial\phi/\partial r_l@f$
+ *
+ * @see BondGeometry.md
+ */
 struct DihedralGeometry {
-	Vector3 ab, bc, cd;	  // Vectors
-	float dihedral_angle; // Computed dihedral angle
-	Vector3 f1, f2, f3;	  // force directions
+	Vector3 ab, bc, cd;		  // Vectors
+	arbd_real dihedral_angle; // Computed dihedral angle
+	Vector3 f1, f2, f3;		  // force directions
 
 	KERNEL_FUNC static DihedralGeometry
 	compute(const Vector3* positions, const int4& particle_indices, const PeriodicBox* pbox) {
@@ -60,10 +69,10 @@ struct DihedralGeometry {
 		Vector3 crossBCD = geom.bc.cross(geom.cd);
 		Vector3 crossX = geom.bc.cross(crossABC);
 
-		float cos_phi = crossABC.dot(crossBCD) / (crossABC.length() * crossBCD.length());
-		float sin_phi = crossX.dot(crossBCD) / (crossX.length() * crossBCD.length());
+		arbd_real cos_phi = crossABC.dot(crossBCD) / (crossABC.length() * crossBCD.length());
+		arbd_real sin_phi = crossX.dot(crossBCD) / (crossX.length() * crossBCD.length());
 
-		geom.dihedral_angle = -atan2(sin_phi, cos_phi);
+		geom.dihedral_angle = atan2(sin_phi, cos_phi);
 
 		geom.f1 = -geom.bc.length() * crossABC.rLength2() * crossABC;
 		geom.f3 = -geom.bc.length() * crossBCD.rLength2() * crossBCD;
@@ -95,7 +104,7 @@ struct ProductPotentialGeometry {
 	BondGeometry bond_b;
 
 	// Combined metrics (for coupled potentials)
-	float combined_metric;
+	arbd_real combined_metric;
 	bool is_singular;
 	ProductPotentialGeometry() = default;
 	ProductPotentialGeometry(const AngleGeometry& angle1,
@@ -106,7 +115,7 @@ struct ProductPotentialGeometry {
 		: angle_a(angle_a), angle_b(angle_b) {}
 	ProductPotentialGeometry(const BondGeometry& bond_a, const BondGeometry& bond_b)
 		: bond_a(bond_a), bond_b(bond_b) {}
-	ProductPotentialGeometry(const float combined_metric, const bool is_singular)
+	ProductPotentialGeometry(const arbd_real combined_metric, const bool is_singular)
 		: combined_metric(combined_metric), is_singular(is_singular) {}
 
 	/**
@@ -134,7 +143,8 @@ struct ProductPotentialGeometry {
 
 		// Check for singularities
 		geom.is_singular =
-			(geom.angle1.angle < 1e-6f || geom.bond.distance < 1e-6f || geom.angle2.angle < 1e-6f);
+			(geom.angle1.angle < arbd_real(1e-6) || geom.bond.distance < arbd_real(1e-6) ||
+			 geom.angle2.angle < arbd_real(1e-6));
 
 		// Optional: compute combined metric for coupled potentials
 		// geom.combined_metric = f(geom.angle1.angle, geom.bond.distance, geom.angle2.angle);
@@ -163,7 +173,8 @@ struct ProductPotentialGeometry {
 			AngleGeometry::compute(positions, int3(indices.y, indices.z, indices.t), pbox);
 
 		// Check for singularities
-		geom.is_singular = (geom.angle_a.angle < 1e-6f || geom.angle_b.angle < 1e-6f);
+		geom.is_singular =
+			(geom.angle_a.angle < arbd_real(1e-6) || geom.angle_b.angle < arbd_real(1e-6));
 
 		return geom;
 	}
@@ -187,7 +198,8 @@ struct ProductPotentialGeometry {
 		geom.bond_b = BondGeometry::compute(positions, int2(indices.y, indices.z), pbox);
 
 		// Check for singularities
-		geom.is_singular = (geom.bond_a.distance < 1e-6f || geom.bond_b.distance < 1e-6f);
+		geom.is_singular =
+			(geom.bond_a.distance < arbd_real(1e-6) || geom.bond_b.distance < arbd_real(1e-6));
 
 		return geom;
 	}

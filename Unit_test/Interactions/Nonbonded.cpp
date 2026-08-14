@@ -1,29 +1,55 @@
 /**
- * @file test_pairwise_nonbonded.cpp
- * @brief Tests for pairwise nonbonded force kernels
+ * @file Nonbonded.cpp
+ * @brief Nonbonded pair potentials: Debye-Huckel, ONC, Gaussian, bare
+ *        Coulomb and softcore.
  *
- * Tests the CORRECTED kernels from PairwiseNonbonded.h:
- * - SoftcoreForceKernel (LJ repulsion)
- * - ColumbForceKernel (electrostatics)
- * - Combined kernel
- *
- * NOTE: Uses existing kernel definitions, does NOT define new ones!
+ * @details References are closed-form in double; never difference arbd_real.
+ * @see Nonbonded.md
  */
 
 #include "../catch_boiler.h"
-
 #include "Backend/Kernels.h"
-#include "Backend/Resource.h"
+#include "Constants.h"
 #include "Interactions/Nonbonded/Columb.h"
 #include "Interactions/Nonbonded/Pairwise.h"
 #include "Objects/DeviceParticleManager.h"
-#include "PatchOperation/Pairlist.h"
 #include "System/PeriodicBox.h"
-#include "Types/Types.h"
-
+#include <cmath>
+#include <utility>
+#include <vector>
 using namespace ARBD;
+using Catch::Approx;
 
 namespace {
+
+constexpr double kLambda = 10.0, kEpsilon = 80.0;
+constexpr double kKappa = 0.1, kSz = 80.0, kZ = 6.86;
+constexpr double kAmp = 2.5, kSigma = 3.0;
+
+double dh_energy(double r, double qi, double qj) {
+	return qi * qj * constants::COULOMB / kEpsilon * std::exp(-r / kLambda) / r;
+}
+
+double onc_dielectric(double r) {
+	const double e = std::exp(r / kZ);
+	const double d = e - 1.0;
+	return kSz * (1.0 - (r * r) / (kZ * kZ) * e / (d * d));
+}
+
+double onc_energy(double r, double qi, double qj) {
+	return qi * qj * constants::COULOMB * std::exp(-kKappa * r) / (onc_dielectric(r) * r);
+}
+
+double gauss_energy(double r) {
+	return kAmp * std::exp(-(r * r) / (kSigma * kSigma));
+}
+
+/// -dU/dr of a double-precision reference.
+template<typename F>
+double fd_force(F u, double r) {
+	const double h = 1e-5 * std::max(1.0, r);
+	return -(u(r + h) - u(r - h)) / (2.0 * h);
+}
 
 /**
  * @brief Helper to create simple 2-particle system
@@ -54,249 +80,220 @@ std::pair<HostParticleData, std::vector<ParticleType>> create_two_particles(arbd
 
 } // anonymous namespace
 
-TEST_CASE("Softcore LJ - Repulsion", "[forces][nonbonded][softcore]") {
+TEST_CASE("Debye-Huckel energy matches closed form", "[nonbonded][electrostatics][debye]") {
+	DebyeHuckelPotential dh{arbd_real(kLambda), arbd_real(kEpsilon)};
+	for (double r : {2.0, 5.0, 12.0, 25.0}) {
+		REQUIRE(dh.compute(arbd_real(r), 1.0f, -1.0f).energy ==
+				Approx(dh_energy(r, 1.0, -1.0)).epsilon(1e-5));
+	}
+}
+
+TEST_CASE("Debye-Huckel force is -dU/dr", "[nonbonded][electrostatics][debye]") {
+	DebyeHuckelPotential dh{arbd_real(kLambda), arbd_real(kEpsilon)};
+	for (double r : {2.0, 5.0, 12.0, 25.0}) {
+		const double ref = fd_force([](double x) { return dh_energy(x, 1.0, -1.0); }, r);
+		REQUIRE(dh.compute(arbd_real(r), 1.0f, -1.0f).force_magnitude == Approx(ref).epsilon(1e-4));
+	}
+}
+
+TEST_CASE("Debye-Huckel decays faster than bare Coulomb", "[nonbonded][electrostatics][debye]") {
+	DebyeHuckelPotential dh{arbd_real(kLambda), arbd_real(kEpsilon)};
+	for (double r : {1.0, 10.0, 30.0}) {
+		REQUIRE(dh.compute(arbd_real(r), 1.0f, 1.0f).energy < constants::COULOMB / kEpsilon / r);
+	}
+}
+
+TEST_CASE("ONC dielectric rises toward its plateau", "[nonbonded][electrostatics][onc]") {
+	OnckElecPotential onc{arbd_real(kKappa), arbd_real(kSz), arbd_real(kZ)};
+
+	double prev = onc.dielectric(arbd_real(0.5));
+	for (double r = 1.0; r <= 40.0; r += 1.0) {
+		const double eps = onc.dielectric(arbd_real(r));
+		REQUIRE(eps > prev);
+		REQUIRE(eps <= kSz);
+		prev = eps;
+	}
+	// Approach is asymptotic and slow: still ~1.2% short at r=60, so check far out.
+	REQUIRE(onc.dielectric(arbd_real(120)) == Approx(kSz).epsilon(1e-3));
+}
+
+TEST_CASE("ONC dielectric matches closed form", "[nonbonded][electrostatics][onc]") {
+	OnckElecPotential onc{arbd_real(kKappa), arbd_real(kSz), arbd_real(kZ)};
+	for (double r : {1.0, 3.0, 7.0, 15.0, 30.0}) {
+		REQUIRE(onc.dielectric(arbd_real(r)) == Approx(onc_dielectric(r)).epsilon(1e-4));
+	}
+}
+
+TEST_CASE("ONC dielectric_deriv matches finite difference", "[nonbonded][electrostatics][onc]") {
+	OnckElecPotential onc{arbd_real(kKappa), arbd_real(kSz), arbd_real(kZ)};
+	for (double r : {1.0, 3.0, 7.0, 15.0}) {
+		const double h = 1e-5 * std::max(1.0, r);
+		const double fd = (onc_dielectric(r + h) - onc_dielectric(r - h)) / (2.0 * h);
+		REQUIRE(fd > 0.0); // eps(r) is increasing
+		REQUIRE(onc.dielectric_deriv(arbd_real(r)) == Approx(fd).epsilon(1e-3));
+	}
+}
+
+TEST_CASE("ONC energy matches closed form", "[nonbonded][electrostatics][onc]") {
+	OnckElecPotential onc{arbd_real(kKappa), arbd_real(kSz), arbd_real(kZ)};
+	for (double r : {2.0, 5.0, 12.0}) {
+		REQUIRE(onc.compute(arbd_real(r), 1.0f, -1.0f).energy ==
+				Approx(onc_energy(r, 1.0, -1.0)).epsilon(1e-4));
+	}
+}
+
+TEST_CASE("ONC force is -dU/dr", "[nonbonded][electrostatics][onc]") {
+	OnckElecPotential onc{arbd_real(kKappa), arbd_real(kSz), arbd_real(kZ)};
+	for (double r : {2.0, 5.0, 12.0}) {
+		const double ref = fd_force([](double x) { return onc_energy(x, 1.0, -1.0); }, r);
+		REQUIRE(onc.compute(arbd_real(r), 1.0f, -1.0f).force_magnitude ==
+				Approx(ref).epsilon(1e-3));
+	}
+}
+
+TEST_CASE("ONC floors the singularity at r=0", "[nonbonded][electrostatics][onc]") {
+	OnckElecPotential onc{arbd_real(kKappa), arbd_real(kSz), arbd_real(kZ)};
+	const auto fe = onc.compute(arbd_real(0), 1.0f, 1.0f);
+	REQUIRE(std::isfinite(fe.energy));
+	REQUIRE(std::isfinite(fe.force_magnitude));
+	REQUIRE(fe.energy == Approx(onc.compute(OnckElecPotential::MIN_DISTANCE, 1.0f, 1.0f).energy));
+}
+
+TEST_CASE("Gaussian energy matches closed form", "[nonbonded][gaussian]") {
+	GaussianPotential g{arbd_real(kAmp), arbd_real(kSigma), arbd_real(100)};
+	for (double r : {0.0, 1.0, 3.0, 6.0}) {
+		REQUIRE(g.compute(arbd_real(r)).energy == Approx(gauss_energy(r)).epsilon(1e-5));
+	}
+}
+
+TEST_CASE("Gaussian force is -dU/dr", "[nonbonded][gaussian]") {
+	GaussianPotential g{arbd_real(kAmp), arbd_real(kSigma), arbd_real(100)};
+	for (double r : {0.5, 1.0, 3.0, 6.0}) {
+		REQUIRE(g.compute(arbd_real(r)).force_magnitude ==
+				Approx(fd_force(gauss_energy, r)).epsilon(1e-4));
+	}
+}
+
+TEST_CASE("Gaussian truncates at cutoff", "[nonbonded][gaussian]") {
+	GaussianPotential g{arbd_real(kAmp), arbd_real(kSigma), arbd_real(25)}; // cutoff 5
+
+	REQUIRE(g.compute(arbd_real(4.9)).energy > 0.0f);
+	REQUIRE(g.compute(arbd_real(5.1)).energy == 0.0f);
+	REQUIRE(g.compute(arbd_real(5.1)).force_magnitude == 0.0f);
+
+	// r=12 not 50: by 50 the Gaussian underflows float to a true zero.
+	GaussianPotential uncapped{arbd_real(kAmp), arbd_real(kSigma), arbd_real(0)};
+	REQUIRE(uncapped.compute(arbd_real(12)).energy > 0.0f);
+	REQUIRE(g.compute(arbd_real(12)).energy == 0.0f);
+}
+
+// ============================================================================
+// BARE COULOMB AND SOFTCORE
+// Merged from the former Nonbonded.cpp; see Nonbonded.md
+// ============================================================================
+
+TEST_CASE("Coulomb energy matches closed form", "[nonbonded][electrostatics][coulomb]") {
+	const double r = 2.0, qi = 1.0, qj = 1.0;
+	const ScalarForceEnergy fe =
+		ColumbPotential::compute(Vector3(float(r), 0.0f, 0.0f), float(r), float(qi), float(qj));
+
+	REQUIRE(fe.energy == Approx(qi * qj * constants::COULOMB / r).epsilon(1e-5));
+}
+
+TEST_CASE("Coulomb force is -dU/dr", "[nonbonded][electrostatics][coulomb]") {
+	const double qi = 1.0, qj = 1.0;
+	auto u = [&](double r) { return qi * qj * constants::COULOMB / r; };
+
+	for (double r : {1.5, 2.0, 5.0}) {
+		INFO("r = " << r);
+		const ScalarForceEnergy fe =
+			ColumbPotential::compute(Vector3(float(r), 0.0f, 0.0f), float(r), float(qi), float(qj));
+		REQUIRE(fe.force_magnitude == Approx(fd_force(u, r)).epsilon(1e-4));
+	}
+}
+
+TEST_CASE("Coulomb kernel repels like charges and attracts opposite",
+		  "[nonbonded][electrostatics][coulomb][kernel]") {
 	initialize_backend_once();
 	Resource res(Global::single_resource_id);
 
-	// Create 2 particles at distance 0.8 (inside sigma=1.0)
-	auto [host_data, types] = create_two_particles(0.8f);
-
-	DeviceParticle particles(2, res);
-	particles.copy_from_host(host_data, 2);
-
-	// Create particle types
-	DeviceParticleTypes type_manager(types, res);
-
-	// Build pairlist
-	auto pairlist = create_pairlist(PairlistBuilderType::ZOrder, res, 10, 10);
-	pairlist->build_pairlist(particles.pos(), 2, 2.0f);
-	REQUIRE(pairlist->get_num_pairs() == 1);
-
-	// Create periodic box
-	PeriodicBox pbox_host(Vector3(100, 100, 100));
-	DeviceBuffer<PeriodicBox> pbox_buffer(1, res);
-	pbox_buffer.copy_from_host(&pbox_host, 1);
-
-	// Create softcore kernel
-	auto particle_view = particles.view();
-	auto type_view = type_manager.view();
-
-	SoftcoreForceKernel kernel{particle_view,
-							   type_view,
-							   pbox_buffer.data(),
-							   pairlist->get_num_pairs()};
-
-	// Launch
-	KernelConfig config = KernelConfig::for_1d(pairlist->get_num_pairs(), res);
-	Event evt = launch_kernel(res, config, kernel);
-	evt.wait();
-
-	// Check forces
-	HostParticleData result;
-	particles.copy_to_host(result, 2);
-
-	// At r=0.8 < sigma=1.0, should be repulsive (pushing apart)
-	REQUIRE(result.force[0].x < 0.0f); // Particle 0 pushed left
-	REQUIRE(result.force[1].x > 0.0f); // Particle 1 pushed right
-
-	// Forces should be equal and opposite
-	REQUIRE(std::abs(result.force[0].x + result.force[1].x) < 1e-5f);
-
-	LOGINFO("Softcore forces at r=0.8: F0={:.3f}, F1={:.3f}", result.force[0].x, result.force[1].x);
-}
-
-TEST_CASE("Softcore LJ - No Force Outside Core", "[forces][nonbonded][softcore]") {
-	Resource res;
-
-	// Create 2 particles at distance 1.5 (outside sigma=1.0)
-	auto [host_data, types] = create_two_particles(1.5f);
-
-	DeviceParticle particles(2, res);
-	particles.copy_from_host(host_data, 2);
-
-	DeviceParticleTypes type_manager(types, res);
-	type_manager.copy_from_host(types);
-
-	auto pairlist = create_pairlist(PairlistBuilderType::CellList, res, 10, 10);
-	pairlist->build_pairlist(particles.pos(), 2, 2.0f);
-
-	PeriodicBox pbox_host(Vector3(100, 100, 100));
-	DeviceBuffer<PeriodicBox> pbox_buffer(1, res);
-	pbox_buffer.copy_from_host(&pbox_host, 1);
-
-	auto particle_view = particles.view();
-	auto type_view = type_manager.view();
-
-	SoftcoreForceKernel kernel{particle_view,
-							   &type_view,
-							   pairlist->get_neighbor_pairs().data(),
-							   pbox_buffer.data(),
-							   pairlist->get_num_pairs(),
-							   false};
-
-	launch_kernel(res, KernelConfig::for_1d(pairlist->get_num_pairs(), res), kernel);
-	res.synchronize();
-
-	HostParticleData result;
-	particles.copy_to_host(result, 2);
-
-	// Outside core - should have zero force
-	REQUIRE(result.force[0].x == Catch::Matchers::WithinAbs(0.0f, 1e-6f));
-	REQUIRE(result.force[1].x == Catch::Matchers::WithinAbs(0.0f, 1e-6f));
-}
-
-TEST_CASE("Coulomb - Repulsion Between Like Charges", "[forces][nonbonded][coulomb]") {
-	Resource res;
-
-	// Create 2 particles at distance 2.0
+	// Particle 0 at the origin, particle 1 at +x, so a repulsive pair must
+	// push 0 toward -x. The kernel previously applied this backwards.
 	auto [host_data, types] = create_two_particles(2.0f);
-
-	// Both have charge +1.0
-	types[0].charge = 1.0f;
-
-	DeviceParticle particles(2, res);
-	particles.copy_from_host(host_data, 2);
-
-	DeviceParticleTypes type_manager(types, res);
-	type_manager.copy_from_host(types);
-
-	auto pairlist = create_pairlist(PairlistBuilderType::CellList, res, 10, 10);
-	pairlist->build_pairlist(particles.pos(), 2, 3.0f);
-
-	PeriodicBox pbox_host(Vector3(100, 100, 100));
-	DeviceBuffer<PeriodicBox> pbox_buffer(1, res);
-	pbox_buffer.copy_from_host(&pbox_host, 1);
-
-	auto particle_view = particles.view();
-	auto type_view = type_manager.view();
-
-	ColumbForceKernel<float> kernel{particle_view,
-									&type_view,
-									pairlist->get_neighbor_pairs().data(),
-									pbox_buffer.data(),
-									pairlist->get_num_pairs(),
-									false};
-
-	launch_kernel(res, KernelConfig::for_1d(pairlist->get_num_pairs(), res), kernel);
-
-	HostParticleData result;
-	particles.copy_to_host(result, 2);
-
-	// F = COULOMB * q1 * q2 / r^2 = 332.06 * 1 * 1 / 4 = 83.015
-	float expected_force = constants::COULOMB * 1.0f * 1.0f / (2.0f * 2.0f);
-
-	// Like charges repel
-	REQUIRE(result.force[0].x == Catch::Matchers::WithinRel(-expected_force, 0.01f));
-	REQUIRE(result.force[1].x == Catch::Matchers::WithinRel(expected_force, 0.01f));
-
-	// Equal and opposite
-	REQUIRE(std::abs(result.force[0].x + result.force[1].x) < 1e-4f);
-}
-
-TEST_CASE("Coulomb - Attraction Between Opposite Charges", "[forces][nonbonded][coulomb]") {
-	Resource res;
-
-	auto [host_data, types] = create_two_particles(2.0f);
-
-	// Create two types: +1 and -1
 	types.push_back(types[0]);
 	types[0].charge = 1.0f;
-	types[1].charge = -1.0f;
 
-	// Assign different types
-	host_data.type_id = {0, 1};
+	const float expected = constants::COULOMB * 1.0f / (2.0f * 2.0f);
 
-	DeviceParticle particles(2, res);
-	particles.copy_from_host(host_data, 2);
+	auto run = [&](float q1) {
+		types[1].charge = q1;
+		HostParticleData data = host_data;
+		data.type_id = {0, 1};
 
-	DeviceParticleManager type_manager(res);
-	type_manager.copy_from_host(types);
+		DeviceParticle particles(2, res);
+		particles.copy_from_host(data, 2);
+		particles.clear_forces();
+		DeviceParticleTypes type_manager(types, res);
 
-	auto pairlist = create_pairlist(PairlistBuilderType::CellList, res, 10, 10);
-	pairlist->build_pairlist(particles.pos(), 2, 3.0f);
+		PeriodicBox pbox_host(Vector3(100.0f, 100.0f, 100.0f));
+		DeviceBuffer<PeriodicBox> pbox_buffer(1, res);
+		pbox_buffer.copy_from_host(&pbox_host, 1);
 
-	PeriodicBox pbox_host(Vector3(100, 100, 100));
-	DeviceBuffer<PeriodicBox> pbox_buffer(1, res);
-	pbox_buffer.copy_from_host(&pbox_host, 1);
+		const ARBD::int2 pair_host{0, 1};
+		DeviceBuffer<ARBD::int2> pairs(1, res);
+		pairs.copy_from_host(&pair_host, 1);
 
-	auto particle_view = particles.view();
-	auto type_view = type_manager.view();
+		ColumbForceKernel kernel{particles.view(),
+								 type_manager.view(),
+								 pairs.data(),
+								 pbox_buffer.data(),
+								 1.0f,
+								 1};
+		launch_kernel(res, KernelConfig::for_1d(1, res), kernel).wait();
 
-	ColumbForceKernel kernel{particle_view,
-							 &type_view,
-							 pairlist->get_neighbor_pairs().data(),
-							 pbox_buffer.data(),
-							 pairlist->get_num_pairs(),
-							 false};
+		HostParticleData result;
+		particles.copy_to_host(result, 2);
+		return std::pair<float, float>{result.force[0].x, result.force[1].x};
+	};
 
-	launch_kernel(res, KernelConfig::for_1d(pairlist->get_num_pairs(), res), kernel);
-	res.synchronize();
+	auto [like0, like1] = run(1.0f);
+	REQUIRE(like0 == Approx(-expected).epsilon(0.01));
+	REQUIRE(like1 == Approx(expected).epsilon(0.01));
+	REQUIRE(like0 + like1 == Approx(0.0f).margin(1e-3));
 
-	HostParticleData result;
-	particles.copy_to_host(result, 2);
-
-	// F = COULOMB * q1 * q2 / r^2 = 332.06 * 1 * (-1) / 4 = -83.015
-	float expected_force = constants::COULOMB * 1.0f * (-1.0f) / (2.0f * 2.0f);
-
-	// Opposite charges attract (forces point toward each other)
-	REQUIRE(result.force[0].x == Catch::Matchers::WithinRel(-expected_force, 0.01));
-	REQUIRE(result.force[1].x == Catch::Matchers::WithinRel(expected_force, 0.01));
-
-	// Equal and opposite
-	REQUIRE(std::abs(result.force[0].x + result.force[1].x) < 1e-4f);
-
-	LOGINFO("Coulomb forces (opposite charges): F0={:.3f}, F1={:.3f}",
-			result.force[0].x,
-			result.force[1].x);
+	auto [opp0, opp1] = run(-1.0f);
+	REQUIRE(opp0 == Approx(expected).epsilon(0.01));
+	REQUIRE(opp1 == Approx(-expected).epsilon(0.01));
+	REQUIRE(opp0 + opp1 == Approx(0.0f).margin(1e-3));
 }
 
-TEST_CASE("Combined Softcore + Coulomb", "[forces][nonbonded][combined]") {
-	Resource res;
+TEST_CASE("Softcore energy is a shifted well inside the core, zero outside",
+		  "[nonbonded][softcore]") {
+	const float eps = 1.0f;
+	const float rad6 = 1.0f;
 
-	// Particles at r=0.9 (inside softcore, close enough for strong Coulomb)
-	auto [host_data, types] = create_two_particles(0.9f);
-	types[0].charge = 1.0f;
-	types[0].eps = 1.0f;
-	types[0].radius = 1.0f;
+	const ScalarForceEnergy inside =
+		SoftcoreForceKernel::softcoreForce(Vector3(0.8f, 0.0f, 0.0f), eps, rad6);
+	REQUIRE(inside.energy > 0.0f);
 
-	DeviceParticle particles(2, res);
-	particles.copy_from_host(host_data, 2);
+	const ScalarForceEnergy outside =
+		SoftcoreForceKernel::softcoreForce(Vector3(1.5f, 0.0f, 0.0f), eps, rad6);
+	REQUIRE(outside.energy == 0.0f);
+}
 
-	DeviceParticleManager type_manager(res);
-	type_manager.copy_from_host(types);
+TEST_CASE("Softcore force magnitude grows as particles are pushed together",
+		  "[nonbonded][softcore]") {
+	const float eps = 1.0f;
+	const float rad6 = 1.0f;
 
-	auto pairlist = create_pairlist(PairlistBuilderType::CellList, res, 10, 10);
-	pairlist->build_pairlist(particles.pos(), 2, 2.0f);
+	// softcoreForce returns dU/dr divided by r - it is meant to scale r_ij
+	// rather than a unit vector - which is the opposite sign convention to the
+	// tabulated path's -dU/dr. Only the magnitude is asserted; see Nonbonded.md.
+	const float f_near = std::abs(
+		SoftcoreForceKernel::softcoreForce(Vector3(0.7f, 0.0f, 0.0f), eps, rad6).force_magnitude);
+	const float f_far = std::abs(
+		SoftcoreForceKernel::softcoreForce(Vector3(0.9f, 0.0f, 0.0f), eps, rad6).force_magnitude);
 
-	PeriodicBox pbox_host(Vector3(100, 100, 100));
-	DeviceBuffer<PeriodicBox> pbox_buffer(1, res);
-	pbox_buffer.copy_from_host(&pbox_host, 1);
-
-	auto particle_view = particles.view();
-	auto type_view = type_manager.view();
-
-	SoftcoreColumbKernel kernel{particle_view,
-								&type_view,
-								pairlist->get_neighbor_pairs().data(),
-								pbox_buffer.data(),
-								pairlist->get_num_pairs(),
-								false};
-
-	launch_kernel(res, KernelConfig::for_1d(pairlist->get_num_pairs(), res), kernel);
-	res.synchronize();
-
-	HostParticleData result;
-	particles.copy_to_host(result, 2);
-
-	// Both should contribute to repulsion
-	REQUIRE(result.force[0].x < 0.0f);
-	REQUIRE(result.force[1].x > 0.0f);
-
-	// Forces should be equal and opposite
-	REQUIRE(std::abs(result.force[0].x + result.force[1].x) < 1e-4f);
-
-	// Combined force should be stronger than either alone
-	// (Both LJ and Coulomb repel at this distance)
-
-	LOGINFO("Combined forces at r=0.9: F0={:.3f}, F1={:.3f}", result.force[0].x, result.force[1].x);
+	REQUIRE(f_near > f_far);
+	REQUIRE(f_far > 0.0f);
 }

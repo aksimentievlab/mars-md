@@ -79,10 +79,10 @@ class BondConfigReader {
 			auto it = std::find(AnalyticalNameList::dihedral_types.begin(),
 								AnalyticalNameList::dihedral_types.end(),
 								dihedral.function_name);
-			if (it != AnalyticalNameList::angle_types.end()) {
+			if (it != AnalyticalNameList::dihedral_types.end()) {
 				dihedral.form = InteractionForm::Analytical;
 				dihedral.function_index =
-					std::distance(AnalyticalNameList::angle_types.begin(), it);
+					std::distance(AnalyticalNameList::dihedral_types.begin(), it);
 			} else {
 				dihedral.form = InteractionForm::Tabulated;
 				dihedral.function_index =

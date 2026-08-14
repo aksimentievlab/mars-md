@@ -15,7 +15,7 @@ void BondedInteractions::make_exclusions(int num_particles, int exclusion_depth)
 
 	// 2. Perform a Breadth-First Search (BFS) starting from each particle.
 	for (int start_node = 0; start_node < num_particles; ++start_node) {
-		std::queue<std::pair<int, int>> q; // Stores {particle_index, current_depth}
+		std::queue<std::pair<int, int>> q; ///< Stores {particle_index, current_depth}
 		q.push({start_node, 0});
 
 		std::vector<bool> visited(num_particles, false);

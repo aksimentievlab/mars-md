@@ -21,11 +21,13 @@ add_executable(arbd_unit_tests
     ${CMAKE_CURRENT_LIST_DIR}/Objects/TestParticle.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Compute/BDKernels.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Interactions/Forces.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Interactions/TabulatedBonded.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Interactions/AnalyticalNB.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Interactions/NonbondedEnergy.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Interactions/GridGrid.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Interactions/RigidBodyGridBatch.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Interactions/RigidBodyParticleGridBatch.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Interactions/Pmf.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/Interactions/ScreenedPotentials.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Interactions/Convolution.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Interactions/GenPotGolden.cpp
     ${CMAKE_CURRENT_LIST_DIR}/IO/RigidBodyConfigParsing.cpp
@@ -72,6 +74,7 @@ add_executable(arbd_zorder_tests
     ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp
     ${CMAKE_CURRENT_LIST_DIR}/System/zorder_tests.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Compute/Zorder_pairlist2.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Compute/zorder_pairlist_tests.cpp
 )
 
 # Includes for ZOrder tests

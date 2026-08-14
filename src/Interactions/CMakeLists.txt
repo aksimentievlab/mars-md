@@ -39,6 +39,7 @@ if(USE_CUDA)
     list(APPEND LIB_SOURCES
         Interactions/Bonded/BondedInstantiations.cu
         Interactions/Nonbonded/NonbondedInstantiations.cu
+        Interactions/Nonbonded/RBNonbonded.cu
     )
 
     # Set CUDA properties for .cu files

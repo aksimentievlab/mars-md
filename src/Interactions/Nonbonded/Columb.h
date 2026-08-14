@@ -54,7 +54,7 @@ struct DebyeHuckelPotential {
  * @note eps(0) is singular; distance is floored at MIN_DISTANCE, matching the
  *       reference implementation's d = 1e-2 guard.
  */
-struct OncElecPotential {
+struct OnckElecPotential {
 	static constexpr arbd_real MIN_DISTANCE = arbd_real(1e-2);
 
 	arbd_real kappa = arbd_real(0.1);
@@ -130,14 +130,16 @@ struct ColumbForceKernel {
 		// Compute
 		ScalarForceEnergy fe = ColumbPotential::compute(r_ij, distance, qi, qj);
 
-		// Apply forces to ParticleView
+		// Apply forces to ParticleView. unit_vec points from x to y and
+		// force_magnitude is +dU/dr negated, i.e. positive when the pair
+		// repels, so the repelled x must move *away* from y.
 		Vector3 force_vec = fe.force_magnitude * unit_vec;
-		atomic_add(&particle_view.ForceEnergy[pair.x].x, force_vec.x);
-		atomic_add(&particle_view.ForceEnergy[pair.x].y, force_vec.y);
-		atomic_add(&particle_view.ForceEnergy[pair.x].z, force_vec.z);
-		atomic_add(&particle_view.ForceEnergy[pair.y].x, -force_vec.x);
-		atomic_add(&particle_view.ForceEnergy[pair.y].y, -force_vec.y);
-		atomic_add(&particle_view.ForceEnergy[pair.y].z, -force_vec.z);
+		atomic_add(&particle_view.ForceEnergy[pair.x].x, -force_vec.x);
+		atomic_add(&particle_view.ForceEnergy[pair.x].y, -force_vec.y);
+		atomic_add(&particle_view.ForceEnergy[pair.x].z, -force_vec.z);
+		atomic_add(&particle_view.ForceEnergy[pair.y].x, force_vec.x);
+		atomic_add(&particle_view.ForceEnergy[pair.y].y, force_vec.y);
+		atomic_add(&particle_view.ForceEnergy[pair.y].z, force_vec.z);
 	}
 };
 
@@ -151,5 +153,5 @@ struct sycl::is_device_copyable<ARBD::ColumbForceKernel> : std::true_type {};
 template<>
 struct sycl::is_device_copyable<ARBD::DebyeHuckelPotential> : std::true_type {};
 template<>
-struct sycl::is_device_copyable<ARBD::OncElecPotential> : std::true_type {};
+struct sycl::is_device_copyable<ARBD::OnckElecPotential> : std::true_type {};
 #endif

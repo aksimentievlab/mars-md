@@ -18,19 +18,25 @@
 
 namespace ARBD {
 
+/**
+ * @brief Scalar force magnitude and energy from a potential evaluation
+ *
+ * The named fields must stay the same type as `float2`'s components: they
+ * alias the same storage, and `float2` is `Vec2<arbd_real>`.
+ */
 struct ScalarForceEnergy {
 	union {
-		float2 fe{0.0f, 0.0f};
+		float2 fe{arbd_real(0), arbd_real(0)};
 		struct {
-			float force_magnitude;
-			float energy;
+			arbd_real force_magnitude;
+			arbd_real energy;
 		};
 	};
 };
 
 struct CalcDistance {
 	Vector3 r_ij;		 // vector between two particles
-	float distance;		 // distance between two particles
+	arbd_real distance;	 // distance between two particles
 	Vector3 unit_vector; // unit vector in the direction of the vector
 
 	DEVICE static CalcDistance
@@ -38,10 +44,10 @@ struct CalcDistance {
 		CalcDistance dist;
 		dist.r_ij = pbox->wrapDiff(positions[particle_indices.y] - positions[particle_indices.x]);
 		dist.distance = dist.r_ij.length();
-		if (dist.distance > 1e-6f) {
+		if (dist.distance > arbd_real(1e-6)) {
 			dist.unit_vector = dist.r_ij / dist.distance;
 		} else {
-			dist.unit_vector = Vector3(0.0f);
+			dist.unit_vector = Vector3(arbd_real(0));
 		}
 		return dist;
 	}

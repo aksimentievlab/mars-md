@@ -100,6 +100,22 @@ struct Table {
 		// dU * step_inv in TabulatedPotential::compute), while still
 		// reporting a plausible-looking (but wrong, always-at-x=start) energy.
 		check_same_step_size();
+		convert_angular_abscissa_to_radians();
+	}
+
+	/**
+	 * @brief Rescale a degrees-valued angle/dihedral abscissa to radians
+	 */
+	void convert_angular_abscissa_to_radians() {
+		if (type != TabulatedType::Angle && type != TabulatedType::Dihedral) {
+			return;
+		}
+		constexpr arbd_real deg_to_rad = static_cast<arbd_real>(constants::PI / 180.0);
+		for (auto& x : X) {
+			x *= deg_to_rad;
+		}
+		start *= deg_to_rad;
+		step_size *= deg_to_rad;
 	}
 
 	/**

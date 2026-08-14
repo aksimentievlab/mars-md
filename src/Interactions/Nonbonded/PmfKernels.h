@@ -128,9 +128,7 @@ struct ComputePMFKernel {
 	bool get_energy = false;
 
 	KERNEL_FUNC void operator()(size_t i,
-								const Vector3* __restrict__ positions,
-								const int* __restrict__ type_ids,
-								Vector3* __restrict__ forces,
+								const ParticleView particles,
 								const ParticleTypeView types,
 								const BaseGridView<arbd_real>* __restrict__ grid_configs,
 								idx_t num_particles) const {
@@ -139,19 +137,19 @@ struct ComputePMFKernel {
 		if (idx >= num_particles)
 			return;
 
-		const int type_id = type_ids[idx];
-		const Vector3 pos = positions[idx];
+		const int type_id = particles.type_id[idx];
+		const Vector3 pos = particles.pos[idx];
 
-		// One thread per particle - forces[idx] is only ever written by this
-		// thread, so this is a plain read-modify-write, not an atomic like
+		// One thread per particle - ForceEnergy[idx] is only ever written by
+		// this thread, so this is a plain read-modify-write, not an atomic like
 		// the pairwise/bonded kernels' get_energy accumulation.
-		forces[idx] += compute_position_dependent_force(pos,
-														type_id,
-														types,
-														grid_configs,
-														electric_field,
-														scheme,
-														get_energy);
+		particles.ForceEnergy[idx] += compute_position_dependent_force(pos,
+																	   type_id,
+																	   types,
+																	   grid_configs,
+																	   electric_field,
+																	   scheme,
+																	   get_energy);
 	}
 };
 
@@ -162,9 +160,7 @@ namespace ARBD {
 extern template Event launch_cuda_kernel(const Resource& resource,
 										 const KernelConfig& config,
 										 ComputePMFKernel kernel_func,
-										 Vector3* positions,
-										 int* type_ids,
-										 Vector3* forces,
+										 ParticleView particles,
 										 ParticleTypeView types,
 										 const BaseGridView<arbd_real>* grid_configs,
 										 idx_t num_particles);

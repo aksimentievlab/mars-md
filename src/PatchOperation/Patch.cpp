@@ -101,9 +101,7 @@ Event Patch::calculate_nonbonded_forces(const NonBondedInteractions& interaction
 		evt = launch_kernel(resource_,
 							config,
 							kernel,
-							particle_view.pos,
-							particle_view.type_id,
-							particle_view.ForceEnergy,
+							particle_view,
 							type_view,
 							grid_views.data(),
 							num_particles);
