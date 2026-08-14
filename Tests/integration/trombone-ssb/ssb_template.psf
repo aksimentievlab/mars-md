@@ -1,0 +1,31 @@
+PSF NAMD
+
+       0 !NTITLE
+
+      14 !NATOM
+       1 ATT     1        rb      rb      rb        0.000000        1.0000
+       2 ATT     2        rb      rb      rb        0.000000        1.0000
+       3 ATT     3        rb      rb      rb        0.000000        1.0000
+       4 ATT     4        rb      rb      rb        0.000000        1.0000
+       5 ATT     5        rb      rb      rb        0.000000        1.0000
+       6 ATT     6        rb      rb      rb        0.000000        1.0000
+       7 ATT     7        rb      rb      rb        0.000000        1.0000
+       8 ATT     8        rb      rb      rb        0.000000        1.0000
+       9 ATT     9        rb      rb      rb        0.000000        1.0000
+      10 ATT     10       rb      rb      rb        0.000000        1.0000
+      11 ATT     11       rb      rb      rb        0.000000        1.0000
+      12 ATT     12       rb      rb      rb        0.000000        1.0000
+      13 ATT     13       rb      rb      rb        0.000000        1.0000
+      14 ATT     14       rb      rb      rb        0.000000        1.0000
+
+       0 !NBOND: bonds
+
+
+       0 !NTHETA: angles
+
+
+       0 !NPHI: dihedrals
+
+
+       0 !NIMPHI: impropers
+

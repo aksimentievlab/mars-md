@@ -1,7 +1,1 @@
-### test_unit
-
-- Folder for unit tests
-
-## CUDA passed tests:
-
-## SYCL passed tests:
+All tests in this folder are deprecated tests. Keep for reference.
