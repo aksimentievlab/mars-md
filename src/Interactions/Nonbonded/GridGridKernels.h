@@ -80,9 +80,7 @@ HOST DEVICE inline void grid_grid_voxel_force_torque(const BaseGridView<arbd_rea
 	const Vector3 force_lab = basis_u_inv.transpose().transform(r_val * (-sample.gradient));
 
 	force_energy_out = force_lab;
-	// Fixed vs. legacy: ComputeGridGrid.cu's reduction sets force[tid].e =
-	// r_val (dropping the sampled potential factor). The per-voxel energy
-	// contribution to E = sum_voxels rho_i * u(x_i) is density * potential.
+	// Legacy ComputeGridGrid.cu is wrong here; see GridGridKernels.md.
 	force_energy_out.t = r_val * sample.value;
 
 	// Torque about rho's own origin (r_pos is the offset from origin_rho, see

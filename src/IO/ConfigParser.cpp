@@ -591,30 +591,23 @@ void ConfigParser::get_elements(const Reader& reader) {
 		return key == "particle" || key == "rigidBody"; // Extend with other block headers as needed
 	};
 
+	// camelCase only, matching v1's grammar. The snake_case aliases are dropped:
+	// the Python migration owns the new-style API, so there is no reason to carry
+	// two spellings of every key through the .bd parser.
 	static const std::unordered_set<std::string_view> particle_field_keys = {
 		"num",
 		"diffusion",
 		"transDamping",
-		"trans_damping",
 		"mass",
 		"gridFile",
-		"grid_file",
 		"diffusionGridFile",
-		"diffusion_grid_file",
 		"forceGridFiles",
-		"force_grid_files",
 		"forceGridScale",
-		"force_grid_scale",
 		"gridFileScale",
-		"grid_file_scale",
 		"gridFileScaleSlope",
-		"grid_file_scale_slope",
 		"gridFileBoundaryConditions",
-		"grid_file_boundary_conditions",
 		"gridFileSMD",
-		"grid_file_smd",
 		"rigidBodyPotential",
-		"rigid_body_potential_key",
 	};
 
 	static const std::unordered_set<std::string_view> rigid_body_field_keys = {
@@ -622,35 +615,28 @@ void ConfigParser::get_elements(const Reader& reader) {
 		"num",
 		"inertia",
 		"transDamping",
-		"trans_damping",
 		"rotDamping",
-		"rot_damping",
 		"inputPsf",
-		"input_psf",
 		"inputPdb",
-		"input_pdb",
 		// Point in the template PDB's own frame that becomes this type's body
 		// origin; load() subtracts it to get body-frame offsets. Per-type, so
 		// every instance shares it - see the fold-in pass below.
 		"referencePoint",
-		"reference_point",
 		"densityGrid",
-		"density_grid",
 		"potentialGrid",
-		"potential_grid",
 		"pmf",
-		"pmf_grid",
 		"densityGridScale",
-		"density_grid_scale",
 		"potentialGridScale",
-		"potential_grid_scale",
 		"pmfScale",
-		"pmf_grid_scale",
 		"position",
 		"orientation",
 		"momentum",
 		"angularMomentum",
-		"angular_momentum",
+		// Per-instance, like position/orientation - NOT per-type. Legacy stored
+		// these on RigidBodyType, which cannot express distinct loads on two
+		// instances of the same type.
+		"constantForce",
+		"constantTorque",
 	};
 
 	// Set by the top-level inputRBCoordinates key, applied after the loop (see
@@ -687,9 +673,7 @@ void ConfigParser::get_elements(const Reader& reader) {
 				if (is_block_header(k) || !particle_field_keys.count(k))
 					break;
 				// Helper lambda to check for variant keys
-				auto check_key = [&k](const std::string& camel, const std::string& snake) {
-					return k == camel || k == snake;
-				};
+				auto check_key = [&k](const std::string& camel) { return k == camel; };
 
 				if (k == "num") {
 					LOGDEBUG("num: {}", v);
@@ -713,7 +697,7 @@ void ConfigParser::get_elements(const Reader& reader) {
 							 ptype.diffusion.x,
 							 ptype.diffusion.y,
 							 ptype.diffusion.z);
-				} else if (check_key("transDamping", "trans_damping")) {
+				} else if (check_key("transDamping")) {
 					auto toks = tokenize(v);
 					if (toks.size() == 3) {
 						ptype.trans_damping.x = std::stof(toks[0]);
@@ -734,11 +718,11 @@ void ConfigParser::get_elements(const Reader& reader) {
 				} else if (k == "mass") {
 					LOGDEBUG("mass: {}", v);
 					ptype.mass = std::stof(v);
-				} else if (check_key("gridFile", "grid_file")) {
+				} else if (check_key("gridFile")) {
 					LOGDEBUG("gridFile/grid_file: {}", v);
 					for (const auto& fname : tokenize(v)) {
 						GridKey grid_key =
-							sim_system_ref_->get_grid_manager().add_dense_grid(fname);
+							sim_system_ref_->get_grid_manager().add_dense_grid(fname, file_name_);
 						if (grid_key.is_valid()) {
 							GridTerm term;
 							term.grid_id = grid_key.grid_id;
@@ -751,9 +735,9 @@ void ConfigParser::get_elements(const Reader& reader) {
 							LOGWARN("Failed to load grid file '{}'", fname);
 						}
 					}
-				} else if (check_key("diffusionGridFile", "diffusion_grid_file")) {
+				} else if (check_key("diffusionGridFile")) {
 					LOGDEBUG("diffusionGridFile/diffusion_grid_file: {}", v);
-					GridKey grid_key = sim_system_ref_->get_grid_manager().add_dense_grid(v);
+					GridKey grid_key = sim_system_ref_->get_grid_manager().add_dense_grid(v, file_name_);
 					if (grid_key.is_valid()) {
 						ptype.diffusion_grid_id = grid_key.grid_id;
 						ptype.diffusion_grid_name = v;
@@ -763,7 +747,7 @@ void ConfigParser::get_elements(const Reader& reader) {
 					} else {
 						LOGWARN("Failed to load grid file '{}'", v);
 					}
-				} else if (check_key("forceGridFiles", "force_grid_files")) {
+				} else if (check_key("forceGridFiles")) {
 					LOGDEBUG("forceGridFiles/force_grid_files: {}", v);
 					auto toks = tokenize(v);
 					if (toks.size() == 3) {
@@ -771,21 +755,21 @@ void ConfigParser::get_elements(const Reader& reader) {
 						ptype.force_grid_names[1] = toks[1];
 						ptype.force_grid_names[2] = toks[2];
 						GridKey grid_key_x =
-							sim_system_ref_->get_grid_manager().add_dense_grid(toks[0]);
+							sim_system_ref_->get_grid_manager().add_dense_grid(toks[0], file_name_);
 						if (grid_key_x.is_valid()) {
 							ptype.force_grid_id[0] = grid_key_x.grid_id;
 						} else {
 							LOGWARN("Failed to load grid file '{}'", toks[0]);
 						}
 						GridKey grid_key_y =
-							sim_system_ref_->get_grid_manager().add_dense_grid(toks[1]);
+							sim_system_ref_->get_grid_manager().add_dense_grid(toks[1], file_name_);
 						if (grid_key_y.is_valid()) {
 							ptype.force_grid_id[1] = grid_key_y.grid_id;
 						} else {
 							LOGWARN("Failed to load grid file '{}'", toks[1]);
 						}
 						GridKey grid_key_z =
-							sim_system_ref_->get_grid_manager().add_dense_grid(toks[2]);
+							sim_system_ref_->get_grid_manager().add_dense_grid(toks[2], file_name_);
 						if (grid_key_z.is_valid()) {
 							ptype.force_grid_id[2] = grid_key_z.grid_id;
 						} else {
@@ -796,7 +780,7 @@ void ConfigParser::get_elements(const Reader& reader) {
 						ptype.force_grid_names = {"", "", ""};
 						ptype.force_grid_id = {-1, -1, -1};
 					}
-				} else if (check_key("forceGridScale", "force_grid_scale")) {
+				} else if (check_key("forceGridScale")) {
 					LOGDEBUG("forceGridScale/force_grid_scale: {}", v);
 					auto toks = tokenize(v);
 					if (toks.size() == 3) {
@@ -812,20 +796,19 @@ void ConfigParser::get_elements(const Reader& reader) {
 								"values for x,y,z but got '{}' - leaving force grids unscaled",
 								v);
 					}
-				} else if (check_key("gridFileScale", "grid_file_scale")) {
+				} else if (check_key("gridFileScale")) {
 					LOGDEBUG("gridFileScale/grid_file_scale: {}", v);
 					pending_pmf_scale = tokenize(v);
-				} else if (check_key("gridFileScaleSlope", "grid_file_scale_slope")) {
+				} else if (check_key("gridFileScaleSlope")) {
 					LOGDEBUG("gridFileScaleSlope/grid_file_scale_slope: {}", v);
 					pending_pmf_scale_slope = tokenize(v);
-				} else if (check_key("gridFileBoundaryConditions",
-									 "grid_file_boundary_conditions")) {
+				} else if (check_key("gridFileBoundaryConditions")) {
 					LOGDEBUG("gridFileBoundaryConditions: {}", v);
 					pending_pmf_bc = tokenize(v);
-				} else if (check_key("gridFileSMD", "grid_file_smd")) {
+				} else if (check_key("gridFileSMD")) {
 					LOGDEBUG("gridFileSMD/grid_file_smd: {}", v);
 					ptype.pmf_smd_freq = std::stoi(v);
-				} else if (check_key("rigidBodyPotential", "rigid_body_potential")) {
+				} else if (check_key("rigidBodyPotential")) {
 					LOGDEBUG("rigidBodyPotential/rigid_body_potential: {}", v);
 					ptype.rigid_body_potential_keys.push_back(v);
 				} else {
@@ -893,9 +876,7 @@ void ConfigParser::get_elements(const Reader& reader) {
 				const auto& [k, v] = params[i];
 				if (is_block_header(k) || !rigid_body_field_keys.count(k))
 					break;
-				auto check_key = [&k](const std::string& camel, const std::string& snake) {
-					return k == camel || k == snake;
-				};
+				auto check_key = [&k](const std::string& camel) { return k == camel; };
 
 				if (k == "mass") {
 					rbtype.mass = std::stof(v);
@@ -906,19 +887,19 @@ void ConfigParser::get_elements(const Reader& reader) {
 										  name.c_str(),
 										  v.c_str());
 					}
-				} else if (check_key("inputPdb", "input_pdb")) {
+				} else if (check_key("inputPdb")) {
 					template_pdb = resolve_file_path(v, file_name_);
-				} else if (check_key("inputPsf", "input_psf")) {
+				} else if (check_key("inputPsf")) {
 					template_psf = resolve_file_path(v, file_name_);
-				} else if (check_key("referencePoint", "reference_point")) {
+				} else if (check_key("referencePoint")) {
 					reference_point = parse_vector3(v);
 				} else if (k == "inertia") {
 					rbtype.inertia = parse_vector3(v);
-				} else if (check_key("transDamping", "trans_damping")) {
+				} else if (check_key("transDamping")) {
 					rbtype.trans_damping = parse_vector3(v);
-				} else if (check_key("rotDamping", "rot_damping")) {
+				} else if (check_key("rotDamping")) {
 					rbtype.rot_damping = parse_vector3(v);
-				} else if (check_key("densityGrid", "density_grid")) {
+				} else if (check_key("densityGrid")) {
 					// Legacy syntax is `<gridKey> <file>`: the key is the logical
 					// name two types must share to be paired for a grid-grid
 					// force, independent of which file each one loads. A bare
@@ -926,7 +907,7 @@ void ConfigParser::get_elements(const Reader& reader) {
 					std::string gkey, gfile;
 					if (parse_rb_grid_entry(v, "densityGrid", gkey, gfile)) {
 						GridKey grid_key =
-							sim_system_ref_->get_grid_manager().add_dense_grid(gfile);
+							sim_system_ref_->get_grid_manager().add_dense_grid(gfile, file_name_);
 						if (grid_key.is_valid()) {
 							rbtype.density_grids.push_back(GridTerm{grid_key.grid_id});
 							rbtype.density_grid_keys.push_back(gkey);
@@ -934,11 +915,11 @@ void ConfigParser::get_elements(const Reader& reader) {
 							LOGWARN("Failed to load rigid body density grid file '{}'", gfile);
 						}
 					}
-				} else if (check_key("potentialGrid", "potential_grid")) {
+				} else if (check_key("potentialGrid")) {
 					std::string gkey, gfile;
 					if (parse_rb_grid_entry(v, "potentialGrid", gkey, gfile)) {
 						GridKey grid_key =
-							sim_system_ref_->get_grid_manager().add_dense_grid(gfile);
+							sim_system_ref_->get_grid_manager().add_dense_grid(gfile, file_name_);
 						if (grid_key.is_valid()) {
 							rbtype.potential_grids.push_back(GridTerm{grid_key.grid_id});
 							rbtype.potential_grid_keys.push_back(gkey);
@@ -946,11 +927,11 @@ void ConfigParser::get_elements(const Reader& reader) {
 							LOGWARN("Failed to load rigid body potential grid file '{}'", gfile);
 						}
 					}
-				} else if (check_key("pmf", "pmf_grid")) {
+				} else if (check_key("pmf")) {
 					std::string gkey, gfile;
 					if (parse_rb_grid_entry(v, "pmf", gkey, gfile)) {
 						GridKey grid_key =
-							sim_system_ref_->get_grid_manager().add_dense_grid(gfile);
+							sim_system_ref_->get_grid_manager().add_dense_grid(gfile, file_name_);
 						if (grid_key.is_valid()) {
 							rbtype.pmf_grids.push_back(GridTerm{grid_key.grid_id});
 							rbtype.pmf_keys.push_back(gkey);
@@ -958,15 +939,15 @@ void ConfigParser::get_elements(const Reader& reader) {
 							LOGWARN("Failed to load rigid body pmf grid file '{}'", gfile);
 						}
 					}
-				} else if (check_key("densityGridScale", "density_grid_scale")) {
+				} else if (check_key("densityGridScale")) {
 					RbGridScale s;
 					if (parse_rb_grid_scale(v, "densityGridScale", s))
 						pending_density_scale.push_back(s);
-				} else if (check_key("potentialGridScale", "potential_grid_scale")) {
+				} else if (check_key("potentialGridScale")) {
 					RbGridScale s;
 					if (parse_rb_grid_scale(v, "potentialGridScale", s))
 						pending_potential_scale.push_back(s);
-				} else if (check_key("pmfScale", "pmf_grid_scale")) {
+				} else if (check_key("pmfScale")) {
 					RbGridScale s;
 					if (parse_rb_grid_scale(v, "pmfScale", s))
 						pending_pmf_scale.push_back(s);
@@ -977,8 +958,12 @@ void ConfigParser::get_elements(const Reader& reader) {
 					rb_io.has_orientation = true;
 				} else if (k == "momentum") {
 					rb_io.momentum = parse_vector3(v);
-				} else if (check_key("angularMomentum", "angular_momentum")) {
+				} else if (check_key("angularMomentum")) {
 					rb_io.angular_momentum = parse_vector3(v);
+				} else if (check_key("constantForce")) {
+					rb_io.external_force = parse_vector3(v);
+				} else if (check_key("constantTorque")) {
+					rb_io.external_torque = parse_vector3(v);
 				} else {
 					// Recognized but not yet wired into RigidBodyType storage in this branch
 					(void)0;

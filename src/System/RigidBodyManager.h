@@ -18,9 +18,11 @@
 #include "Objects/RigidBodyForcePairs.h"
 #include "PatchOperation/Integrator/RBBD.h"
 #include "PatchOperation/Integrator/RBDLM.h"
+#include "RBOperation/RBHostFTManager.h"
 #include "System/PeriodicBox.h"
 #include <algorithm>
 #include <memory>
+#include <span>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -98,6 +100,35 @@ class RigidBodyManager {
 			evt = launch_kernel(compute_resource(), config, kernel);
 		}
 		return evt;
+	}
+
+	/**
+	 * @brief Setup-time upload of per-instance constantForce/constantTorque.
+	 * @param force Per-body constant force, indexed by device SoA slot.
+	 * @param torque Per-body constant torque, same indexing.
+	 * @see RBHostFTManager.md
+	 */
+	void set_external_loads(std::span<const Vector3> force, std::span<const Vector3> torque) {
+		ensure_initialized();
+		if (bodies_->size() == 0) {
+			return;
+		}
+		host_forces().set_baseline(force, torque);
+		host_forces().push_baseline(bodies_->view()).wait();
+	}
+
+	/**
+	 * @brief The single path for host-computed external force/torque.
+	 * @details Holds the constantForce/constantTorque baseline, so a dynamic
+	 *          producer must use push_with_baseline() or it will assign over it.
+	 */
+	RBHostFTManager& host_forces() {
+		ensure_initialized();
+		if (!host_forces_) {
+			host_forces_ =
+				std::make_unique<RBHostFTManager>(bodies_->size(), compute_resource());
+		}
+		return *host_forces_;
 	}
 
 	/**
@@ -739,6 +770,8 @@ class RigidBodyManager {
 	size_t compute_resource_idx_;
 	std::unique_ptr<DeviceRigidBody> bodies_;
 	std::unique_ptr<DeviceRigidBodyTypes> types_;
+	// Lazily built: its staging capacity needs bodies_->size().
+	std::unique_ptr<RBHostFTManager> host_forces_;
 	RigidBodyForcePairList force_pairs_;
 	std::vector<int> host_type_id_; // per-RB-instance type id, for candidate expansion
 

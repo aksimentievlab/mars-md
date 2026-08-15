@@ -1,9 +1,17 @@
 #pragma once
+#include "Backend/Events.h"
+#include "Backend/KernelConfig.h"
+#include "Backend/Kernels.h"
+#include "Backend/Resource.h"
 #include "Header.h"
 #include "Objects/DeviceRigidBody.h"
 #include "Types/Types.h"
 
 namespace ARBD {
+/**
+ * @brief
+ * @todo Needs to accumulate ALL froces on HOST first
+ */
 struct ExternalForceView {
 	CONSTANT_PTR(int) __restrict__ id;
 	CONSTANT_PTR(Vector3) __restrict__ external_force;
@@ -36,7 +44,6 @@ struct ApplyExternalForcesKernel {
 } // namespace ARBD
 #ifdef USE_CUDA
 namespace ARBD {
-extern template struct ApplyExternalForcesKernel;
 extern template Event launch_cuda_kernel(const Resource& resource,
 										 const KernelConfig& config,
 										 ApplyExternalForcesKernel kernel_func);

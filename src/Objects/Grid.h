@@ -2,6 +2,7 @@
 #include "ARBDLogger.h"
 #include "Backend/Buffer.h"
 #include "Backend/Resource.h"
+#include "Header.h" // resolve_file_path
 #include "Types/BaseGrid.h"
 #include "Types/BaseGridDevice.h"
 #include "Types/GridTerm.h"
@@ -65,23 +66,31 @@ class GridManager {
 			LOGINFO("GridManager: Configured for {} resources", resources_->size());
 		}
 	}
-	GridKey add_grid(const std::string& name) {
+	GridKey add_grid(const std::string& name, const std::string& config_file_path = "") {
 		if (name.find(".dx") != std::string::npos) {
 			GridFormat format = GridFormat::Dense;
-			return add_dense_grid(name);
+			return add_dense_grid(name, config_file_path);
 		} else {
 			GridFormat format = GridFormat::Sparse;
 			return add_sparse_grid(name);
 		}
 	};
 
+	/// Resolves against the process CWD - prefer the two-argument overload.
+	GridKey add_dense_grid(const std::string& filename) {
+		return add_dense_grid(filename, "");
+	}
+
 	/**
 	 * @brief Add a dense grid from file
-	 * @param filename Path to .dx file
-	 * @param type Grid type (PMF, Diffusion, etc.)
+	 * @param filename Path to .dx file, as written in the config
+	 * @param config_file_path Config file the path is relative to; "" means the
+	 *        process CWD
 	 * @return GridKey with assigned grid_id
+	 * @note @p filename is registered verbatim as the lookup key; only the read
+	 *       is resolved. See Grid.md.
 	 */
-	GridKey add_dense_grid(const std::string& filename) {
+	GridKey add_dense_grid(const std::string& filename, const std::string& config_file_path) {
 		// Check if already loaded
 		auto it = fname_to_gridkey_.find(filename);
 		if (it != fname_to_gridkey_.end()) {
@@ -92,7 +101,8 @@ class GridManager {
 		}
 
 		// Load grid from file
-		BaseGrid<arbd_real> grid = DXReader::read_from_file<float>(filename);
+		BaseGrid<arbd_real> grid =
+			DXReader::read_from_file<float>(resolve_file_path(filename, config_file_path));
 
 		// Assign unified grid_id
 		int grid_id = next_grid_id_++;

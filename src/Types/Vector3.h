@@ -309,7 +309,7 @@ class alignas(4 * sizeof(T)) Vector3_t {
 
 // Free function operators
 template<typename T, typename U>
-HOST DEVICE constexpr T operator/(U s, const Vector3_t<T>& v) {
+HOST DEVICE constexpr auto operator/(U s, const Vector3_t<T>& v) {
 #ifdef __CUDA_ARCH__
 	using TU = T;
 #elif defined(__SYCL_DEVICE_ONLY__)

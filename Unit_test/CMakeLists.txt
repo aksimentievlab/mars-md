@@ -18,6 +18,7 @@ add_executable(arbd_unit_tests
     ${CMAKE_CURRENT_LIST_DIR}/Objects/RigidBodies.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Objects/RigidBodyForcePairs.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Objects/RigidBodyManager.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Objects/RigidBodyExternalForces.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Objects/TestParticle.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Compute/BDKernels.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Interactions/Forces.cpp

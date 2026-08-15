@@ -44,9 +44,17 @@ add_subdirectory(Interactions)
 add_subdirectory(IO)
 add_subdirectory(System)
 add_subdirectory(PatchOperation)
+# Host-set rigid-body forces (always) + the scuff-em coupling (USE_SCUFF only).
+add_subdirectory(RBOperation)
 
 # Define the library with all collected sources
 add_library("lib${PROJECT_NAME}" ${LIB_SOURCES})
+
+# ARBD::scuff is defined by RBOperation only when USE_SCUFF is ON.
+if(TARGET ARBD::scuff)
+    target_link_libraries("lib${PROJECT_NAME}" PUBLIC ARBD::scuff)
+    message(STATUS "Linking lib${PROJECT_NAME} against scuff-em")
+endif()
 
 # For SYCL builds, apply -fsycl-targets only to device sources
 # Note: -fsycl is already set globally in root CMakeLists.txt

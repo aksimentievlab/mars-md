@@ -14,8 +14,39 @@
 
 option(USE_SCUFF "Build the scuff-em plasmonic rigid-body coupling" OFF)
 
+# --- Always built: host-set rigid-body forces, no scuff-em dependency --------
+# RBHostFTManager is the single path for host-computed per-body external
+# force/torque (scuff-em is one producer among several), so it must not be gated
+# on USE_SCUFF.
+list(APPEND HOST_DEVICE_HEADERS
+    RBOperation/ApplyHostForce.h
+)
+list(APPEND HOST_ONLY_HEADERS
+    RBOperation/RBHostFTManager.h
+)
+
+# ApplyExternalForcesKernel is declared with an extern template in
+# ApplyHostForce.h, so its launch_cuda_kernel instantiation has to be forced into
+# a real CUDA translation unit or every host-only .cpp calling push() picks up the
+# non-CUDA stub in KernelHelper.cuh.
+if(USE_CUDA)
+    list(APPEND LIB_SOURCES
+        RBOperation/RBOpKernel.cu
+    )
+    set_source_files_properties(
+        RBOperation/RBOpKernel.cu
+        PROPERTIES
+        LANGUAGE CUDA
+        CUDA_SEPARABLE_COMPILATION ON
+    )
+    message(STATUS "RBOperation: Adding CUDA specific sources to lib${PROJECT_NAME}")
+endif()
+
 if(NOT USE_SCUFF)
     message(STATUS "RBOperation: USE_SCUFF=OFF, skipping scuff-em coupling")
+    set(HOST_DEVICE_HEADERS ${HOST_DEVICE_HEADERS} PARENT_SCOPE)
+    set(HOST_ONLY_HEADERS ${HOST_ONLY_HEADERS} PARENT_SCOPE)
+    set(LIB_SOURCES ${LIB_SOURCES} PARENT_SCOPE)
     return()
 endif()
 
@@ -81,39 +112,13 @@ if(NOT TARGET ARBD::scuff)
     message(STATUS "RBOperation: scuff-em library  ${SCUFF_LIBRARY}")
 endif()
 
-# --- Sources -----------------------------------------------------------------
-list(APPEND HOST_DEVICE_HEADERS
-    RBOperation/ApplyHostForce.h
-)
-
-# ScuffRigidBody.h is host-only: it includes libscuff.h, which no device
-# compiler should ever see.
+# --- scuff-em-only sources ---------------------------------------------------
+# ScuffRigidBody.h is host-only: it includes libscuff.h, which no device compiler
+# should ever see.
 list(APPEND HOST_ONLY_HEADERS
     RBOperation/ScuffRigidBody.h
 )
 
 set(HOST_DEVICE_HEADERS ${HOST_DEVICE_HEADERS} PARENT_SCOPE)
 set(HOST_ONLY_HEADERS ${HOST_ONLY_HEADERS} PARENT_SCOPE)
-
-# ApplyExternalForcesKernel is declared with an extern template in
-# ApplyHostForce.h, so its launch_cuda_kernel instantiation has to be forced
-# into a real CUDA translation unit or every host-only .cpp calling push()
-# picks up the non-CUDA stub in KernelHelper.cuh.
-if(USE_CUDA)
-    list(APPEND LIB_SOURCES
-        RBOperation/RBOpKernel.cu
-    )
-
-    set_source_files_properties(
-        RBOperation/RBOpKernel.cu
-        PROPERTIES
-        LANGUAGE CUDA
-        CUDA_SEPARABLE_COMPILATION ON
-    )
-
-    message(STATUS "RBOperation: Adding CUDA specific sources to lib${PROJECT_NAME}")
-endif()
-
-# Must be propagated *after* the CUDA block above, or the .cu appended there is
-# dropped and its explicit instantiations never make it into the library.
 set(LIB_SOURCES ${LIB_SOURCES} PARENT_SCOPE)

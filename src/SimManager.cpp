@@ -201,6 +201,19 @@ void SimManager::init() {
 			sys_state_.get_global_rigid_bodies(),
 			[this](int id) { return sys_.get_grid_manager().get_grid_format(id); },
 			sys_.get_rb_update_period());
+		// AoS -> SoA here, at the IO boundary: RigidBodyIO is a parse-time
+		// structure and must not reach the device-side managers. Mirrors what
+		// SystemState does for the fields HostRigidBodyData does carry.
+		{
+			const size_t rb_count = pending_initial_rigid_bodies_.size();
+			std::vector<Vector3> constant_force(rb_count);
+			std::vector<Vector3> constant_torque(rb_count);
+			for (size_t i = 0; i < rb_count; ++i) {
+				constant_force[i] = pending_initial_rigid_bodies_[i].external_force;
+				constant_torque[i] = pending_initial_rigid_bodies_[i].external_torque;
+			}
+			rigid_body_manager_->set_external_loads(constant_force, constant_torque);
+		}
 		rigid_body_manager_->prepare_grid_grid_dispatch(sys_.get_grid_manager(), 0);
 		rigid_body_manager_->prepare_particle_grid_dispatch(sys_.get_rigid_body_types(),
 															sys_state_.get_num_particles());

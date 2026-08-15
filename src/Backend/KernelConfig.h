@@ -2,7 +2,6 @@
 #include "Events.h"
 #include "Header.h"
 #include "Resource.h"
-
 #ifdef USE_CUDA
 #include "CUDA/CUDAManager.h"
 #endif
@@ -18,9 +17,9 @@
 #include <thread>
 #endif
 
-#ifdef HOST_GUARD
+// Unconditional: LOGDEBUG/LOGWARN below are parsed in nvcc's device pass too,
+// where Header.h leaves HOST_GUARD undefined.
 #include "ARBDLogger.h"
-#endif
 namespace ARBD {
 struct kerneldim3 {
 	idx_t x = 1, y = 1, z = 1;

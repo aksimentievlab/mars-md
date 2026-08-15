@@ -3,7 +3,6 @@
 #include "libscuff.h"
 
 #include "ARBDException.h"
-#include "ApplyHostForce.h"
 #include "Backend/Buffer.h"
 #include "Backend/Events.h"
 #include "Backend/KernelConfig.h"
@@ -106,7 +105,7 @@ struct ScuffRigidBody {
 			const idx_t src = static_cast<idx_t>(plasmonic_particle_id[i]);
 			if (src >= global_rigidBody_data.size()) {
 				ARBD_Exception(ExceptionType::ValueError,
-							   "ScuffRigidBody entry {} references rigid body {} of {}",
+							   "ScuffRigidBody entry %zu references rigid body %zu of %zu",
 							   i,
 							   src,
 							   global_rigidBody_data.size());
@@ -169,7 +168,7 @@ class ScuffForceCalculator {
 		}
 		if (!placed.empty()) {
 			ARBD_Exception(ExceptionType::ValueError,
-						   "scuff geometry '{}' places surfaces itself: {}. Remove the "
+						   "scuff geometry '%s' places surfaces itself: %s. Remove the "
 						   "DISPLACED/ROTATED lines from those OBJECT/SURFACE blocks - the "
 						   "rigid body pose supplies the absolute placement.",
 						   geo_file_,
@@ -256,7 +255,7 @@ class ScuffForceCalculator {
 	scuff::RWGSurface* get_surface(int surface_index) {
 		if (surface_index < 0 || surface_index >= geometry_.NumSurfaces) {
 			ARBD_Exception(ExceptionType::ValueError,
-						   "SCUFF surface index {} out of range [0,{})",
+						   "SCUFF surface index %d out of range [0,%d)",
 						   surface_index,
 						   geometry_.NumSurfaces);
 		}
@@ -315,52 +314,6 @@ class ScuffForceCalculator {
 	std::unique_ptr<HVector> rhs_vector_;
 	std::unique_ptr<HVector> kn_vector_;
 	std::unique_ptr<HMatrix> pft_matrix_;
-};
-
-/**
- * @brief Staging buffers that push the plasmonic subset onto the device.
- *
- * Only the plasmonic entries are transferred; ApplyExternalForcesKernel
- * scatters them into the full external_force/external_torque SoA by rigid-body
- * index, so untouched bodies keep whatever they already held.
- */
-class ScuffExternalForceUpload {
-  public:
-	ScuffExternalForceUpload(idx_t capacity, const Resource& resource)
-		: resource_(resource), capacity_(capacity), id_(capacity, resource),
-		  force_(capacity, resource), torque_(capacity, resource) {}
-
-	idx_t capacity() const {
-		return capacity_;
-	}
-
-	Event push(const ScuffRigidBody& scuff_rb, RigidBodyView rb) {
-		const idx_t n = scuff_rb.size();
-		if (n == 0) {
-			return Event(nullptr, resource_);
-		}
-		if (n > capacity_) {
-			ARBD_Exception(ExceptionType::RuntimeError,
-						   "ScuffExternalForceUpload overflow: {} entries into capacity {}",
-						   n,
-						   capacity_);
-		}
-
-		id_.copy_from_host(scuff_rb.plasmonic_particle_id.data(), n);
-		force_.copy_from_host(scuff_rb.plasmonic_force.data(), n);
-		torque_.copy_from_host(scuff_rb.plasmonic_torque.data(), n);
-
-		ExternalForceView view{id_.data(), force_.data(), torque_.data()};
-		KernelConfig config = KernelConfig::for_1d(n, resource_);
-		return launch_kernel(resource_, config, ApplyExternalForcesKernel(rb, view, n));
-	}
-
-  private:
-	Resource resource_;
-	idx_t capacity_;
-	DeviceBuffer<int> id_;
-	DeviceBuffer<Vector3> force_;
-	DeviceBuffer<Vector3> torque_;
 };
 
 } // namespace ARBD
