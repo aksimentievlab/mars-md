@@ -39,6 +39,8 @@ class BondConfigReader {
 				parse_bond_line(value);
 			} else if (key == "EXCLUDE") {
 				parse_exclude_line(value);
+			} else if (key == "RESTRAINT") {
+				parse_restraint_line(value);
 			}
 		}
 	}

@@ -40,6 +40,10 @@ template Event launch_cuda_kernel(const Resource& resource,
 								  const KernelConfig& config,
 								  TabulatedDihedralComputer kernel_func);
 
+template Event launch_cuda_kernel(const Resource& resource,
+								  const KernelConfig& config,
+								  HarmonicRestraintComputer kernel_func);
+
 // Exclusion generation from bonded-topology adjacency (see Interactions/
 // Exclusion.h). Launched with a trailing argument pack, so it is spelled out.
 template Event launch_cuda_kernel(const Resource& resource,

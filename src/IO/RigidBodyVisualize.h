@@ -27,25 +27,26 @@ class RigidBodyPdbPsfReader {
 				std::any_of(known_particle_types.begin(),
 							known_particle_types.end(),
 							[&](const ParticleType& pt) { return pt.name == atom.resname; });
-			if (!known) {
-				throw Exception(ExceptionType::ValueError,
-								SourceLocation(),
-								"RigidBodyTemplateReader: resname '%s' (resid %d) in type '%s' "
-								"has no matching predeclared particle type",
-								atom.resname.c_str(),
-								atom.resid,
-								rt.name.c_str());
-			}
 
 			CosmeticParticle cosmetic{};
 			cosmetic.name = atom.name;
 			cosmetic.resname = atom.resname;
 			cosmetic.segname = atom.segname;
-			cosmetic.type_name = atom.type_name;
+			cosmetic.type_name = known ? atom.type_name : constants::kCosmeticTypeName;
 			cosmetic.resid = atom.resid;
 			cosmetic.body_frame_position = atom.position - reference_point;
 
 			if (cosmetic.segname == attached_marker) {
+				if (!known) {
+					throw Exception(
+						ExceptionType::ValueError,
+						SourceLocation(),
+						"RigidBodyTemplateReader: attached particle resname '%s' (resid %d) in "
+						"type '%s' has no matching predeclared particle type",
+						atom.resname.c_str(),
+						atom.resid,
+						rt.name.c_str());
+				}
 				ParticleIO p{};
 				p.type_name = cosmetic.resname;
 				p.position = cosmetic.body_frame_position;

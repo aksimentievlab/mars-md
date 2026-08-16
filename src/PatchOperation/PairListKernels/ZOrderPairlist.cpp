@@ -238,14 +238,17 @@ void ZOrderPairlist::find_neighbors_zorder(size_t num_particles) {
 	pair_count_.copy_to_host(&num_pairs, 1, true);
 	if (num_pairs > max_pairs_) {
 		ARBD_Exception(ExceptionType::ValueError,
-					   "Pairlist capacity exceeded: {} pairs found for {} particles but capacity "
-					   "is {}, so {} interactions would be dropped. Raise the per-particle pair "
-					   "estimate (Patch.h, kEstimatedPairsPerParticle) or shorten the pairlist "
-					   "cutoff; continuing would silently simulate a different system.",
+					   "Pairlist capacity exceeded: %u pairs found for %zu particles (%.1f per "
+					   "particle) but capacity is %u, so %u interactions would be dropped. Raise "
+					   "the per-particle pair estimate (Patch.h, kEstimatedPairsPerParticle, "
+					   "currently %zu) or shorten the pairlist cutoff; continuing would silently "
+					   "simulate a different system.",
 					   num_pairs,
 					   num_particles,
+					   num_particles ? static_cast<double>(num_pairs) / num_particles : 0.0,
 					   max_pairs_,
-					   num_pairs - max_pairs_);
+					   num_pairs - max_pairs_,
+					   num_particles ? max_pairs_ / num_particles : 0u);
 	}
 	num_pairs_ = num_pairs;
 	LOGDEBUG("pair_count AFTER kernel: {}", num_pairs);

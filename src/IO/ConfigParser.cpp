@@ -987,7 +987,7 @@ void ConfigParser::get_elements(const Reader& reader) {
 								 [](GridTerm& t, float s) { t.scale = s; });
 
 			// Attached/cosmetic particles come from a PDB+PSF template pair.
-			// load() resolves every atom's resname against the already-declared
+			// load() resolves each ATT atom's resname against the already-declared
 			// ParticleTypes, so particle blocks must precede rigidBody blocks;
 			// fail with that explanation rather than the raw "unknown resname".
 			if (!template_pdb.empty() || !template_psf.empty()) {

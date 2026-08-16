@@ -11,7 +11,7 @@
 #include "ARBDLogger.h"
 #include "Backend/Events.h"
 #include "Backend/Kernels.h"
-#include "Interactions/Bonded/BondComputer.h"
+#include "Interactions/DeviceBondedInteraction.h"
 #include "Interactions/Nonbonded/Pairwise.h"
 #include "Interactions/Nonbonded/PmfKernels.h"
 #include "PatchOperation/Integrator.h"
@@ -56,12 +56,14 @@ void Patch::ensure_bonded_topology_ready(const BondedInteractions& interactions,
 		device_bonded_.copy_from_host(interactions);
 		device_bonded_.link_tables(tables_registry, resource_idx);
 		bonded_device_data_prepared_ = true;
-		LOGINFO("Patch {}: Prepared {} bonds, {} angles, {} dihedrals, {} exclusions for device",
+		LOGINFO("Patch {}: Prepared {} bonds, {} angles, {} dihedrals, {} exclusions, {} restraints "
+				"for device",
 				patch_id_,
 				device_bonded_.num_bonds(),
 				device_bonded_.num_angles(),
 				device_bonded_.num_dihedrals(),
-				device_bonded_.num_exclusions());
+				device_bonded_.num_exclusions(),
+				device_bonded_.num_restraints());
 	}
 }
 
@@ -184,7 +186,7 @@ Event Patch::calculate_bonded_forces(const BondedInteractions& interactions,
 	ensure_bonded_topology_ready(interactions, tables_registry, resource_idx);
 
 	if (device_bonded_.num_bonds() == 0 && device_bonded_.num_angles() == 0 &&
-		device_bonded_.num_dihedrals() == 0) {
+		device_bonded_.num_dihedrals() == 0 && device_bonded_.num_restraints() == 0) {
 		return Event(nullptr, resource_);
 	}
 
@@ -238,6 +240,19 @@ Event Patch::calculate_bonded_forces(const BondedInteractions& interactions,
 										 pbox,
 										 get_energy,
 										 device_bonded_.num_dihedrals());
+	}
+
+	if (device_bonded_.num_restraints() > 0) {
+		LOGTRACE("Patch {}: Computing {} restraints", patch_id_, device_bonded_.num_restraints());
+		evt = launch_harmonic_restraints(resource_,
+										 device_bonded_.restraint_particle_ids(),
+										 particle_view.pos,
+										 particle_view.ForceEnergy,
+										 device_bonded_.restraint_positions(),
+										 device_bonded_.restraint_spring_constants(),
+										 pbox,
+										 get_energy,
+										 device_bonded_.num_restraints());
 	}
 
 	return evt;

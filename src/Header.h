@@ -21,7 +21,7 @@
 
 #ifdef __METAL_VERSION__
 #include <metal_stdlib>
-#define KERNEL_FUNC [[kernel]]
+#define KERNEL_FUNC inline
 #endif
 
 // Only include SYCL headers when actually compiling with SYCL support

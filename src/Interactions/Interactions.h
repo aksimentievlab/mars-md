@@ -39,10 +39,9 @@ struct CalcDistance {
 	arbd_real distance;	 // distance between two particles
 	Vector3 unit_vector; // unit vector in the direction of the vector
 
-	DEVICE static CalcDistance
-	compute(const Vector3* positions, const int2& particle_indices, const PeriodicBox* pbox) {
+	DEVICE static CalcDistance compute(const Vector3& from, const Vector3& to, const PeriodicBox* pbox) {
 		CalcDistance dist;
-		dist.r_ij = pbox->wrapDiff(positions[particle_indices.y] - positions[particle_indices.x]);
+		dist.r_ij = pbox->wrapDiff(to - from);
 		dist.distance = dist.r_ij.length();
 		if (dist.distance > arbd_real(1e-6)) {
 			dist.unit_vector = dist.r_ij / dist.distance;
@@ -50,6 +49,11 @@ struct CalcDistance {
 			dist.unit_vector = Vector3(arbd_real(0));
 		}
 		return dist;
+	}
+
+	DEVICE static CalcDistance
+	compute(const Vector3* positions, const int2& particle_indices, const PeriodicBox* pbox) {
+		return compute(positions[particle_indices.x], positions[particle_indices.y], pbox);
 	}
 };
 /** Future pybind class for new analytical pairwise potential registration */

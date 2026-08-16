@@ -2,10 +2,13 @@
 
 #pragma once
 #include "Backend/Buffer.h"
+#include "Backend/Kernels.h"
 #include "Backend/Resource.h"
+#include "Interactions/Bonded/BondComputer.h"
 #include "Interactions/BondedInteraction.h"
 #include "Interactions/TabulatedPotential.h"
 #include "Objects/Tables.h"
+#include "System/PeriodicBox.h"
 #include "Types/Types.h"
 #include "Types/Vector3.h"
 #include <algorithm>
@@ -344,7 +347,7 @@ class DeviceBondedInteractions {
 	DEVICE_PTR(const Vector3) restraint_positions() const {
 		return restraint_positions_.data();
 	}
-	DEVICE_PTR(const float) restraint_spring_constants() const {
+	DEVICE_PTR(const arbd_real) restraint_spring_constants() const {
 		return restraint_spring_constants_.data();
 	}
 	idx_t num_restraints() const {
@@ -393,5 +396,139 @@ class DeviceBondedInteractions {
 	DeviceBuffer<arbd_real> restraint_spring_constants_;
 	idx_t num_restraints_{0};
 };
+
+// ============================================================================
+// LAUNCH HELPER FUNCTIONS (similar to launch_BD, launch_BAOAB)
+// ============================================================================
+
+/**
+ * @brief Launch tabulated bond force computation
+ */
+inline Event launch_tabulated_bonds(const Resource& resource,
+									DEVICE_PTR(const int2) particle_indices,
+									DEVICE_PTR(Vector3) positions,
+									DEVICE_PTR(Vector3) force_energy,
+									DEVICE_PTR(const TabulatedPotential) tables,
+									DEVICE_PTR(const int) table_indices,
+									DEVICE_PTR(const int) forms,
+									const PeriodicBox* pbox,
+									bool get_energy,
+									idx_t num_bonds) {
+	KernelConfig config = KernelConfig::for_1d(num_bonds, resource);
+
+	TabulatedBondComputer computer(particle_indices,
+								   positions,
+								   force_energy,
+								   tables,
+								   table_indices,
+								   forms,
+								   pbox,
+								   get_energy,
+								   num_bonds);
+
+	return launch_kernel(resource, config, computer);
+}
+
+/**
+ * @brief Launch tabulated angle force computation
+ */
+inline Event launch_tabulated_angles(const Resource& resource,
+									 DEVICE_PTR(const int3) particle_indices,
+									 DEVICE_PTR(Vector3) positions,
+									 DEVICE_PTR(Vector3) force_energy,
+									 DEVICE_PTR(const TabulatedPotential) tables,
+									 DEVICE_PTR(const int) table_indices,
+									 DEVICE_PTR(const int) forms,
+									 const PeriodicBox* pbox,
+									 bool get_energy,
+									 idx_t num_angles) {
+	KernelConfig config = KernelConfig::for_1d(num_angles, resource);
+
+	TabulatedAngleComputer computer(particle_indices,
+									positions,
+									force_energy,
+									tables,
+									table_indices,
+									forms,
+									pbox,
+									get_energy,
+									num_angles);
+
+	return launch_kernel(resource, config, computer);
+}
+
+/**
+ * @brief Launch tabulated dihedral force computation
+ */
+inline Event launch_tabulated_dihedrals(const Resource& resource,
+										DEVICE_PTR(const int4) particle_indices,
+										DEVICE_PTR(Vector3) positions,
+										DEVICE_PTR(Vector3) force_energy,
+										DEVICE_PTR(const TabulatedPotential) tables,
+										DEVICE_PTR(const int) table_indices,
+										DEVICE_PTR(const int) forms,
+										const PeriodicBox* pbox,
+										bool get_energy,
+										idx_t num_dihedrals) {
+	KernelConfig config = KernelConfig::for_1d(num_dihedrals, resource);
+
+	TabulatedDihedralComputer computer(particle_indices,
+									   positions,
+									   force_energy,
+									   tables,
+									   table_indices,
+									   forms,
+									   pbox,
+									   get_energy,
+									   num_dihedrals);
+
+	return launch_kernel(resource, config, computer);
+}
+
+/**
+ * @brief Launch analytical bond force computation (templated by bond type)
+ */
+template<int BondTypeId>
+inline Event launch_analytical_bonds(const Resource& resource,
+									 DEVICE_PTR(const int2) particle_indices,
+									 DEVICE_PTR(Vector3) positions,
+									 DEVICE_PTR(Vector3) force_energy,
+									 DEVICE_PTR(const arbd_real) params,
+									 const PeriodicBox* pbox,
+									 bool get_energy,
+									 idx_t num_bonds) {
+	KernelConfig config = KernelConfig::for_1d(num_bonds, resource);
+
+	AnalyticalBondComputer<BondTypeId>
+		computer(particle_indices, positions, force_energy, params, pbox, get_energy, num_bonds);
+
+	return launch_kernel(resource, config, computer);
+}
+
+/**
+ * @brief Launch harmonic restraint force computation
+ */
+inline Event launch_harmonic_restraints(const Resource& resource,
+										DEVICE_PTR(const int) particle_ids,
+										DEVICE_PTR(Vector3) positions,
+										DEVICE_PTR(Vector3) force_energy,
+										DEVICE_PTR(const Vector3) anchors,
+										DEVICE_PTR(const arbd_real) spring_constants,
+										const PeriodicBox* pbox,
+										bool get_energy,
+										idx_t num_restraints) {
+	KernelConfig config = KernelConfig::for_1d(num_restraints, resource);
+
+	HarmonicRestraintComputer computer(particle_ids,
+									   positions,
+									   force_energy,
+									   anchors,
+									   spring_constants,
+									   pbox,
+									   get_energy,
+									   num_restraints);
+
+	return launch_kernel(resource, config, computer);
+}
 
 } // namespace ARBD

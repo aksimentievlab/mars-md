@@ -22,16 +22,7 @@ const std::vector<std::string> long_range_nonbonded_types = {"E-field", "Pmf"};
 
 struct PairNonBonded {
 	int type_id_1{-1};
-	int type_id_2{-1};
-	// Alternate, deferred-resolution path for callers that don't already know
-	// the numeric type ids (e.g. the Python bindings, which take ParticleType
-	// objects) - mirrors ParticleIO::type_name / RigidBodyIO::type_name. When
-	// non-empty, SimSystem::build_name_to_id_maps() resolves these into
-	// type_id_1/type_id_2 (see resolve_type_names below); the legacy
-	// `tabulatedFile i@j@file` config path supplies ids directly and leaves
-	// these empty. Safe to defer because the ids aren't read until
-	// Patch::calculate_nonbonded_forces builds the type-pair matrix on the
-	// first step, long after type ids are assigned.
+	int type_id_2{-1}; ///< for callers that don't already know the numeric type ids yet
 	std::string type_name_1{};
 	std::string type_name_2{};
 	int id{-1};

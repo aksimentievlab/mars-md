@@ -173,8 +173,8 @@ HOST DEVICE Matrix3_t<T> rotation_matrix_x(T t) {
 	using Vector3 = Vector3_t<T>;
 	using Matrix3 = Matrix3_t<T>;
 	return Matrix3(Vector3(T{1}, T{0}, T{0}),
-				   Vector3(T{0}, c, -s),
-				   Vector3(T{0}, s, c));
+				   Vector3(T{0}, c, s),
+				   Vector3(T{0}, -s, c));
 }
 
 template<typename T>
@@ -184,9 +184,9 @@ HOST DEVICE Matrix3_t<T> rotation_matrix_y(T t) {
 	const T s = t / (T{1} + qt);
 	using Vector3 = Vector3_t<T>;
 	using Matrix3 = Matrix3_t<T>;
-	return Matrix3(Vector3(c, T{0}, s),
+	return Matrix3(Vector3(c, T{0}, -s),
 				   Vector3(T{0}, T{1}, T{0}),
-				   Vector3(-s, T{0}, c));
+				   Vector3(s, T{0}, c));
 }
 
 template<typename T>
@@ -196,8 +196,8 @@ HOST DEVICE Matrix3_t<T> rotation_matrix_z(T t) {
 	const T s = t / (T{1} + qt);
 	using Vector3 = Vector3_t<T>;
 	using Matrix3 = Matrix3_t<T>;
-	return Matrix3(Vector3(c, -s, T{0}),
-				   Vector3(s, c, T{0}),
+	return Matrix3(Vector3(c, s, T{0}),
+				   Vector3(-s, c, T{0}),
 				   Vector3(T{0}, T{0}, T{1}));
 }
 

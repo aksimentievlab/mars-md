@@ -42,13 +42,7 @@ constexpr float SMALLRAD2 = SMALLRAD * SMALLRAD;
 
 // Legacy RigidBody unit conversions (v1 RigidBody.cu / RigidBodyType.cu).
 constexpr float impulse_to_momentum = 4.1867999435271e4f;
-// Converts transDamping/rotDamping from config units (1/ns, acting on a
-// momentum in amu AA/ns) into kcal/mol/AA. Legacy applies this ONCE at setup
-// (RigidBodyType::setDampingCoeffs), so every later use of transDamping/
-// rotDamping there is already scaled. arbd2 stores them unscaled, so it must be
-// applied at use - in BOTH the noise coefficient and the drag term, exactly as
-// legacy's addLangevin sees them. Omitting it entirely is what let the drag
-// dwarf the momentum it acted on and diverged every rigid body to NaN.
+
 constexpr float langevin_damping_unit = 2.3900574e-9f;
 // Additional literal factor on the drag term only, from legacy
 // RigidBody::addLangevin ("... * 10000"). Applied on top of
@@ -57,9 +51,13 @@ constexpr float langevin_damp_scale = 10000.0f;
 constexpr float velocity_scale = 1e4f;
 constexpr double ANGSTROM_TO_MICRON = 1.0e-4;
 constexpr double MICRON_TO_ANGSTROM = 1.0e4;
-constexpr const char* kAttachedSegnameMarker = "ATT";
-// marker in pdb file that will mark the attachement site.
+constexpr const char* kAttachedSegnameMarker =
+	"ATT"; ///< marker in pdb file that will mark the attachement site.
+
+constexpr const char* kCosmeticTypeName =
+	"COS"; ///< Type name for template atoms that carry no physics.
 } // namespace constants
+// namespace constants
 /**
  * @brief Unit conversions between SCUFF-EM's reporting units and ARBD's.
  *

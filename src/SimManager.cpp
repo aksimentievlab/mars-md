@@ -32,6 +32,16 @@ void append_restart_line(std::string& buf, int type_id, const Vector3& v) {
 	append(v.z);
 	buf.push_back('\n');
 }
+
+/// Segname for a rigid body's cosmetic atoms: the type name up to its first
+/// '.', capped at the PDB segID column width. See dev_notes.md.
+std::string rigid_body_segname(const std::string& type_name) {
+	std::string s = type_name.substr(0, type_name.find('.'));
+	if (s.size() > 4) {
+		s.resize(4);
+	}
+	return s.empty() ? std::string("RB") : s;
+}
 } // namespace
 
 //================================================================================
@@ -150,21 +160,22 @@ void SimManager::init() {
 				pending_initial_rigid_bodies_.size());
 	}
 
-	// Load cached bonded interactions (from load_config or set_bonded_interactions)
-	// Exclusions ride in the same struct, so they must be part of the guard:
-	// a system with `inputExcludes` but no bonded terms otherwise loses every
-	// exclusion silently and evaluates bonded neighbours as nonbonded pairs.
+	// Load cached bonded interactions (from load_config or set_bonded_interactions).
+	// Every term that rides in the struct has to be in the guard, or a config
+	// carrying only that term loses it silently - see dev_notes.md.
 	if (pending_bonded_interactions_.get_num_bonds() > 0 ||
 		pending_bonded_interactions_.get_num_angles() > 0 ||
 		pending_bonded_interactions_.get_num_dihedrals() > 0 ||
-		!pending_bonded_interactions_.get_exclusions().empty()) {
+		!pending_bonded_interactions_.get_exclusions().empty() ||
+		!pending_bonded_interactions_.get_restraints().empty()) {
 		sys_state_.update_bonded_interactions(pending_bonded_interactions_);
-		LOGINFO("SimManager: Loaded {} bonds, {} angles, {} dihedrals, {} exclusions into system "
-				"state",
+		LOGINFO("SimManager: Loaded {} bonds, {} angles, {} dihedrals, {} exclusions, {} "
+				"restraints into system state",
 				pending_bonded_interactions_.get_num_bonds(),
 				pending_bonded_interactions_.get_num_angles(),
 				pending_bonded_interactions_.get_num_dihedrals(),
-				pending_bonded_interactions_.get_exclusions().size());
+				pending_bonded_interactions_.get_exclusions().size(),
+				pending_bonded_interactions_.get_restraints().size());
 	}
 
 	// Perform domain decomposition (creates PatchManager in SimSystem)
@@ -774,6 +785,9 @@ void SimManager::build_structure_view() {
 		const bool is_attached =
 			i < particles.attached_rigid_body_id.size() && particles.attached_rigid_body_id[i] >= 0;
 		a.segname = is_attached ? "ATT" : "SYS";
+		if (is_attached) {
+			a.beta = static_cast<float>(particles.attached_rigid_body_id[i]);
+		}
 		a.position = i < particles.pos.size() ? particles.pos[i] : Vector3(0.0f);
 		s.atoms.push_back(std::move(a));
 	}
@@ -810,10 +824,9 @@ void SimManager::build_structure_view() {
 			a.type_name = c.type_name.empty() ? c.resname : c.type_name;
 			a.resid = c.resid;
 			a.chain = "R";
-			// Distinct from the attached particles' "ATT" so cosmetic atoms can
-			// be hidden or coloured separately; the rigid body's own id keeps
-			// instances apart.
-			a.segname = "RB" + std::to_string(rb.id);
+			// Type in segname, instance in beta - see dev_notes.md.
+			a.segname = rigid_body_segname(type.name);
+			a.beta = static_cast<float>(rb.id);
 			a.mass = 0.0f;	 // no physics
 			a.charge = 0.0f; // no physics
 			// Placed at t=0 by this instance's transform; write_pdb refreshes it.
@@ -1018,6 +1031,7 @@ void SimManager::report_progress(size_t current_step, size_t total_steps, size_t
 
 void SimManager::report_performance(float elapsed_time, size_t total_steps) {
 	const float steps_per_second = static_cast<float>(total_steps) / elapsed_time;
+	const float ms_per_step=elapsed_time * 1000.0f / static_cast<float>(total_steps);
 	const float io_time = wkf_timer_time(timerS_.timer);
 	const float energy_time = wkf_timer_time(timerE_.timer);
 	const float compute_time = elapsed_time - io_time - energy_time;
@@ -1030,7 +1044,7 @@ void SimManager::report_performance(float elapsed_time, size_t total_steps) {
 			  << "%)" << std::endl;
 	std::cout << "  Energy time:       " << energy_time << " s ("
 			  << energy_time / elapsed_time * 100 << "%)" << std::endl;
-	std::cout << "  Steps/second:      " << steps_per_second << std::endl;
+	std::cout << "  ms/Step:      " << steps_per_second << std::endl;
 	std::cout << "  ns/day (est):      "
 			  << (steps_per_second * sys_.get_timestep() * 86400.0f) / 1e6f << std::endl;
 	std::cout << "=========================================" << std::endl;

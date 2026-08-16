@@ -1,6 +1,6 @@
 # Interactions
 
-This module defines both **bonded** and **nonbonded** interactions for the simulation framework. Interactions are implemented as modular classes, following the `PatchOp` interface, and are responsible for computing forces and energies between objects (e.g., particles, rigid bodies) within a patch.
+This module defines both **bonded** and **nonbonded** interactions for the simulation framework. Interactions are implemented as modular classes, following the `PatchOperation` interface, and are responsible for computing forces and energies between objects (e.g., particles, rigid bodies) within a patch.
 
 ## Structure
 

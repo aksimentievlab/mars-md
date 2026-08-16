@@ -1,6 +1,6 @@
 #pragma once
 #include "Header.h"
-#include "Types/BaseGridDevice.h"
+#include "Types/GridTerm.h"
 #include "Types/Types.h"
 #include "Types/Vector3.h"
 namespace ARBD {

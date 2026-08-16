@@ -71,14 +71,56 @@ struct AnalyticalBondComputer {
 };
 
 /**
- * @brief Tabulated bond force computer
+ * @brief Harmonic restraint pinning one particle to a fixed point.
  *
- * `tables` holds one entry per distinct bond *type* (as loaded by
- * TablesRegistry), not one per bond instance - table_indices[i] says which
- * entry bond i uses (see DeviceBondedInteractions::bond_table_indices()).
- * forms[i] is an InteractionForm (Grid=0, Tabulated=1, Analytical=2); this
- * computer only processes Tabulated entries and skips the rest (Analytical
- * bonds are handled by AnalyticalBondComputer instead, via a separate launch).
+ * @f$\vec{f} = -k\,\mathrm{wrapDiff}(\vec{r} - \vec{r}_0)@f$, one restraint per
+ * work item. See dev_notes.md.
+ */
+struct HarmonicRestraintComputer {
+	DEVICE_PTR(const int) particle_ids;
+	DEVICE_PTR(Vector3) positions;
+	DEVICE_PTR(Vector3) force_energy;
+	DEVICE_PTR(const Vector3) anchors;
+	DEVICE_PTR(const arbd_real) spring_constants;
+	const PeriodicBox* pbox;
+	bool get_energy;
+	idx_t num_restraints;
+
+	HarmonicRestraintComputer(DEVICE_PTR(const int) ids,
+							  DEVICE_PTR(Vector3) pos,
+							  DEVICE_PTR(Vector3) fe,
+							  DEVICE_PTR(const Vector3) r0,
+							  DEVICE_PTR(const arbd_real) k,
+							  const PeriodicBox* box,
+							  bool energy,
+							  idx_t n)
+		: particle_ids(ids), positions(pos), force_energy(fe), anchors(r0), spring_constants(k),
+		  pbox(box), get_energy(energy), num_restraints(n) {}
+
+	KERNEL_FUNC void operator()(idx_t i) const {
+		if (i >= num_restraints)
+			return;
+
+		const int id = particle_ids[i];
+		if (id < 0)
+			return;
+
+		const CalcDistance geom = CalcDistance::compute(anchors[i], positions[id], pbox);
+
+		const arbd_real params[AnalyticalForceComputer<0>::NUM_PARAMS] = {spring_constants[i],
+																		  arbd_real(0)};
+		const ScalarForceEnergy fe = AnalyticalForceComputer<0>::compute(geom.distance, params);
+
+		atomic_add(&force_energy[id], geom.unit_vector * fe.force_magnitude);
+
+		if (get_energy) {
+			atomic_add(&force_energy[id].t, fe.energy);
+		}
+	}
+};
+
+/**
+ * @brief Tabulated bond force computer. See dev_notes.md.
  */
 struct TabulatedBondComputer {
 	// Members
@@ -287,114 +329,6 @@ struct TabulatedDihedralComputer {
 	}
 };
 
-// ============================================================================
-// LAUNCH HELPER FUNCTIONS (similar to launch_BD, launch_BAOAB)
-// ============================================================================
-
-/**
- * @brief Launch tabulated bond force computation
- */
-inline Event launch_tabulated_bonds(const Resource& resource,
-									DEVICE_PTR(const int2) particle_indices,
-									DEVICE_PTR(Vector3) positions,
-									DEVICE_PTR(Vector3) force_energy,
-									DEVICE_PTR(const TabulatedPotential) tables,
-									DEVICE_PTR(const int) table_indices,
-									DEVICE_PTR(const int) forms,
-									const PeriodicBox* pbox,
-									bool get_energy,
-									idx_t num_bonds) {
-	KernelConfig config = KernelConfig::for_1d(num_bonds, resource);
-
-	TabulatedBondComputer computer(particle_indices,
-								   positions,
-								   force_energy,
-								   tables,
-								   table_indices,
-								   forms,
-								   pbox,
-								   get_energy,
-								   num_bonds);
-
-	return launch_kernel(resource, config, computer);
-}
-
-/**
- * @brief Launch tabulated angle force computation
- */
-inline Event launch_tabulated_angles(const Resource& resource,
-									 DEVICE_PTR(const int3) particle_indices,
-									 DEVICE_PTR(Vector3) positions,
-									 DEVICE_PTR(Vector3) force_energy,
-									 DEVICE_PTR(const TabulatedPotential) tables,
-									 DEVICE_PTR(const int) table_indices,
-									 DEVICE_PTR(const int) forms,
-									 const PeriodicBox* pbox,
-									 bool get_energy,
-									 idx_t num_angles) {
-	KernelConfig config = KernelConfig::for_1d(num_angles, resource);
-
-	TabulatedAngleComputer computer(particle_indices,
-									positions,
-									force_energy,
-									tables,
-									table_indices,
-									forms,
-									pbox,
-									get_energy,
-									num_angles);
-
-	return launch_kernel(resource, config, computer);
-}
-
-/**
- * @brief Launch tabulated dihedral force computation
- */
-inline Event launch_tabulated_dihedrals(const Resource& resource,
-										DEVICE_PTR(const int4) particle_indices,
-										DEVICE_PTR(Vector3) positions,
-										DEVICE_PTR(Vector3) force_energy,
-										DEVICE_PTR(const TabulatedPotential) tables,
-										DEVICE_PTR(const int) table_indices,
-										DEVICE_PTR(const int) forms,
-										const PeriodicBox* pbox,
-										bool get_energy,
-										idx_t num_dihedrals) {
-	KernelConfig config = KernelConfig::for_1d(num_dihedrals, resource);
-
-	TabulatedDihedralComputer computer(particle_indices,
-									   positions,
-									   force_energy,
-									   tables,
-									   table_indices,
-									   forms,
-									   pbox,
-									   get_energy,
-									   num_dihedrals);
-
-	return launch_kernel(resource, config, computer);
-}
-
-/**
- * @brief Launch analytical bond force computation (templated by bond type)
- */
-template<int BondTypeId>
-inline Event launch_analytical_bonds(const Resource& resource,
-									 DEVICE_PTR(const int2) particle_indices,
-									 DEVICE_PTR(Vector3) positions,
-									 DEVICE_PTR(Vector3) force_energy,
-									 DEVICE_PTR(const arbd_real) params,
-									 const PeriodicBox* pbox,
-									 bool get_energy,
-									 idx_t num_bonds) {
-	KernelConfig config = KernelConfig::for_1d(num_bonds, resource);
-
-	AnalyticalBondComputer<BondTypeId>
-		computer(particle_indices, positions, force_energy, params, pbox, get_energy, num_bonds);
-
-	return launch_kernel(resource, config, computer);
-}
-
 } // namespace ARBD
 
 // Explicit template instantiation declarations to prevent host instantiation
@@ -403,19 +337,12 @@ inline Event launch_analytical_bonds(const Resource& resource,
 namespace ARBD {
 extern template struct AnalyticalBondComputer<0>;
 extern template struct AnalyticalBondComputer<1>;
-// Also declare launch_cuda_kernel instantiations to prevent host stub instantiation
 extern template Event launch_cuda_kernel(const Resource& resource,
 										 const KernelConfig& config,
 										 AnalyticalBondComputer<0> kernel_func);
 extern template Event launch_cuda_kernel(const Resource& resource,
 										 const KernelConfig& config,
 										 AnalyticalBondComputer<1> kernel_func);
-// Tabulated bond/angle/dihedral computers are concrete (non-template) types,
-// but still need their launch_cuda_kernel instantiation forced into a real
-// CUDA compilation unit (see Bonded/BondedInstantiations.cu) - otherwise any
-// host-only .cpp that calls launch_tabulated_bonds/_angles/_dihedrals (or
-// Patch::calculate_bonded_forces, which calls them) implicitly instantiates
-// the non-CUDA stub in KernelHelper.cuh and throws NotImplementedError.
 extern template Event launch_cuda_kernel(const Resource& resource,
 										 const KernelConfig& config,
 										 TabulatedBondComputer kernel_func);
@@ -425,6 +352,9 @@ extern template Event launch_cuda_kernel(const Resource& resource,
 extern template Event launch_cuda_kernel(const Resource& resource,
 										 const KernelConfig& config,
 										 TabulatedDihedralComputer kernel_func);
+extern template Event launch_cuda_kernel(const Resource& resource,
+										 const KernelConfig& config,
+										 HarmonicRestraintComputer kernel_func);
 } // namespace ARBD
 #endif
 
@@ -441,4 +371,7 @@ struct sycl::is_device_copyable<ARBD::TabulatedAngleComputer> : std::true_type {
 
 template<>
 struct sycl::is_device_copyable<ARBD::TabulatedDihedralComputer> : std::true_type {};
+
+template<>
+struct sycl::is_device_copyable<ARBD::HarmonicRestraintComputer> : std::true_type {};
 #endif

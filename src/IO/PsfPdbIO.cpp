@@ -423,11 +423,11 @@ void write_pdb_atoms(FILE* file,
 		const std::string z = format_pdb_coordinate(atom.position.z);
 
 		std::string segname = atom.segname;
-		if (segname.size() > 6)
-			segname = segname.substr(0, 6);
+		if (segname.size() > 4)
+			segname = segname.substr(0, 4);
 
 		std::fprintf(file,
-					 "ATOM %6.6s %4.4s %-3.3s %c%-5.5s   %8.8s%8.8s%8.8s%6.2f%6.2f  %2s%6s\n",
+					 "ATOM %6.6s %4.4s %-3.3s %c%-5.5s   %8.8s%8.8s%8.8s%6.2f%6.2f      %-4.4s\n",
 					 serial.c_str(),
 					 name.c_str(),
 					 resname.c_str(),
@@ -438,7 +438,6 @@ void write_pdb_atoms(FILE* file,
 					 z.c_str(),
 					 static_cast<double>(atom.occupancy),
 					 static_cast<double>(beta),
-					 "",
 					 segname.c_str());
 		last_atom = &atom;
 	}
