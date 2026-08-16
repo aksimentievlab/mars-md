@@ -108,7 +108,6 @@ struct type_caster<ARBD::Matrix3_t<T>> {
 		r(0, 2) = c2.x;
 		r(1, 2) = c2.y;
 		r(2, 2) = c2.z;
-		return result.release();
 	}
 };
 

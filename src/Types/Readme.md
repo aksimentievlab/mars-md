@@ -1,2 +1,2 @@
 # Matrix3.h
-Martices are **Row Major** in arbd and arbd2.
+Martix3 layout is row-major but its Vector3 interface is column-based

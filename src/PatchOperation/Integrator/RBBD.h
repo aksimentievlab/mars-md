@@ -61,9 +61,11 @@ struct RBIntegrateBDKernel {
 		const Vector3 rot_damping = types.rot_damping[type] * constants::langevin_damping_unit;
 
 		// See RBLangevinForceKernel for why the log argument is clamped.
-		openrand::Philox rng(base_seed + current_step,
+		// Seed, step, index and stream each need their own Philox word - see
+		// dev_notes.md.
+		openrand::Philox rng(base_seed,
 							 static_cast<uint32_t>(idx),
-							 openrand::DEFAULT_GLOBAL_SEED,
+							 static_cast<uint32_t>(current_step),
 							 rng_stream);
 		auto gaussian_pair = [](float u_r, float u_theta, float& a, float& b) {
 			const float r = sqrtf(-2.0f * logf(fmaxf(u_r, 1e-20f)));

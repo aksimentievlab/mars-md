@@ -45,18 +45,45 @@ __device__ inline void atomicMinFloat(float* address, float val) {
  * This kernel computes the maximum displacement of particles between two
  * position sets, enabling intelligent decision making for pairlist updates
  * without requiring host-device synchronization.
+ *
+ * Displacements are measured under the minimum image convention. Integrators
+ * wrap positions back into the box every step, so a particle crossing a
+ * periodic face differs from its reference by nearly a full box length while
+ * having physically moved almost nothing. Taking that raw difference makes
+ * every boundary crossing look like a box-sized jump, which trips any skin
+ * threshold and forces a spurious pairlist rebuild.
+ *
+ * `box_len` is per axis: a positive component marks that axis periodic and its
+ * displacements are wrapped; a zero or negative component marks it open and the
+ * raw difference is used.
  */
 struct DisplacementKernel {
 	const Vector3* current_positions;
 	const Vector3* previous_positions;
 	float* max_displacement; // Single value reduction result
 	size_t num_particles;
+	Vector3 box_len; ///< Per-axis periodic length; <= 0 marks an open axis
+
+	/// Wrap a displacement into [-L/2, L/2]. Both inputs are already wrapped
+	/// into the box, so |d| < L and at most one iteration runs.
+	KERNEL_FUNC static inline float min_image(float d, float L) {
+		if (L <= 0.0f)
+			return d;
+		while (d > 0.5f * L)
+			d -= L;
+		while (d < -0.5f * L)
+			d += L;
+		return d;
+	}
 
 	KERNEL_FUNC void operator()(idx_t i) const {
 		if (i >= num_particles)
 			return;
 
-		Vector3 dr = current_positions[i] - previous_positions[i];
+		Vector3 raw = current_positions[i] - previous_positions[i];
+		Vector3 dr{min_image(raw.x, box_len.x),
+				   min_image(raw.y, box_len.y),
+				   min_image(raw.z, box_len.z)};
 		float displacement_sq = dr.length2();
 
 #ifdef __CUDA_ARCH__

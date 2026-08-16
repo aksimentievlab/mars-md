@@ -27,7 +27,7 @@ namespace ARBD {
  * in OpenGL, Vulkan, and Metal. Simplified for Metal C++17 compatibility.
  */
 template<typename T>
-struct alignas(16) Matrix3_t {
+struct alignas(4 * sizeof(T)) Matrix3_t {
 	using Matrix3 = Matrix3_t<T>;
 	using Vector3 = Vector3_t<T>;
 
@@ -172,9 +172,7 @@ HOST DEVICE Matrix3_t<T> rotation_matrix_x(T t) {
 	const T s = t / (T{1} + qt);
 	using Vector3 = Vector3_t<T>;
 	using Matrix3 = Matrix3_t<T>;
-	return Matrix3(Vector3(T{1}, T{0}, T{0}),
-				   Vector3(T{0}, c, s),
-				   Vector3(T{0}, -s, c));
+	return Matrix3(Vector3(T{1}, T{0}, T{0}), Vector3(T{0}, c, s), Vector3(T{0}, -s, c));
 }
 
 template<typename T>
@@ -184,9 +182,7 @@ HOST DEVICE Matrix3_t<T> rotation_matrix_y(T t) {
 	const T s = t / (T{1} + qt);
 	using Vector3 = Vector3_t<T>;
 	using Matrix3 = Matrix3_t<T>;
-	return Matrix3(Vector3(c, T{0}, -s),
-				   Vector3(T{0}, T{1}, T{0}),
-				   Vector3(s, T{0}, c));
+	return Matrix3(Vector3(c, T{0}, -s), Vector3(T{0}, T{1}, T{0}), Vector3(s, T{0}, c));
 }
 
 template<typename T>
@@ -196,9 +192,7 @@ HOST DEVICE Matrix3_t<T> rotation_matrix_z(T t) {
 	const T s = t / (T{1} + qt);
 	using Vector3 = Vector3_t<T>;
 	using Matrix3 = Matrix3_t<T>;
-	return Matrix3(Vector3(c, s, T{0}),
-				   Vector3(-s, c, T{0}),
-				   Vector3(T{0}, T{0}, T{1}));
+	return Matrix3(Vector3(c, s, T{0}), Vector3(-s, c, T{0}), Vector3(T{0}, T{0}, T{1}));
 }
 
 template<typename T>

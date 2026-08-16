@@ -125,7 +125,7 @@ bool ZOrderPairlist::needs_update(const DeviceBuffer<Vector3>& positions,
 								  const DeviceBuffer<Vector3>& old_positions,
 								  size_t num_particles,
 								  float skin_distance) const {
-	float max_disp = sorter_.compute_max_displacement(positions, num_particles);
+	float max_disp = sorter_.compute_max_displacement(positions, num_particles, box_len_);
 	return max_disp > (skin_distance * 0.5f);
 }
 

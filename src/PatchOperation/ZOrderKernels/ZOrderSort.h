@@ -158,10 +158,14 @@ class ZOrderSort {
 	 * @brief Compute maximum displacement between current and previous positions (Pairlist mode)
 	 * @param current_positions Current particle positions
 	 * @param num_particles Number of particles
+	 * @param box_len Per-axis periodic length; <= 0 marks an open axis. Displacements are
+	 *        measured under the minimum image convention on periodic axes, so a particle
+	 *        wrapped across a face is not mistaken for one that moved a box length.
 	 * @return Maximum displacement
 	 */
 	float compute_max_displacement(const DeviceBuffer<Vector3>& current_positions,
-								   size_t num_particles) const;
+								   size_t num_particles,
+								   const Vector3& box_len = Vector3{0.0f}) const;
 
 	/**
 	 * @brief Record the current positions as the reference for displacement tracking

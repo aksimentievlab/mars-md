@@ -50,9 +50,11 @@ struct BDIntegrate {
 		Vector3 diffusion = particle_types.diffusion[type];
 
 		// Generate Gaussian random numbers
-		openrand::Philox rng(base_seed + current_step,
+		// Seed, step, index and stream each need their own Philox word - see
+		// dev_notes.md.
+		openrand::Philox rng(base_seed,
 							 base_ctr + static_cast<uint32_t>(idx),
-							 openrand::DEFAULT_GLOBAL_SEED,
+							 static_cast<uint32_t>(current_step),
 							 rng_stream);
 		openrand::float4 uniform = rng.draw_float4();
 

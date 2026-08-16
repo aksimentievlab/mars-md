@@ -83,9 +83,12 @@ struct BAOABIntegrate {
 							sqrtf(kT * mass * (1.0f - c.z * c.z)) * constants::SQRT_CAL_TO_JOULE);
 
 		// Generate Random Numbers (Box-Muller)
+		// Seed, step, index and stream each need their own Philox word - see
+		// dev_notes.md. base_ctr is a constant 0 at every call site, so without
+		// the step here this kernel drew the same numbers on every step.
 		openrand::Philox rng(base_seed,
 							 base_ctr + static_cast<uint32_t>(idx),
-							 openrand::DEFAULT_GLOBAL_SEED,
+							 static_cast<uint32_t>(current_step),
 							 rng_stream);
 		openrand::float4 uniform = rng.draw_float4();
 

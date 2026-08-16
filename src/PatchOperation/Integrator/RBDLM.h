@@ -50,9 +50,11 @@ struct RBLangevinForceKernel {
 		// draw_float4() returns values in [0,1); log(0) is -inf, which would
 		// make the whole trajectory NaN, so the radius argument is clamped away
 		// from zero. The bias is ~1 ulp and only on a ~2^-32 tail.
-		openrand::Philox rng(base_seed + current_step,
+		// Seed, step, index and stream each need their own Philox word - see
+		// dev_notes.md.
+		openrand::Philox rng(base_seed,
 							 static_cast<uint32_t>(idx),
-							 openrand::DEFAULT_GLOBAL_SEED,
+							 static_cast<uint32_t>(current_step),
 							 rng_stream);
 		auto gaussian_pair = [](float u_r, float u_theta, float& a, float& b) {
 			const float r = sqrtf(-2.0f * logf(fmaxf(u_r, 1e-20f)));

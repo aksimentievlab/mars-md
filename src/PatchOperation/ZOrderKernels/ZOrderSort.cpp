@@ -169,7 +169,8 @@ void ZOrderSort::resize(size_t new_max_particles) {
 }
 
 float ZOrderSort::compute_max_displacement(const DeviceBuffer<Vector3>& current_positions,
-										   size_t num_particles) const {
+										   size_t num_particles,
+										   const Vector3& box_len) const {
 	if (optimization_mode_ != ZOrderOptimizationMode::Pairlist) {
 		ARBD_Exception(ExceptionType::RuntimeError,
 					   "compute_max_displacement only available in Pairlist mode");
@@ -181,7 +182,8 @@ float ZOrderSort::compute_max_displacement(const DeviceBuffer<Vector3>& current_
 	DisplacementKernel disp_kernel{current_positions.data(),
 								   old_positions_.data(),
 								   max_displacement_.data(),
-								   num_particles};
+								   num_particles,
+								   box_len};
 
 	KernelConfig config = KernelConfig::for_1d(num_particles, resource_);
 	launch_kernel(resource_, config, disp_kernel);
