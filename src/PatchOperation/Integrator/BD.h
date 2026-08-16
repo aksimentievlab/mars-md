@@ -18,6 +18,7 @@ struct BDIntegrate {
 	uint64_t base_seed;
 	uint32_t base_ctr;
 	size_t current_step;
+	constexpr static uint32_t rng_stream = 0x5324120u; // Arbitrary stream ID for Philox RNG
 
 	// Constructor for proper initialization
 	BDIntegrate(ParticleView pv,
@@ -49,7 +50,10 @@ struct BDIntegrate {
 		Vector3 diffusion = particle_types.diffusion[type];
 
 		// Generate Gaussian random numbers
-		openrand::Philox rng(base_seed + current_step, base_ctr + static_cast<uint32_t>(idx));
+		openrand::Philox rng(base_seed + current_step,
+							 base_ctr + static_cast<uint32_t>(idx),
+							 openrand::DEFAULT_GLOBAL_SEED,
+							 rng_stream);
 		openrand::float4 uniform = rng.draw_float4();
 
 		// Box-Muller transform

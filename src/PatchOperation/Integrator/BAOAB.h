@@ -21,6 +21,7 @@ struct BAOABIntegrate {
 	uint64_t base_seed;
 	uint32_t base_ctr;
 	size_t current_step;
+	constexpr static uint32_t rng_stream = 0x1356914u; // Arbitrary stream ID for Philox RNG
 
 	BAOABIntegrate(ParticleView pv,
 				   const ParticleTypeView pt,
@@ -82,7 +83,10 @@ struct BAOABIntegrate {
 							sqrtf(kT * mass * (1.0f - c.z * c.z)) * constants::SQRT_CAL_TO_JOULE);
 
 		// Generate Random Numbers (Box-Muller)
-		openrand::Philox rng(base_seed, base_ctr + static_cast<uint32_t>(idx));
+		openrand::Philox rng(base_seed,
+							 base_ctr + static_cast<uint32_t>(idx),
+							 openrand::DEFAULT_GLOBAL_SEED,
+							 rng_stream);
 		openrand::float4 uniform = rng.draw_float4();
 
 		float r1 = sqrtf(-2.0f * logf(uniform.x));

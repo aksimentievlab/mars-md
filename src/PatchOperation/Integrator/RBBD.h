@@ -31,7 +31,7 @@ struct RBIntegrateBDKernel {
 
 	/// Philox ctr1, distinct from openrand's 0x12345 default so this kernel's
 	/// stream cannot coincide with another kernel's at the same index.
-	static constexpr uint32_t rng_stream = 0x52424244u;
+	static constexpr uint32_t rng_stream = 0x2422044u;
 
 	RBIntegrateBDKernel(RigidBodyView rb_view,
 						RigidBodyTypeView type_view,

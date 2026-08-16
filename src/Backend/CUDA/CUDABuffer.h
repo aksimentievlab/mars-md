@@ -18,6 +18,40 @@ void fill_impl(void* dst, T value, size_t num_elements, void* queue, bool sync);
 namespace ARBD {
 namespace CUDA {
 
+/// Maps a device ordinal to a cudaMemLocation. cudaCpuDeviceId (-1) means host.
+inline cudaMemLocation mem_location(int device_id) {
+	cudaMemLocation loc{};
+	if (device_id == cudaCpuDeviceId) {
+		loc.type = cudaMemLocationTypeHost;
+		loc.id = 0;
+	} else {
+		loc.type = cudaMemLocationTypeDevice;
+		loc.id = device_id;
+	}
+	return loc;
+}
+
+// The location-based managed-memory API is spelled `_v2` on CUDA 12.2-12.x and
+// unsuffixed on CUDA 13, which dropped the old device-ordinal overloads.
+// Requires CUDA >= 12.2.
+inline cudaError_t
+prefetch_async(const void* ptr, size_t bytes, cudaMemLocation loc, cudaStream_t stream) {
+#if CUDART_VERSION >= 13000
+	return cudaMemPrefetchAsync(ptr, bytes, loc, 0, stream);
+#else
+	return cudaMemPrefetchAsync_v2(ptr, bytes, loc, 0, stream);
+#endif
+}
+
+inline cudaError_t
+advise(const void* ptr, size_t bytes, cudaMemoryAdvise advice, cudaMemLocation loc) {
+#if CUDART_VERSION >= 13000
+	return cudaMemAdvise(ptr, bytes, advice, loc);
+#else
+	return cudaMemAdvise_v2(ptr, bytes, advice, loc);
+#endif
+}
+
 struct Policy {
 	static void*
 	allocate(const Resource& resource, size_t bytes, void* queue = nullptr, bool sync = true) {
@@ -173,7 +207,7 @@ struct UnifiedPolicy {
 
 	static void prefetch(void* ptr, size_t bytes, int device_id, void* queue = nullptr) {
 		cudaStream_t stream = queue ? static_cast<cudaStream_t>(queue) : 0;
-		CUDA_CHECK(cudaMemPrefetchAsync(ptr, bytes, device_id, stream));
+		CUDA_CHECK(prefetch_async(ptr, bytes, mem_location(device_id), stream));
 	}
 
 	static void mem_advise(void* ptr, size_t bytes, int advice, int device_id) {
@@ -183,7 +217,7 @@ struct UnifiedPolicy {
 		cudaMemoryAdvise cuda_advice =
 			(advice == 0) ? cudaMemAdviseSetReadMostly : static_cast<cudaMemoryAdvise>(advice);
 
-		CUDA_CHECK(cudaMemAdvise(ptr, bytes, cuda_advice, device_id));
+		CUDA_CHECK(advise(ptr, bytes, cuda_advice, mem_location(device_id)));
 	}
 
 	static void copy_from_host(void* unified_dst,
@@ -197,7 +231,7 @@ struct UnifiedPolicy {
 		int device;
 		cudaGetDevice(&device);
 		cudaStream_t stream = queue ? static_cast<cudaStream_t>(queue) : 0;
-		CUDA_CHECK(cudaMemPrefetchAsync(unified_dst, bytes, device, stream));
+		CUDA_CHECK(prefetch_async(unified_dst, bytes, mem_location(device), stream));
 	}
 
 	static void copy_to_host(void* host_dst,
@@ -208,8 +242,7 @@ struct UnifiedPolicy {
 		cudaStream_t stream = queue ? static_cast<cudaStream_t>(queue) : 0;
 
 		// Prefetch to host
-		CUDA_CHECK(
-			cudaMemPrefetchAsync(const_cast<void*>(unified_src), bytes, cudaCpuDeviceId, stream));
+		CUDA_CHECK(prefetch_async(unified_src, bytes, mem_location(cudaCpuDeviceId), stream));
 		if (stream) {
 			CUDA_CHECK(cudaStreamSynchronize(stream));
 		} else {

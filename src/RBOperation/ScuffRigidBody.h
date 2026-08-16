@@ -23,6 +23,7 @@
 namespace ARBD {
 
 /**
+ * @todo Change the wrong column major matrix to row major.
  * @brief Host-side SoA for the plasmonic subset of the rigid bodies.
  *
  * Entry @c i couples slot @c plasmonic_particle_id[i] of @c global_rigidBody_data
