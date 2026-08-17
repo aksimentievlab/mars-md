@@ -5,7 +5,7 @@
  */
 
 #include "../catch_boiler.h"
-#include "Interactions/Bonded/BondComputer.h"
+#include "Interactions/DeviceBondedInteraction.h"
 #include "System/PeriodicBox.h"
 #include "Types/Types.h"
 

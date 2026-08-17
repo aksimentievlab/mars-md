@@ -297,3 +297,48 @@ TEST_CASE("integrate_motion applies the external load without add_langevin_force
 	const float expected_p = dt * 5.0f * constants::impulse_to_momentum;
 	REQUIRE(result.momentum[0].x == Catch::Approx(expected_p).epsilon(1e-4));
 }
+
+TEST_CASE("integrate_motion applies external torque in the lab frame",
+		  "[device][rigidbody][external]") {
+	initialize_backend_once();
+	Resource res(Global::single_resource_id);
+	RigidBodyManager mgr({res});
+
+	// The companion force test above leaves torque at zero, so nothing pinned
+	// the rotational half of the external-load move out of
+	// RBLangevinForceKernel. What matters is the frame: substeps 0 and 2 apply
+	// orientation.transpose() to (torque + external_torque), so external_torque
+	// must be a lab-frame quantity, matching legacy's lab-frame `torque`
+	// accumulator (RigidBody.h:90) that constantTorque was added to.
+	//
+	// Inertia is deliberately huge so substep 1's rotation angle
+	// (dt * L / I * 1e4) is ~1e-8 rad: both half-kicks then see the same
+	// orientation and the expected value stays closed form.
+	auto types = damped_type(Vector3(1.0f, 1.0f, 1.0f), Vector3(1.0f, 1.0f, 1.0f));
+	types[0].inertia = Vector3(1.0e15f, 1.0e15f, 1.0e15f);
+
+	// Body rotated +90 deg about x, so lab z maps onto body y and the transpose
+	// is actually exercised - an identity orientation would pass either way.
+	HostRigidBodyData host = bodies_at_origin(1);
+	host.orientation[0] = rotation_matrix_x(2.0f); // Cayley t=2 is exactly 90 deg
+	mgr.initialize(types, host, unreachable_grid_format);
+
+	const float torque_z = 4.0f;
+	const std::vector<Vector3> force{Vector3(0.0f, 0.0f, 0.0f)};
+	const std::vector<Vector3> torque{Vector3(0.0f, 0.0f, torque_z)};
+	mgr.set_external_loads(force, torque);
+
+	const float dt = 0.25f;
+	mgr.integrate_motion(dt, PeriodicBox()).wait();
+
+	HostRigidBodyData result;
+	mgr.bodies().copy_to_host(result, 1);
+
+	// Rx(90)^T * (0,0,T) = (0,T,0): the lab-z torque lands on body y.
+	const float expected = dt * torque_z * constants::impulse_to_momentum;
+	const Vector3 L = result.angular_momentum[0];
+	INFO("angular_momentum = " << L.x << " " << L.y << " " << L.z);
+	CHECK(L.x == Catch::Approx(0.0f).margin(1e-3f * expected));
+	CHECK(L.y == Catch::Approx(expected).epsilon(1e-4));
+	CHECK(L.z == Catch::Approx(0.0f).margin(1e-3f * expected));
+}

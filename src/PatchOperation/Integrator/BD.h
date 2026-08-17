@@ -49,9 +49,6 @@ struct BDIntegrate {
 		float mass = particle_types.mass[type];
 		Vector3 diffusion = particle_types.diffusion[type];
 
-		// Generate Gaussian random numbers
-		// Seed, step, index and stream each need their own Philox word - see
-		// dev_notes.md.
 		openrand::Philox rng(base_seed,
 							 base_ctr + static_cast<uint32_t>(idx),
 							 static_cast<uint32_t>(current_step),

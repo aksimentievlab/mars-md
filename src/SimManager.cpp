@@ -9,14 +9,6 @@
 namespace ARBD {
 
 namespace {
-// fprintf's "%.10g" goes through glibc's arbitrary-precision decimal
-// conversion (__printf_fp_l / __mpn_*), which nsys CPU sampling showed
-// dominating the ~700ms per-output-frame host stall for ~300k particles
-// (2x fprintf calls per particle, pos + momentum restart). std::to_chars
-// uses a shortest-round-trip algorithm that is orders of magnitude faster
-// for the same information content, and the restart-file reader
-// (ConfigParser.cpp load_restart_file) just tokenizes on whitespace, so the
-// exact textual form doesn't matter.
 void append_restart_line(std::string& buf, int type_id, const Vector3& v) {
 	char tmp[64];
 	auto append = [&](auto value) {
@@ -296,9 +288,31 @@ void SimManager::run() {
 	wkf_timer_start(timer0_.timer);
 	wkf_timer_start(timerP_.timer);
 
+	// DLM splits its two half-kicks around the force phase. See dev_notes.md.
+	const bool split_dlm = rigid_body_manager_ && rigid_body_manager_->size() > 0 &&
+						   sys_.get_rigid_body_algorithm() != IntegratorType::Brownian;
+	const PeriodicBox& sim_box = sys_.get_boundary_conditions();
+	const float dt = sys_.get_timestep();
+
+	if (split_dlm) {
+		execute_force_calculation(0); // prime step 1's opening half-kick
+	}
+
 	for (size_t step = 1; step <= num_steps; ++step) {
+		// ===== RB DRIFT PHASE (DLM substeps 0-1) =====
+		if (split_dlm) {
+			rigid_body_manager_->integrate_drift(dt, sim_box).wait();
+			sys_state_.invalidate_rigid_bodies();
+		}
+
 		// ===== FORCE CALCULATION PHASE =====
 		execute_force_calculation(step);
+
+		// ===== RB KICK PHASE (DLM substep 2) =====
+		if (split_dlm) {
+			rigid_body_manager_->integrate_kick(dt, sim_box).wait();
+			sys_state_.invalidate_rigid_bodies();
+		}
 
 		// ===== INTEGRATION PHASE =====
 		execute_integration(step);
@@ -428,17 +442,9 @@ void SimManager::execute_force_calculation(size_t step) {
 		}
 		DeviceParticleTypes& particle_types = *device_particle_types_cache_[resource_idx];
 
-		// calculate_nonbonded_forces() clears the force buffer and writes the
-		// PMF/grid + pairwise nonbonded terms; calculate_bonded_forces() must
-		// run after it and accumulate on top (it only ever atomic-adds, never
-		// clears).
-		//
-		// Energy accumulation adds an extra atomic write (ForceEnergy.t)
-		// alongside the 3 force-component atomics on every pairwise-neighbor
-		// and bonded-term evaluation, so it's only enabled on the same steps
-		// handle_output() will actually report energy for - matching legacy
-		// ARBD, which likewise only computes energy every outputEnergyPeriod
-		// steps rather than every step.
+		// Nonbonded clears and writes; bonded must follow and accumulate.
+		// Energy is gated to output steps - it costs an extra atomic per term.
+		// See dev_notes.md.
 		const size_t energy_output_period = static_cast<size_t>(sys_.get_energy_output_period());
 		const bool compute_energy = energy_output_period > 0 && step % energy_output_period == 0;
 		Event evt = patch->calculate_nonbonded_forces(
@@ -505,9 +511,6 @@ void SimManager::execute_force_calculation(size_t step) {
 		}
 		grid_evt.wait();
 
-		// The Brownian integrator is overdamped - it derives its own drag and
-		// noise from the damping coefficients, so a thermostat force here would
-		// double-count them.
 		if (sys_.get_rigid_body_algorithm() != IntegratorType::Brownian) {
 			const Temperature& temperature = sys_.get_temperature_struct();
 			rigid_body_manager_
@@ -562,9 +565,8 @@ void SimManager::execute_integration(size_t step) {
 									 step,
 									 sys_.get_boundary_conditions())
 				.wait();
-		} else {
-			rigid_body_manager_->integrate_motion(timestep, sys_.get_boundary_conditions()).wait();
 		}
+		// DLM is integrated around the force phase in run(), not here.
 		sys_state_.invalidate_rigid_bodies();
 	}
 
@@ -598,18 +600,8 @@ void SimManager::synchronize_multi_resource() {
 //================================================================================
 
 void SimManager::settle_momenta_for_output(size_t step) {
-	// BAOAB defers its closing half-kick to the top of the next step (see
-	// Patch::finish_deferred_kick), so right now every particle's momentum is
-	// half a kick behind its position. Positions are unaffected, but momentum
-	// DCD frames, restart files and kinetic energies read that momentum and
-	// would record - and, on restart, resume from - a half-step value.
-	//
-	// Pay the kick before reading. It needs the force at the current positions,
-	// which nothing has evaluated yet, so re-run the force calculation first;
-	// the next step would have recomputed exactly this anyway, so the cost is
-	// one extra force evaluation per output frame (~0.1% at outputPeriod 1000).
-	// finish_deferred_kick() clears the pending flag, so the next step applies
-	// only its opening half-kick and the total impulse is unchanged.
+	// BAOAB's closing half-kick is deferred, so momentum is half a kick behind
+	// position. Pay it before reading, which needs a fresh force. See dev_notes.md.
 	PatchManager* patch_mgr = sys_.get_patch_manager();
 	if (!patch_mgr) {
 		return;
@@ -1031,7 +1023,7 @@ void SimManager::report_progress(size_t current_step, size_t total_steps, size_t
 
 void SimManager::report_performance(float elapsed_time, size_t total_steps) {
 	const float steps_per_second = static_cast<float>(total_steps) / elapsed_time;
-	const float ms_per_step=elapsed_time * 1000.0f / static_cast<float>(total_steps);
+	const float ms_per_step = elapsed_time * 1000.0f / static_cast<float>(total_steps);
 	const float io_time = wkf_timer_time(timerS_.timer);
 	const float energy_time = wkf_timer_time(timerE_.timer);
 	const float compute_time = elapsed_time - io_time - energy_time;
@@ -1063,19 +1055,21 @@ void SimManager::handle_imd_commands() {
 //================================================================================
 // Initial Conditions
 //================================================================================
-
+/**
+ * @brief
+ *
+ * @param positions
+ * @param types
+ */
 void SimManager::generate_initial_particles(std::vector<Vector3>& positions,
 											std::vector<int>& types) {
 	const Vector3 box_size = sys_.get_box_size();
 
-	// TODO: Get number of particles from configuration
 	const size_t num_particles = sys_state_.get_num_particles();
 
 	positions.reserve(num_particles);
 	types.reserve(num_particles);
 
-	// Simple random placement for testing
-	// TODO: Replace with proper initial condition generation
 	for (size_t i = 0; i < num_particles; ++i) {
 		positions.emplace_back(box_size.x * (float)rand() / float(RAND_MAX),
 							   box_size.y * (float)rand() / float(RAND_MAX),
@@ -1157,18 +1151,11 @@ void SimManager::load_restart_data(const std::string& filename) {
 
 void SimManager::write_energy_output(size_t step) {
 	(void)step;
-	// Gather the SystemState that execute_force_calculation() this step
-	// accumulated potential energy into (ForceEnergy.t, unpacked into
-	// HostParticleData::energy by DeviceParticle::copy_to_host).
 	gather_particle_data_from_patches(/*need_energy=*/true);
 
 	const auto& particles = sys_state_.get_global_particles();
 	const size_t n = particles.size();
 
-	// Potential energy: sum of per-particle energy from bonded + pairwise
-	// nonbonded kernels (only accumulated when execute_force_calculation()
-	// enabled compute_energy for this step - see the energy_output_period
-	// gating there). Grid/PMF contributions are not tracked yet.
 	double potential_energy = 0.0;
 	for (float e : particles.energy) {
 		potential_energy += e;
@@ -1229,16 +1216,8 @@ void SimManager::wait_for_pending_restart_write() {
 }
 
 void SimManager::write_restart_files() {
-	// Bound to at most one in-flight write, and make sure the previous write
-	// (if any) is done before this one starts writing the same files.
 	wait_for_pending_restart_write();
 
-	// Assumes sys_state_ already holds the state to persist (gathered by the
-	// caller - write_energy_output() during the run, write_final_restart()
-	// at the end). Snapshot (copy) the fields the writer needs rather than
-	// handing the background task a reference into sys_state_: the next
-	// gather_particles_to_state() move-assigns a fresh HostParticleData in,
-	// which would otherwise race with this task still reading the old one.
 	const auto& particles = sys_state_.get_global_particles();
 	std::vector<int> type_id = particles.type_id;
 	std::vector<Vector3> pos = particles.pos;
@@ -1267,8 +1246,7 @@ void SimManager::write_restart_files() {
 				LOGWARN("SimManager: Failed to open '{}' for restart output", restart_filename);
 			}
 
-			// Momentum restart only applies to Langevin dynamics, matching
-			// the momentum trajectory gating in initialize_output_writers().
+			// Momentum restart only applies to Langevin dynamics
 			// The "0" in the filename mirrors legacy ARBD's on-disk naming.
 			if (write_momentum) {
 				const std::string momentum_restart_filename = output_name + ".0.momentum.restart";
@@ -1290,11 +1268,8 @@ void SimManager::write_restart_files() {
 }
 
 void SimManager::write_final_restart() {
-	// Gather particle data before writing restart
 	gather_particle_data_from_patches();
 	write_restart_files();
-	// The final restart write must actually be on disk before the process
-	// exits - unlike periodic writes, there's no "next" write to overlap with.
 	wait_for_pending_restart_write();
 	LOGINFO("SimManager: Wrote final restart files for '{}'", sys_.get_output_name());
 }

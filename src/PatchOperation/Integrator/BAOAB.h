@@ -52,15 +52,6 @@ struct BAOABIntegrate {
 		// 2. Physical Constants & Properties
 		float mass = particle_types.mass[type];
 
-		// gamma is transDamping directly (legacy: Vector3 gamma = pt.transDamping).
-		// This is distinct from `diffusion`, which only feeds the plain
-		// Brownian integrator (BD.h) - the two are independent inputs here,
-		// matching legacy BrownianParticleType's separate fields. Legacy only
-		// derives gamma from diffusion via the Einstein relation when a
-		// per-particle diffusionGrid is set (position-dependent D); that
-		// override, and the analogous position-dependent kT (kTGrid) case,
-		// are unimplemented here - TODO: a separate BAOAB_TempGrid kernel
-		// variant, not a branch in this hot path.
 		Vector3 gamma = particle_types.trans_damping[type];
 
 		// --- B: Momentum Update (Half Step) ---
@@ -82,10 +73,6 @@ struct BAOABIntegrate {
 							sqrtf(kT * mass * (1.0f - c.y * c.y)) * constants::SQRT_CAL_TO_JOULE,
 							sqrtf(kT * mass * (1.0f - c.z * c.z)) * constants::SQRT_CAL_TO_JOULE);
 
-		// Generate Random Numbers (Box-Muller)
-		// Seed, step, index and stream each need their own Philox word - see
-		// dev_notes.md. base_ctr is a constant 0 at every call site, so without
-		// the step here this kernel drew the same numbers on every step.
 		openrand::Philox rng(base_seed,
 							 base_ctr + static_cast<uint32_t>(idx),
 							 static_cast<uint32_t>(current_step),
@@ -109,13 +96,8 @@ struct BAOABIntegrate {
 		// Added 1e4 to match Old Kernel line: r0 = r0 + 0.5f * timestep * p0 * 1e4 / mass;
 		pos += 0.5f * timestep * mom / mass * 10000.0f;
 
-		// Apply Periodic Boundary Conditions.
-		// Matches legacy "r0 = sys->wrap(r0)": wrapping is relative to the box
-		// origin, so a box centered on zero stays centered instead of being
-		// shifted into [0, L).
 		pos = sim_box.wrap(pos);
 
-		// Write Back
 		particle_view.pos[idx] = pos;
 		particle_view.mom[idx] = mom;
 	}
@@ -147,8 +129,6 @@ struct BAOAB_LastUpdate {
 	KERNEL_FUNC void operator()(idx_t idx) const {
 		if (idx >= num_particles)
 			return;
-		// Rigid-body attached particles are positioned by their parent body,
-		// not integrated - see ParticleFlags::FLAG_RB_ATTACHED.
 		if (particle_view.flags[idx] & ParticleFlags::FLAG_RB_ATTACHED)
 			return;
 

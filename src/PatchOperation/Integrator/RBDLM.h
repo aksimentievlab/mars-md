@@ -46,12 +46,7 @@ struct RBLangevinForceKernel {
 		const Vector3 rot_damping = types.rot_damping[type];
 		const Matrix3 orientation = rb.orientation[idx];
 
-		//
-		// draw_float4() returns values in [0,1); log(0) is -inf, which would
-		// make the whole trajectory NaN, so the radius argument is clamped away
-		// from zero. The bias is ~1 ulp and only on a ~2^-32 tail.
-		// Seed, step, index and stream each need their own Philox word - see
-		// dev_notes.md.
+		// draw_float4() returns values in [0,1); log(0) is -inf
 		openrand::Philox rng(base_seed,
 							 static_cast<uint32_t>(idx),
 							 static_cast<uint32_t>(current_step),
@@ -73,7 +68,7 @@ struct RBLangevinForceKernel {
 		const Vector3 w2(g[3], g[4], g[5]);
 
 		// kT is legacy's `Temp` exactly - RigidBody.cu:28 computes it as
-		// temperature * 0.0019872065, i.e. kT in kcal/mol, not Kelvin.
+		// temperature * 0.0019872065, i.e. kT in kcal/mol
 		const Vector3 trans_damp = trans_damping * constants::langevin_damping_unit;
 		const Vector3 rot_damp = rot_damping * constants::langevin_damping_unit;
 
@@ -157,6 +152,8 @@ struct RBIntegrateDLMKernel {
 		R = rotation_matrix_x(0.5f * timestep * rb.angular_momentum[idx].x / inertia.x *
 							  constants::velocity_scale);
 		rb.apply_body_frame_rotation(idx, R);
+
+		rb.orientation[idx] = normalize_orientation(rb.orientation[idx]);
 	}
 };
 

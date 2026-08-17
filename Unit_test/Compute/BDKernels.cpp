@@ -1,7 +1,7 @@
 #include "../catch_boiler.h"
 
 #include "Backend/Resource.h"
-#include "Interactions/Bonded/BondComputer.h"
+#include "Interactions/DeviceBondedInteraction.h"
 #include "Objects/DeviceParticleManager.h"
 #include "Objects/Tables.h"
 #include "PatchOperation/Integrator.h"

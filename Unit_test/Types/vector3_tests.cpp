@@ -2,6 +2,7 @@
 
 #include "ARBDException.h"
 #include "Backend/Buffer.h"
+#include "Types/Matrix3.h"
 #include "Types/Vector3.h"
 
 #include <cmath>

@@ -84,18 +84,38 @@ class RigidBodyManager {
 	}
 
 	/**
-	 * @brief Port of legacy RigidBody::integrateDLM, batched across all RBs.
-	 *
-	 * Three substeps (half-kick, drift+rotate, half-kick) launched back to
-	 * back on the same stream - stream ordering makes each substep see the
-	 * previous one's writes with no explicit event/sync between them.
+	 * @brief DLM half-kick then drift (substeps 0-1). Run before the force phase.
+	 * @param dt Timestep.
+	 * @param sim_box Boundary conditions.
+	 * @see dev_notes.md
 	 */
-	Event integrate_motion(float dt, const PeriodicBox& sim_box) {
+	Event integrate_drift(float dt, const PeriodicBox& sim_box) {
+		return integrate_motion(dt, sim_box, 0, 1);
+	}
+
+	/**
+	 * @brief DLM trailing half-kick (substep 2). Run after the force phase.
+	 * @param dt Timestep.
+	 * @param sim_box Boundary conditions.
+	 */
+	Event integrate_kick(float dt, const PeriodicBox& sim_box) {
+		return integrate_motion(dt, sim_box, 2, 2);
+	}
+
+	/**
+	 * @brief Port of legacy RigidBody::integrateDLM, batched across all RBs.
+	 * @param dt Timestep.
+	 * @param sim_box Boundary conditions.
+	 * @param first First substep to run, inclusive: 0/2 half-kick, 1 drift.
+	 * @param last Last substep to run, inclusive.
+	 * @see dev_notes.md - running 0-2 in one call is not velocity Verlet.
+	 */
+	Event integrate_motion(float dt, const PeriodicBox& sim_box, int first = 0, int last = 2) {
 		ensure_initialized();
 		const idx_t n = bodies_->size();
 		KernelConfig config = KernelConfig::for_1d(n, compute_resource());
 		Event evt;
-		for (int substep = 0; substep < 3; ++substep) {
+		for (int substep = first; substep <= last; ++substep) {
 			RBIntegrateDLMKernel kernel(bodies_->view(), types_->view(), sim_box, dt, n, substep);
 			evt = launch_kernel(compute_resource(), config, kernel);
 		}
@@ -125,8 +145,7 @@ class RigidBodyManager {
 	RBHostFTManager& host_forces() {
 		ensure_initialized();
 		if (!host_forces_) {
-			host_forces_ =
-				std::make_unique<RBHostFTManager>(bodies_->size(), compute_resource());
+			host_forces_ = std::make_unique<RBHostFTManager>(bodies_->size(), compute_resource());
 		}
 		return *host_forces_;
 	}
@@ -149,28 +168,15 @@ class RigidBodyManager {
 	}
 
 	/**
-	 * @brief Precompute the static instance-level candidate list and
-	 *        worklist capacity for batched grid-grid dispatch (Phase 4.1).
+	 * @brief Precompute the instance-level candidate list and worklist capacity
+	 *        for batched grid-grid dispatch (Phase 4.1).
 	 *
-	 * The type-level force pairs (Phase 3) are expanded here into concrete
-	 * RB-instance pairs - static for the run, since RB counts/types don't
-	 * change - so only the per-step distance cull needs to run on-device
-	 * (RBGridCullKernel). Must be called once after initialize() and after
-	 * grid_manager.build_device_arrays(); call again if either changes.
+	 * Call once after initialize() and grid_manager.build_device_arrays();
+	 * call again if either changes. See dev_notes.md.
 	 *
-	 * Worklist capacity is set to exactly num_candidates: culling only
-	 * removes candidates, never adds them, so this is an exact upper bound
-	 * with no wasted allocation and (in the intended usage) no possible
-	 * overflow - RBGridCullKernel's overflow flag exists as a safety net,
-	 * exercised directly in RigidBodyGridBatch's own tests.
-	 *
-	 * @param grid_manager Supplies host-visible grid sizes (for block-count
-	 *        sizing) and, later, the device grid views compute_grid_grid_forces()
-	 *        reads from.
-	 * @param grid_resource_idx grid_manager's resource index to read grid
-	 *        sizes/views from - independent of compute_resource_idx_, since
-	 *        the two managers may be indexed differently until Phase 5 wires
-	 *        them through the same SimSystem resource list.
+	 * @param grid_manager Supplies grid sizes and device grid views.
+	 * @param grid_resource_idx grid_manager's resource index, independent of
+	 *        compute_resource_idx_.
 	 * @param threads_per_block Kernel B's block size; matches legacy NUMTHREADS.
 	 */
 	void prepare_grid_grid_dispatch(GridManager& grid_manager,
@@ -791,8 +797,8 @@ class RigidBodyManager {
 	// Attached-particle state (see prepare_attached_particles). Static for the
 	// run: which particle belongs to which body never changes.
 	idx_t attached_threads_per_block_{128};
-	idx_t num_attached_{0};		   // total attached particles across all bodies
-	idx_t num_attached_blocks_{0}; // == number of bodies that have any
+	idx_t num_attached_{0};		   ///< total attached particles across all bodies
+	idx_t num_attached_blocks_{0}; ///< == number of bodies that have any
 	DeviceBuffer<RBAttachedParticle> attached_;
 	DeviceBuffer<int> attached_range_start_;
 	DeviceBuffer<int> attached_range_count_;

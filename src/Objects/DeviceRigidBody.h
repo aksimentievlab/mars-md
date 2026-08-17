@@ -16,11 +16,10 @@ struct RigidBodyView {
 	DEVICE_PTR(Vector3) __restrict__ external_force;
 	DEVICE_PTR(Vector3) __restrict__ external_torque;
 
-	/// DLM body-frame rotation step (legacy RigidBody::applyRotation).
+	/// DLM body-frame rotation step. Caller owns re-orthonormalization.
 	HOST DEVICE void apply_body_frame_rotation(idx_t idx, const Matrix3& R) const {
 		angular_momentum[idx] = R * angular_momentum[idx];
 		orientation[idx] = orientation[idx] * R;
-		orientation[idx] = normalize_orientation(orientation[idx]);
 	}
 };
 
@@ -37,10 +36,7 @@ struct ConstRigidBodyView {
 	CONSTANT_PTR(Vector3) __restrict__ external_torque;
 };
 
-// A type's density/potential/pmf grid lists are variable length (unlike
-// ParticleTypeView's fixed int3 force_grid_id), so each list is represented
-// as offset+count into a flat int grid-id buffer owned by
-// DeviceRigidBodyTypes rather than as a fixed-size field here.
+// Grid lists are variable length, so each is offset+count. See dev_notes.md.
 struct alignas(16) RigidBodyTypeView {
 	CONSTANT_PTR(float) __restrict__ mass;
 	CONSTANT_PTR(Vector3) __restrict__ inertia;

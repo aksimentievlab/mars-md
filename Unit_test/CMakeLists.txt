@@ -11,6 +11,7 @@ add_executable(arbd_unit_tests
     ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Backend/backend_buffer_tests.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Types/vector3_tests.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Types/matrix3_tests.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Types/basegrid_device_tests.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Types/grid_boundary_tests.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Types/grid_arithmetic_tests.cpp
@@ -21,6 +22,7 @@ add_executable(arbd_unit_tests
     ${CMAKE_CURRENT_LIST_DIR}/Objects/RigidBodyExternalForces.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Objects/TestParticle.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Compute/BDKernels.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Compute/StochasticIntegrators.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Interactions/Forces.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Interactions/TabulatedBonded.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Interactions/AnalyticalNB.cpp
