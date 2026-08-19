@@ -3,6 +3,8 @@
 #include "DeviceParticle.h"
 #include "ParticleProperties.h"
 #include "Types/Types.h"
+#include <utility>
+#include <vector>
 
 namespace ARBD {
 
@@ -12,7 +14,14 @@ class DeviceParticle {
 		: capacity_(capacity), count_(0), resource_(resource), id_(capacity, resource),
 		  type_id_(capacity, resource), pos_(capacity, resource), mom_(capacity, resource),
 		  ForceEnergy_(capacity, resource), orient_(capacity, resource),
-		  flags_(capacity, resource) {}
+		  flags_(capacity, resource)
+#ifdef ENABLE_ZORDER_REORDER
+		  ,
+		  reorder_scratch_vec3_(capacity, resource), reorder_scratch_int_(capacity, resource),
+		  reorder_scratch_uint32_(capacity, resource)
+#endif
+	{
+	}
 
 	// Get View for Kernels
 	ParticleView view() {
@@ -115,14 +124,19 @@ class DeviceParticle {
 	}
 
 	// Bulk Copy Helper: Device -> Host
-	// `need_energy` gates the ForceEnergy_ device->host copy and its
-	// per-particle unpack loop into host.force/host.energy: DCD-frame and
-	// restart-only gathers (the common case) need neither, so skip this
-	// field-copy + O(N) unpack loop for them.
 	void copy_to_host(HostParticleData& host, idx_t count, bool need_energy = false) const {
-		// Ensure host vectors are sized appropriately
 		if (host.size() < count)
 			host.resize(count);
+
+#ifdef ENABLE_ZORDER_REORDER
+		// After a Morton reorder the in-memory slot order no longer matches the
+		// user's atom order; emit in global_id order so trajectories/restarts stay
+		// readable by VMD/MDAnalysis. See dev_notes.
+		if (reordered_) {
+			copy_to_host_unpermuted(host, count, need_energy);
+			return;
+		}
+#endif
 
 		id_.copy_to_host(host.global_id.data(), count);
 		type_id_.copy_to_host(host.type_id.data(), count);
@@ -146,9 +160,84 @@ class DeviceParticle {
 		}
 	}
 
+#ifdef ENABLE_ZORDER_REORDER
+	/// Permute the persistent SoA into the sorter's Morton order (double-buffered).
+	/// ForceEnergy is cleared each step, so it is not permuted. See dev_notes.
+	template<class Sorter>
+	void permute(Sorter& sorter) {
+		const size_t n = static_cast<size_t>(count_);
+		if (n == 0) {
+			return;
+		}
+		sorter.reorder_data(pos_, reorder_scratch_vec3_, n);
+		std::swap(pos_, reorder_scratch_vec3_);
+		sorter.reorder_data(mom_, reorder_scratch_vec3_, n);
+		std::swap(mom_, reorder_scratch_vec3_);
+		sorter.reorder_data(orient_, reorder_scratch_vec3_, n);
+		std::swap(orient_, reorder_scratch_vec3_);
+		sorter.reorder_data(id_, reorder_scratch_int_, n);
+		std::swap(id_, reorder_scratch_int_);
+		sorter.reorder_data(type_id_, reorder_scratch_int_, n);
+		std::swap(type_id_, reorder_scratch_int_);
+		sorter.reorder_data(flags_, reorder_scratch_uint32_, n);
+		std::swap(flags_, reorder_scratch_uint32_);
+		reordered_ = true;
+	}
+
+	bool is_reordered() const {
+		return reordered_;
+	}
+#endif
+
 	void swap(DeviceParticle& other);
 
   private:
+#ifdef ENABLE_ZORDER_REORDER
+	// Emit device data in original global_id order. Single-patch invariant:
+	// global_id is a permutation of [0,count), so slot i scatters to global_id[i].
+	void copy_to_host_unpermuted(HostParticleData& host, idx_t count, bool need_energy) const {
+		std::vector<int> gid(count), tid(count);
+		std::vector<Vector3> p(count), m(count), o(count);
+		std::vector<uint32_t> fl(count);
+		id_.copy_to_host(gid.data(), count);
+		type_id_.copy_to_host(tid.data(), count);
+		pos_.copy_to_host(p.data(), count);
+		mom_.copy_to_host(m.data(), count);
+		orient_.copy_to_host(o.data(), count);
+		flags_.copy_to_host(fl.data(), count);
+		std::vector<Vector3> fe;
+		if (need_energy) {
+			fe.resize(count);
+			ForceEnergy_.copy_to_host(fe.data(), count);
+		}
+		for (idx_t i = 0; i < count; ++i) {
+			const int g = gid[i];
+			if (g < 0 || static_cast<idx_t>(g) >= count) {
+				throw Exception(ExceptionType::RuntimeError,
+								SourceLocation(),
+								"Reorder output: global_id {} outside [0,{}); dense single-patch "
+								"ids required for un-permutation",
+								g,
+								count);
+			}
+			const idx_t d = static_cast<idx_t>(g);
+			host.global_id[d] = g;
+			host.type_id[d] = tid[i];
+			host.pos[d] = p[i];
+			host.mom[d] = m[i];
+			host.orient[d] = o[i];
+			host.flags[d] = fl[i];
+			if (need_energy) {
+				host.force[d].x = fe[i].x;
+				host.force[d].y = fe[i].y;
+				host.force[d].z = fe[i].z;
+				host.force[d].t = 0.0f;
+				host.energy[d] = fe[i].t;
+			}
+		}
+	}
+#endif
+
 	idx_t capacity_;
 	idx_t count_;
 	Resource resource_;
@@ -160,6 +249,13 @@ class DeviceParticle {
 	DeviceBuffer<Vector3> ForceEnergy_;
 	DeviceBuffer<Vector3> orient_;
 	DeviceBuffer<uint32_t> flags_; // Replaces 3 bool arrays
+
+#ifdef ENABLE_ZORDER_REORDER
+	DeviceBuffer<Vector3> reorder_scratch_vec3_;
+	DeviceBuffer<int> reorder_scratch_int_;
+	DeviceBuffer<uint32_t> reorder_scratch_uint32_;
+	bool reordered_{false};
+#endif
 };
 
 class DeviceParticleTypes {
@@ -175,10 +271,6 @@ class DeviceParticleTypes {
 		pmf_smd_freq_ = DeviceBuffer<uint32_t>(types.size(), res);
 		pmf_grid_offset_ = DeviceBuffer<int>(types.size(), res);
 		pmf_grid_count_ = DeviceBuffer<int>(types.size(), res);
-
-		// Zero terms is legitimate (no type declared a gridFile); Buffer's ctor
-		// skips allocation for count 0 and the kernel's per-type count is 0 too,
-		// so the null data() is never reached.
 		size_t total_pmf_terms = 0;
 		for (const auto& t : types) {
 			total_pmf_terms += t.pmf_grids.size();

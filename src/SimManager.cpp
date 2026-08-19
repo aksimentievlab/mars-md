@@ -1,5 +1,6 @@
 #include "SimManager.h"
 #include "System/PatchManager.h"
+#include "PatchOperation/ZOrderKernels/ZOrderSort.h" // complete type for RB index remap
 #include <charconv>
 #include <cstdio>
 #include <fstream>
@@ -66,6 +67,7 @@ void SimManager::load_config(const ConfigParser& parser) {
 	sys_.set_num_steps(parser.get_sim_system().get_num_steps());
 	sys_.set_neighbor_list_rebuild_period(
 		parser.get_sim_system().get_neighbor_list_rebuild_period());
+	sys_.set_reorder_period(parser.get_sim_system().get_reorder_period());
 	sys_.set_output_period(parser.get_sim_system().get_output_period());
 	sys_.set_energy_output_period(parser.get_sim_system().get_energy_output_period());
 	sys_.set_output_name(parser.get_sim_system().get_output_name());
@@ -115,11 +117,7 @@ void SimManager::init() {
 
 	// Load cached initial particle data (from load_config or set_initial_particles)
 	if (!pending_initial_particles_.empty()) {
-		// The staged list order *is* the global particle indexing, so assign
-		// ids from it (ConfigParser already does this for its own path) and,
-		// while the mapping is known, rewrite any bonded terms that named
-		// their particles by ParticleIO::uid handle rather than by index -
-		// see ParticleUids in Interactions/BondedInteraction.h.
+		// The staged list order *is* the global particle indexing
 		std::unordered_map<int, int> uid_to_index;
 		for (size_t i = 0; i < pending_initial_particles_.size(); ++i) {
 			auto& particle = pending_initial_particles_[i];
@@ -399,6 +397,22 @@ void SimManager::execute_force_calculation(size_t step) {
 						SourceLocation(),
 						"PatchManager not available for force calculation");
 	}
+
+#ifdef ENABLE_ZORDER_REORDER
+	if (sys_.get_reorder_period() > 0) {
+		auto& reorder_patches = patch_mgr->get_patches();
+		if (!reorder_patches.empty() && reorder_patches.front()) {
+			if (!reorder_mgr_) {
+				reorder_mgr_ = std::make_unique<ParticleReorderManager>(sys_.get_reorder_period());
+			}
+			auto& reorder_patch = reorder_patches.front();
+			if (reorder_mgr_->maybe_reorder(step, *reorder_patch) && rigid_body_manager_) {
+				rigid_body_manager_->remap_attached_particle_indices(
+					reorder_patch->reorder_sorter());
+			}
+		}
+	}
+#endif
 
 	// Legacy step order: clear RB forces -> particle nonbonded/bonded -> RB
 	// grid-grid/particle-RB -> RB Langevin (see the RB force block below).
@@ -692,16 +706,10 @@ void SimManager::write_dcd_frame(size_t step) {
 	// Gather global state from patches
 	gather_particle_data_from_patches();
 	if (sys_state_.prepare_for_dcd_output()) {
-		// Frame layout is [regular particles][attached particles][cosmetic
-		// atoms]. The first two blocks are exactly the global particle array -
-		// ConfigParser appends attached particles after all regular ones - so
-		// this is "every real particle, then the visualization-only remainder".
-		// A PSF describing this trajectory must use the same order.
+		// Frame layout is [regular particles][attached particles][cosmetic atoms].
 		const auto& positions = sys_state_.get_global_positions();
 		std::vector<Vector3> frame(positions.begin(), positions.end());
 		if (rigid_body_manager_ && rigid_body_manager_->num_cosmetic_atoms() > 0) {
-			// Placed on the device from the bodies' current transforms; this is
-			// the only work in the step that touches these atoms.
 			rigid_body_manager_->compute_cosmetic_positions().wait();
 			rigid_body_manager_->copy_cosmetic_positions_to_host(frame);
 		}

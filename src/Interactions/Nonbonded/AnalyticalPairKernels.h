@@ -37,12 +37,12 @@ enum AnalyticalPairTerm : uint32_t {
  * @see AnalyticalPairKernels.md
  */
 struct AnalyticalPairKernel {
-	DEVICE_PTR(const int2) neighbor_pairs;
-	DEVICE_PTR(Vector3) positions;
+	DEVICE_PTR(const int2) __restrict__ neighbor_pairs;
+	DEVICE_PTR(const Vector3) __restrict__ positions;
 	DEVICE_PTR(Vector3) force_energy;
-	DEVICE_PTR(const int) type_ids;
+	DEVICE_PTR(const int) __restrict__ type_ids;
 	ParticleTypeView types;
-	const PeriodicBox* pbox;
+	const PeriodicBox* __restrict__ pbox;
 
 	uint32_t enabled_terms;
 	ColumbPotential coulomb;

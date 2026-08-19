@@ -122,9 +122,19 @@ Event Patch::calculate_nonbonded_forces(const NonBondedInteractions& interaction
 	// Rebuild the neighbor list every rebuild_period steps
 	const bool at_period = (rebuild_period == 0 || (step - 1) % rebuild_period == 0);
 	bool rebuild = at_period;
+#ifdef ENABLE_ZORDER_REORDER
+	// A reorder invalidates the old-order pairlist; force a full rebuild and skip
+	// the displacement shortcut (the sorter's reference positions are now stale).
+	const bool forced_rebuild = force_rebuild_;
+	force_rebuild_ = false;
+	rebuild = rebuild || forced_rebuild;
+#else
+	constexpr bool forced_rebuild = false;
+#endif
 
 	const float skin = pairlist_cutoff - interaction_cutoff;
-	if (rebuild && rebuild_period != 0 && pairlist_built_ && skin > 0.0f && particle_count_ > 0) {
+	if (rebuild && !forced_rebuild && rebuild_period != 0 && pairlist_built_ && skin > 0.0f &&
+		particle_count_ > 0) {
 		rebuild =
 			pairlist_->needs_update(particles_.pos(), particles_.pos(), particle_count_, skin);
 		if (!rebuild) {
@@ -139,6 +149,25 @@ Event Patch::calculate_nonbonded_forces(const NonBondedInteractions& interaction
 	if (rebuild) {
 		pairlist_->build_pairlist(particles_.pos(), particle_count_, pairlist_cutoff);
 		pairlist_built_ = true;
+
+		// Resolve per-pair table indices once per rebuild (see Pairwise.h / dev_notes).
+		const size_t np = pairlist_->get_num_pairs();
+		if (pair_table_idx_.size() < np)
+			pair_table_idx_.resize(np);
+		if (np > 0) {
+			launch_resolve_pair_tables(resource_,
+									   pairlist_->get_neighbor_pairs().data(),
+									   particle_view.type_id,
+									   device_pair_nb_->pairwise_table_matrix(),
+									   device_pair_nb_->pairwise_form_matrix(),
+									   device_pair_nb_->num_particle_types(),
+									   device_bonded_.exclusion_offsets(),
+									   device_bonded_.exclusion_neighbors(),
+									   device_bonded_.num_excl_particles(),
+									   pair_table_idx_.data(),
+									   np)
+				.wait();
+		}
 	}
 
 	evt = launch_pairwise_nonbonded(
@@ -146,14 +175,8 @@ Event Patch::calculate_nonbonded_forces(const NonBondedInteractions& interaction
 		pairlist_->get_neighbor_pairs().data(),
 		particle_view.pos,
 		particle_view.ForceEnergy,
-		particle_view.type_id,
-		device_pair_nb_->pairwise_table_matrix(),
-		device_pair_nb_->pairwise_form_matrix(),
+		pair_table_idx_.data(),
 		device_pair_nb_->nonbonded_potentials(),
-		device_pair_nb_->num_particle_types(),
-		device_bonded_.exclusion_offsets(),
-		device_bonded_.exclusion_neighbors(),
-		device_bonded_.num_excl_particles(),
 		pbox,
 		compute_energy,
 		pairlist_->get_num_pairs(),
@@ -452,6 +475,43 @@ Event Patch::build_pairlist(float pairlist_cutoff) {
 			 pairlist_->get_num_pairs());
 	return Event(nullptr, resource_);
 }
+
+#ifdef ENABLE_ZORDER_REORDER
+Patch::~Patch() = default;
+
+void Patch::reorder_particles() {
+	const idx_t n = particle_count_;
+	if (n == 0) {
+		return;
+	}
+
+	// Morton box: prefer the periodic box, else this patch's spatial bounds.
+	Vector3 box_min = min_bounds_;
+	Vector3 box_max = max_bounds_;
+	if (periodic_box_) {
+		box_min = periodic_box_->get_origin();
+		box_max = box_min + periodic_box_->get_box_size();
+	}
+	if (!(box_max.x > box_min.x && box_max.y > box_min.y && box_max.z > box_min.z)) {
+		LOGWARN("Patch {}: skipping reorder - degenerate Morton box", patch_id_);
+		return;
+	}
+
+	if (!reorder_sorter_) {
+		reorder_sorter_ =
+			std::make_unique<ZOrderSort>(resource_, capacity_, ZOrderOptimizationMode::System);
+	}
+	reorder_sorter_->sort_particles(particles_.pos(), n, box_min, box_max);
+	particles_.permute(*reorder_sorter_);
+	device_bonded_.remap_particle_indices(*reorder_sorter_);
+	force_rebuild_ = true;
+	LOGTRACE("Patch {}: reordered {} particles into Morton order", patch_id_, n);
+}
+
+ZOrderSort& Patch::reorder_sorter() {
+	return *reorder_sorter_;
+}
+#endif
 
 Event Patch::update_pairlist() {
 	// Update pairlist using current particle positions

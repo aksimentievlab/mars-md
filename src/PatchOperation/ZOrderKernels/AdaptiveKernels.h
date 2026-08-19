@@ -58,8 +58,8 @@ __device__ inline void atomicMinFloat(float* address, float val) {
  * raw difference is used.
  */
 struct DisplacementKernel {
-	const Vector3* current_positions;
-	const Vector3* previous_positions;
+	const Vector3* __restrict__ current_positions;
+	const Vector3* __restrict__ previous_positions;
 	float* max_displacement; // Single value reduction result
 	size_t num_particles;
 	Vector3 box_len; ///< Per-axis periodic length; <= 0 marks an open axis

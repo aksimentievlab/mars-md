@@ -84,6 +84,24 @@ struct InverseIndexKernel {
 	}
 };
 
+/// Remap slot indices in place: indices[i] = inv[indices[i]]. Sentinels (< 0 or
+/// out of range) pass through unchanged.
+struct RemapIndicesKernel {
+	int* indices;
+	const uint32_t* inverse_map;
+	size_t num_indices;
+	size_t map_size;
+
+	KERNEL_FUNC void operator()(idx_t i) const {
+		if (i >= num_indices)
+			return;
+		const int old_idx = indices[i];
+		if (old_idx >= 0 && static_cast<size_t>(old_idx) < map_size) {
+			indices[i] = static_cast<int>(inverse_map[old_idx]);
+		}
+	}
+};
+
 /**
  * @brief Kernel to validate Z-order sorting (for debugging)
  */
@@ -205,6 +223,15 @@ extern template Event launch_cuda_kernel(const Resource& resource,
 extern template Event launch_cuda_kernel(const Resource& resource,
 										 const KernelConfig& config,
 										 MortonValidationKernel kernel_func);
+extern template Event launch_cuda_kernel(const Resource& resource,
+										 const KernelConfig& config,
+										 RemapIndicesKernel kernel_func);
+extern template Event launch_cuda_kernel(const Resource& resource,
+										 const KernelConfig& config,
+										 ReorderDataKernel<int> kernel_func);
+extern template Event launch_cuda_kernel(const Resource& resource,
+										 const KernelConfig& config,
+										 ReorderDataKernel<uint32_t> kernel_func);
 #endif
 
 } // namespace ARBD
@@ -231,4 +258,7 @@ struct sycl::is_device_copyable<ARBD::DisplacementKernel> : std::true_type {};
 
 template<>
 struct sycl::is_device_copyable<ARBD::MortonValidationKernel> : std::true_type {};
+
+template<>
+struct sycl::is_device_copyable<ARBD::RemapIndicesKernel> : std::true_type {};
 #endif

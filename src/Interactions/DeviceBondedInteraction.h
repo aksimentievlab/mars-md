@@ -132,6 +132,9 @@ class DeviceBondedInteractions {
 			});
 			exclusion_pairs_ = DeviceBuffer<int2>(num_exclusions_, resource_);
 			exclusion_pairs_.copy_from_host(excl_pairs.data(), num_exclusions_);
+#ifdef ENABLE_ZORDER_REORDER
+			excl_pairs_host_ = excl_pairs; // retained for reorder CSR rebuild
+#endif
 
 			// Build per-particle CSR exclusion lists. Each exclusion (a,b) is
 			// recorded in both a's and b's segment, so the nonbonded kernel can
@@ -354,6 +357,84 @@ class DeviceBondedInteractions {
 		return num_restraints_;
 	}
 
+#ifdef ENABLE_ZORDER_REORDER
+	/// Remap all particle-slot references after a Morton reorder. Bonds/angles/
+	/// dihedrals/restraints in place on device; exclusion CSR rebuilt. See dev_notes.
+	template<class Sorter>
+	void remap_particle_indices(Sorter& sorter) {
+		if (num_bonds_ > 0)
+			sorter.remap_indices(reinterpret_cast<int*>(bond_indices_.data()),
+								 static_cast<size_t>(num_bonds_) * 2);
+		if (num_angles_ > 0)
+			sorter.remap_indices(reinterpret_cast<int*>(angle_indices_.data()),
+								 static_cast<size_t>(num_angles_) * 3);
+		if (num_dihedrals_ > 0)
+			sorter.remap_indices(reinterpret_cast<int*>(dihedral_indices_.data()),
+								 static_cast<size_t>(num_dihedrals_) * 4);
+		if (num_restraints_ > 0)
+			sorter.remap_indices(restraint_particle_ids_.data(),
+								 static_cast<size_t>(num_restraints_));
+		if (num_exclusions_ > 0)
+			rebuild_exclusions_after_reorder(sorter);
+	}
+
+	/// Remap exclusion edge endpoints through the inverse map, then rebuild the
+	/// per-particle CSR from the remapped edges (host; reorder cadence only).
+	template<class Sorter>
+	void rebuild_exclusions_after_reorder(Sorter& sorter) {
+		const size_t nparts = sorter.get_num_particles();
+		std::vector<uint32_t> inv(nparts);
+		sorter.get_inverse_indices().copy_to_host(inv.data(), nparts);
+
+		for (auto& e : excl_pairs_host_) {
+			int a = static_cast<int>(inv[e.x]);
+			int b = static_cast<int>(inv[e.y]);
+			if (a > b) {
+				std::swap(a, b);
+			}
+			e = int2{a, b};
+		}
+		std::sort(excl_pairs_host_.begin(), excl_pairs_host_.end(),
+				  [](const int2& p, const int2& q) { return p.x != q.x ? p.x < q.x : p.y < q.y; });
+
+		int max_idx = 0;
+		for (const auto& e : excl_pairs_host_) {
+			max_idx = std::max(max_idx, e.y);
+		}
+		num_excl_particles_ = static_cast<idx_t>(max_idx) + 1;
+		std::vector<int> offsets(num_excl_particles_ + 1, 0);
+		for (const auto& e : excl_pairs_host_) {
+			offsets[e.x + 1]++;
+			offsets[e.y + 1]++;
+		}
+		for (idx_t p = 0; p < num_excl_particles_; ++p) {
+			offsets[p + 1] += offsets[p];
+		}
+		const size_t total = static_cast<size_t>(offsets[num_excl_particles_]);
+		std::vector<int> neighbors(total);
+		std::vector<int> cursor(offsets.begin(), offsets.end() - 1);
+		for (const auto& e : excl_pairs_host_) {
+			neighbors[cursor[e.x]++] = e.y;
+			neighbors[cursor[e.y]++] = e.x;
+		}
+
+		exclusion_pairs_.copy_from_host(excl_pairs_host_.data(), num_exclusions_);
+		// Grow-only reuse: reorder runs every few steps, so never realloc these
+		// per reorder (excl_neighbors_ is a constant 2*num_exclusions_; excl_offsets_
+		// only grows toward num_particles+1). Reallocating each time churns device
+		// memory over a long run. The kernel bounds its reads by num_excl_particles_,
+		// so trailing stale entries in an oversized buffer are never touched.
+		if (excl_offsets_.size() < static_cast<size_t>(num_excl_particles_ + 1)) {
+			excl_offsets_ = DeviceBuffer<int>(num_excl_particles_ + 1, resource_);
+		}
+		excl_offsets_.copy_from_host(offsets.data(), num_excl_particles_ + 1);
+		if (excl_neighbors_.size() < total) {
+			excl_neighbors_ = DeviceBuffer<int>(total, resource_);
+		}
+		excl_neighbors_.copy_from_host(neighbors.data(), total);
+	}
+#endif
+
   private:
 	Resource resource_;
 
@@ -389,6 +470,11 @@ class DeviceBondedInteractions {
 	DeviceBuffer<int> excl_offsets_;   // size num_excl_particles_ + 1
 	DeviceBuffer<int> excl_neighbors_; // size 2 * num_exclusions_
 	idx_t num_excl_particles_{0};	   // number of particles covered by excl_offsets_
+#ifdef ENABLE_ZORDER_REORDER
+	// Canonical exclusion edges in current slot order, retained so a reorder can
+	// remap endpoints and rebuild the CSR without re-reading host topology.
+	std::vector<int2> excl_pairs_host_;
+#endif
 
 	// === RESTRAINTS ===
 	DeviceBuffer<int> restraint_particle_ids_;

@@ -93,6 +93,10 @@ class SimSystem {
 		neighbor_list_rebuild_period = period;
 	}
 
+	void set_reorder_period(int period) {
+		reorder_period_ = period;
+	}
+
 	void set_rb_update_period(int period) {
 		rb_update_period_ = period;
 	}
@@ -365,6 +369,11 @@ class SimSystem {
 	 */
 	float get_neighbor_list_rebuild_period() const {
 		return neighbor_list_rebuild_period;
+	}
+
+	/// Morton reorder period in steps; 0 disables (also needs ENABLE_ZORDER_REORDER).
+	int get_reorder_period() const {
+		return reorder_period_;
 	}
 
 	/**
@@ -662,6 +671,7 @@ class SimSystem {
 	int output_period_{10};					// output period in steps
 	int energy_output_period_{100};			// energy output period in steps
 	int neighbor_list_rebuild_period{1000}; // neighbor list rebuild period in steps
+	int reorder_period_{0};					// Morton reorder period in steps; 0 disables
 	int rb_update_period_{1};				// rigid body update period in steps
 
 	size_t global_seed_{214};

@@ -81,6 +81,9 @@ class ZOrderSort {
 					  DeviceBuffer<T>& output_data,
 					  size_t num_elements);
 
+	/// Remap slot indices in place through the inverse map: new = inv[old].
+	void remap_indices(int* indices, size_t num_ints);
+
 	/**
 	 * @brief Get sorted Morton codes
 	 */

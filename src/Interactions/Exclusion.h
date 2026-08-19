@@ -17,11 +17,6 @@ struct GenerateExclusionsFunctor {
 								// --- Pointers to GPU Data ---
 								DEVICE_PTR(const int2) adjacency_offsets,
 								DEVICE_PTR(const int) adjacency_list,
-								// Packed (ind1, ind2) pairs - the device-side SoA
-								// representation of exclusions, matching
-								// DeviceBondedInteractions::exclusion_pairs(). The
-								// host-side AoS Exclude type deliberately stays off
-								// the device.
 								DEVICE_PTR(int2) exclusions_output, // Pre-allocated output buffer
 								DEVICE_PTR(int)
 									exclusion_count,	 // Atomic counter for the output buffer

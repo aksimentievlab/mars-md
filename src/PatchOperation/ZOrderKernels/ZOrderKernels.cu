@@ -34,4 +34,16 @@ template Event launch_cuda_kernel(const Resource& resource,
 								  const KernelConfig& config,
 								  MortonValidationKernel kernel_func);
 
+template Event launch_cuda_kernel(const Resource& resource,
+								  const KernelConfig& config,
+								  RemapIndicesKernel kernel_func);
+
+template Event launch_cuda_kernel(const Resource& resource,
+								  const KernelConfig& config,
+								  ReorderDataKernel<int> kernel_func);
+
+template Event launch_cuda_kernel(const Resource& resource,
+								  const KernelConfig& config,
+								  ReorderDataKernel<uint32_t> kernel_func);
+
 } // namespace ARBD

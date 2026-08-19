@@ -20,11 +20,11 @@ namespace ARBD {
 template<int BondTypeId>
 struct AnalyticalBondComputer {
 	// Members - stored by value for device compatibility
-	DEVICE_PTR(const int2) particle_indices;
-	DEVICE_PTR(Vector3) positions;
+	DEVICE_PTR(const int2) __restrict__ particle_indices;
+	DEVICE_PTR(const Vector3) __restrict__ positions;
 	DEVICE_PTR(Vector3) force_energy;
-	DEVICE_PTR(const arbd_real) params;
-	const PeriodicBox* pbox;
+	DEVICE_PTR(const arbd_real) __restrict__ params;
+	const PeriodicBox* __restrict__ pbox;
 	bool get_energy;
 	idx_t num_bonds;
 
@@ -77,12 +77,12 @@ struct AnalyticalBondComputer {
  * work item. See dev_notes.md.
  */
 struct HarmonicRestraintComputer {
-	DEVICE_PTR(const int) particle_ids;
-	DEVICE_PTR(Vector3) positions;
+	DEVICE_PTR(const int) __restrict__ particle_ids;
+	DEVICE_PTR(const Vector3) __restrict__ positions;
 	DEVICE_PTR(Vector3) force_energy;
-	DEVICE_PTR(const Vector3) anchors;
-	DEVICE_PTR(const arbd_real) spring_constants;
-	const PeriodicBox* pbox;
+	DEVICE_PTR(const Vector3) __restrict__ anchors;
+	DEVICE_PTR(const arbd_real) __restrict__ spring_constants;
+	const PeriodicBox* __restrict__ pbox;
 	bool get_energy;
 	idx_t num_restraints;
 
@@ -124,13 +124,13 @@ struct HarmonicRestraintComputer {
  */
 struct TabulatedBondComputer {
 	// Members
-	DEVICE_PTR(const int2) particle_indices;
-	DEVICE_PTR(Vector3) positions;
+	DEVICE_PTR(const int2) __restrict__ particle_indices;
+	DEVICE_PTR(const Vector3) __restrict__ positions;
 	DEVICE_PTR(Vector3) force_energy;
-	DEVICE_PTR(const TabulatedPotential) tables;
-	DEVICE_PTR(const int) table_indices;
-	DEVICE_PTR(const int) forms;
-	const PeriodicBox* pbox;
+	DEVICE_PTR(const TabulatedPotential) __restrict__ tables;
+	DEVICE_PTR(const int) __restrict__ table_indices;
+	DEVICE_PTR(const int) __restrict__ forms;
+	const PeriodicBox* __restrict__ pbox;
 	bool get_energy;
 	idx_t num_bonds;
 
@@ -192,13 +192,13 @@ struct TabulatedBondComputer {
  */
 struct TabulatedAngleComputer {
 	// Members
-	DEVICE_PTR(const int3) particle_indices;
-	DEVICE_PTR(Vector3) positions;
+	DEVICE_PTR(const int3) __restrict__ particle_indices;
+	DEVICE_PTR(const Vector3) __restrict__ positions;
 	DEVICE_PTR(Vector3) force_energy;
-	DEVICE_PTR(const TabulatedPotential) tables;
-	DEVICE_PTR(const int) table_indices;
-	DEVICE_PTR(const int) forms;
-	const PeriodicBox* pbox;
+	DEVICE_PTR(const TabulatedPotential) __restrict__ tables;
+	DEVICE_PTR(const int) __restrict__ table_indices;
+	DEVICE_PTR(const int) __restrict__ forms;
+	const PeriodicBox* __restrict__ pbox;
 	bool get_energy;
 	idx_t num_angles;
 
@@ -269,13 +269,13 @@ struct TabulatedAngleComputer {
  */
 struct TabulatedDihedralComputer {
 	// Members
-	DEVICE_PTR(const int4) particle_indices;
-	DEVICE_PTR(Vector3) positions;
+	DEVICE_PTR(const int4) __restrict__ particle_indices;
+	DEVICE_PTR(const Vector3) __restrict__ positions;
 	DEVICE_PTR(Vector3) force_energy;
-	DEVICE_PTR(const TabulatedPotential) tables;
-	DEVICE_PTR(const int) table_indices;
-	DEVICE_PTR(const int) forms;
-	const PeriodicBox* pbox;
+	DEVICE_PTR(const TabulatedPotential) __restrict__ tables;
+	DEVICE_PTR(const int) __restrict__ table_indices;
+	DEVICE_PTR(const int) __restrict__ forms;
+	const PeriodicBox* __restrict__ pbox;
 	bool get_energy;
 	idx_t num_dihedrals;
 

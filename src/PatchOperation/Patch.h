@@ -21,6 +21,10 @@
 #include "Objects/Grid.h"
 #include "Objects/Tables.h"
 #include "PatchOperation/Pairlist.h"
+#ifdef ENABLE_ZORDER_REORDER
+// Complete type needed: Patch's inline ctor holds a unique_ptr<ZOrderSort> member.
+#include "PatchOperation/ZOrderKernels/ZOrderSort.h"
+#endif
 #include "System/PeriodicBox.h"
 #include "System/SystemForward.h"
 #include "Types/Types.h"
@@ -31,6 +35,7 @@ namespace ARBD {
 
 // Forward declarations
 class SimSystem;
+class ZOrderSort;
 
 /**
  * @brief Spatial decomposition unit for distributed particle simulation
@@ -56,11 +61,18 @@ class Patch {
 		  const Resource& resource,
 		  PairlistBuilderType pairlist_type = PairlistBuilderType::ZOrder)
 		: patch_id_(patch_id), capacity_(capacity), resource_(resource),
-		  particles_(capacity, resource), device_bonded_(resource) {
+		  particles_(capacity, resource), pair_table_idx_(capacity, resource),
+		  device_bonded_(resource) {
 		// Global device-memory-bounded pair budget (Pairlist.h kPairlistMaxPairs, from GPU_MEM).
 		pairlist_ = create_pairlist(pairlist_type, resource, capacity, kPairlistMaxPairs);
 		initialize_spatial_structures();
 	}
+
+#ifdef ENABLE_ZORDER_REORDER
+	// Out-of-line (=default in Patch.cpp) so unique_ptr<ZOrderSort> sees the
+	// complete type at destruction.
+	~Patch();
+#endif
 
 	//================================================================================
 	// Communication Buffers for Particle Exchange
@@ -499,6 +511,21 @@ class Patch {
 	 */
 	Event build_pairlist(float pairlist_cutoff);
 
+#ifdef ENABLE_ZORDER_REORDER
+	/// Morton-reorder the canonical particle SoA and remap bonded topology to the
+	/// new slots; forces a pairlist rebuild next force call. See dev_notes.
+	void reorder_particles();
+
+	/// The sorter driving the last reorder_particles(); its inverse map lets a
+	/// parallel subsystem (e.g. RigidBodyManager) remap its own particle indices.
+	ZOrderSort& reorder_sorter();
+
+	/// Whether device bonded topology is populated (reorder needs it before remap).
+	bool is_bonded_prepared() const {
+		return bonded_device_data_prepared_;
+	}
+#endif
+
 	/**
 	 * @brief Update pairlist if particles have moved significantly
 	 * @return Event for async pairlist update
@@ -591,8 +618,13 @@ class Patch {
 	HostParticleData host_particles_;	 ///< used for staging on HOST.
 	DeviceParticle particles_;			 ///< Local particle data in SoA format
 	std::unique_ptr<Pairlist> pairlist_; ///< Pairlist for neighbor finding and spatial organization
+	DeviceBuffer<int> pair_table_idx_;	 ///< Per-pair tabulated-table index, resolved each rebuild (-1 = skip)
 	bool pairlist_built_{
 		false}; ///< True once pairlist_ has been built; gates the displacement skip check
+#ifdef ENABLE_ZORDER_REORDER
+	std::unique_ptr<ZOrderSort> reorder_sorter_; ///< Morton sorter for canonical reorder (System mode)
+	bool force_rebuild_{false};					 ///< Set by reorder_particles(); forces next pairlist rebuild
+#endif
 	std::unique_ptr<DeviceParticleTypes> particle_types_; ///< Device buffers for all particle types
 
 	float halo_thickness_{0.0f}; ///< Halo region thickness for ghost particles

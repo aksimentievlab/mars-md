@@ -16,8 +16,7 @@ struct TabulatedPotential {
 	 * @usage:
 	 * const ScalarForceEnergy fe = TabulatedPotential::compute(geom.distance, &tables[i]);
 	 */
-	DEVICE static inline ScalarForceEnergy compute(arbd_real dx,
-														const TabulatedPotential* table) {
+	DEVICE static inline ScalarForceEnergy compute(arbd_real dx, const TabulatedPotential* table) {
 		// Table lookup with linear interpolation
 		arbd_real w = (dx - table->start) * table->step_inv;
 		int home = static_cast<int>(floorf(w));

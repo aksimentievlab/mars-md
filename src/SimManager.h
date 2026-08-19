@@ -27,6 +27,7 @@
 #include "IO/TrajectoryWriter.h"
 #include "IO/WKFUtils.h"
 #include "Objects/DeviceParticleManager.h"
+#include "PatchOperation/ReorderManager.h"
 #include "System/RigidBodyManager.h"
 #include "System/SimSystem.h"
 #include "System/SystemState.h"
@@ -188,6 +189,11 @@ class SimManager {
 	// Owns all rigid-body device state once the system has rigid body types;
 	// null otherwise. Constructed in init(), after grids are on-device.
 	std::unique_ptr<RigidBodyManager> rigid_body_manager_;
+
+#ifdef ENABLE_ZORDER_REORDER
+	// Intra-patch Morton reorder policy; constructed lazily once reorder_period > 0.
+	std::unique_ptr<ParticleReorderManager> reorder_mgr_;
+#endif
 
 	// Random number generation
 	size_t current_step_{0}; ///< Current simulation step (used for RNG counter)

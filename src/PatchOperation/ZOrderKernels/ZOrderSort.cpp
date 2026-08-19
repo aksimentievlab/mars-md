@@ -63,6 +63,8 @@ void ZOrderSort::sort_particles(const DeviceBuffer<Vector3>& positions,
 
 	// Step 3: Create inverse mapping
 	create_inverse_mapping();
+	// inverse_indices_ must be fully written before sort_particles returns
+	resource_.synchronize_streams();
 
 	LOGTRACE("Z-order sorting completed");
 }
@@ -236,6 +238,16 @@ void ZOrderSort::update_positions_incremental(const DeviceBuffer<Vector3>& posit
 
 	// Store new positions for next update detection without host roundtrip
 	old_positions_.copy_device_to_device_sync(positions, num_particles);
+}
+
+void ZOrderSort::remap_indices(int* indices, size_t num_ints) {
+	if (num_ints == 0) {
+		return;
+	}
+	RemapIndicesKernel kernel{indices, inverse_indices_.data(), num_ints, num_particles_};
+	KernelConfig config = KernelConfig::for_1d(num_ints, resource_);
+	launch_kernel(resource_, config, kernel);
+	resource_.synchronize_streams();
 }
 
 } // namespace ARBD

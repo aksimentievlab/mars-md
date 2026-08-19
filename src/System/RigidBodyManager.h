@@ -581,6 +581,28 @@ class RigidBodyManager {
 		return num_attached_ > 0;
 	}
 
+#ifdef ENABLE_ZORDER_REORDER
+	/// Remap attached-particle slot indices after a Morton reorder (host roundtrip;
+	/// attached count is small, runs at reorder cadence). See dev_notes.
+	template<class Sorter>
+	void remap_attached_particle_indices(Sorter& sorter) {
+		if (num_attached_ == 0) {
+			return;
+		}
+		const size_t nparts = sorter.get_num_particles();
+		std::vector<uint32_t> inv(nparts);
+		sorter.get_inverse_indices().copy_to_host(inv.data(), nparts);
+		std::vector<RBAttachedParticle> host(num_attached_);
+		attached_.copy_to_host(host.data(), num_attached_);
+		for (auto& a : host) {
+			if (a.particle_index >= 0 && static_cast<size_t>(a.particle_index) < nparts) {
+				a.particle_index = static_cast<int>(inv[a.particle_index]);
+			}
+		}
+		attached_.copy_from_host(host.data(), num_attached_);
+	}
+#endif
+
 	/**
 	 * @brief Build the static table of visualization-only template atoms.
 	 *

@@ -23,7 +23,7 @@ namespace ARBD {
  * Zero-fill `cell_begin`/`cell_end` before launch (empty cells -> empty range).
  */
 struct BuildCellRangesKernel {
-	const morton_t* sorted_morton_codes;
+	const morton_t* __restrict__ sorted_morton_codes;
 	uint32_t* cell_begin;
 	uint32_t* cell_end;
 	size_t num_particles;
@@ -136,12 +136,12 @@ struct BuildCellNeighborsKernel {
  * (positive wraps with minimum image, zero is open). See dev_notes.md.
  */
 struct ZOrderCellNeighborKernel {
-	const Vector3* sorted_positions;
-	const morton_t* sorted_morton_codes;
-	const uint32_t* sorted_to_original;
-	const uint32_t* cell_begin;
-	const uint32_t* cell_end;
-	const uint32_t* cell_neighbors; ///< [num_cells * MAX_NEIGHBORS] from BuildCellNeighborsKernel
+	const Vector3* __restrict__ sorted_positions;
+	const morton_t* __restrict__ sorted_morton_codes;
+	const uint32_t* __restrict__ sorted_to_original;
+	const uint32_t* __restrict__ cell_begin;
+	const uint32_t* __restrict__ cell_end;
+	const uint32_t* __restrict__ cell_neighbors; ///< [num_cells * MAX_NEIGHBORS] from BuildCellNeighborsKernel
 	int2* neighbor_pairs;
 	uint32_t* pair_count;
 	float cutoff_squared;

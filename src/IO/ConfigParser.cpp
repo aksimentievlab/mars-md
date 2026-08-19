@@ -194,6 +194,11 @@ void ConfigParser::parse_parameters(const Reader& reader) {
 		sim_system_ref_->set_neighbor_list_rebuild_period(reader.parseValue<float>(key));
 	}
 
+	if (hasParameterVariant(reader, "reorderPeriod", "reorder_period")) {
+		std::string key = findParameterVariant(reader, "reorderPeriod", "reorder_period");
+		sim_system_ref_->set_reorder_period(reader.parseValue<int>(key));
+	}
+
 	if (hasParameterVariant(reader, "outputPeriod", "output_period")) {
 		std::string key = findParameterVariant(reader, "outputPeriod", "output_period");
 		sim_system_ref_->set_output_period(reader.parseValue<float>(key));
@@ -1152,6 +1157,8 @@ void ConfigParser::parse_dictionary(const std::map<std::string, pybind11::object
 				sim_system_ref_->set_energy_output_period(pybind11::cast<float>(value));
 			} else if (key == "neighbor_list_rebuild_period") {
 				sim_system_ref_->set_neighbor_list_rebuild_period(pybind11::cast<float>(value));
+			} else if (key == "reorder_period") {
+				sim_system_ref_->set_reorder_period(pybind11::cast<int>(value));
 			} else if (key == "output_name") {
 				sim_system_ref_->set_output_name(pybind11::cast<std::string>(value));
 			} else if (key == "pressure") {

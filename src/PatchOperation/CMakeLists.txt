@@ -4,6 +4,7 @@
 # Common source files
 list(APPEND LIB_SOURCES
     PatchOperation/Patch.cpp
+    PatchOperation/ReorderManager.cpp
     PatchOperation/Pairlist.cpp
     #PatchOperation/PairListKernels/CellListPairlist.cpp
     PatchOperation/PairListKernels/ZOrderPairlist.cpp
@@ -13,6 +14,7 @@ list(APPEND LIB_SOURCES
 # Common headers
 list(APPEND HOST_DEVICE_HEADERS
     PatchOperation/Patch.h
+    PatchOperation/ReorderManager.h
     PatchOperation/Pairlist.h
     PatchOperation/Integrator.h
     PatchOperation/Colvars.h

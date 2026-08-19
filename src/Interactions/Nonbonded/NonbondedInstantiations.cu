@@ -20,6 +20,11 @@ template Event launch_cuda_kernel(const Resource& resource,
 								  const KernelConfig& config,
 								  TabulatedNonBondedComputer kernel_func);
 
+// Per-pair table-index resolver, run once per pairlist rebuild (Pairwise.h).
+template Event launch_cuda_kernel(const Resource& resource,
+								  const KernelConfig& config,
+								  ResolvePairTableKernel kernel_func);
+
 // Every analytical nonbonded term shares one kernel, so this is the only
 // instantiation needed no matter how many terms are enabled
 // (AnalyticalPairKernels.h).
