@@ -756,9 +756,6 @@ void SimManager::build_structure_view() {
 	const size_t num_particles = particles.size();
 
 	s.atoms.reserve(num_particles);
-	// Zero particles is not itself an error - a rigid-body-only system still
-	// has cosmetic template atoms worth writing - so the emptiness check waits
-	// until both blocks below have been built (see the end of this function).
 	for (size_t i = 0; i < num_particles; ++i) {
 		const int tid = particles.type_id[i];
 		const bool known = tid >= 0 && static_cast<size_t>(tid) < ptypes.size();
@@ -1177,28 +1174,30 @@ void SimManager::write_energy_output(size_t step) {
 	kinetic_energy_kcal /= (constants::SQRT_CAL_TO_JOULE * constants::SQRT_CAL_TO_JOULE);
 	const double kinetic_energy_kT = kT > 0.0f ? kinetic_energy_kcal / kT : 0.0;
 
-	const std::string energy_filename = sys_.get_output_name() + ".energy.dat";
-	std::ofstream energy_file(energy_filename, std::ios::out | std::ios::app);
-	if (energy_file.is_open()) {
-		energy_file << "Kinetic Energy: " << kinetic_energy_kT << " (kT) " << std::endl;
-		energy_file << "Potential Energy: " << potential_energy << " (kcal/mol) " << std::endl;
+	if (!energy_file_.is_open()) {
+		energy_file_.open(sys_.get_output_name() + ".energy.dat");
+	}
+	if (energy_file_.is_open()) {
+		energy_file_ << "Kinetic Energy: " << kinetic_energy_kT << " (kT) " << std::endl;
+		energy_file_ << "Potential Energy: " << potential_energy << " (kcal/mol) " << std::endl;
 	} else {
-		LOGWARN("SimManager: Failed to open '{}' for energy output", energy_filename);
+		LOGWARN("SimManager: Failed to open '{}' for energy output",
+				sys_.get_output_name() + ".energy.dat");
 	}
 
 	if (has_rigid_bodies_) {
 		// TODO: rigid-body kinetic/potential energy is not yet computed by
-		// SimManager (no rigid-body dynamics pipeline exists yet); write
-		// zeros so downstream tooling that expects this file still gets it,
+		// SimManager; write zeros so downstream tooling still gets the file,
 		// matching legacy ARBD's rb_energy.dat format.
-		const std::string rb_energy_filename = sys_.get_output_name() + ".rb_energy.dat";
-		std::ofstream rb_energy_file(rb_energy_filename, std::ios::out | std::ios::app);
-		if (rb_energy_file.is_open()) {
-			rb_energy_file << "Kinetic Energy 0 (kT)" << std::endl;
-			rb_energy_file << "Potential Energy 0 (kcal/mol)" << std::endl;
+		if (!rb_energy_file_.is_open()) {
+			rb_energy_file_.open(sys_.get_output_name() + ".rb_energy.dat");
+		}
+		if (rb_energy_file_.is_open()) {
+			rb_energy_file_ << "Kinetic Energy 0 (kT)" << std::endl;
+			rb_energy_file_ << "Potential Energy 0 (kcal/mol)" << std::endl;
 		} else {
 			LOGWARN("SimManager: Failed to open '{}' for rigid body energy output",
-					rb_energy_filename);
+					sys_.get_output_name() + ".rb_energy.dat");
 		}
 	}
 

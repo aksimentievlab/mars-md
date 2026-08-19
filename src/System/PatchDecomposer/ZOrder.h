@@ -116,8 +116,6 @@ class ZOrderDecomposer : public PatchDecomposer {
 	std::unique_ptr<DeviceBuffer<uint32_t>> global_indices_;
 	std::unique_ptr<ZOrderSort> global_sorter_;
 
-	// collect_global_positions removed - particles now come directly from SimSystem in decompose()
-
 	/**
 	 * @brief Compute global bounding box
 	 * @param positions All particle positions

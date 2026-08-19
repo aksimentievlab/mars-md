@@ -359,13 +359,7 @@ class RigidBodyManager {
 
 	/**
 	 * @brief Precompute the static (RB instance, potential-grid) candidate
-	 *        list for batched particle-RB dispatch (Phase 4.3).
-	 *
-	 * Unlike prepare_grid_grid_dispatch(), there's no distance-based culling
-	 * here (see RigidBodyParticleGridBatch.h) and every candidate shares the
-	 * same num_particles, so block counts are uniform across candidates -
-	 * the whole worklist reduces to plain arithmetic, no worklist buffer or
-	 * prefix sum needed.
+	 *        list for batched particle-RB dispatch (Phase 4.3)
 	 *
 	 * @param types Same RigidBodyType vector passed to initialize() -
 	 *        re-passed here rather than cached, since RigidBodyManager has
@@ -804,10 +798,7 @@ class RigidBodyManager {
 	DeviceBuffer<int> attached_range_count_;
 	DeviceBuffer<int> attached_block_rb_id_;
 
-	// Visualization-only template atoms (see prepare_cosmetic_atoms). Stored
-	// SoA to match RBCosmeticParticleView. Static for the run;
-	// cosmetic_positions_ is the per-output-period scratch the trajectory
-	// writer drains - it is never read by any physics kernel.
+	// Visualization-only template atoms (see prepare_cosmetic_atoms).
 	idx_t num_cosmetic_{0};
 	DeviceBuffer<Vector3> cosmetic_body_offset_;
 	DeviceBuffer<int> cosmetic_rb_id_;

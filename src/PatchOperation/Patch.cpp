@@ -73,7 +73,7 @@ Event Patch::calculate_nonbonded_forces(const NonBondedInteractions& interaction
 										const DeviceBuffer<BaseGridView<arbd_real>>& grid_views,
 										const TablesRegistry& tables_registry,
 										size_t resource_idx,
-										float cutoff,
+										float pairlist_cutoff,
 										float interaction_cutoff,
 										size_t step,
 										size_t rebuild_period,
@@ -110,8 +110,7 @@ Event Patch::calculate_nonbonded_forces(const NonBondedInteractions& interaction
 	}
 
 	// Lazily build the type-pair -> table matrix; pairwise topology (which
-	// type pairs have a tabulated potential) is static for the run, same as
-	// bonded topology above.
+	// type pairs have a tabulated potential) is static for the run
 	if (!pairwise_nb_device_data_prepared_) {
 		device_pair_nb_ =
 			std::make_unique<DevicePairNonBondedInteractions>(particle_types.size(), resource_);
@@ -121,26 +120,16 @@ Event Patch::calculate_nonbonded_forces(const NonBondedInteractions& interaction
 	}
 
 	// Rebuild the neighbor list every rebuild_period steps
-	bool rebuild = (rebuild_period == 0 || (step - 1) % rebuild_period == 0);
+	const bool at_period = (rebuild_period == 0 || (step - 1) % rebuild_period == 0);
+	bool rebuild = at_period;
 
-	// The period alone is not a correctness criterion. A pair absent from the
-	// list was more than `cutoff` apart when it was built, so it can only come
-	// inside the interaction cutoff if the two particles each move more than
-	// half the skin. Once any particle has done so the list may be missing real
-	// interactions, and waiting for the configured period to elapse simply
-	// drops them - which is the same failure mode as an under-enumerated
-	// stencil, just intermittent. Check the actual displacement and rebuild
-	// early if it exceeds the skin the list was built with.
-	// This matters for the systems this engine targets: on the 305k-particle
-	// cytoplasm benchmark, mean displacement over a 1000-step rebuild interval
-	// (~11 A) already exceeds the configured 10 A skin.
-	const float skin = cutoff - interaction_cutoff;
-	if (!rebuild && skin > 0.0f && particle_count_ > 0) {
+	const float skin = pairlist_cutoff - interaction_cutoff;
+	if (rebuild && rebuild_period != 0 && pairlist_built_ && skin > 0.0f && particle_count_ > 0) {
 		rebuild =
 			pairlist_->needs_update(particles_.pos(), particles_.pos(), particle_count_, skin);
-		if (rebuild) {
-			LOGTRACE("Patch {}: rebuilding pairlist early at step {} - displacement exceeded "
-					 "half the {} A skin",
+		if (!rebuild) {
+			LOGTRACE("Patch {}: skipping scheduled rebuild at step {} - max displacement "
+					 "below half the {} A skin",
 					 patch_id_,
 					 step,
 					 skin);
@@ -148,7 +137,8 @@ Event Patch::calculate_nonbonded_forces(const NonBondedInteractions& interaction
 	}
 
 	if (rebuild) {
-		pairlist_->build_pairlist(particles_.pos(), particle_count_, cutoff);
+		pairlist_->build_pairlist(particles_.pos(), particle_count_, pairlist_cutoff);
+		pairlist_built_ = true;
 	}
 
 	evt = launch_pairwise_nonbonded(
@@ -194,10 +184,6 @@ Event Patch::calculate_bonded_forces(const BondedInteractions& interactions,
 	const PeriodicBox* pbox = get_device_periodic_box();
 	const bool get_energy = compute_energy;
 
-	// Each kernel is submitted to the same in-order resource_ queue, so they
-	// execute sequentially regardless of which Event is returned/waited on;
-	// only the last launch's Event is kept, matching how callers already
-	// treat these results (SimManager discards them with (void)).
 	Event evt(nullptr, resource_);
 
 	if (device_bonded_.num_bonds() > 0) {
@@ -325,22 +311,6 @@ Event Patch::integrate_motion(float dt,
 				 dt,
 				 kT);
 
-		// BAOAB is B-A-O-A-B, but launch_BAOAB only performs B-A-O-A: the
-		// closing half-kick needs the force at the *new* positions, which does
-		// not exist until the next force evaluation has run. Apply it here, at
-		// the top of the following step, immediately before that step's opening
-		// half-kick - the two use the same force and together form the full
-		// kick of the standard merged-kick formulation.
-		//
-		// This was previously never launched at all (BAOAB_LastUpdate was
-		// defined and instantiated but had no launch site), so every step
-		// delivered only half the intended impulse while the O-step noise was
-		// applied in full. The result was an effectively weakened potential:
-		// the engine could not hold a condensed phase and drifted toward a
-		// dilute one regardless of temperature.
-		//
-		// Skipped on the first step, which has no predecessor to complete, and
-		// when an output flush already applied it (see finish_deferred_kick).
 		if (deferred_kick_pending_) {
 			launch_BAOAB_LastUpdate<float>(resource_,
 										   particle_view,
@@ -393,10 +363,6 @@ Event Patch::finish_deferred_kick(float dt) {
 		sim_box = *periodic_box_;
 	}
 
-	// BAOAB_LastUpdate reads only position-independent state (momentum, force,
-	// mass), so it needs neither a temperature nor an RNG stream - the O-step
-	// noise was already applied by the B-A-O-A kernel. Passing zeros here is
-	// therefore not a shortcut that could bias the dynamics.
 	return launch_BAOAB_LastUpdate<float>(resource_,
 										  particles_.view(),
 										  particle_types_ ? particle_types_->view()
@@ -443,17 +409,21 @@ Patch::pack_halo_particles(DeviceBuffer<arbd_real>& send_buffer, int direction, 
 	return {Event(nullptr, resource_), packed_count};
 }
 
+/**
+ * @brief 
+ * @todo Launch kernel to unpack received halo particles:
+ * - Unpack particle data from recv_buffer
+ * - Store in ghost/halo region of particle data structures
+ * - Update halo particle counts
+ * @param recv_buffer 
+ * @param particle_count 
+ * @return Event 
+ */
 Event Patch::unpack_halo_particles(const DeviceBuffer<arbd_real>& recv_buffer, idx_t particle_count) {
 	// Ensure halo buffers are allocated
 	if (!halo_buffers_) {
 		halo_buffers_ = std::make_unique<HaloBuffers>(resource_, capacity_);
 	}
-
-	// TODO: Launch kernel to unpack received halo particles
-	// - Unpack particle data from recv_buffer
-	// - Store in ghost/halo region of particle data structures
-	// - Update halo particle counts
-
 	LOGTRACE("Patch {}: Unpacking {} halo particles", patch_id_, particle_count);
 
 	return Event(nullptr, resource_);
@@ -462,7 +432,7 @@ Event Patch::unpack_halo_particles(const DeviceBuffer<arbd_real>& recv_buffer, i
 Event Patch::sort_particles() {
 	// Build pairlist which internally sorts particles (e.g., Z-order)
 	// Use a small cutoff just for sorting purposes
-	float sorting_cutoff = 0.1f; // Small value just to trigger sorting
+	constexpr arbd_real sorting_cutoff = arbd_real(0.1); // Small value just to trigger sorting
 	build_pairlist(sorting_cutoff);
 	LOGTRACE("Patch {}: Sorted {} particles using pairlist ({})",
 			 patch_id_,
@@ -471,13 +441,13 @@ Event Patch::sort_particles() {
 	return Event(nullptr, resource_);
 }
 
-Event Patch::build_pairlist(float cutoff) {
+Event Patch::build_pairlist(float pairlist_cutoff) {
 	// Build pairlist using current particle positions
-	pairlist_->build_pairlist(particles_.pos(), particle_count_, cutoff);
+	pairlist_->build_pairlist(particles_.pos(), particle_count_, pairlist_cutoff);
 	LOGTRACE("Patch {}: Built pairlist ({}) with cutoff {} for {} particles, found {} pairs",
 			 patch_id_,
 			 pairlist_->get_name(),
-			 cutoff,
+			 pairlist_cutoff,
 			 particle_count_,
 			 pairlist_->get_num_pairs());
 	return Event(nullptr, resource_);

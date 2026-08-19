@@ -155,11 +155,6 @@ void ConfigParser::parse_parameters(const Reader& reader) {
 		std::string key = findParameterVariant(reader, "temperature", "temperature");
 		sim_system_ref_->set_temperature(reader.parseValue<float>(key));
 	}
-
-	// The `seed` directive was previously not parsed at all, so every run used
-	// SimSystem's built-in default regardless of what the input file asked for -
-	// two runs of the same config were bit-identical, and users had no way to
-	// generate independent replicas.
 	if (hasParameterVariant(reader, "seed", "seed")) {
 		std::string key = findParameterVariant(reader, "seed", "seed");
 		sim_system_ref_->set_base_seed(static_cast<size_t>(reader.parseValue<long long>(key)));
@@ -194,10 +189,8 @@ void ConfigParser::parse_parameters(const Reader& reader) {
 		sim_system_ref_->set_num_steps(reader.parseValue<int>(key));
 	}
 
-	if (hasParameterVariant(reader, "neighborListRebuildPeriod", "neighbor_list_rebuild_period")) {
-		std::string key = findParameterVariant(reader,
-											   "neighborListRebuildPeriod",
-											   "neighbor_list_rebuild_period");
+	if (hasParameterVariant(reader, "decompPeriod", "pairlist_rebuild_period")) {
+		std::string key = findParameterVariant(reader, "decompPeriod", "pairlist_rebuild_period");
 		sim_system_ref_->set_neighbor_list_rebuild_period(reader.parseValue<float>(key));
 	}
 
@@ -588,12 +581,9 @@ void ConfigParser::get_elements(const Reader& reader) {
 	const auto params = reader.getParameters();
 
 	auto is_block_header = [](std::string_view key) {
-		return key == "particle" || key == "rigidBody"; // Extend with other block headers as needed
+		return key == "particle" || key == "rigidBody";
 	};
 
-	// camelCase only, matching v1's grammar. The snake_case aliases are dropped:
-	// the Python migration owns the new-style API, so there is no reason to carry
-	// two spellings of every key through the .bd parser.
 	static const std::unordered_set<std::string_view> particle_field_keys = {
 		"num",
 		"diffusion",
@@ -737,7 +727,8 @@ void ConfigParser::get_elements(const Reader& reader) {
 					}
 				} else if (check_key("diffusionGridFile")) {
 					LOGDEBUG("diffusionGridFile/diffusion_grid_file: {}", v);
-					GridKey grid_key = sim_system_ref_->get_grid_manager().add_dense_grid(v, file_name_);
+					GridKey grid_key =
+						sim_system_ref_->get_grid_manager().add_dense_grid(v, file_name_);
 					if (grid_key.is_valid()) {
 						ptype.diffusion_grid_id = grid_key.grid_id;
 						ptype.diffusion_grid_name = v;
@@ -1082,9 +1073,6 @@ void ConfigParser::get_elements(const Reader& reader) {
 							  file_name_,
 							  sim_system_ref_->get_particle_types());
 		} else if (key == "inputRBCoordinates" || key == "input_rb_coordinates") {
-			// Deferred: this file supplies one line per rigid-body instance
-			// across every type, so it can only be applied once all rigidBody
-			// blocks have been seen - regardless of where the key appears.
 			rb_coordinates_file = resolve_file_path(value, file_name_);
 		} else if (key == "rigidBodyGridGridPeriod" || key == "rigid_body_grid_grid_period") {
 			sim_system_ref_->set_rb_update_period(std::stoi(value));
@@ -1116,9 +1104,6 @@ void ConfigParser::fold_in_attached_particles() {
 	const size_t num_regular = init_particles_.size();
 	init_particles_.reserve(num_regular + total_attached);
 
-	// Instance order here is exactly declaration order (type-major,
-	// instance-minor), which is also the order RigidBodyCoordReader consumed -
-	// so instance i's range lines up with the coordinates it was given.
 	for (RigidBodyIO& rb : init_rigid_bodies_) {
 		if (rb.type_id < 0 || static_cast<size_t>(rb.type_id) >= types.size()) {
 			continue;
@@ -1135,11 +1120,6 @@ void ConfigParser::fold_in_attached_particles() {
 			ParticleIO p = tmpl;
 			p.id = static_cast<int>(init_particles_.size());
 			p.attached_rigid_body_id = rb.id;
-			// tmpl.position is the body-frame offset that
-			// RigidBodyPdbPsfReader::load() derived from the template PDB;
-			// place it in the world using this instance's own transform. The
-			// per-step sync kernel recomputes exactly this, so the only job
-			// here is to make step 0 consistent before the first sync runs.
 			p.position = rb.orientation * tmpl.position + rb.position;
 			init_particles_.push_back(p);
 		}
@@ -1163,10 +1143,6 @@ void ConfigParser::parse_dictionary(const std::map<std::string, pybind11::object
 			} else if (key == "timestep") {
 				sim_system_ref_->set_timestep(pybind11::cast<float>(value));
 			} else if (key == "seed") {
-				// Must mirror the text-config path above; without it every
-				// Python-driven run falls back to SimSystem's default seed, so
-				// replicas launched from a script are bit-identical to each
-				// other however they set `seed`.
 				sim_system_ref_->set_base_seed(pybind11::cast<long long>(value));
 			} else if (key == "num_steps" || key == "steps") {
 				sim_system_ref_->set_num_steps(pybind11::cast<int>(value));

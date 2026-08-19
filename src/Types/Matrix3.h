@@ -93,6 +93,10 @@ struct alignas(4 * sizeof(T)) Matrix3_t {
 		return Matrix3(cols[0] + m.cols[0], cols[1] + m.cols[1], cols[2] + m.cols[2]);
 	}
 
+	HOST DEVICE Matrix3 operator-(const Matrix3& m) const {
+		return Matrix3(cols[0] - m.cols[0], cols[1] - m.cols[1], cols[2] - m.cols[2]);
+	}
+
 	// Matrix transpose
 	HOST DEVICE Matrix3 transpose() const {
 		Vector3 r0(cols[0].x, cols[1].x, cols[2].x);
@@ -141,7 +145,7 @@ struct alignas(4 * sizeof(T)) Matrix3_t {
 	}
 
 #ifdef HOST_GUARD
-
+	//to string would be in row major for IO.
 	auto to_string() const {
 		Matrix3 transposed = transpose();
 		return string_format("%2.8f %2.8f %2.8f\n%2.8f %2.8f %2.8f\n%2.8f %2.8f %2.8f",

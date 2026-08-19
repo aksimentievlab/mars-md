@@ -1,2 +1,2 @@
 # Matrix3.h
-Martix3 layout is row-major but its Vector3 interface is column-based
+Martix3 in this C++ project is COLUMN-MAJORED, but its I/O and python convention are all transposed to row majored!

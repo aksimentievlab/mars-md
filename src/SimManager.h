@@ -219,6 +219,11 @@ class SimManager {
 	// Legacy plaintext rigid-body trajectory (see write_rb_traj_frame). Held
 	// open for the run and flushed per frame, mirroring v1's trajFile.
 	std::ofstream rb_traj_file_;
+
+	/// Energy logs, held open for the run (see write_energy_output).
+	std::ofstream energy_file_;
+	std::ofstream rb_energy_file_;
+
 	bool has_momentum_output_{false};
 	bool has_rigid_bodies_{false};
 

@@ -31,7 +31,6 @@ namespace ARBD {
 
 // Forward declarations
 class SimSystem;
-class SystemState;
 
 /**
  * @brief Spatial decomposition unit for distributed particle simulation
@@ -58,23 +57,8 @@ class Patch {
 		  PairlistBuilderType pairlist_type = PairlistBuilderType::ZOrder)
 		: patch_id_(patch_id), capacity_(capacity), resource_(resource),
 		  particles_(capacity, resource), device_bonded_(resource) {
-		// Estimate stored pairs per particle. Each pair is recorded once, keyed
-		// on the lower particle index, so this is roughly half the mean neighbor
-		// count within the pairlist cutoff (interaction cutoff plus skin).
-		//
-		// The previous value of 50 was far too low for dense condensed-phase
-		// systems: a coarse-grained cytoplasm at production density carries
-		// ~295 neighbors inside a 45 A pairlist cutoff, i.e. ~148 stored pairs
-		// per particle, so the list overflowed and was silently truncated -
-		// which removes real interactions and corrupts the physics. 300 leaves
-		// roughly 2x headroom above that. The cost is memory: at 8 bytes per
-		// pair this reserves capacity * 2.4 kB, so a 1M-particle patch holds a
-		// ~2.5 GB pairlist. Ideally this would be derived from the actual
-		// number density and cutoff rather than fixed; until then ZOrderPairlist
-		// logs an error and clamps if the estimate is still exceeded.
-		constexpr size_t kEstimatedPairsPerParticle = 300;
-		size_t estimated_max_pairs = capacity * kEstimatedPairsPerParticle;
-		pairlist_ = create_pairlist(pairlist_type, resource, capacity, estimated_max_pairs);
+		// Global device-memory-bounded pair budget (Pairlist.h kPairlistMaxPairs, from GPU_MEM).
+		pairlist_ = create_pairlist(pairlist_type, resource, capacity, kPairlistMaxPairs);
 		initialize_spatial_structures();
 	}
 
@@ -215,13 +199,13 @@ class Patch {
 	 * @param particle_types Device particle type data from SimSystem
 	 * @param tables_registry Tabulated potential tables (bonded and nonbonded)
 	 * @param resource_idx This patch's index into tables_registry's per-resource arrays
-	 * @param cutoff Neighbor-list search radius used to rebuild the pairlist - should
+	 * @param pairlist_cutoff Neighbor-list search radius used to rebuild the pairlist - should
 	 *        include the pairlist skin (SimSystem::get_pairlist_cutoff(), i.e.
 	 *        interaction cutoff + pairlistDistance), not just the raw interaction
 	 *        cutoff, since pairs found at one rebuild are reused for rebuild_period
 	 *        steps and particles can drift in the meantime.
 	 * @param interaction_cutoff The radius beyond which pairs do not interact
-	 *        (SimSystem::get_cutoff(), i.e. `cutoff` above minus the skin). The
+	 *        (SimSystem::get_cutoff(), i.e. `pairlist_cutoff` above minus the skin). The
 	 *        force kernel rejects pairs beyond this, which the pairlist cannot
 	 *        do for it - the skin is precisely what lets the list outlive a
 	 *        single step. Pass <= 0 to evaluate every pair in the list.
@@ -238,7 +222,7 @@ class Patch {
 									 const DeviceBuffer<BaseGridView<arbd_real>>& grid_views,
 									 const TablesRegistry& tables_registry,
 									 size_t resource_idx,
-									 float cutoff,
+									 float pairlist_cutoff,
 									 float interaction_cutoff,
 									 size_t step,
 									 size_t rebuild_period,
@@ -510,7 +494,7 @@ class Patch {
 
 	/**
 	 * @brief Build pairlist for neighbor finding
-	 * @param cutoff Interaction cutoff distance
+	 * @param pairlist_cutoff Pairlist search radius (force cutoff + skin)
 	 * @return Event for async pairlist building
 	 */
 	Event build_pairlist(float pairlist_cutoff);
@@ -529,18 +513,10 @@ class Patch {
 	 */
 	bool needs_pairlist_update(const DeviceBuffer<Vector3>& old_positions, float skin_distance);
 
-	/**
-	 * @brief Get the pairlist for accessing neighbor pairs
-	 * @return Reference to the pairlist
-	 */
 	const Pairlist& get_pairlist() const {
 		return *pairlist_;
 	}
 
-	/**
-	 * @brief Get mutable access to the pairlist
-	 * @return Reference to the pairlist
-	 */
 	Pairlist& get_pairlist() {
 		return *pairlist_;
 	}
@@ -573,9 +549,9 @@ class Patch {
 	 *        energy-output path needs it)
 	 */
 	void copy_particles_to_host(HostParticleData& host_data,
-								 idx_t start_idx,
-								 idx_t count,
-								 bool need_energy = false) const;
+								idx_t start_idx,
+								idx_t count,
+								bool need_energy = false) const;
 
   private:
 	/**
@@ -602,12 +578,12 @@ class Patch {
 	//================================================================================
 	// Core Patch Properties
 	//================================================================================
-	patch_t patch_id_;		  ///< Unique patch identifier
-	uint64_t base_seed_{0};	  ///< Run-wide RNG seed (see set_base_seed)
+	patch_t patch_id_;					///< Unique patch identifier
+	uint64_t base_seed_{0};				///< Run-wide RNG seed (see set_base_seed)
 	bool deferred_kick_pending_{false}; ///< BAOAB closing half-kick owed (see finish_deferred_kick)
-	idx_t capacity_;		  ///< Maximum particle storage capacity
-	idx_t particle_count_{0}; ///< Current number of active particles
-	Resource resource_;		  ///< Computational resource (GPU/CPU)
+	idx_t capacity_;					///< Maximum particle storage capacity
+	idx_t particle_count_{0};			///< Current number of active particles
+	Resource resource_;					///< Computational resource (GPU/CPU)
 
 	//================================================================================
 	// Particle Data and Spatial Organization
@@ -615,6 +591,8 @@ class Patch {
 	HostParticleData host_particles_;	 ///< used for staging on HOST.
 	DeviceParticle particles_;			 ///< Local particle data in SoA format
 	std::unique_ptr<Pairlist> pairlist_; ///< Pairlist for neighbor finding and spatial organization
+	bool pairlist_built_{
+		false}; ///< True once pairlist_ has been built; gates the displacement skip check
 	std::unique_ptr<DeviceParticleTypes> particle_types_; ///< Device buffers for all particle types
 
 	float halo_thickness_{0.0f}; ///< Halo region thickness for ghost particles
@@ -622,15 +600,15 @@ class Patch {
 	//================================================================================
 	// Spatial Bounds and Geometry
 	//================================================================================
-	Vector3 min_bounds_{0.0f}; ///< Patch minimum spatial bounds
-	Vector3 max_bounds_{0.0f}; ///< Patch maximum spatial bounds
+	Vector3 min_bounds_{arbd_real(0)}; ///< Patch minimum spatial bounds
+	Vector3 max_bounds_{arbd_real(0)}; ///< Patch maximum spatial bounds
 
 	//================================================================================
 	// System References (not owned)
 	//================================================================================
-	const PeriodicBox* periodic_box_{nullptr}; ///< System boundary conditions
+	const PeriodicBox* periodic_box_{nullptr};		///< System boundary conditions
 	DeviceBuffer<PeriodicBox> periodic_box_device_; ///< Device-resident copy for kernels that
-													 ///< dereference PeriodicBox* on-device
+													///< dereference PeriodicBox* on-device
 
 	// Device-side bonded topology (bonds/angles/dihedrals/exclusions/tables)
 	// for calculate_bonded_forces(), lazily built on first call and cached

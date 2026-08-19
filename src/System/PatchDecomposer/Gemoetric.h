@@ -12,12 +12,6 @@ namespace ARBD {
  * Uses geometric information (e.g., membrane boundaries) to
  * create domain partitions that respect system geometry.
  */
-/**
- * @brief Geometric patch decomposition for systems with specific shapes
- *
- * Uses geometric information (e.g., membrane boundaries) to
- * create domain partitions that respect system geometry.
- */
 class GeometricPatchDecomposer : public PatchDecomposer {
   public:
 	GeometricPatchDecomposer() {

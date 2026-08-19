@@ -6,14 +6,6 @@
  *
  * BuildCellRangesKernel indexes the sorted array by coarse cell, and
  * ZOrderCellNeighborKernel walks the 27-cell stencil around each particle.
- *
- * A fixed-window search over the sorted order used to live here as well. It is
- * gone, not disabled: a Morton curve is discontinuous at every octree boundary,
- * so no bounded window can enumerate the full neighbor set, and no choice of
- * window size fixes that. Measured against a KD-tree ground truth on a
- * 305k-particle cytoplasm at the production pairlist cutoff, a +/-64 window
- * found ~29% of true neighbors, silently dropping ~71% of nonbonded
- * interactions and leaving the system unable to condense.
  *********************************************************************/
 
 #include "../ZOrderKernels/MortonCode.h"
@@ -26,14 +18,9 @@ namespace ARBD {
 /**
  * @brief Build per-cell [begin,end) ranges over the Morton-sorted particle array.
  *
- * Exploits the hierarchical property of Morton codes: taking the top `3*m` bits
- * of a code yields the index of a coarse cell whose side is `1/2^m` of the
- * encoding box, and -- because the interleave preserves that prefix ordering --
- * every particle in such a cell occupies a *contiguous* run of the sorted array.
- * Detecting the run boundaries therefore requires only a linear scan.
- *
- * `cell_begin`/`cell_end` must be zero-filled before launch so that cells with
- * no particles yield an empty range.
+ * Top `3*m` bits of a Morton code index a coarse cell; particles in a cell form
+ * a contiguous run of the sorted array, so a linear scan finds the boundaries.
+ * Zero-fill `cell_begin`/`cell_end` before launch (empty cells -> empty range).
  */
 struct BuildCellRangesKernel {
 	const morton_t* sorted_morton_codes;
@@ -53,40 +40,21 @@ struct BuildCellRangesKernel {
 	}
 };
 
+/// Sentinel for an unused / clipped slot in a cell's neighbor table.
+inline constexpr uint32_t kInvalidCell = 0xFFFFFFFFu;
+
 /**
- * @brief Exact Z-order neighbor finding via a 27-cell stencil.
+ * @brief Precompute each coarse cell's up-to-27 neighbor cell indices.
  *
- * Particles remain
- * Morton-sorted -- that is what gives the force kernel its memory locality --
- * but neighbors are enumerated by visiting the 27 coarse cells surrounding each
- * particle, exactly as a conventional cell list does. The coarse cell side is
- * chosen on the host to be at least the pairlist cutoff, so the 27-cell stencil
- * provably covers the cutoff sphere and no interacting pair can be missed.
- *
- * Periodicity is per axis and is carried entirely by `box_len`: a positive
- * component means that axis is periodic, so its cell indices wrap and its
- * displacements use the minimum image convention; a zero component means the
- * axis is open and the stencil is simply clipped there. Mixed boundary
- * conditions therefore work, instead of degrading the whole search to open.
- *
- * The Morton encoding box must equal the simulation box on every periodic
- * axis -- see ZOrderPairlist::build_pairlist, which enforces that. Wrapping a
- * cell index modulo the grid asserts that cell n-1 is physically adjacent to
- * cell 0, which only holds when the encoded extent is the periodic extent.
+ * The stencil topology depends only on the grid (coarse_bits, per-axis
+ * periodicity), not on particle positions, so it is built once per grid and
+ * reused across rebuilds. Slots are padded to MAX_NEIGHBORS with kInvalidCell.
+ * See dev_notes.md.
  */
-struct ZOrderCellNeighborKernel {
-	const Vector3* sorted_positions;
-	const morton_t* sorted_morton_codes;
-	const uint32_t* sorted_to_original;
-	const uint32_t* cell_begin;
-	const uint32_t* cell_end;
-	int2* neighbor_pairs;
-	uint32_t* pair_count;
-	float cutoff_squared;
-	size_t num_particles;
-	size_t max_pairs;
+struct BuildCellNeighborsKernel {
+	uint32_t* cell_neighbors; ///< [num_cells * MAX_NEIGHBORS] output
+	size_t num_cells;
 	int coarse_bits; ///< m: coarse cells per dim = 2^m
-	int shift;		 ///< 3 * (bits_per_dim - m)
 	Vector3 box_len; ///< per-axis periodic length; <= 0 marks an open axis
 
 	DEVICE static inline uint32_t compact_by3(uint32_t x) {
@@ -107,6 +75,81 @@ struct ZOrderCellNeighborKernel {
 		return x;
 	}
 
+	DEVICE void operator()(idx_t c) const {
+		if (c >= num_cells)
+			return;
+		const uint32_t cell = static_cast<uint32_t>(c);
+		const uint32_t cx = compact_by3(cell >> 2);
+		const uint32_t cy = compact_by3(cell >> 1);
+		const uint32_t cz = compact_by3(cell);
+
+		const int n = 1 << coarse_bits;
+		const uint32_t mask = static_cast<uint32_t>(n - 1);
+		const bool per_x = box_len.x > 0.0f;
+		const bool per_y = box_len.y > 0.0f;
+		const bool per_z = box_len.z > 0.0f;
+
+		// Periodic axes: narrow offsets when n <= 2 so no cell aliases. See dev_notes.md.
+		const int p_lo = (n >= 3) ? -1 : 0;
+		const int p_hi = (n >= 2) ? 1 : 0;
+		const int x_lo = per_x ? p_lo : -1, x_hi = per_x ? p_hi : 1;
+		const int y_lo = per_y ? p_lo : -1, y_hi = per_y ? p_hi : 1;
+		const int z_lo = per_z ? p_lo : -1, z_hi = per_z ? p_hi : 1;
+
+		uint32_t* out = cell_neighbors + static_cast<size_t>(cell) * MAX_NEIGHBORS;
+		int k = 0;
+		for (int dx = x_lo; dx <= x_hi; ++dx) {
+			int nx = static_cast<int>(cx) + dx;
+			if (per_x)
+				nx = static_cast<int>((static_cast<uint32_t>(nx + n)) & mask);
+			else if (nx < 0 || nx >= n)
+				continue;
+			const uint32_t mx = split_by3(static_cast<uint32_t>(nx)) << 2;
+			for (int dy = y_lo; dy <= y_hi; ++dy) {
+				int ny = static_cast<int>(cy) + dy;
+				if (per_y)
+					ny = static_cast<int>((static_cast<uint32_t>(ny + n)) & mask);
+				else if (ny < 0 || ny >= n)
+					continue;
+				const uint32_t mxy = mx | (split_by3(static_cast<uint32_t>(ny)) << 1);
+				for (int dz = z_lo; dz <= z_hi; ++dz) {
+					int nz = static_cast<int>(cz) + dz;
+					if (per_z)
+						nz = static_cast<int>((static_cast<uint32_t>(nz + n)) & mask);
+					else if (nz < 0 || nz >= n)
+						continue;
+					out[k++] = mxy | split_by3(static_cast<uint32_t>(nz));
+				}
+			}
+		}
+		for (; k < MAX_NEIGHBORS; ++k)
+			out[k] = kInvalidCell;
+	}
+};
+
+/**
+ * @brief Exact Z-order neighbor finding via a 27-cell stencil.
+ *
+ * Particles stay Morton-sorted (force-kernel locality); neighbors come from the
+ * 27 coarse cells around each particle. Cell side >= pairlist cutoff so the
+ * stencil covers the cutoff sphere. Periodicity is per axis via `box_len`
+ * (positive wraps with minimum image, zero is open). See dev_notes.md.
+ */
+struct ZOrderCellNeighborKernel {
+	const Vector3* sorted_positions;
+	const morton_t* sorted_morton_codes;
+	const uint32_t* sorted_to_original;
+	const uint32_t* cell_begin;
+	const uint32_t* cell_end;
+	const uint32_t* cell_neighbors; ///< [num_cells * MAX_NEIGHBORS] from BuildCellNeighborsKernel
+	int2* neighbor_pairs;
+	uint32_t* pair_count;
+	float cutoff_squared;
+	size_t num_particles;
+	size_t max_pairs;
+	int shift;		 ///< 3 * (bits_per_dim - m); recovers a cell index from a Morton code
+	Vector3 box_len; ///< per-axis periodic length; <= 0 marks an open axis
+
 	DEVICE inline float min_image(float d, float L) const {
 		if (L <= 0.0f)
 			return d;
@@ -123,106 +166,46 @@ struct ZOrderCellNeighborKernel {
 
 		const Vector3 pos_i = sorted_positions[i];
 		const uint32_t sorted_i = static_cast<uint32_t>(i);
+		const uint32_t cell = static_cast<uint32_t>(sorted_morton_codes[i] >> shift);
+		const uint32_t* nbrs = cell_neighbors + static_cast<size_t>(cell) * MAX_NEIGHBORS;
 
-		// Decode this particle's coarse cell from its Morton prefix. The encode
-		// order is z | y<<1 | x<<2 (see MortonCode::encode).
-		const morton_t prefix = sorted_morton_codes[i] >> shift;
-		const uint32_t cx = compact_by3(prefix >> 2);
-		const uint32_t cy = compact_by3(prefix >> 1);
-		const uint32_t cz = compact_by3(prefix);
-
-		const int n = 1 << coarse_bits;
-		const uint32_t mask = static_cast<uint32_t>(n - 1);
-
-		const bool per_x = box_len.x > 0.0f;
-		const bool per_y = box_len.y > 0.0f;
-		const bool per_z = box_len.z > 0.0f;
-
-		// Offset range for a *periodic* axis. With fewer than three cells along
-		// it the wrapped offsets -1/0/+1 alias onto the same cell -- all three
-		// when n == 1, and -1 with +1 when n == 2 -- so the naive -1..1 loop
-		// visits that cell repeatedly and emits each pair in it up to 27 times,
-		// multiplying its force by the same factor. Narrowing the range keeps
-		// every distinct cell visited exactly once, and it stays complete: when
-		// n <= 2 the stencil covers the entire grid either way.
-		//
-		// Open axes are unaffected -- out-of-range indices are skipped rather
-		// than wrapped, so they cannot alias -- and must keep the full range to
-		// reach the cell below.
-		const int p_lo = (n >= 3) ? -1 : 0;
-		const int p_hi = (n >= 2) ? 1 : 0;
-		const int x_lo = per_x ? p_lo : -1, x_hi = per_x ? p_hi : 1;
-		const int y_lo = per_y ? p_lo : -1, y_hi = per_y ? p_hi : 1;
-		const int z_lo = per_z ? p_lo : -1, z_hi = per_z ? p_hi : 1;
-
-		for (int dx = x_lo; dx <= x_hi; ++dx) {
-			int nx = static_cast<int>(cx) + dx;
-			if (per_x)
-				nx = static_cast<int>((static_cast<uint32_t>(nx + n)) & mask);
-			else if (nx < 0 || nx >= n)
+		for (int k = 0; k < MAX_NEIGHBORS; ++k) {
+			const uint32_t ncell = nbrs[k];
+			if (ncell == kInvalidCell)
 				continue;
-			const uint32_t mx = split_by3(static_cast<uint32_t>(nx)) << 2;
 
-			for (int dy = y_lo; dy <= y_hi; ++dy) {
-				int ny = static_cast<int>(cy) + dy;
-				if (per_y)
-					ny = static_cast<int>((static_cast<uint32_t>(ny + n)) & mask);
-				else if (ny < 0 || ny >= n)
-					continue;
-				const uint32_t mxy = mx | (split_by3(static_cast<uint32_t>(ny)) << 1);
+			const uint32_t begin = cell_begin[ncell];
+			const uint32_t end = cell_end[ncell];
 
-				for (int dz = z_lo; dz <= z_hi; ++dz) {
-					int nz = static_cast<int>(cz) + dz;
-					if (per_z)
-						nz = static_cast<int>((static_cast<uint32_t>(nz + n)) & mask);
-					else if (nz < 0 || nz >= n)
-						continue;
+			// Start at sorted_i+1 so each pair is emitted once. See dev_notes.md.
+			const uint32_t j_lo = (begin > sorted_i + 1u) ? begin : sorted_i + 1u;
 
-					const uint32_t ncell = mxy | split_by3(static_cast<uint32_t>(nz));
+			for (uint32_t j = j_lo; j < end; ++j) {
+				const Vector3 pos_j = sorted_positions[j];
+				const float ddx = min_image(pos_j.x - pos_i.x, box_len.x);
+				const float ddy = min_image(pos_j.y - pos_i.y, box_len.y);
+				const float ddz = min_image(pos_j.z - pos_i.z, box_len.z);
+				const float d2 = ddx * ddx + ddy * ddy + ddz * ddz;
 
-					const uint32_t begin = cell_begin[ncell];
-					const uint32_t end = cell_end[ncell];
-
-					// Emit each pair once, keyed on the *sorted* index. Because
-					// a cell occupies a contiguous run of the sorted array, a
-					// whole cell lying before this particle collapses to an
-					// empty loop, and the particle's own cell is entered at
-					// i+1 -- so roughly half the stencil is skipped outright
-					// rather than enumerated and rejected pairwise. The stencil
-					// relation is symmetric under wrapping, so a pair dropped
-					// here is always emitted by the other particle's thread.
-					const uint32_t j_lo = (begin > sorted_i + 1u) ? begin : sorted_i + 1u;
-
-					for (uint32_t j = j_lo; j < end; ++j) {
-						const Vector3 pos_j = sorted_positions[j];
-						const float ddx = min_image(pos_j.x - pos_i.x, box_len.x);
-						const float ddy = min_image(pos_j.y - pos_i.y, box_len.y);
-						const float ddz = min_image(pos_j.z - pos_i.z, box_len.z);
-						const float d2 = ddx * ddx + ddy * ddy + ddz * ddz;
-
-						if (d2 <= cutoff_squared) {
+				if (d2 <= cutoff_squared) {
 #ifdef USE_CUDA
-							uint32_t pair_idx = ATOMIC_ADD(pair_count, 1U);
+					uint32_t pair_idx = ATOMIC_ADD(pair_count, 1U);
 #elif defined(USE_SYCL)
-							sycl::atomic_ref<uint32_t,
-											 sycl::memory_order::relaxed,
-											 sycl::memory_scope::device,
-											 sycl::access::address_space::global_space>
-								atomic_ref(*pair_count);
-							uint32_t pair_idx = atomic_ref.fetch_add(1);
+					sycl::atomic_ref<uint32_t,
+									 sycl::memory_order::relaxed,
+									 sycl::memory_scope::device,
+									 sycl::access::address_space::global_space>
+						atomic_ref(*pair_count);
+					uint32_t pair_idx = atomic_ref.fetch_add(1);
 #else
-							uint32_t pair_idx = (*pair_count)++;
+					uint32_t pair_idx = (*pair_count)++;
 #endif
-							if (pair_idx < max_pairs) {
-								// Original indices are only needed for pairs
-								// that survive; ordering them keeps the
-								// x < y invariant the sorted-index key drops.
-								const uint32_t a = sorted_to_original[i];
-								const uint32_t b = sorted_to_original[j];
-								neighbor_pairs[pair_idx] = int2(static_cast<int>(a < b ? a : b),
-																static_cast<int>(a < b ? b : a));
-							}
-						}
+					// Ordering them keeps the x < y invariant the sorted-index key drops.
+					if (pair_idx < max_pairs) {
+						const uint32_t a = sorted_to_original[i];
+						const uint32_t b = sorted_to_original[j];
+						neighbor_pairs[pair_idx] = int2(static_cast<int>(a < b ? a : b),
+														static_cast<int>(a < b ? b : a));
 					}
 				}
 			}
@@ -231,13 +214,12 @@ struct ZOrderCellNeighborKernel {
 };
 
 #ifdef USE_CUDA
-// Both kernels are launched from ZOrderPairlist.cpp, a host-only translation
-// unit. Without these declarations the compiler instantiates the non-CUDA stub
-// in KernelHelper.cuh and every pairlist build throws NotImplementedError; the
-// matching definitions live in ZOrderPairlist.cu.
 extern template Event launch_cuda_kernel(const Resource& resource,
 										 const KernelConfig& config,
 										 BuildCellRangesKernel kernel_func);
+extern template Event launch_cuda_kernel(const Resource& resource,
+										 const KernelConfig& config,
+										 BuildCellNeighborsKernel kernel_func);
 extern template Event launch_cuda_kernel(const Resource& resource,
 										 const KernelConfig& config,
 										 ZOrderCellNeighborKernel kernel_func);
@@ -251,4 +233,6 @@ template<>
 struct sycl::is_device_copyable<ARBD::ZOrderCellNeighborKernel> : std::true_type {};
 template<>
 struct sycl::is_device_copyable<ARBD::BuildCellRangesKernel> : std::true_type {};
+template<>
+struct sycl::is_device_copyable<ARBD::BuildCellNeighborsKernel> : std::true_type {};
 #endif

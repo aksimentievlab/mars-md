@@ -83,18 +83,18 @@ struct SoftcoreForceKernel {
  */
 struct TabulatedNonBondedComputer {
 	// Members
-	DEVICE_PTR(const int2) particle_indices;
-	DEVICE_PTR(Vector3) positions;
-	DEVICE_PTR(Vector3) force_energy;
-	DEVICE_PTR(const int) type_ids;
-	DEVICE_PTR(const int) pairwise_table_matrix;
-	DEVICE_PTR(const int) pairwise_form_matrix;
-	DEVICE_PTR(const TabulatedPotential) tables;
+	DEVICE_PTR(const int2) __restrict__ particle_indices;
+	DEVICE_PTR(const Vector3) __restrict__ positions;
+	DEVICE_PTR(Vector3) __restrict__ force_energy;
+	DEVICE_PTR(const int) __restrict__ type_ids;
+	DEVICE_PTR(const int) __restrict__ pairwise_table_matrix;
+	DEVICE_PTR(const int) __restrict__ pairwise_form_matrix;
+	DEVICE_PTR(const TabulatedPotential) __restrict__ tables;
 	idx_t num_particle_types;
-	DEVICE_PTR(const int) excl_offsets;	  // CSR: per-particle offsets, size num_excl_particles+1
-	DEVICE_PTR(const int) excl_neighbors; // CSR: excluded partners, concatenated per particle
-	idx_t num_excl_particles;			  // particles covered by excl_offsets
-	const PeriodicBox* pbox;
+	DEVICE_PTR(const int) __restrict__ excl_offsets;   // CSR: per-particle offsets, size num_excl_particles+1
+	DEVICE_PTR(const int) __restrict__ excl_neighbors; // CSR: excluded partners, concatenated per particle
+	idx_t num_excl_particles;						   // particles covered by excl_offsets
+	const PeriodicBox* __restrict__ pbox;
 	bool get_energy;
 	idx_t num_pairs;
 	float cutoff_squared;
@@ -152,8 +152,7 @@ struct TabulatedNonBondedComputer {
 		// Scan only particle `indices.x`'s excluded-partner list (CSR), which is
 		// ~degree(indices.x) entries rather than the whole exclusion set. Each exclusion is stored
 		// in both partners' lists, so checking one endpoint is sufficient. This keeps the per-pair
-		// exclusion test O(1) w.r.t. system size; the old full scan was O(N) per
-		// pair, i.e. O(N^2) per step, which made large systems appear to hang.
+		// exclusion test O(1) w.r.t. system size; 
 		if (indices.x < static_cast<int>(num_excl_particles)) {
 			const int begin = excl_offsets[indices.x];
 			const int end = excl_offsets[indices.x + 1];

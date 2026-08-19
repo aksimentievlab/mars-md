@@ -22,8 +22,7 @@ namespace ARBD {
  *
  * Uses Morton code sorting to organize particles spatially, then leverages
  * the spatial locality property of Z-order curves to efficiently find
- * neighbors. This approach often provides better cache performance than
- * cell decomposition, especially for irregular particle distributions.
+ * neighbors.
  */
 class ZOrderPairlist : public Pairlist {
   public:
@@ -44,11 +43,11 @@ class ZOrderPairlist : public Pairlist {
 	 * @brief Build pairlist using Z-order sorting
 	 * @param positions Particle positions
 	 * @param num_particles Number of particles
-	 * @param cutoff Interaction cutoff distance
+	 * @param pairlist_cutoff Pairlist search radius (force cutoff + skin)
 	 */
 	void build_pairlist(const DeviceBuffer<Vector3>& positions,
 						size_t num_particles,
-						float cutoff) override;
+						float pairlist_cutoff) override;
 
 	/**
 	 * @brief Update pairlist (rebuilds with current sort if particles haven't moved much)
@@ -113,60 +112,12 @@ class ZOrderPairlist : public Pairlist {
 	}
 
 	/**
-	 * @brief Set search range for neighbor finding
-	 * @param range Number of positions to search in each direction in sorted order
-	 *
-	 * Larger values find more neighbors but are slower. Typical values: 32-128.
-	 * The optimal value depends on particle density and cutoff distance.
-	 */
-	void set_search_range(size_t range) {
-		search_range_ = range;
-	}
-
-	/**
 	 * @brief Set displacement thresholds for intelligent updates
 	 * @param validation_threshold Threshold for Morton code validation
 	 * @param update_threshold Threshold for full rebuild
 	 */
 	void set_displacement_thresholds(float validation_threshold, float update_threshold) {
 		sorter_.set_displacement_thresholds(validation_threshold, update_threshold);
-	}
-
-	/**
-	 * @brief Enable/disable adaptive search ranges
-	 * @param enable Whether to use per-particle adaptive search ranges
-	 */
-	void set_adaptive_ranges(bool enable) {
-		use_adaptive_ranges_ = enable;
-	}
-
-	/**
-	 * @brief Enable/disable hierarchical Morton search
-	 * @param enable Whether to use hierarchical Morton code search
-	 */
-	void set_hierarchical_search(bool enable) {
-		use_hierarchical_search_ = enable;
-	}
-
-	/**
-	 * @brief Get adaptive ranges status
-	 */
-	bool is_using_adaptive_ranges() const {
-		return use_adaptive_ranges_;
-	}
-
-	/**
-	 * @brief Get hierarchical search status
-	 */
-	bool is_using_hierarchical_search() const {
-		return use_hierarchical_search_;
-	}
-
-	/**
-	 * @brief Get current search range
-	 */
-	size_t get_search_range() const {
-		return search_range_;
 	}
 
 	/**
@@ -191,13 +142,7 @@ class ZOrderPairlist : public Pairlist {
 	mutable DeviceBuffer<Vector3> persistent_bbox_min_; ///< Persistent bounding box minimum buffer
 	mutable DeviceBuffer<Vector3> persistent_bbox_max_; ///< Persistent bounding box maximum buffer
 
-	// Adaptive search range optimization
-	DeviceBuffer<uint32_t> adaptive_search_ranges_; ///< Per-particle adaptive search ranges
-
-	/// Largest coarse-cell resolution used by the neighbor search, as bits per
-	/// dimension. Capping this bounds the cell arrays at 8^7 = 2M entries;
-	/// exceeding the cap only makes cells wider than the cutoff, which costs
-	/// extra candidates to scan but never misses a pair.
+	/// Max coarse-cell bits/dim; caps cell arrays at 8^7 entries. See dev_notes.md.
 	static constexpr int kMaxCoarseBits = 7;
 	/// Initial allocation for the cell index, grown on demand.
 	static constexpr size_t kInitialCoarseCells = 4096;
@@ -206,30 +151,23 @@ class ZOrderPairlist : public Pairlist {
 	/// 27-cell neighbor search. Sized 8^coarse_bits_ and rebuilt each pass.
 	DeviceBuffer<uint32_t> cell_begin_;
 	DeviceBuffer<uint32_t> cell_end_;
-	int coarse_bits_ = 0;			  ///< Coarse cells per dimension = 2^coarse_bits_
-	Vector3 box_len_{0.0f};			  ///< Per-axis periodic length; <= 0 marks an open axis
-	Vector3 box_origin_{0.0f};		  ///< Lower corner of the periodic box
-	Vector3 last_box_extent_{0.0f};	  ///< Extent of the box used for the last Morton encoding
+	/// Per-cell neighbor table [num_cells * MAX_NEIGHBORS]. Topology depends only on
+	/// the grid, so it is rebuilt only when coarse_bits_/periodicity change (~patch init).
+	DeviceBuffer<uint32_t> cell_neighbors_;
+	int cell_neighbors_bits_ = -1;	  ///< coarse_bits_ the table was built for (-1 = unbuilt)
+	int cell_neighbors_permask_ = -1; ///< periodicity mask the table was built for
+	int coarse_bits_ = 0;			///< Coarse cells per dimension = 2^coarse_bits_
+	Vector3 box_len_{0.0f};			///< Per-axis periodic length; <= 0 marks an open axis
+	Vector3 box_origin_{0.0f};		///< Lower corner of the periodic box
+	Vector3 last_box_extent_{0.0f}; ///< Extent of the box used for the last Morton encoding
 
   public:
 	/**
 	 * @brief Declare which axes of the simulation box are periodic.
 	 *
-	 * On a periodic axis the 27-cell stencil wraps at the grid edges and
-	 * displacements use the minimum image convention, so pairs spanning that
-	 * boundary are enumerated. Without this, such pairs are silently absent
-	 * from the pairlist even though the force kernel would apply minimum image
-	 * to them.
-	 *
-	 * Periodicity is per axis, so mixed boundary conditions are handled
-	 * directly. Treating a partly periodic box as fully open would drop exactly
-	 * the cross-face pairs the force kernel still wraps.
-	 *
-	 * The origin matters as much as the length: on a periodic axis the Morton
-	 * encoding box is forced to [origin, origin + length) rather than the
-	 * particle bounding box, because wrapping a cell index modulo the grid is
-	 * only geometrically correct when the encoded extent *is* the periodic
-	 * extent. See build_pairlist.
+	 * Per axis via box_len: a positive component wraps that axis (minimum image)
+	 * so cross-boundary pairs are enumerated; zero leaves it open. On a periodic
+	 * axis the Morton box is forced to [origin, origin+length), not the bbox.
 	 *
 	 * @param box_len Per-axis periodic lengths; a zero component marks that
 	 *        axis open, and a zero vector disables periodicity entirely.
@@ -241,11 +179,7 @@ class ZOrderPairlist : public Pairlist {
 	}
 
   private:
-	bool use_adaptive_ranges_;						///< Whether to use adaptive search ranges
-	bool use_hierarchical_search_;					///< Whether to use hierarchical Morton search
-
 	// Configuration parameters
-	size_t search_range_;	 ///< Search range in sorted order
 	bool auto_bbox_;		 ///< Whether to auto-compute bounding box
 	Vector3 manual_box_min_; ///< Manual bounding box minimum
 	Vector3 manual_box_max_; ///< Manual bounding box maximum

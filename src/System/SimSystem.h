@@ -54,13 +54,6 @@ class SimSystem {
 	}
 
 	void set_temperature(float temp) {
-		// Assign a whole Temperature rather than poking the fields: the
-		// constructor is what derives kT from the value. Setting `value` alone
-		// left `kT` at whatever the default construction produced
-		// (298.15 K), so the configured temperature never reached the
-		// integrators - every run was thermostatted at 298.15 K regardless of
-		// the `temperature` directive, and changing it had no effect at all.
-		// Matches the BaseGrid overload below, which was already correct.
 		temperature_ = Temperature(temp);
 	}
 	void set_base_seed(size_t seed) {
@@ -586,8 +579,7 @@ class SimSystem {
 				const std::string& gname = g < particle_type.pmf_grid_names.size()
 											   ? particle_type.pmf_grid_names[g]
 											   : std::string{};
-				particle_type.pmf_grids[g].grid_id =
-					get_grid_manager().get_grid_key(gname).grid_id;
+				particle_type.pmf_grids[g].grid_id = get_grid_manager().get_grid_key(gname).grid_id;
 			}
 			particle_type.diffusion_grid_id =
 				get_grid_manager().get_grid_key(particle_type.diffusion_grid_name).grid_id;
@@ -667,10 +659,10 @@ class SimSystem {
 	// Simulation control
 	SimSteps steps_{1e-5f, 1000}; // timestep in ns.
 
-	int output_period_{10};				   // output period in steps
-	int energy_output_period_{100};		   // energy output period in steps
+	int output_period_{10};					// output period in steps
+	int energy_output_period_{100};			// energy output period in steps
 	int neighbor_list_rebuild_period{1000}; // neighbor list rebuild period in steps
-	int rb_update_period_{1};			   // rigid body update period in steps
+	int rb_update_period_{1};				// rigid body update period in steps
 
 	size_t global_seed_{214};
 	std::string output_name{"out"};

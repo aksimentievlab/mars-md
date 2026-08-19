@@ -81,8 +81,9 @@ class RigidBodyCoordReader {
 			rb.position = Vector3(v[0], v[1], v[2]);
 			// Input is row-major; Matrix3's three-vector constructor takes
 			// columns, so index down the columns rather than across the rows.
-			rb.orientation =
-				Matrix3(Vector3(v[3], v[6], v[9]), Vector3(v[4], v[7], v[10]), Vector3(v[5], v[8], v[11]));
+			rb.orientation = Matrix3(Vector3(v[3], v[6], v[9]),
+									 Vector3(v[4], v[7], v[10]),
+									 Vector3(v[5], v[8], v[11]));
 			rb.has_orientation = true;
 
 			if (v.size() >= 18) {

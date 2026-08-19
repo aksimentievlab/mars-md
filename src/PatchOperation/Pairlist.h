@@ -16,6 +16,14 @@
 
 namespace ARBD {
 
+#ifndef GPU_MEM
+#define GPU_MEM 10 // GiB; worst-case RTX 3080. Override via CMake (-DGPU_MEM=...).
+#endif
+
+/// Global pairlist buffer capacity in pairs: ~30% of device memory, int2 = 8 B/pair.
+inline constexpr size_t kPairlistMaxPairs =
+	(static_cast<size_t>(GPU_MEM) * (size_t{1} << 30) * 3 / 10) / sizeof(int2);
+
 /**
  * @brief Enumeration of available pairlist strategies
  */
@@ -88,7 +96,6 @@ class Pairlist {
 							  size_t num_particles,
 							  float skin_distance) const {
 		// Default implementation: always update
-		// Derived classes can implement smarter update criteria
 		return true;
 	}
 
@@ -170,17 +177,8 @@ class Pairlist {
 	float cutoff_;
 	float cutoff_squared_;
 
-	// Core pairlist data.
-	//
-	// There is deliberately no per-pair distance array. One used to be
-	// allocated alongside neighbor_pairs_ and was never written or read by any
-	// builder or consumer; at the default capacity that is 4 bytes x 307M pairs
-	// = 1.2 GB of device memory reserved for nothing. Recomputing a distance in
-	// the force kernel is cheaper than the bandwidth to fetch a stored one, so
-	// if a consumer ever needs it, it should recompute rather than reinstate
-	// this.
-	DeviceBuffer<int2> neighbor_pairs_;	///< Neighbor particle pairs (i, j)
-	DeviceBuffer<uint32_t> pair_count_;	///< Atomic counter for pair generation
+	DeviceBuffer<int2> neighbor_pairs_; ///< Neighbor particle pairs (i, j)
+	DeviceBuffer<uint32_t> pair_count_; ///< Atomic counter for pair generation
 
 	/**
 	 * @brief Update internal state after pairlist build

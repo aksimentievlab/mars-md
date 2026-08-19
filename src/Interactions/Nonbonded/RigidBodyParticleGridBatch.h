@@ -123,20 +123,20 @@ struct RBParticleGridForceKernel {
 			const Vector3 local = w.basis_inv.transform(pos - w.origin_lab);
 			const Matrix3 identity(1.0f);
 			const GridSample<arbd_real> sample = (w.scheme == 0)
-												 ? sample_grid_linear(grid.data,
-																	  local,
-																	  Vector3(0.0f),
-																	  identity,
-																	  identity,
-																	  grid.dimensions,
-																	  grid.boundary_condition)
-												 : sample_grid_cubic(grid.data,
-																	 local,
-																	 Vector3(0.0f),
-																	 identity,
-																	 identity,
-																	 grid.dimensions,
-																	 grid.boundary_condition);
+													 ? sample_grid_linear(grid.data,
+																		  local,
+																		  Vector3(0.0f),
+																		  identity,
+																		  identity,
+																		  grid.dimensions,
+																		  grid.boundary_condition)
+													 : sample_grid_cubic(grid.data,
+																		 local,
+																		 Vector3(0.0f),
+																		 identity,
+																		 identity,
+																		 grid.dimensions,
+																		 grid.boundary_condition);
 
 			const Vector3 force_lab =
 				w.basis_inv.transpose().transform(sample.gradient * (-w.scale));
@@ -144,9 +144,6 @@ struct RBParticleGridForceKernel {
 			fe.t = w.scale * sample.value;
 			atomic_add(&particles.ForceEnergy[p], fe);
 
-			// RB reaction is -force_lab (Newton's third law) - the torque
-			// term below was already negated correctly; this accumulator
-			// wasn't.
 			f_acc.x -= force_lab.x;
 			f_acc.y -= force_lab.y;
 			f_acc.z -= force_lab.z;

@@ -1,8 +1,4 @@
-// RigidBodyGridBatch.h (2026)
-// Phase 4.1 of the rigid-body suite: batched grid-grid dispatch on top of
-// Phase 1's per-voxel math (GridGridKernels.h) and Phase 3's type-level pair
-// list (RigidBodyForcePairs.h). See todo.md Phase 4.1 for the full design
-// rationale (batching vs. per-pair launches, the prefix-sum block mapping).
+
 #pragma once
 #include "Interactions/Nonbonded/GridGridKernels.h"
 #include "Objects/DeviceRigidBody.h"

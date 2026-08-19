@@ -52,7 +52,7 @@ void SimSystem::validate_method_parameters() const {
 						"Number of steps must be positive (got {})",
 						steps_.steps);
 	}
-	if (neighbor_list_rebuild_period <= arbd_real(0.0)) {
+	if (neighbor_list_rebuild_period <= 0) {
 		throw Exception(ExceptionType::ValueError,
 						SourceLocation(),
 						"Neighbor list rebuild period must be positive (got {})",
