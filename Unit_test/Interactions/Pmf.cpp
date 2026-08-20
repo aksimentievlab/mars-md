@@ -1,7 +1,7 @@
 /**
  * @file Pmf.cpp
  * @brief Tests for the flattened per-type PMF grid table consumed by
- * compute_position_dependent_force (Interactions/Nonbonded/PmfKernels.h).
+ * compute_position_dependent_force (Interactions/Nonbonded/Pmf.h).
  *
  * A particle type may reference any number of PMF grids - legacy ARBD's
  * `gridFile` takes a whitespace-separated list, each entry with its own scale -
@@ -18,7 +18,7 @@
  */
 
 #include "../catch_boiler.h"
-#include "Interactions/Nonbonded/PmfKernels.h"
+#include "Interactions/Nonbonded/Pmf.h"
 #include "Objects/DeviceParticle.h"
 #include "Types/BaseGrid.h"
 
@@ -133,7 +133,7 @@ TEST_CASE("PMF grid table: per-type offset/count ranges", "[pmf][grids]") {
 
 	SECTION("a type with no terms gets no grid force") {
 		const Vector3 f = compute_position_dependent_force(
-			pos, type_none, view, grids.data(), 0.0f, SCHEME_LINEAR);
+			pos, type_none, view, grids.data(), Vector3{0.0f, 0.0f, 0.0f}, SCHEME_LINEAR);
 		CHECK(f.x == Approx(0.0f));
 		CHECK(f.y == Approx(0.0f));
 		CHECK(f.z == Approx(0.0f));
@@ -142,7 +142,7 @@ TEST_CASE("PMF grid table: per-type offset/count ranges", "[pmf][grids]") {
 	SECTION("a single term applies its own scale, negating the gradient") {
 		// F = -scale * grad V = -2 * (1,0,0)
 		const Vector3 f = compute_position_dependent_force(
-			pos, type_one, view, grids.data(), 0.0f, SCHEME_LINEAR);
+			pos, type_one, view, grids.data(), Vector3{0.0f, 0.0f, 0.0f}, SCHEME_LINEAR);
 		CHECK(f.x == Approx(-2.0f));
 		CHECK(f.y == Approx(0.0f));
 		CHECK(f.z == Approx(0.0f));
@@ -152,7 +152,7 @@ TEST_CASE("PMF grid table: per-type offset/count ranges", "[pmf][grids]") {
 		// F = -(2 * (1,0,0) + (-3) * (0,1,0)) = (-2, +3, 0). The y component is
 		// the whole point: with a single pmf_grid_id it would have been 0.
 		const Vector3 f = compute_position_dependent_force(
-			pos, type_two, view, grids.data(), 0.0f, SCHEME_LINEAR);
+			pos, type_two, view, grids.data(), Vector3{0.0f, 0.0f, 0.0f}, SCHEME_LINEAR);
 		CHECK(f.x == Approx(-2.0f));
 		CHECK(f.y == Approx(3.0f));
 		CHECK(f.z == Approx(0.0f));
@@ -161,16 +161,16 @@ TEST_CASE("PMF grid table: per-type offset/count ranges", "[pmf][grids]") {
 	SECTION("energy sums scale * V over the type's terms") {
 		// V_x = V_y = 3.5 at the sample point, so 2*3.5 + (-3)*3.5 = -3.5.
 		const Vector3 f = compute_position_dependent_force(
-			pos, type_two, view, grids.data(), 0.0f, SCHEME_LINEAR, /*get_energy=*/true);
+			pos, type_two, view, grids.data(), Vector3{0.0f, 0.0f, 0.0f}, SCHEME_LINEAR, /*get_energy=*/true);
 		CHECK(f.t == Approx(-3.5f));
 	}
 
 	SECTION("terms are not shared between types") {
 		// type_one's range must stop before type_two's terms in the flat table.
 		const Vector3 f_one = compute_position_dependent_force(
-			pos, type_one, view, grids.data(), 0.0f, SCHEME_LINEAR);
+			pos, type_one, view, grids.data(), Vector3{0.0f, 0.0f, 0.0f}, SCHEME_LINEAR);
 		const Vector3 f_two = compute_position_dependent_force(
-			pos, type_two, view, grids.data(), 0.0f, SCHEME_LINEAR);
+			pos, type_two, view, grids.data(), Vector3{0.0f, 0.0f, 0.0f}, SCHEME_LINEAR);
 		CHECK(f_one.y == Approx(0.0f));
 		CHECK(f_two.y == Approx(3.0f));
 		CHECK(types.pmf_offset[type_two] == types.pmf_offset[type_one] + 1);
@@ -180,7 +180,7 @@ TEST_CASE("PMF grid table: per-type offset/count ranges", "[pmf][grids]") {
 		HostTypes charged;
 		const int t = charged.add(1.5f, {term(0, 2.0f)});
 		const Vector3 f = compute_position_dependent_force(
-			pos, t, charged.view(), grids.data(), 4.0f, SCHEME_LINEAR);
+			pos, t, charged.view(), grids.data(), Vector3{0.0f, 0.0f, 4.0f}, SCHEME_LINEAR);
 		CHECK(f.x == Approx(-2.0f));
 		CHECK(f.z == Approx(1.5f * 4.0f));
 	}
@@ -189,7 +189,7 @@ TEST_CASE("PMF grid table: per-type offset/count ranges", "[pmf][grids]") {
 		HostTypes with_hole;
 		const int t = with_hole.add(0.0f, {term(-1, 2.0f), term(1, -3.0f)});
 		const Vector3 f = compute_position_dependent_force(
-			pos, t, with_hole.view(), grids.data(), 0.0f, SCHEME_LINEAR);
+			pos, t, with_hole.view(), grids.data(), Vector3{0.0f, 0.0f, 0.0f}, SCHEME_LINEAR);
 		CHECK(f.x == Approx(0.0f));
 		CHECK(f.y == Approx(3.0f));
 	}
@@ -209,7 +209,7 @@ TEST_CASE("PMF grid table: cubic scheme walks the same term range", "[pmf][grids
 													  type_two,
 													  types.view(),
 													  grids.data(),
-													  0.0f,
+													  Vector3{0.0f, 0.0f, 0.0f},
 													  /*scheme=*/1);
 	CHECK(f.x == Approx(-2.0f));
 	CHECK(f.y == Approx(3.0f));

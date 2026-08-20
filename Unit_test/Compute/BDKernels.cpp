@@ -114,7 +114,9 @@ TEST_CASE("IntegratorTest", "[free][bd]") {
 	auto type_view = device_types.view();
 
 	for (int step = 0; step < num_steps; step++) {
-		launch_BD<float>(res, particle_view, type_view, dt, step, kT, 100, sim_box, 5, step);
+		launch_BD<float>(res, particle_view, type_view, dt, step, kT, 100, sim_box, 5, step,
+						 /*grid_configs=*/nullptr, /*electric_field=*/Vector3{0.0f, 0.0f, 0.0f},
+						 /*interpolation_scheme=*/1);
 	}
 
 	// Calculate MSD

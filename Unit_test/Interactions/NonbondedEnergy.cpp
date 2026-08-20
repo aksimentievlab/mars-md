@@ -118,21 +118,32 @@ std::pair<arbd_real, std::vector<Vector3>> run_pairwise(const Resource& res,
 	DeviceBuffer<PeriodicBox> box_buf(1, res);
 	box_buf.copy_from_host(&box_host, 1);
 
+	const idx_t num_pairs = static_cast<idx_t>(pairs.size());
+	DeviceBuffer<int> table_idx_buf(std::max<size_t>(pairs.size(), 1), res);
+
+	// Resolve per-pair table indices (exclusions + type->table), then apply forces.
+	launch_resolve_pair_tables(res,
+							   pairs_buf.data(),
+							   types_buf.data(),
+							   table_matrix_buf.data(),
+							   form_matrix_buf.data(),
+							   static_cast<idx_t>(num_types),
+							   excl_off_buf.data(),
+							   excl_nbr_buf.data(),
+							   num_excl_particles,
+							   table_idx_buf.data(),
+							   num_pairs)
+		.wait();
+
 	launch_pairwise_nonbonded(res,
 							  pairs_buf.data(),
 							  pos_buf.data(),
 							  force_buf.data(),
-							  types_buf.data(),
-							  table_matrix_buf.data(),
-							  form_matrix_buf.data(),
+							  table_idx_buf.data(),
 							  tables.data(),
-							  static_cast<idx_t>(num_types),
-							  excl_off_buf.data(),
-							  excl_nbr_buf.data(),
-							  num_excl_particles,
 							  box_buf.data(),
 							  /*get_energy=*/true,
-							  static_cast<idx_t>(pairs.size()),
+							  num_pairs,
 							  cutoff > 0 ? cutoff * cutoff : arbd_real(0))
 		.wait();
 

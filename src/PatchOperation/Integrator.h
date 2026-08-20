@@ -15,6 +15,7 @@
 #include "Header.h"
 #include "Integrator/BAOAB.h"
 #include "Integrator/BD.h"
+#include "Interactions/Nonbonded/Pmf.h"
 #include "System/SimSystem.h"
 #include "Types/Types.h"
 #include "Types/Vector3.h"
@@ -31,7 +32,10 @@ Event launch_BD(const Resource& resource,
 				idx_t num_particles,
 				const PeriodicBox& sim_box,
 				uint64_t base_seed,
-				uint32_t base_ctr) {
+				uint32_t base_ctr,
+				const BaseGridView<arbd_real>* grid_configs,
+				const Vector3& electric_field,
+				int interpolation_scheme) {
 	KernelConfig config = KernelConfig::for_1d(num_particles, resource);
 	BDIntegrate<T> bd_integrate(particle_view,
 								particle_types,
@@ -41,7 +45,10 @@ Event launch_BD(const Resource& resource,
 								kT,
 								num_particles,
 								base_seed,
-								base_ctr);
+								base_ctr,
+								grid_configs,
+								electric_field,
+								interpolation_scheme);
 	Event evt = launch_kernel(resource, config, bd_integrate);
 	return evt;
 }
@@ -56,7 +63,10 @@ Event launch_BAOAB(const Resource& resource,
 				   float kT,
 				   idx_t num_particles,
 				   uint64_t base_seed,
-				   uint32_t base_ctr) {
+				   uint32_t base_ctr,
+				   const BaseGridView<arbd_real>* grid_configs,
+				   const Vector3& electric_field,
+				   int interpolation_scheme) {
 	KernelConfig config = KernelConfig::for_1d(num_particles, resource);
 	BAOABIntegrate<T> baoab_integrate(particle_view,
 									  particle_types,
@@ -66,7 +76,10 @@ Event launch_BAOAB(const Resource& resource,
 									  kT,
 									  num_particles,
 									  base_seed,
-									  base_ctr);
+									  base_ctr,
+									  grid_configs,
+									  electric_field,
+									  interpolation_scheme);
 	Event evt = launch_kernel(resource, config, baoab_integrate);
 	return evt;
 }
@@ -91,7 +104,10 @@ Event launch_BAOAB_LastUpdate(const Resource& resource,
 							  float kT,
 							  idx_t num_particles,
 							  uint64_t base_seed,
-							  uint32_t base_ctr) {
+							  uint32_t base_ctr,
+							  const BaseGridView<arbd_real>* grid_configs,
+							  const Vector3& electric_field,
+							  int interpolation_scheme) {
 	KernelConfig config = KernelConfig::for_1d(num_particles, resource);
 	BAOAB_LastUpdate<T> baoab_last(particle_view,
 								   particle_types,
@@ -101,8 +117,32 @@ Event launch_BAOAB_LastUpdate(const Resource& resource,
 								   kT,
 								   num_particles,
 								   base_seed,
-								   base_ctr);
+								   base_ctr,
+								   grid_configs,
+								   electric_field,
+								   interpolation_scheme);
 	return launch_kernel(resource, config, baoab_last);
 }
+/**
+ * @brief pmf kernel. placed here because only BAOAB consumes it.
+ */
+inline Event launch_PMF(const Resource& resource,
+				 ParticleView particle_view,
+				 const ParticleTypeView particle_types,
+				 const Vector3& box_size,
+				 idx_t num_particles,
+				 const BaseGridView<arbd_real>* grid_configs,
+				 const Vector3& electric_field,
+				 int interpolation_scheme) {
+	const KernelConfig config = KernelConfig::for_1d(num_particles, resource);
 
+	const ComputePMFKernel kernel{electric_field, interpolation_scheme};
+	return launch_kernel(resource,
+						 config,
+						 kernel,
+						 particle_view,
+						 particle_types,
+						 grid_configs,
+						 num_particles);
+}
 } // namespace ARBD

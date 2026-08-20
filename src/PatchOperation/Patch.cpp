@@ -10,10 +10,8 @@
 #include "ARBDException.h"
 #include "ARBDLogger.h"
 #include "Backend/Events.h"
-#include "Backend/Kernels.h"
 #include "Interactions/DeviceBondedInteraction.h"
 #include "Interactions/Nonbonded/Pairwise.h"
-#include "Interactions/Nonbonded/PmfKernels.h"
 #include "PatchOperation/Integrator.h"
 #include "PatchOperation/PairListKernels/ZOrderPairlist.h"
 #include "PatchOperation/Pairlist.h"
@@ -27,11 +25,7 @@ void Patch::set_periodic_box(const PeriodicBox* sim_box) {
 	} else {
 		periodic_box_device_ = DeviceBuffer<PeriodicBox>();
 	}
-	// Periodicity is passed per axis. Falling back to fully non-periodic
-	// neighbor finding whenever any axis is open (as this used to do) drops
-	// exactly the cross-face pairs on the axes that *are* periodic, while the
-	// force kernel goes on applying minimum image to them - the same class of
-	// silently missing interactions the stencil was written to eliminate.
+	// Periodicity is passed per axis.
 	if (auto* zpl = dynamic_cast<ZOrderPairlist*>(pairlist_.get())) {
 		if (sim_box) {
 			const auto bs = sim_box->get_box_size();
@@ -56,14 +50,15 @@ void Patch::ensure_bonded_topology_ready(const BondedInteractions& interactions,
 		device_bonded_.copy_from_host(interactions);
 		device_bonded_.link_tables(tables_registry, resource_idx);
 		bonded_device_data_prepared_ = true;
-		LOGINFO("Patch {}: Prepared {} bonds, {} angles, {} dihedrals, {} exclusions, {} restraints "
-				"for device",
-				patch_id_,
-				device_bonded_.num_bonds(),
-				device_bonded_.num_angles(),
-				device_bonded_.num_dihedrals(),
-				device_bonded_.num_exclusions(),
-				device_bonded_.num_restraints());
+		LOGINFO(
+			"Patch {}: Prepared {} bonds, {} angles, {} dihedrals, {} exclusions, {} restraints "
+			"for device",
+			patch_id_,
+			device_bonded_.num_bonds(),
+			device_bonded_.num_angles(),
+			device_bonded_.num_dihedrals(),
+			device_bonded_.num_exclusions(),
+			device_bonded_.num_restraints());
 	}
 }
 
@@ -77,7 +72,7 @@ Event Patch::calculate_nonbonded_forces(const NonBondedInteractions& interaction
 										float interaction_cutoff,
 										size_t step,
 										size_t rebuild_period,
-										float electric_field,
+										const Vector3& electric_field,
 										int interpolation_scheme,
 										bool compute_energy) {
 	(void)interactions;
@@ -95,19 +90,11 @@ Event Patch::calculate_nonbonded_forces(const NonBondedInteractions& interaction
 	const PeriodicBox* pbox = get_device_periodic_box();
 	Event evt(nullptr, resource_);
 
-	if (!grid_views.empty()) {
-		const ParticleTypeView type_view = particle_types.view();
-		const KernelConfig config = KernelConfig::for_1d(num_particles, resource_);
-
-		const ComputePMFKernel kernel{electric_field, interpolation_scheme};
-		evt = launch_kernel(resource_,
-							config,
-							kernel,
-							particle_view,
-							type_view,
-							grid_views.data(),
-							num_particles);
-	}
+	// Position-dependent force stashed the grid/field state so integrate_motion can fold it into
+	// the integrator kernels (v1-faithful, one per-particle read). The uniform E field applies
+	pmf_grid_configs_ = grid_views.empty() ? nullptr : grid_views.data();
+	electric_field_ = electric_field;
+	interpolation_scheme_ = interpolation_scheme;
 
 	// Lazily build the type-pair -> table matrix; pairwise topology (which
 	// type pairs have a tabulated potential) is static for the run
@@ -324,7 +311,10 @@ Event Patch::integrate_motion(float dt,
 							   particle_count_,
 							   sim_box,
 							   base_seed,
-							   base_ctr);
+							   base_ctr,
+							   pmf_grid_configs_,
+							   electric_field_,
+							   interpolation_scheme_);
 		break;
 
 	case IntegratorType::Langevin:
@@ -333,6 +323,18 @@ Event Patch::integrate_motion(float dt,
 				 particle_count_,
 				 dt,
 				 kT);
+
+		if (pmf_grid_configs_ != nullptr && particle_count_ > 0) {
+			launch_PMF(resource_,
+					   particle_view,
+					   particle_type_view,
+					   sim_box.get_box_size(),
+					   particle_count_,
+					   pmf_grid_configs_,
+					   electric_field_,
+					   interpolation_scheme_)
+				.wait();
+		}
 
 		if (deferred_kick_pending_) {
 			launch_BAOAB_LastUpdate<float>(resource_,
@@ -344,7 +346,10 @@ Event Patch::integrate_motion(float dt,
 										   kT,
 										   particle_count_,
 										   base_seed,
-										   base_ctr)
+										   base_ctr,
+										   pmf_grid_configs_,
+										   electric_field_,
+										   interpolation_scheme_)
 				.wait();
 			deferred_kick_pending_ = false;
 		}
@@ -362,7 +367,10 @@ Event Patch::integrate_motion(float dt,
 								  kT,
 								  particle_count_,
 								  base_seed,
-								  base_ctr);
+								  base_ctr,
+								  pmf_grid_configs_,
+								  electric_field_,
+								  interpolation_scheme_);
 		break;
 
 	default:
@@ -396,7 +404,10 @@ Event Patch::finish_deferred_kick(float dt) {
 										  /*kT=*/0.0f,
 										  particle_count_,
 										  /*base_seed=*/0,
-										  /*base_ctr=*/0);
+										  /*base_ctr=*/0,
+										  pmf_grid_configs_,
+										  electric_field_,
+										  interpolation_scheme_);
 }
 
 //================================================================================
@@ -433,16 +444,17 @@ Patch::pack_halo_particles(DeviceBuffer<arbd_real>& send_buffer, int direction, 
 }
 
 /**
- * @brief 
+ * @brief
  * @todo Launch kernel to unpack received halo particles:
  * - Unpack particle data from recv_buffer
  * - Store in ghost/halo region of particle data structures
  * - Update halo particle counts
- * @param recv_buffer 
- * @param particle_count 
- * @return Event 
+ * @param recv_buffer
+ * @param particle_count
+ * @return Event
  */
-Event Patch::unpack_halo_particles(const DeviceBuffer<arbd_real>& recv_buffer, idx_t particle_count) {
+Event Patch::unpack_halo_particles(const DeviceBuffer<arbd_real>& recv_buffer,
+								   idx_t particle_count) {
 	// Ensure halo buffers are allocated
 	if (!halo_buffers_) {
 		halo_buffers_ = std::make_unique<HaloBuffers>(resource_, capacity_);

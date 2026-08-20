@@ -271,8 +271,8 @@ class PatchManager {
 												float cutoff,
 												size_t step,
 												size_t rebuild_period,
-												float electric_field = 0.0f,
-												int interpolation_scheme = 1);
+												const Vector3& electric_field = Vector3{0.0f, 0.0f, 0.0f},
+												int interpolation_scheme = 0);
 
 	/**
 	 * @brief Compute bonded forces across all patches

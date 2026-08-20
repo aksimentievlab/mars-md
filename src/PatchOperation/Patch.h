@@ -238,8 +238,8 @@ class Patch {
 									 float interaction_cutoff,
 									 size_t step,
 									 size_t rebuild_period,
-									 float electric_field = 0.0f,
-									 int interpolation_scheme = 1,
+									 const Vector3& electric_field = Vector3{0.0f, 0.0f, 0.0f},
+									 int interpolation_scheme = 0,
 									 bool compute_energy = false);
 
 	/**
@@ -641,6 +641,15 @@ class Patch {
 	const PeriodicBox* periodic_box_{nullptr};		///< System boundary conditions
 	DeviceBuffer<PeriodicBox> periodic_box_device_; ///< Device-resident copy for kernels that
 													///< dereference PeriodicBox* on-device
+
+	//================================================================================
+	// Position-dependent force state (set in calculate_nonbonded_forces, consumed by
+	// integrate_motion, which fuses the PMF/force-grid + uniform E term into the
+	// integrator kernels - see Pmf.h / v1's compute_position_dependent_force).
+	//================================================================================
+	const BaseGridView<arbd_real>* pmf_grid_configs_{nullptr}; ///< PMF/force grids, nullptr = none
+	Vector3 electric_field_{0.0f, 0.0f, 0.0f};				   ///< Uniform global E field
+	int interpolation_scheme_{1};							   ///< 0=linear, 1=cubic
 
 	// Device-side bonded topology (bonds/angles/dihedrals/exclusions/tables)
 	// for calculate_bonded_forces(), lazily built on first call and cached

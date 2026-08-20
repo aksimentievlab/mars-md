@@ -267,7 +267,7 @@ struct ConvolveGridKernel {
 } // namespace ARBD
 
 // Explicit template instantiation declaration to prevent host instantiation
-// (see PmfKernels.h for why - real definition lives in
+// (see Pmf.h for why - real definition lives in
 // Nonbonded/NonbondedInstantiations.cu).
 #ifdef USE_CUDA
 #include "Backend/CUDA/KernelHelper.cuh"

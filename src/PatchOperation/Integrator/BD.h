@@ -2,6 +2,7 @@
 
 #include "../Random/philox.h"
 #include "Header.h"
+#include "Interactions/Nonbonded/Pmf.h"
 #include "Objects/DeviceParticle.h"
 #include "System/PeriodicBox.h"
 #include "Types/Types.h"
@@ -18,6 +19,9 @@ struct BDIntegrate {
 	uint64_t base_seed;
 	uint32_t base_ctr;
 	size_t current_step;
+	const BaseGridView<arbd_real>* grid_configs; ///< PMF/force grids (nullptr = none); fused per v1
+	Vector3 electric_field;						 ///< Uniform global E field applied here
+	int interpolation_scheme;					 ///< 0=linear, 1=cubic
 	constexpr static uint32_t rng_stream = 0x5324120u; // Arbitrary stream ID for Philox RNG
 
 	// Constructor for proper initialization
@@ -29,9 +33,13 @@ struct BDIntegrate {
 				TemperatureType temp,
 				idx_t n,
 				uint64_t seed,
-				uint32_t ctr)
+				uint32_t ctr,
+				const BaseGridView<arbd_real>* grids,
+				const Vector3& efield,
+				int scheme)
 		: particle_view(pv), particle_types(pt), sim_box(box), timestep(dt), kT(temp),
-		  num_particles(n), base_seed(seed), base_ctr(ctr), current_step(current_step) {}
+		  num_particles(n), base_seed(seed), base_ctr(ctr), current_step(current_step),
+		  grid_configs(grids), electric_field(efield), interpolation_scheme(scheme) {}
 
 	KERNEL_FUNC void operator()(idx_t idx) const {
 		if (idx >= num_particles)
@@ -44,6 +52,10 @@ struct BDIntegrate {
 		Vector3 pos = particle_view.pos[idx];
 		Vector3 force = particle_view.ForceEnergy[idx];
 		int type = particle_view.type_id[idx];
+
+		// Position-dependent force (PMF/force grid + uniform E) fused here per v1.
+		force += compute_position_dependent_force(pos, type, particle_types, grid_configs,
+												  electric_field, interpolation_scheme);
 
 		// Get particle type properties
 		float mass = particle_types.mass[type];

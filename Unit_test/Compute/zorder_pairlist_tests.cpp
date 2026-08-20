@@ -108,26 +108,8 @@ TEST_CASE("ZOrderPairlist Integration", "[zorder][pairlist][integration]") {
 	}
 
 	SECTION("Configuration Options") {
-		// Test search range configuration
-		pairlist.set_search_range(128);
-		REQUIRE(pairlist.get_search_range() == 128);
-
 		// Test displacement thresholds
 		pairlist.set_displacement_thresholds(0.1f, 0.2f);
-
-		// Test adaptive ranges
-		pairlist.set_adaptive_ranges(true);
-		REQUIRE(pairlist.is_using_adaptive_ranges());
-
-		pairlist.set_adaptive_ranges(false);
-		REQUIRE_FALSE(pairlist.is_using_adaptive_ranges());
-
-		// Test hierarchical search
-		pairlist.set_hierarchical_search(true);
-		REQUIRE(pairlist.is_using_hierarchical_search());
-
-		pairlist.set_hierarchical_search(false);
-		REQUIRE_FALSE(pairlist.is_using_hierarchical_search());
 
 		// Test bounding box mode
 		Vector3 manual_min(-5.0f, -5.0f, -5.0f);

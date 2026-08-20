@@ -472,8 +472,10 @@ void SimManager::execute_force_calculation(size_t step) {
 			static_cast<float>(sys_.get_cutoff()),
 			step,
 			static_cast<size_t>(sys_.get_neighbor_list_rebuild_period()),
-			0.0f,
-			1,
+			Vector3{0.0, 0.0, 0.0},
+			// Linear grid interpolation, matching legacy default ParticleInterpolationType=0
+			// (cubic is 64-point vs linear 8-point - ~3.5x costlier per PMF eval).
+			0,
 			compute_energy);
 
 		Event bonded_evt = patch->calculate_bonded_forces(sys_state_.get_bonded_interactions(),

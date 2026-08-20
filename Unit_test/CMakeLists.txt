@@ -76,6 +76,7 @@ endif()
 add_executable(arbd_zorder_tests
     ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp
     ${CMAKE_CURRENT_LIST_DIR}/System/zorder_tests.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/System/reorder_tests.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Compute/Zorder_pairlist2.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Compute/zorder_pairlist_tests.cpp
 )

@@ -2,6 +2,7 @@
 #include "../Random/philox.h"
 #include "Constants.h"
 #include "Header.h"
+#include "Interactions/Nonbonded/Pmf.h"
 #include "Objects/DeviceParticle.h"
 #include "System/PeriodicBox.h"
 #include "Types/BaseGrid.h"
@@ -21,6 +22,9 @@ struct BAOABIntegrate {
 	uint64_t base_seed;
 	uint32_t base_ctr;
 	size_t current_step;
+	const BaseGridView<arbd_real>* grid_configs; ///< PMF/force grids (nullptr = none); fused per v1
+	Vector3 electric_field;						 ///< Uniform global E field applied here
+	int interpolation_scheme;					 ///< 0=linear, 1=cubic
 	constexpr static uint32_t rng_stream = 0x1356914u; // Arbitrary stream ID for Philox RNG
 
 	BAOABIntegrate(ParticleView pv,
@@ -31,9 +35,13 @@ struct BAOABIntegrate {
 				   TemperatureType temp,
 				   idx_t n,
 				   uint64_t seed,
-				   uint32_t ctr)
+				   uint32_t ctr,
+				   const BaseGridView<arbd_real>* grids,
+				   const Vector3& efield,
+				   int scheme)
 		: particle_view(pv), particle_types(pt), sim_box(box), timestep(dt),
-		  current_step(current_step), kT(temp), num_particles(n), base_seed(seed), base_ctr(ctr) {}
+		  current_step(current_step), kT(temp), num_particles(n), base_seed(seed), base_ctr(ctr),
+		  grid_configs(grids), electric_field(efield), interpolation_scheme(scheme) {}
 
 	KERNEL_FUNC void operator()(idx_t idx) const {
 		if (idx >= num_particles)
@@ -49,6 +57,15 @@ struct BAOABIntegrate {
 		Vector3 force = particle_view.ForceEnergy[idx];
 		int type = particle_view.type_id[idx];
 
+		/**  Position-dependent force (PMF/force grid + uniform E) fused here per v1
+		 (evaluated at pos_N; closes step N-1 via BAOAB_LastUpdate and opens step N).
+		force += compute_position_dependent_force(pos,
+												  type,
+												  particle_types,
+												  grid_configs,
+												  electric_field,
+												  interpolation_scheme);
+		*/
 		// 2. Physical Constants & Properties
 		float mass = particle_types.mass[type];
 
@@ -56,12 +73,12 @@ struct BAOABIntegrate {
 
 		// --- B: Momentum Update (Half Step) ---
 		// p = p + 0.5 * dt * F * Unit1
-		mom += 0.5f * timestep * force * constants::FORCE_CONVERSION_FACTOR;
+		mom += arbd_real(0.5) * timestep * force * constants::FORCE_CONVERSION_FACTOR;
 
 		// --- A: Position Update (Half Step) ---
 		// r = r + 0.5 * dt * (p/m) * 1e4
 		// 1e4 accounts for the ns -> internal velocity scaling
-		pos += 0.5f * timestep * mom / mass * 10000.0f;
+		pos += arbd_real(0.5) * timestep * mom / mass * arbd_real(10000.0);
 
 		// --- O: Ornstein-Uhlenbeck Process (Vectorized) ---
 		// Calculate decay factors (c) and noise scales component-wise
@@ -94,7 +111,7 @@ struct BAOABIntegrate {
 		// --- A: Position Update (Second Half Step) ---
 		// r = r + 0.5 * dt * (p/m) * 1e4
 		// Added 1e4 to match Old Kernel line: r0 = r0 + 0.5f * timestep * p0 * 1e4 / mass;
-		pos += 0.5f * timestep * mom / mass * 10000.0f;
+		pos += arbd_real(0.5) * timestep * mom / mass * arbd_real(10000.0);
 
 		pos = sim_box.wrap(pos);
 
@@ -113,6 +130,9 @@ struct BAOAB_LastUpdate {
 	uint64_t base_seed;
 	uint32_t base_ctr;
 	size_t current_step;
+	const BaseGridView<arbd_real>* grid_configs; ///< PMF/force grids (nullptr = none); fused per v1
+	Vector3 electric_field;						 ///< Uniform global E field applied here
+	int interpolation_scheme;					 ///< 0=linear, 1=cubic
 
 	BAOAB_LastUpdate(ParticleView pv,
 					 const ParticleTypeView pt,
@@ -122,9 +142,13 @@ struct BAOAB_LastUpdate {
 					 TemperatureType temp,
 					 idx_t n,
 					 uint64_t seed,
-					 uint32_t ctr)
+					 uint32_t ctr,
+					 const BaseGridView<arbd_real>* grids,
+					 const Vector3& efield,
+					 int scheme)
 		: particle_view(pv), particle_types(pt), box_size(box), timestep(dt),
-		  current_step(current_step), kT(temp), num_particles(n), base_seed(seed), base_ctr(ctr) {}
+		  current_step(current_step), kT(temp), num_particles(n), base_seed(seed), base_ctr(ctr),
+		  grid_configs(grids), electric_field(efield), interpolation_scheme(scheme) {}
 
 	KERNEL_FUNC void operator()(idx_t idx) const {
 		if (idx >= num_particles)
@@ -137,7 +161,16 @@ struct BAOAB_LastUpdate {
 		Vector3 force = particle_view.ForceEnergy[idx];
 		int type = particle_view.type_id[idx];
 
-		mom += 0.5f * timestep * force * constants::FORCE_CONVERSION_FACTOR;
+		/**  Closing half-kick: force at pos_N must include the same position-dependent
+		// term the opening kernel added (v1 evaluates it in LastUpdateKernelBAOAB too).
+		force += compute_position_dependent_force(pos,
+												  type,
+												  particle_types,
+												  grid_configs,
+												  electric_field,
+												  interpolation_scheme);
+		*/
+		mom += arbd_real(0.5) * timestep * force * constants::FORCE_CONVERSION_FACTOR;
 		particle_view.mom[idx] = mom;
 	}
 };

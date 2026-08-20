@@ -82,8 +82,8 @@ struct RBParticleGridBuildKernel {
  *        of a prefix-sum + binary search).
  *
  * Force on each particle is scattered atomically into
- * ParticleView::ForceEnergy (matching PmfKernels.h's force+energy packing,
- * force = -scale*gradient, energy = scale*value) - unlike PmfKernels.h's
+ * ParticleView::ForceEnergy (matching Pmf.h's force+energy packing,
+ * force = -scale*gradient, energy = scale*value) - unlike Pmf.h's
  * single-pass one-thread-per-particle kernel, multiple work items (distinct
  * RB/grid candidates) can touch the same particle here, so the write can't
  * be a plain read-modify-write. The RB's Newton's-third-law reaction

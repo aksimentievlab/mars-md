@@ -64,11 +64,11 @@ compute_position_dependent_force(const Vector3& pos,
 								 int type_id,
 								 const ParticleTypeView types,
 								 const BaseGridView<arbd_real>* grid_configs,
-								 float electric_field,
+								 const Vector3& electric_field,
 								 int scheme,
 								 bool get_energy = false) {
 	const float charge = types.charge[type_id];
-	Vector3 force(0.0f, 0.0f, charge * electric_field);
+	Vector3 force(charge * electric_field.x, charge * electric_field.y, charge * electric_field.z);
 
 	// A type can reference any number of PMF grids; its terms occupy
 	// [offset, offset + count) of the flat table (legacy: the per-type
@@ -123,8 +123,8 @@ compute_position_dependent_force(const Vector3& pos,
 }
 
 struct ComputePMFKernel {
-	float electric_field = 0.0f;
-	int scheme = 1;
+	Vector3 electric_field{0.0f, 0.0f, 0.0f};
+	int scheme = 0;
 	bool get_energy = false;
 
 	KERNEL_FUNC void operator()(size_t i,
@@ -140,9 +140,6 @@ struct ComputePMFKernel {
 		const int type_id = particles.type_id[idx];
 		const Vector3 pos = particles.pos[idx];
 
-		// One thread per particle - ForceEnergy[idx] is only ever written by
-		// this thread, so this is a plain read-modify-write, not an atomic like
-		// the pairwise/bonded kernels' get_energy accumulation.
 		particles.ForceEnergy[idx] += compute_position_dependent_force(pos,
 																	   type_id,
 																	   types,

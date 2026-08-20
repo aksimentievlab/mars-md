@@ -2,7 +2,7 @@
 #include "Header.h"
 #include "Interactions/Nonbonded/GridGridKernels.h"
 #include "Interactions/Nonbonded/Pairwise.h"
-#include "Interactions/Nonbonded/PmfKernels.h"
+#include "Interactions/Nonbonded/Pmf.h"
 #include "Interactions/Nonbonded/RigidBodyAttachedParticles.h"
 #include "Interactions/Nonbonded/RigidBodyGridBatch.h"
 #include "Interactions/Nonbonded/RigidBodyParticleGridBatch.h"
