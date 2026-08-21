@@ -243,14 +243,14 @@ void SimManager::run() {
 
 	for (size_t step = 1; step <= num_steps; ++step) {
 		if (split_dlm) {
-			rigid_body_manager_->integrate_drift(dt, sim_box).wait();
+			rigid_body_manager_->integrate_drift(dt, sim_box); //.wait();
 			sys_state_.invalidate_rigid_bodies();
 		}
 
 		execute_force_calculation(step);
 
 		if (split_dlm) {
-			rigid_body_manager_->integrate_kick(dt, sim_box).wait();
+			rigid_body_manager_->integrate_kick(dt, sim_box); //.wait();
 			sys_state_.invalidate_rigid_bodies();
 		}
 
@@ -389,18 +389,17 @@ void SimManager::execute_force_calculation(size_t step) {
 														  resource_idx,
 														  compute_energy);
 
-		bonded_evt.wait();
-		evt.wait();
+		// bonded_evt.wait();
+		// evt.wait();
 	}
 
 	if (rigid_body_manager_) {
 		if (rigid_body_manager_->has_attached_particles()) {
 			auto& patches = patch_mgr->get_patches();
 			if (!patches.empty()) {
-				rigid_body_manager_
-					->reduce_attached_particle_forces(
-						std::as_const(patches.front()->get_particles()).view())
-					.wait();
+				rigid_body_manager_->reduce_attached_particle_forces(
+					std::as_const(patches.front()->get_particles()).view());
+				//.wait();
 			}
 		}
 
@@ -422,12 +421,11 @@ void SimManager::execute_force_calculation(size_t step) {
 
 		if (sys_.get_rigid_body_algorithm() != IntegratorType::Brownian) {
 			const Temperature& temperature = sys_.get_temperature_struct();
-			rigid_body_manager_
-				->add_langevin_forces(sys_.get_timestep(),
-									  temperature.kT,
-									  sys_.get_base_seed(),
-									  step)
-				.wait();
+			rigid_body_manager_->add_langevin_forces(sys_.get_timestep(),
+													 temperature.kT,
+													 sys_.get_base_seed(),
+													 step);
+			//.wait();
 		}
 	}
 
