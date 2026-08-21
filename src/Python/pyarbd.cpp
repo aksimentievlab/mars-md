@@ -1,16 +1,16 @@
-#include <pybind11/numpy.h>
-#include <pybind11/operators.h>
-#include <pybind11/pybind11.h>
+#include <nanobind/nanobind.h>
+#include <nanobind/ndarray.h>
+#include <nanobind/operators.h>
 
-namespace py = pybind11;
+namespace nb = nanobind;
 
-extern void init_pysystem(py::module_& m);
-extern void init_pyobjects(py::module_& m);
-extern void init_pybonded(py::module_& m);
-extern void init_pyloadfile(py::module_& m);
-extern void init_pysim(py::module_& m);
+extern void init_pysystem(nb::module_& m);
+extern void init_pyobjects(nb::module_& m);
+extern void init_pybonded(nb::module_& m);
+extern void init_pyloadfile(nb::module_& m);
+extern void init_pysim(nb::module_& m);
 
-PYBIND11_MODULE(arbd, m) {
+NB_MODULE(arbd, m) {
 	init_pysystem(m);
 	init_pyobjects(m);
 	init_pybonded(m);

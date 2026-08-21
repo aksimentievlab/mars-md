@@ -5,14 +5,16 @@
 #include "SimParam.h"
 #include "System/SimSystem.h"
 
-// pybind11 core
-#include <pybind11/pybind11.h>
-#include <pybind11/stl.h>
+// nanobind core
+#include <nanobind/nanobind.h>
+#include <nanobind/stl/string.h>
+#include <nanobind/stl/string_view.h>
+#include <nanobind/stl/vector.h>
 
 // Standard library
 #include <string>
 
-namespace py = pybind11;
+namespace nb = nanobind;
 using namespace ARBD;
 
 /**
@@ -74,27 +76,27 @@ using namespace ARBD;
  * # Runtime state is managed internally - results written to output files
  * ```
  */
-void init_pysystem(py::module_& m) {
+void init_pysystem(nb::module_& m) {
 	//================================================================================
 	// Enum Bindings
 	//================================================================================
-	py::enum_<Periodicity>(m, "Periodicity")
+	nb::enum_<Periodicity>(m, "Periodicity")
 		.value("AllPeriodic", Periodicity::AllPeriodic)
 		.value("TwoDimensional", Periodicity::TwoDimensional)
 		.value("OneDimensional", Periodicity::OneDimensional)
 		.value("Open", Periodicity::Open);
 
-	py::enum_<DecomposerType>(m, "DecomposerType")
+	nb::enum_<DecomposerType>(m, "DecomposerType")
 		.value("Spatial", DecomposerType::Spatial)
 		.value("RecursiveBisection", DecomposerType::RecursiveBisection)
 		.value("Geometric", DecomposerType::Geometric);
 
-	py::enum_<DecomposeDirection>(m, "DecomposeDirection")
+	nb::enum_<DecomposeDirection>(m, "DecomposeDirection")
 		.value("X", DecomposeDirection::X)
 		.value("Y", DecomposeDirection::Y)
 		.value("Z", DecomposeDirection::Z);
 
-	py::enum_<LongRangeMethod>(m, "LongRangeMethod")
+	nb::enum_<LongRangeMethod>(m, "LongRangeMethod")
 		.value("CutoffAMR", LongRangeMethod::CutoffAMR)
 		.value("PPPM", LongRangeMethod::PPPM)
 		.value("PME", LongRangeMethod::PME)
@@ -102,18 +104,18 @@ void init_pysystem(py::module_& m) {
 		.value("Direct", LongRangeMethod::Direct)
 		.value("None", LongRangeMethod::None);
 
-	py::enum_<OutputFormat>(m, "OutputFormat")
+	nb::enum_<OutputFormat>(m, "OutputFormat")
 		.value("DCD", OutputFormat::DCD)
 		.value("PDB", OutputFormat::PDB)
 		.value("HDF5", OutputFormat::HDF5);
 
 	// Temperature format enum
-	py::enum_<Temperature::Format>(m, "TemperatureFormat")
+	nb::enum_<Temperature::Format>(m, "TemperatureFormat")
 		.value("Value", Temperature::Format::Value)
 		.value("Grid", Temperature::Format::Grid);
 
 	// Resource type enum
-	py::enum_<ResourceType>(m, "ResourceType")
+	nb::enum_<ResourceType>(m, "ResourceType")
 		.value("CPU", ResourceType::CPU)
 		.value("CUDA", ResourceType::CUDA)
 		.value("SYCL", ResourceType::SYCL)
@@ -125,22 +127,22 @@ void init_pysystem(py::module_& m) {
 	// Length is a typedef for float, so we just expose it as float in Python
 	// Users can use float directly for Length values
 
-	py::class_<Temperature>(m, "Temperature")
-		.def(py::init<>())
-		.def_readwrite("format", &Temperature::format)
-		.def_readwrite("value", &Temperature::value)
+	nb::class_<Temperature>(m, "Temperature")
+		.def(nb::init<>())
+		.def_rw("format", &Temperature::format)
+		.def_rw("value", &Temperature::value)
 		.def("__repr__", [](const Temperature& t) {
 			return std::string("Temperature(format=") +
 				   (t.format == Temperature::Format::Value ? "Value" : "Grid") +
 				   ", value=" + std::to_string(t.value) + ")";
 		});
 
-	py::class_<SimSteps>(m, "SimSteps")
-		.def(py::init<float, float>(), py::arg("timestep"), py::arg("total_simulation_time"))
-		.def(py::init<float, int>(), py::arg("timestep"), py::arg("steps"))
-		.def_readwrite("timestep", &SimSteps::timestep)
-		.def_readwrite("steps", &SimSteps::steps)
-		.def_readwrite("total_simulation_time", &SimSteps::total_simulation_time)
+	nb::class_<SimSteps>(m, "SimSteps")
+		.def(nb::init<float, float>(), nb::arg("timestep"), nb::arg("total_simulation_time"))
+		.def(nb::init<float, int>(), nb::arg("timestep"), nb::arg("steps"))
+		.def_rw("timestep", &SimSteps::timestep)
+		.def_rw("steps", &SimSteps::steps)
+		.def_rw("total_simulation_time", &SimSteps::total_simulation_time)
 		.def("set_total_steps", &SimSteps::set_total_steps)
 		.def("__repr__", [](const SimSteps& ss) {
 			return "SimSteps(timestep=" + std::to_string(ss.timestep) +
@@ -148,22 +150,22 @@ void init_pysystem(py::module_& m) {
 				   ", total_simulation_time=" + std::to_string(ss.total_simulation_time) + ")";
 		});
 
-	py::class_<PeriodicBox>(m, "PeriodicBox")
-		.def(py::init<>(), "Create non-periodic box")
-		.def(py::init<Vector3, bool, bool, bool>(),
-			 py::arg("box_size"),
-			 py::arg("periodic_x") = true,
-			 py::arg("periodic_y") = true,
-			 py::arg("periodic_z") = true,
+	nb::class_<PeriodicBox>(m, "PeriodicBox")
+		.def(nb::init<>(), "Create non-periodic box")
+		.def(nb::init<Vector3, bool, bool, bool>(),
+			 nb::arg("box_size"),
+			 nb::arg("periodic_x") = true,
+			 nb::arg("periodic_y") = true,
+			 nb::arg("periodic_z") = true,
 			 "Create periodic box from dimensions")
-		.def(py::init<Vector3, Vector3, Vector3, Vector3, bool, bool, bool>(),
-			 py::arg("origin"),
-			 py::arg("basis1"),
-			 py::arg("basis2"),
-			 py::arg("basis3"),
-			 py::arg("periodic1") = true,
-			 py::arg("periodic2") = true,
-			 py::arg("periodic3") = true,
+		.def(nb::init<Vector3, Vector3, Vector3, Vector3, bool, bool, bool>(),
+			 nb::arg("origin"),
+			 nb::arg("basis1"),
+			 nb::arg("basis2"),
+			 nb::arg("basis3"),
+			 nb::arg("periodic1") = true,
+			 nb::arg("periodic2") = true,
+			 nb::arg("periodic3") = true,
 			 "Create periodic box from basis vectors")
 		.def("get_box_size", &PeriodicBox::get_box_size, "Get box dimensions")
 		.def("get_periodicity", &PeriodicBox::get_periodicity, "Get periodicity flags")
@@ -180,12 +182,12 @@ void init_pysystem(py::module_& m) {
 	//================================================================================
 	// Resource Binding - Computational resources (CPU, GPU, etc.)
 	//================================================================================
-	py::class_<Resource>(m, "Resource")
-		.def(py::init<>(), "Create default resource (CPU)")
-		.def(py::init<short>(), py::arg("device_id"), "Create resource with device ID")
-		.def(py::init<ResourceType, short>(),
-			 py::arg("resource_type"),
-			 py::arg("device_id") = 0,
+	nb::class_<Resource>(m, "Resource")
+		.def(nb::init<>(), "Create default resource (CPU)")
+		.def(nb::init<short>(), nb::arg("device_id"), "Create resource with device ID")
+		.def(nb::init<ResourceType, short>(),
+			 nb::arg("resource_type"),
+			 nb::arg("device_id") = 0,
 			 "Create resource with type and device ID")
 		.def("type", &Resource::type, "Get resource type")
 		.def("id", &Resource::id, "Get device ID")
@@ -200,35 +202,35 @@ void init_pysystem(py::module_& m) {
 		.def("__ne__", &Resource::operator!=)
 		.def("__lt__", &Resource::operator<);
 
-	// Note: std::vector<Resource> is automatically bound by pybind11/stl.h
+	// Note: std::vector<Resource> is automatically bound by nanobind/stl/vector.h
 	// No manual binding needed - Python can use list[Resource] directly
 
 	//================================================================================
 	// SimSystem Binding - Time-immutable system configuration
 	//================================================================================
 
-	py::class_<SimSystem>(m, "SimSystem")
-		.def(py::init<std::vector<Resource>>(), py::arg("resources"), "Create simulation system")
+	nb::class_<SimSystem>(m, "SimSystem")
+		.def(nb::init<std::vector<Resource>>(), nb::arg("resources"), "Create simulation system")
 		// Physical parameters
 		.def(
 			"set_temperature_value",
 			[](SimSystem& sys, float temp) { sys.set_temperature(temp); },
-			py::arg("temperature"),
+			nb::arg("temperature"),
 			"Set system temperature (constant value)")
 		.def(
 			"set_temperature_grid",
 			[](SimSystem& sys, const BaseGrid<arbd_real>& grid) { sys.set_temperature(grid); },
-			py::arg("grid"),
+			nb::arg("grid"),
 			"Set system temperature (spatial grid)")
 		.def(
 			"get_temperature",
 			[](const SimSystem& sys, Vector3 position) { return sys.get_temperature(position); },
-			py::arg("position") = Vector3{0, 0, 0},
+			nb::arg("position") = Vector3{0, 0, 0},
 			"Get temperature")
 		.def(
 			"set_cutoff",
 			[](SimSystem& sys, float cutoff) { sys.set_cutoff(Length(cutoff)); },
-			py::arg("cutoff"),
+			nb::arg("cutoff"),
 			"Set interaction cutoff distance")
 		.def(
 			"get_cutoff",
@@ -236,88 +238,88 @@ void init_pysystem(py::module_& m) {
 			"Get interaction cutoff distance")
 		.def("set_box_size",
 			 &SimSystem::set_box_size,
-			 py::arg("x"),
-			 py::arg("y"),
-			 py::arg("z"),
+			 nb::arg("x"),
+			 nb::arg("y"),
+			 nb::arg("z"),
 			 "Set box dimensions")
 		.def("get_box_size", &SimSystem::get_box_size, "Get box dimensions")
 		.def("set_periodicity",
 			 &SimSystem::set_periodicity,
-			 py::arg("px"),
-			 py::arg("py"),
-			 py::arg("pz"),
+			 nb::arg("px"),
+			 nb::arg("py"),
+			 nb::arg("pz"),
 			 "Set periodicity")
 		.def("get_boundary_conditions",
 			 &SimSystem::get_boundary_conditions,
-			 py::return_value_policy::reference_internal,
+			 nb::rv_policy::reference_internal,
 			 "Get boundary conditions (PeriodicBox)")
 		// Method selection
 		.def("set_decomposer_type",
 			 &SimSystem::set_decomposer_type,
-			 py::arg("type"),
-			 py::arg("direction") = DecomposeDirection::Z,
+			 nb::arg("type"),
+			 nb::arg("direction") = DecomposeDirection::Z,
 			 "Set domain decomposition method")
 		.def("get_decomposer_type",
 			 &SimSystem::get_decomposer_type,
 			 "Get domain decomposition method")
 		.def("set_long_range_method",
 			 &SimSystem::set_long_range_method,
-			 py::arg("method"),
+			 nb::arg("method"),
 			 "Set long-range interaction method")
 		.def("get_long_range_method",
 			 &SimSystem::get_long_range_method,
 			 "Get long-range interaction method")
 		.def("set_particle_integrator_type",
 			 &SimSystem::set_particle_integrator_type,
-			 py::arg("type"),
+			 nb::arg("type"),
 			 "Set particle dynamics algorithm")
 		.def("get_particle_algorithm",
 			 &SimSystem::get_particle_algorithm,
 			 "Get particle dynamics algorithm")
 		.def("set_rigid_body_integrator_type",
 			 &SimSystem::set_rigid_body_integrator_type,
-			 py::arg("type"),
+			 nb::arg("type"),
 			 "Set rigid body dynamics algorithm")
 		.def("get_rigid_body_algorithm",
 			 &SimSystem::get_rigid_body_algorithm,
 			 "Get rigid body dynamics algorithm")
 		// Simulation control
-		.def("set_timestep", &SimSystem::set_timestep, py::arg("dt"), "Set timestep")
+		.def("set_timestep", &SimSystem::set_timestep, nb::arg("dt"), "Set timestep")
 		.def("get_timestep", &SimSystem::get_timestep, "Get timestep")
-		.def("set_num_steps", &SimSystem::set_num_steps, py::arg("n"), "Set number of steps")
+		.def("set_num_steps", &SimSystem::set_num_steps, nb::arg("n"), "Set number of steps")
 		.def("get_num_steps", &SimSystem::get_num_steps, "Get number of steps")
 		.def("set_output_period",
 			 &SimSystem::set_output_period,
-			 py::arg("period"),
+			 nb::arg("period"),
 			 "Set trajectory output period")
 		.def("get_output_period", &SimSystem::get_output_period, "Get trajectory output period")
 		.def("set_energy_output_period",
 			 &SimSystem::set_energy_output_period,
-			 py::arg("period"),
+			 nb::arg("period"),
 			 "Set energy output period")
 		.def("get_energy_output_period",
 			 &SimSystem::get_energy_output_period,
 			 "Get energy output period")
 		.def("set_output_name",
 			 &SimSystem::set_output_name,
-			 py::arg("name"),
+			 nb::arg("name"),
 			 "Set output file base name")
 		.def("get_output_name", &SimSystem::get_output_name, "Get output file base name")
 		.def("set_output_format",
 			 &SimSystem::set_output_format,
-			 py::arg("format"),
+			 nb::arg("format"),
 			 "Set output file format")
 		.def("get_output_format", &SimSystem::get_output_format, "Get output file format")
 		// Type definitions (time-invariant configuration)
 		.def("add_particle_type",
 			 &SimSystem::add_particle_type,
-			 py::arg("type"),
+			 nb::arg("type"),
 			 "Register a particle type (copied into the system)")
 		.def("add_rigid_body_type",
 			 &SimSystem::add_rigid_body_type,
-			 py::arg("type"),
+			 nb::arg("type"),
 			 "Register a rigid body type (copied into the system)")
-		// NOTE: these return a *copy* as a plain Python list - pybind11/stl.h
+		// NOTE: these return a *copy* as a plain Python list - nanobind/stl/vector.h
 		// converts std::vector<T> by value, so reference_internal cannot make
 		// the result a live view and mutating it (e.g. .append()) does nothing
 		// to the system. Use add_particle_type()/add_rigid_body_type() to
@@ -332,22 +334,22 @@ void init_pysystem(py::module_& m) {
 			 "Get a copy of the registered rigid body types (read-only snapshot)")
 		.def("get_particle_type_id",
 			 &SimSystem::get_particle_type_id,
-			 py::arg("name"),
+			 nb::arg("name"),
 			 "Resolve a particle type name to its assigned id (valid only after "
 			 "SimManager.init())")
 		.def("get_rigid_body_type_id",
 			 &SimSystem::get_rigid_body_type_id,
-			 py::arg("name"),
+			 nb::arg("name"),
 			 "Resolve a rigid body type name to its assigned id (valid only after "
 			 "SimManager.init())")
 		.def("get_grid_manager",
 			 static_cast<GridManager& (SimSystem::*)()>(&SimSystem::get_grid_manager),
-			 py::return_value_policy::reference_internal,
+			 nb::rv_policy::reference_internal,
 			 "Get GridManager for unified grid management")
 		.def("get_nonbonded_interactions",
 			 static_cast<NonBondedInteractions& (SimSystem::*)()>(
 				 &SimSystem::get_nonbonded_interactions),
-			 py::return_value_policy::reference_internal,
+			 nb::rv_policy::reference_internal,
 			 "Get NonBondedInteractions - pair/long-range parameters are tied to particle "
 			 "type definitions, so this lives on SimSystem rather than being staged into "
 			 "SimManager like bonded interactions")
@@ -365,19 +367,19 @@ void init_pysystem(py::module_& m) {
 	// ConfigParser loads configuration files and temporarily holds initial topology data.
 	// The initial data (particles, bonds, etc.) is retrieved once during initialization
 	// and then discarded. It does NOT create SystemState - that's created separately.
-	py::class_<ConfigParser>(m, "ConfigParser")
-		.def(py::init<SimSystem&, std::string_view>(),
-			 py::arg("sim_system"),
-			 py::arg("file_name"),
+	nb::class_<ConfigParser>(m, "ConfigParser")
+		.def(nb::init<SimSystem&, std::string_view>(),
+			 nb::arg("sim_system"),
+			 nb::arg("file_name"),
 			 "Load configuration from file and configure SimSystem")
 		.def("get_sim_system",
 			 static_cast<SimSystem& (ConfigParser::*)()>(&ConfigParser::get_sim_system),
-			 py::return_value_policy::reference_internal,
+			 nb::rv_policy::reference_internal,
 			 "Get reference to loaded SimSystem")
 		.def("get_init_particles",
 			 static_cast<std::vector<ParticleIO>& (ConfigParser::*)()>(
 				 &ConfigParser::get_init_particles),
-			 py::return_value_policy::reference_internal,
+			 nb::rv_policy::reference_internal,
 			 "Get initial particles (temporary data)")
 		.def("validate", &ConfigParser::validate, "Validate loaded configuration")
 		.def("__repr__", [](const ConfigParser& parser) {

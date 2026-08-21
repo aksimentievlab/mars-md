@@ -8,9 +8,9 @@
 #include <string>	   // For std::string member
 #include <string_view> // For function parameters
 
-// Forward declaration for pybind11
+// Forward declaration for nanobind
 #ifdef USE_PYTHON
-namespace pybind11 {
+namespace nanobind {
 class object;
 }
 #endif
@@ -43,11 +43,11 @@ class ConfigParser {
 
 #ifdef USE_PYTHON
 	/**
-	 * @brief Construct from Python dictionary (pybind11-friendly)
+	 * @brief Construct from Python dictionary (nanobind-friendly)
 	 * @param sim_system Simulation system to configure
 	 * @param config_dict Python dictionary with configuration parameters
 	 */
-	ConfigParser(SimSystem& sim_system, const std::map<std::string, pybind11::object>& config_dict);
+	ConfigParser(SimSystem& sim_system, const std::map<std::string, nanobind::object>& config_dict);
 #endif
 	/**
 	 * @brief Parse configuration from file
@@ -130,7 +130,7 @@ class ConfigParser {
 	 */
 	void fold_in_attached_particles();
 #ifdef USE_PYTHON
-	void parse_dictionary(const std::map<std::string, pybind11::object>& config_dict);
+	void parse_dictionary(const std::map<std::string, nanobind::object>& config_dict);
 #endif
 };
 } // namespace ARBD

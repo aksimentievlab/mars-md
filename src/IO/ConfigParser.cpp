@@ -19,11 +19,11 @@
 #include <unordered_set>
 #include <vector>
 
-// pybind11 includes (implementation only)
+// nanobind includes (implementation only)
 #ifdef USE_PYTHON
-#include <pybind11/cast.h>
-#include <pybind11/pybind11.h>
-#include <pybind11/stl.h>
+#include <nanobind/nanobind.h>
+#include <nanobind/stl/string.h>
+#include <nanobind/stl/vector.h>
 #endif
 namespace ARBD {
 
@@ -67,7 +67,7 @@ ConfigParser::ConfigParser(SimSystem& sim_system, std::string_view file_name)
 
 #ifdef USE_PYTHON
 ConfigParser::ConfigParser(SimSystem& sim_system,
-						   const std::map<std::string, pybind11::object>& config_dict)
+						   const std::map<std::string, nanobind::object>& config_dict)
 	: sim_system_ref_(&sim_system),
 	  bond_config_reader_(init_bonded_interactions_, sim_system_ref_->get_tables_registry()) {
 	apply_defaults();
@@ -1137,39 +1137,39 @@ void ConfigParser::fold_in_attached_particles() {
 }
 
 #ifdef USE_PYTHON
-void ConfigParser::parse_dictionary(const std::map<std::string, pybind11::object>& config_dict) {
+void ConfigParser::parse_dictionary(const std::map<std::string, nanobind::object>& config_dict) {
 
 	for (const auto& [key, value] : config_dict) {
 		try {
 			if (key == "temperature") {
-				sim_system_ref_->set_temperature(pybind11::cast<float>(value));
+				sim_system_ref_->set_temperature(nanobind::cast<float>(value));
 			} else if (key == "cutoff") {
-				sim_system_ref_->set_cutoff(Length(pybind11::cast<float>(value)));
+				sim_system_ref_->set_cutoff(Length(nanobind::cast<float>(value)));
 			} else if (key == "timestep") {
-				sim_system_ref_->set_timestep(pybind11::cast<float>(value));
+				sim_system_ref_->set_timestep(nanobind::cast<float>(value));
 			} else if (key == "seed") {
-				sim_system_ref_->set_base_seed(pybind11::cast<long long>(value));
+				sim_system_ref_->set_base_seed(nanobind::cast<long long>(value));
 			} else if (key == "num_steps" || key == "steps") {
-				sim_system_ref_->set_num_steps(pybind11::cast<int>(value));
+				sim_system_ref_->set_num_steps(nanobind::cast<int>(value));
 			} else if (key == "output_period") {
-				sim_system_ref_->set_output_period(pybind11::cast<float>(value));
+				sim_system_ref_->set_output_period(nanobind::cast<float>(value));
 			} else if (key == "energy_output_period") {
-				sim_system_ref_->set_energy_output_period(pybind11::cast<float>(value));
+				sim_system_ref_->set_energy_output_period(nanobind::cast<float>(value));
 			} else if (key == "neighbor_list_rebuild_period") {
-				sim_system_ref_->set_neighbor_list_rebuild_period(pybind11::cast<float>(value));
+				sim_system_ref_->set_neighbor_list_rebuild_period(nanobind::cast<float>(value));
 			} else if (key == "reorder_period") {
-				sim_system_ref_->set_reorder_period(pybind11::cast<int>(value));
+				sim_system_ref_->set_reorder_period(nanobind::cast<int>(value));
 			} else if (key == "output_name") {
-				sim_system_ref_->set_output_name(pybind11::cast<std::string>(value));
+				sim_system_ref_->set_output_name(nanobind::cast<std::string>(value));
 			} else if (key == "pressure") {
 				// TODO: Add setter for pressure
-				// sim_system_ref_->set_pressure(pybind11::cast<float>(value));
+				// sim_system_ref_->set_pressure(nanobind::cast<float>(value));
 			} else if (key == "replicas") {
 				// TODO: Add setter for replicas
-				// sim_system_ref_->set_replicas(pybind11::cast<int>(value));
+				// sim_system_ref_->set_replicas(nanobind::cast<int>(value));
 			} else if (key == "box_size") {
 				// Handle box size as tuple/list of 3 floats
-				auto box_list = pybind11::cast<std::vector<float>>(value);
+				auto box_list = nanobind::cast<std::vector<float>>(value);
 				if (box_list.size() == 3) {
 					sim_system_ref_->set_box_size(box_list[0], box_list[1], box_list[2]);
 				} else {
@@ -1178,7 +1178,7 @@ void ConfigParser::parse_dictionary(const std::map<std::string, pybind11::object
 									"Box size must be a list/tuple of 3 floats");
 				}
 			} else if (key == "decomposer") {
-				std::string decomposer_str = pybind11::cast<std::string>(value);
+				std::string decomposer_str = nanobind::cast<std::string>(value);
 				if (decomposer_str == "Spatial") {
 					sim_system_ref_->set_decomposer_type(DecomposerType::Spatial);
 				} else if (decomposer_str == "RecursiveBisection") {
@@ -1192,7 +1192,7 @@ void ConfigParser::parse_dictionary(const std::map<std::string, pybind11::object
 									decomposer_str);
 				}
 			} else if (key == "long_range_method") {
-				std::string method_str = pybind11::cast<std::string>(value);
+				std::string method_str = nanobind::cast<std::string>(value);
 				if (method_str == "CutoffAMR") {
 					sim_system_ref_->set_long_range_method(LongRangeMethod::CutoffAMR);
 				} else if (method_str == "PPPM") {
@@ -1212,7 +1212,7 @@ void ConfigParser::parse_dictionary(const std::map<std::string, pybind11::object
 									method_str);
 				}
 			} else if (key == "particle_dynamic_type") {
-				std::string dynamic_str = pybind11::cast<std::string>(value);
+				std::string dynamic_str = nanobind::cast<std::string>(value);
 				if (dynamic_str == "Brownian") {
 					sim_system_ref_->set_particle_integrator_type(IntegratorType::Brownian);
 				} else if (dynamic_str == "Langevin") {
@@ -1226,7 +1226,7 @@ void ConfigParser::parse_dictionary(const std::map<std::string, pybind11::object
 									dynamic_str);
 				}
 			} else if (key == "rigid_body_dynamic_type") {
-				std::string dynamic_str = pybind11::cast<std::string>(value);
+				std::string dynamic_str = nanobind::cast<std::string>(value);
 				if (dynamic_str == "Brownian") {
 					sim_system_ref_->set_rigid_body_integrator_type(IntegratorType::Brownian);
 				} else if (dynamic_str == "Langevin") {
@@ -1240,7 +1240,7 @@ void ConfigParser::parse_dictionary(const std::map<std::string, pybind11::object
 									dynamic_str);
 				}
 			} else if (key == "output_format") {
-				std::string format_str = pybind11::cast<std::string>(value);
+				std::string format_str = nanobind::cast<std::string>(value);
 				if (format_str == "DCD") {
 					sim_system_ref_->set_output_format(OutputFormat::DCD);
 				} else if (format_str == "PDB") {
@@ -1256,7 +1256,7 @@ void ConfigParser::parse_dictionary(const std::map<std::string, pybind11::object
 			} else {
 				LOGINFO("ConfigParser: Ignoring unknown configuration parameter '{}'", key);
 			}
-		} catch (const pybind11::cast_error& e) {
+		} catch (const nanobind::cast_error& e) {
 			throw Exception(ExceptionType::ValueError,
 							SourceLocation(),
 							"Failed to cast parameter '{}' to expected type: {}",

@@ -34,14 +34,18 @@
 #include "Objects/Tables.h"
 #include "PyTypeCasters.h"
 
-#include <pybind11/numpy.h>
-#include <pybind11/pybind11.h>
-#include <pybind11/stl.h>
+#include <nanobind/nanobind.h>
+#include <nanobind/ndarray.h>
+#include <nanobind/stl/optional.h>
+#include <nanobind/stl/string.h>
+#include <nanobind/stl/vector.h>
 
-namespace py = pybind11;
+namespace nb = nanobind;
 using namespace ARBD;
 
 namespace {
+
+using InArray = nb::ndarray<float, nb::ndim<3>, nb::c_contig, nb::device::cpu>;
 
 /**
  * @brief Build a dense Grid directly from a 3D numpy array, e.g. one
@@ -54,24 +58,14 @@ namespace {
  * @param spacing Per-axis grid spacing (dx, dy, dz); use `basis` instead for
  *        a non-orthogonal grid.
  */
-BaseGrid<arbd_real> grid_from_numpy(py::array_t<float, py::array::c_style | py::array::forcecast> values,
-								Vector3 origin,
-								Vector3 spacing) {
-	py::buffer_info info = values.request();
-	if (info.ndim != 3) {
-		throw std::runtime_error(
-			"Grid.from_numpy: values must be a 3D array of shape (nx, ny, nz); "
-			"got ndim=" +
-			std::to_string(info.ndim));
-	}
-
-	const auto nx = static_cast<idx_t>(info.shape[0]);
-	const auto ny = static_cast<idx_t>(info.shape[1]);
-	const auto nz = static_cast<idx_t>(info.shape[2]);
+BaseGrid<arbd_real> grid_from_numpy(InArray values, Vector3 origin, Vector3 spacing) {
+	const auto nx = static_cast<idx_t>(values.shape(0));
+	const auto ny = static_cast<idx_t>(values.shape(1));
+	const auto nz = static_cast<idx_t>(values.shape(2));
 
 	Matrix3 basis(spacing.x, spacing.y, spacing.z);
 	BaseGrid<arbd_real> grid(basis, origin, nx, ny, nz);
-	std::memcpy(grid.data(), info.ptr, static_cast<size_t>(info.size) * sizeof(float));
+	std::memcpy(grid.data(), values.data(), values.size() * sizeof(float));
 	return grid;
 }
 
@@ -79,24 +73,13 @@ BaseGrid<arbd_real> grid_from_numpy(py::array_t<float, py::array::c_style | py::
  * @brief Same as grid_from_numpy, but for a non-orthogonal grid: takes a
  *        full basis matrix instead of per-axis spacing.
  */
-BaseGrid<arbd_real> grid_from_numpy_basis(
-	py::array_t<float, py::array::c_style | py::array::forcecast> values,
-	Vector3 origin,
-	Matrix3 basis) {
-	py::buffer_info info = values.request();
-	if (info.ndim != 3) {
-		throw std::runtime_error(
-			"Grid.from_numpy_basis: values must be a 3D array of shape (nx, ny, nz); "
-			"got ndim=" +
-			std::to_string(info.ndim));
-	}
-
-	const auto nx = static_cast<idx_t>(info.shape[0]);
-	const auto ny = static_cast<idx_t>(info.shape[1]);
-	const auto nz = static_cast<idx_t>(info.shape[2]);
+BaseGrid<arbd_real> grid_from_numpy_basis(InArray values, Vector3 origin, Matrix3 basis) {
+	const auto nx = static_cast<idx_t>(values.shape(0));
+	const auto ny = static_cast<idx_t>(values.shape(1));
+	const auto nz = static_cast<idx_t>(values.shape(2));
 
 	BaseGrid<arbd_real> grid(basis, origin, nx, ny, nz);
-	std::memcpy(grid.data(), info.ptr, static_cast<size_t>(info.size) * sizeof(float));
+	std::memcpy(grid.data(), values.data(), values.size() * sizeof(float));
 	return grid;
 }
 
@@ -104,53 +87,57 @@ BaseGrid<arbd_real> grid_from_numpy_basis(
  * @brief Grid values as a 3D numpy array, shape (nx, ny, nz), matching
  *        grid_from_numpy's expected layout.
  */
-py::array_t<float> grid_to_numpy(const BaseGrid<arbd_real>& grid) {
-	py::array_t<float> result({static_cast<py::ssize_t>(grid.nx()),
-							   static_cast<py::ssize_t>(grid.ny()),
-							   static_cast<py::ssize_t>(grid.nz())});
-	py::buffer_info info = result.request();
-	std::memcpy(info.ptr, grid.data(), static_cast<size_t>(grid.size()) * sizeof(float));
-	return result;
+nb::ndarray<float, nb::numpy, nb::ndim<3>> grid_to_numpy(const BaseGrid<arbd_real>& grid) {
+	const size_t n = static_cast<size_t>(grid.size());
+	float* data = new float[n];
+	std::memcpy(data, grid.data(), n * sizeof(float));
+
+	nb::capsule owner(data, [](void* p) noexcept { delete[] static_cast<float*>(p); });
+
+	size_t shape[3] = {static_cast<size_t>(grid.nx()),
+					   static_cast<size_t>(grid.ny()),
+					   static_cast<size_t>(grid.nz())};
+	return nb::ndarray<float, nb::numpy, nb::ndim<3>>(data, 3, shape, owner);
 }
 
 // BaseGrid<T>::index(ix, iy, iz) is private (host-only convenience is not
 // part of its device-shared API), so the linear-index formula - z fastest,
 // x slowest, matching numpy's default C order for shape (nx, ny, nz) - is
 // duplicated here from its public nx()/ny()/nz() instead.
-idx_t grid_flat_index(const BaseGrid<arbd_real>& grid, py::tuple ijk) {
+idx_t grid_flat_index(const BaseGrid<arbd_real>& grid, nb::tuple ijk) {
 	if (ijk.size() != 3)
-		throw py::index_error("Grid index must be a length-3 (ix, iy, iz) tuple");
-	const auto ix = ijk[0].cast<idx_t>();
-	const auto iy = ijk[1].cast<idx_t>();
-	const auto iz = ijk[2].cast<idx_t>();
+		throw nb::index_error("Grid index must be a length-3 (ix, iy, iz) tuple");
+	const auto ix = nb::cast<idx_t>(ijk[0]);
+	const auto iy = nb::cast<idx_t>(ijk[1]);
+	const auto iz = nb::cast<idx_t>(ijk[2]);
 	return iz + iy * grid.nz() + ix * grid.ny() * grid.nz();
 }
 
 } // namespace
 
-void declare_loadfile(py::module& m) {
-	py::enum_<GridFormat>(m, "GridFormat")
+void declare_loadfile(nb::module_& m) {
+	nb::enum_<GridFormat>(m, "GridFormat")
 		.value("Dense", GridFormat::Dense)
 		.value("Sparse", GridFormat::Sparse);
 
-	py::enum_<GridType>(m, "GridType")
+	nb::enum_<GridType>(m, "GridType")
 		.value("Potential", GridType::Potential)
 		.value("Diffusion", GridType::Diffusion)
 		.value("PMF", GridType::PMF)
 		.value("Force", GridType::Force)
 		.value("Density", GridType::Density);
 
-	py::enum_<InterpolationOrder>(m, "InterpolationOrder")
+	nb::enum_<InterpolationOrder>(m, "InterpolationOrder")
 		.value("Linear", InterpolationOrder::Linear)
 		.value("Cubic", InterpolationOrder::Cubic);
 
-	py::class_<GridKey>(m, "GridKey")
-		.def(py::init<>())
-		.def(py::init<const std::string&, const GridFormat&>(), py::arg("name"), py::arg("format"))
-		.def_readwrite("name", &GridKey::name)
-		.def_readwrite("format", &GridKey::format)
-		.def_readwrite("grid_id", &GridKey::grid_id)
-		.def_readwrite("interpolation_order", &GridKey::interpolation_order)
+	nb::class_<GridKey>(m, "GridKey")
+		.def(nb::init<>())
+		.def(nb::init<const std::string&, const GridFormat&>(), nb::arg("name"), nb::arg("format"))
+		.def_rw("name", &GridKey::name)
+		.def_rw("format", &GridKey::format)
+		.def_rw("grid_id", &GridKey::grid_id)
+		.def_rw("interpolation_order", &GridKey::interpolation_order)
 		.def("is_valid", &GridKey::is_valid)
 		.def("__repr__", [](const GridKey& gk) {
 			return "GridKey(name='" + gk.name +
@@ -161,35 +148,36 @@ void declare_loadfile(py::module& m) {
 	//========================================================================
 	// Grid - host-side dense grid data (BaseGrid<arbd_real>)
 	//========================================================================
-	py::class_<BaseGrid<arbd_real>>(m, "Grid")
-		.def(py::init<>(), "Create an empty 1x1x1 grid")
-		.def(py::init([](Vector3 origin, Matrix3 basis, idx_t nx, idx_t ny, idx_t nz) {
-				 return BaseGrid<arbd_real>(basis, origin, nx, ny, nz);
-			 }),
-			 py::arg("origin"),
-			 py::arg("basis"),
-			 py::arg("nx"),
-			 py::arg("ny"),
-			 py::arg("nz"),
+	nb::class_<BaseGrid<arbd_real>>(m, "Grid")
+		.def(nb::init<>(), "Create an empty 1x1x1 grid")
+		.def("__init__",
+			 [](BaseGrid<arbd_real>* self, Vector3 origin, Matrix3 basis, idx_t nx, idx_t ny, idx_t nz) {
+				 new (self) BaseGrid<arbd_real>(basis, origin, nx, ny, nz);
+			 },
+			 nb::arg("origin"),
+			 nb::arg("basis"),
+			 nb::arg("nx"),
+			 nb::arg("ny"),
+			 nb::arg("nz"),
 			 "Create a grid with an explicit basis matrix and dimensions")
-		.def(py::init<const Vector3&, float>(),
-			 py::arg("box_size"),
-			 py::arg("dx"),
+		.def(nb::init<const Vector3&, float>(),
+			 nb::arg("box_size"),
+			 nb::arg("dx"),
 			 "Create an orthogonal grid spanning box_size, centered at the origin, with "
 			 "spacing dx")
 		.def_static("from_numpy",
 					&grid_from_numpy,
-					py::arg("values"),
-					py::arg("origin") = Vector3(0.0f, 0.0f, 0.0f),
-					py::arg("spacing") = Vector3(1.0f, 1.0f, 1.0f),
+					nb::arg("values"),
+					nb::arg("origin") = Vector3(0.0f, 0.0f, 0.0f),
+					nb::arg("spacing") = Vector3(1.0f, 1.0f, 1.0f),
 					"Build a dense grid from a 3D numpy array of shape (nx, ny, nz) - e.g. "
 					"evaluated over np.meshgrid(x, y, z, indexing='ij') - with per-axis "
 					"spacing. Use from_numpy_basis for a non-orthogonal grid.")
 		.def_static("from_numpy_basis",
 					&grid_from_numpy_basis,
-					py::arg("values"),
-					py::arg("origin"),
-					py::arg("basis"),
+					nb::arg("values"),
+					nb::arg("origin"),
+					nb::arg("basis"),
 					"Build a dense grid from a 3D numpy array with a full (possibly "
 					"non-orthogonal) basis matrix")
 		.def("to_numpy", &grid_to_numpy, "Grid values as a 3D numpy array, shape (nx, ny, nz)")
@@ -197,20 +185,20 @@ void declare_loadfile(py::module& m) {
 		.def("ny", &BaseGrid<arbd_real>::ny)
 		.def("nz", &BaseGrid<arbd_real>::nz)
 		.def("size", &BaseGrid<arbd_real>::size)
-		.def_property_readonly("origin",
-								static_cast<const Vector3& (BaseGrid<arbd_real>::*)() const>(
-									&BaseGrid<arbd_real>::origin))
-		.def_property_readonly(
+		.def_prop_ro("origin",
+					 static_cast<const Vector3& (BaseGrid<arbd_real>::*)() const>(
+						 &BaseGrid<arbd_real>::origin))
+		.def_prop_ro(
 			"basis",
 			static_cast<const Matrix3& (BaseGrid<arbd_real>::*)() const>(&BaseGrid<arbd_real>::basis))
 		.def("__getitem__",
 			 [](const BaseGrid<arbd_real>& g, idx_t i) { return g[i]; })
 		.def("__getitem__",
-			 [](const BaseGrid<arbd_real>& g, py::tuple ijk) { return g[grid_flat_index(g, ijk)]; })
+			 [](const BaseGrid<arbd_real>& g, nb::tuple ijk) { return g[grid_flat_index(g, ijk)]; })
 		.def("__setitem__",
 			 [](BaseGrid<arbd_real>& g, idx_t i, float value) { g[i] = value; })
 		.def("__setitem__",
-			 [](BaseGrid<arbd_real>& g, py::tuple ijk, float value) {
+			 [](BaseGrid<arbd_real>& g, nb::tuple ijk, float value) {
 				 g[grid_flat_index(g, ijk)] = value;
 			 })
 		.def("__len__", &BaseGrid<arbd_real>::size)
@@ -223,24 +211,24 @@ void declare_loadfile(py::module& m) {
 	// GridManager - unified grid loading/lookup (dense grids only for now;
 	// sparse/.vdb loading is deferred, see file docstring)
 	//========================================================================
-	py::class_<GridManager>(m, "GridManager")
-		.def(py::init<>())
+	nb::class_<GridManager>(m, "GridManager")
+		.def(nb::init<>())
 		.def("add_grid",
 			 &GridManager::add_grid,
-			 py::arg("name"),
+			 nb::arg("name"),
 			 "Load a grid, dispatching on file extension (.dx -> dense; anything else -> "
 			 "sparse, which currently raises NotImplementedError)")
 		.def("add_dense_grid",
 			 &GridManager::add_dense_grid,
-			 py::arg("filename"),
+			 nb::arg("filename"),
 			 "Load a dense grid from a .dx file")
 		.def("add_sparse_grid",
 			 &GridManager::add_sparse_grid,
-			 py::arg("filename"),
+			 nb::arg("filename"),
 			 "Not yet implemented - sparse/.vdb grid support is deferred (see Objects/Grid.h)")
-		.def("get_grid_key", &GridManager::get_grid_key, py::arg("filename"))
-		.def("has_grid", &GridManager::has_grid, py::arg("filename"))
-		.def("get_grid_format", &GridManager::get_grid_format, py::arg("grid_id"))
+		.def("get_grid_key", &GridManager::get_grid_key, nb::arg("filename"))
+		.def("has_grid", &GridManager::has_grid, nb::arg("filename"))
+		.def("get_grid_format", &GridManager::get_grid_format, nb::arg("grid_id"))
 		.def("num_grids", &GridManager::num_grids)
 		.def("build_device_arrays",
 			 &GridManager::build_device_arrays,
@@ -250,35 +238,35 @@ void declare_loadfile(py::module& m) {
 		});
 }
 
-void init_pyloadfile(py::module_& m) {
+void init_pyloadfile(nb::module_& m) {
 	declare_loadfile(m);
 
-	py::enum_<TabulatedType>(m, "TabulatedType")
+	nb::enum_<TabulatedType>(m, "TabulatedType")
 		.value("NonBondedPair", TabulatedType::NonBondedPair)
 		.value("Bond", TabulatedType::Bond)
 		.value("Angle", TabulatedType::Angle)
 		.value("Dihedral", TabulatedType::Dihedral)
 		.value("Default", TabulatedType::Default);
 
-	py::class_<Table>(m, "Table")
-		.def(py::init<TabulatedType>(), py::arg("type") = TabulatedType::Default)
-		.def_readwrite("name", &Table::name)
-		.def_readwrite("type", &Table::type)
-		.def_readwrite("step_size", &Table::step_size)
-		.def_readwrite("start", &Table::start)
-		.def_readwrite("X", &Table::X)
-		.def_readwrite("Y", &Table::Y)
+	nb::class_<Table>(m, "Table")
+		.def(nb::init<TabulatedType>(), nb::arg("type") = TabulatedType::Default)
+		.def_rw("name", &Table::name)
+		.def_rw("type", &Table::type)
+		.def_rw("step_size", &Table::step_size)
+		.def_rw("start", &Table::start)
+		.def_rw("X", &Table::X)
+		.def_rw("Y", &Table::Y)
 		.def("read_file",
 			 &Table::read_file,
-			 py::arg("file_name"),
-			 py::arg("name") = "",
+			 nb::arg("file_name"),
+			 nb::arg("name") = "",
 			 "Load X/Y pairs from a two-column text file")
 		.def("set_values",
 			 &Table::set_values,
-			 py::arg("y_values"),
-			 py::arg("start"),
-			 py::arg("stop") = py::none(),
-			 py::arg("step_size") = py::none(),
+			 nb::arg("y_values"),
+			 nb::arg("start"),
+			 nb::arg("stop") = nb::none(),
+			 nb::arg("step_size") = nb::none(),
 			 "Populate the table directly from a Y-value list or numpy array (no file), "
 			 "with X generated evenly from start using either stop or step_size (exactly "
 			 "one of the two)")

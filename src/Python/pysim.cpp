@@ -32,57 +32,58 @@
 #include "IO/ConfigParser.h"
 #include "SimManager.h"
 
-#include <pybind11/pybind11.h>
-#include <pybind11/stl.h>
+#include <nanobind/nanobind.h>
+#include <nanobind/stl/string.h>
+#include <nanobind/stl/vector.h>
 
-namespace py = pybind11;
+namespace nb = nanobind;
 using namespace ARBD;
 
-void init_pysim(py::module_& m) {
-	py::class_<SimManager>(m, "SimManager")
-		.def(py::init<SimSystem&>(),
-			 py::arg("sys"),
-			 py::keep_alive<1, 2>(),
+void init_pysim(nb::module_& m) {
+	nb::class_<SimManager>(m, "SimManager")
+		.def(nb::init<SimSystem&>(),
+			 nb::arg("sys"),
+			 nb::keep_alive<1, 2>(),
 			 "Construct without a ConfigParser - configure via send_particles/"
 			 "send_bonded_interactions/send_rigid_bodies before init()")
-		.def(py::init<SimSystem&, const ConfigParser&>(),
-			 py::arg("sys"),
-			 py::arg("parser"),
-			 py::keep_alive<1, 2>(),
+		.def(nb::init<SimSystem&, const ConfigParser&>(),
+			 nb::arg("sys"),
+			 nb::arg("parser"),
+			 nb::keep_alive<1, 2>(),
 			 "Construct from a loaded ConfigParser")
 		.def("init",
 			 &SimManager::init,
 			 "Set up domain decomposition, output writers, IMD, and initial conditions")
 		.def("load_config",
 			 &SimManager::load_config,
-			 py::arg("parser"),
+			 nb::arg("parser"),
 			 "Load particles/bonded interactions/rigid bodies from a ConfigParser")
 		.def("stage_particles",
 			 &SimManager::set_initial_particles,
-			 py::arg("particles"),
+			 nb::arg("particles"),
 			 "Stage initial particles (ParticleIO list), consumed by init()")
 		.def("stage_bonded_interactions",
 			 &SimManager::set_bonded_interactions,
-			 py::arg("bonded_interactions"),
+			 nb::arg("bonded_interactions"),
 			 "Stage parsed bonds/angles/dihedrals/exclusions, consumed by init()")
 		.def("stage_rigid_bodies",
 			 &SimManager::set_initial_rigid_bodies,
-			 py::arg("bodies"),
+			 nb::arg("bodies"),
 			 "Stage initial rigid bodies (RigidBody list), consumed by init()")
 		.def("run",
 			 &SimManager::run,
-			 py::call_guard<py::gil_scoped_release>(),
+			 nb::call_guard<nb::gil_scoped_release>(),
 			 "Run the main simulation loop (releases the GIL - this blocks for the "
 			 "full simulation)")
 		.def("write_psf",
 			 &SimManager::write_psf,
-			 py::arg("path") = "",
+			 nb::arg("path") = "",
 			 "Write a PSF matching the DCD's atom order "
 			 "([regular][attached][cosmetic]). Call after init(). "
 			 "Defaults to '<outputName>.psf'.")
 		.def("write_pdb",
 			 &SimManager::write_pdb,
-			 py::arg("path") = "",
+			 nb::arg("path") = "",
 			 "Write a PDB snapshot of the current positions, same atom order and "
 			 "topology as write_psf(). Defaults to '<outputName>.pdb'.")
 		.def("get_total_time", &SimManager::get_total_time)

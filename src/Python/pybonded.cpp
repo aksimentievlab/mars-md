@@ -3,44 +3,45 @@
 #include "Interactions/NonBondedInteraction.h"
 #include "Objects/ParticleProperties.h"
 #include "PyTypeCasters.h"
-#include <pybind11/pybind11.h>
-#include <pybind11/stl.h>
+#include <nanobind/nanobind.h>
+#include <nanobind/stl/string.h>
+#include <nanobind/stl/vector.h>
 
-namespace py = pybind11;
+namespace nb = nanobind;
 using namespace ARBD;
 
 // ============================================================================
 // BONDED INTERACTION BINDINGS
 // ============================================================================
 
-void declare_bond(py::module& m) {
-	py::enum_<BondFlag>(m, "BondFlag")
+void declare_bond(nb::module_& m) {
+	nb::enum_<BondFlag>(m, "BondFlag")
 		.value("DEFAULT", BondFlag::DEFAULT)
 		.value("REPLACE", BondFlag::REPLACE)
 		.value("ADD", BondFlag::ADD);
 
-	py::enum_<AnalyticalBondType>(m, "AnalyticalBondType")
+	nb::enum_<AnalyticalBondType>(m, "AnalyticalBondType")
 		.value("Harmonic", AnalyticalBondType::Harmonic)
 		.value("Morse", AnalyticalBondType::Morse)
 		.value("FENE", AnalyticalBondType::FENE)
 		.value("Half_Harmonic", AnalyticalBondType::Half_Harmonic)
 		.value("WLCSK", AnalyticalBondType::WLCSK);
 
-	py::enum_<AnalyticalAngleType>(m, "AnalyticalAngleType")
+	nb::enum_<AnalyticalAngleType>(m, "AnalyticalAngleType")
 		.value("Harmonic", AnalyticalAngleType::Harmonic)
 		.value("Morse", AnalyticalAngleType::Morse)
 		.value("FENE", AnalyticalAngleType::FENE)
 		.value("Half_Harmonic", AnalyticalAngleType::Half_Harmonic)
 		.value("WLCSK", AnalyticalAngleType::WLCSK);
 
-	py::enum_<AnalyticalDihedralType>(m, "AnalyticalDihedralType")
+	nb::enum_<AnalyticalDihedralType>(m, "AnalyticalDihedralType")
 		.value("Harmonic", AnalyticalDihedralType::Harmonic)
 		.value("Morse", AnalyticalDihedralType::Morse)
 		.value("FENE", AnalyticalDihedralType::FENE)
 		.value("Half_Harmonic", AnalyticalDihedralType::Half_Harmonic)
 		.value("WLCSK", AnalyticalDihedralType::WLCSK);
 
-	py::enum_<InteractionForm>(m, "InteractionForm")
+	nb::enum_<InteractionForm>(m, "InteractionForm")
 		.value("Grid", InteractionForm::Grid)
 		.value("Tabulated", InteractionForm::Tabulated)
 		.value("Analytical", InteractionForm::Analytical);
@@ -52,86 +53,88 @@ void declare_bond(py::module& m) {
 	// handles are captured here - see ParticleUids in
 	// Interactions/BondedInteraction.h. `ind1`/`ind2` are therefore not
 	// exposed: they are outputs of that resolution, not inputs.
-	py::class_<Bond>(m, "Bond")
-		.def(py::init<>())
-		.def(py::init([](const ParticleIO& i, const ParticleIO& j, const std::string& name) {
-				 Bond b{};
-				 b.uids.uid1 = i.uid;
-				 b.uids.uid2 = j.uid;
-				 b.function_name = name;
-				 return b;
-			 }),
-			 py::arg("i"),
-			 py::arg("j"),
-			 py::arg("bond"))
-		.def_readwrite("name", &Bond::function_name)
-		.def_readwrite("form", &Bond::form)
-		.def_readwrite("flag", &Bond::flag)
+	nb::class_<Bond>(m, "Bond")
+		.def(nb::init<>())
+		.def("__init__",
+			 [](Bond* self, const ParticleIO& i, const ParticleIO& j, const std::string& name) {
+				 new (self) Bond{};
+				 self->uids.uid1 = i.uid;
+				 self->uids.uid2 = j.uid;
+				 self->function_name = name;
+			 },
+			 nb::arg("i"),
+			 nb::arg("j"),
+			 nb::arg("bond"))
+		.def_rw("name", &Bond::function_name)
+		.def_rw("form", &Bond::form)
+		.def_rw("flag", &Bond::flag)
 		.def("add_exclusion", &Bond::add_exclusion)
 		.def("__repr__", [](const Bond& b) { return "Bond(name='" + b.function_name + "')"; });
 }
 
-void declare_angle(py::module& m) {
-	py::class_<Angle>(m, "Angle")
-		.def(py::init<>())
-		.def(py::init([](const ParticleIO& i,
-						 const ParticleIO& j,
-						 const ParticleIO& k,
-						 const std::string& name) {
-				 Angle a{};
-				 a.uids.uid1 = i.uid;
-				 a.uids.uid2 = j.uid;
-				 a.uids.uid3 = k.uid;
-				 a.function_name = name;
-				 return a;
-			 }),
-			 py::arg("i"),
-			 py::arg("j"),
-			 py::arg("k"),
-			 py::arg("angle"))
-		.def_readwrite("name", &Angle::function_name)
-		.def_readwrite("form", &Angle::form)
+void declare_angle(nb::module_& m) {
+	nb::class_<Angle>(m, "Angle")
+		.def(nb::init<>())
+		.def("__init__",
+			 [](Angle* self,
+				const ParticleIO& i,
+				const ParticleIO& j,
+				const ParticleIO& k,
+				const std::string& name) {
+				 new (self) Angle{};
+				 self->uids.uid1 = i.uid;
+				 self->uids.uid2 = j.uid;
+				 self->uids.uid3 = k.uid;
+				 self->function_name = name;
+			 },
+			 nb::arg("i"),
+			 nb::arg("j"),
+			 nb::arg("k"),
+			 nb::arg("angle"))
+		.def_rw("name", &Angle::function_name)
+		.def_rw("form", &Angle::form)
 		.def("__repr__", [](const Angle& a) { return "Angle(name='" + a.function_name + "')"; });
 }
 
-void declare_dihedral(py::module& m) {
-	py::class_<Dihedral>(m, "Dihedral")
-		.def(py::init<>())
-		.def(py::init([](const ParticleIO& i,
-						 const ParticleIO& j,
-						 const ParticleIO& k,
-						 const ParticleIO& l,
-						 const std::string& name) {
-				 Dihedral d{};
-				 d.uids.uid1 = i.uid;
-				 d.uids.uid2 = j.uid;
-				 d.uids.uid3 = k.uid;
-				 d.uids.uid4 = l.uid;
-				 d.function_name = name;
-				 return d;
-			 }),
-			 py::arg("i"),
-			 py::arg("j"),
-			 py::arg("k"),
-			 py::arg("l"),
-			 py::arg("dihedral"))
-		.def_readwrite("name", &Dihedral::function_name)
-		.def_readwrite("form", &Dihedral::form)
+void declare_dihedral(nb::module_& m) {
+	nb::class_<Dihedral>(m, "Dihedral")
+		.def(nb::init<>())
+		.def("__init__",
+			 [](Dihedral* self,
+				const ParticleIO& i,
+				const ParticleIO& j,
+				const ParticleIO& k,
+				const ParticleIO& l,
+				const std::string& name) {
+				 new (self) Dihedral{};
+				 self->uids.uid1 = i.uid;
+				 self->uids.uid2 = j.uid;
+				 self->uids.uid3 = k.uid;
+				 self->uids.uid4 = l.uid;
+				 self->function_name = name;
+			 },
+			 nb::arg("i"),
+			 nb::arg("j"),
+			 nb::arg("k"),
+			 nb::arg("l"),
+			 nb::arg("dihedral"))
+		.def_rw("name", &Dihedral::function_name)
+		.def_rw("form", &Dihedral::form)
 		.def("__repr__",
 			 [](const Dihedral& d) { return "Dihedral(name='" + d.function_name + "')"; });
 }
 
-void declare_exclude(py::module& m) {
-	py::class_<Exclude>(m, "Exclude")
-		.def(py::init<>())
-		.def(py::init([](const ParticleIO& i, const ParticleIO& j) {
-				 Exclude e{};
-				 e.uids.uid1 = i.uid;
-				 e.uids.uid2 = j.uid;
-				 return e;
-			 }),
-			 py::arg("i"),
-			 py::arg("j"))
+void declare_exclude(nb::module_& m) {
+	nb::class_<Exclude>(m, "Exclude")
+		.def(nb::init<>())
+		.def("__init__",
+			 [](Exclude* self, const ParticleIO& i, const ParticleIO& j) {
+				 new (self) Exclude{};
+				 self->uids.uid1 = i.uid;
+				 self->uids.uid2 = j.uid;
+			 },
+			 nb::arg("i"),
+			 nb::arg("j"))
 		.def("__eq__", [](const Exclude& a, const Exclude& b) { return a == b; })
 		.def("__ne__", [](const Exclude& a, const Exclude& b) { return a != b; })
 		.def("__lt__", [](const Exclude& a, const Exclude& b) { return a < b; })
@@ -141,21 +144,21 @@ void declare_exclude(py::module& m) {
 		});
 }
 
-void declare_restraint(py::module& m) {
-	py::class_<Restraint>(m, "Restraint")
-		.def(py::init<>())
-		.def(py::init([](const ParticleIO& i, Vector3 r0, float k) {
-				 Restraint r{};
-				 r.uids.uid1 = i.uid;
-				 r.r0 = r0;
-				 r.k = k;
-				 return r;
-			 }),
-			 py::arg("i"),
-			 py::arg("r0"),
-			 py::arg("k"))
-		.def_readwrite("r0", &Restraint::r0)
-		.def_readwrite("k", &Restraint::k)
+void declare_restraint(nb::module_& m) {
+	nb::class_<Restraint>(m, "Restraint")
+		.def(nb::init<>())
+		.def("__init__",
+			 [](Restraint* self, const ParticleIO& i, Vector3 r0, float k) {
+				 new (self) Restraint{};
+				 self->uids.uid1 = i.uid;
+				 self->r0 = r0;
+				 self->k = k;
+			 },
+			 nb::arg("i"),
+			 nb::arg("r0"),
+			 nb::arg("k"))
+		.def_rw("r0", &Restraint::r0)
+		.def_rw("k", &Restraint::k)
 		.def("__repr__", [](const Restraint& r) {
 			return "Restraint(r0=" + r.r0.to_string() + ", k=" + std::to_string(r.k) + ")";
 		});
@@ -173,23 +176,23 @@ void declare_restraint(py::module& m) {
  * >>> print(bi)
  * BondedInteraction()
  */
-void declare_bonded_interaction(py::module& m) {
-	py::class_<BondedInteractions>(m, "BondedInteractions")
-		.def(py::init<std::vector<Bond>,
+void declare_bonded_interaction(nb::module_& m) {
+	nb::class_<BondedInteractions>(m, "BondedInteractions")
+		.def(nb::init<std::vector<Bond>,
 					  std::vector<Angle>,
 					  std::vector<Dihedral>,
 					  std::vector<Exclude>,
 					  std::vector<Restraint>>(),
-			 py::arg("bonds") = std::vector<Bond>{},
-			 py::arg("angles") = std::vector<Angle>{},
-			 py::arg("dihedrals") = std::vector<Dihedral>{},
-			 py::arg("exclusions") = std::vector<Exclude>{},
-			 py::arg("restraints") = std::vector<Restraint>{})
-		.def("add_bond", &BondedInteractions::add_bond, py::arg("bond"))
-		.def("add_angle", &BondedInteractions::add_angle, py::arg("angle"))
-		.def("add_dihedral", &BondedInteractions::add_dihedral, py::arg("dihedral"))
-		.def("add_exclusion", &BondedInteractions::add_exclude, py::arg("exclusion"))
-		.def("add_restraint", &BondedInteractions::add_restraint, py::arg("restraint"))
+			 nb::arg("bonds") = std::vector<Bond>{},
+			 nb::arg("angles") = std::vector<Angle>{},
+			 nb::arg("dihedrals") = std::vector<Dihedral>{},
+			 nb::arg("exclusions") = std::vector<Exclude>{},
+			 nb::arg("restraints") = std::vector<Restraint>{})
+		.def("add_bond", &BondedInteractions::add_bond, nb::arg("bond"))
+		.def("add_angle", &BondedInteractions::add_angle, nb::arg("angle"))
+		.def("add_dihedral", &BondedInteractions::add_dihedral, nb::arg("dihedral"))
+		.def("add_exclusion", &BondedInteractions::add_exclude, nb::arg("exclusion"))
+		.def("add_restraint", &BondedInteractions::add_restraint, nb::arg("restraint"))
 		.def("get_num_bonds", &BondedInteractions::get_num_bonds)
 		.def("get_num_angles", &BondedInteractions::get_num_angles)
 		.def("get_num_dihedrals", &BondedInteractions::get_num_dihedrals)
@@ -214,20 +217,22 @@ void declare_bonded_interaction(py::module& m) {
 // runs, so an id read at construction time would be meaningless. Only the
 // names are captured here; SimSystem::build_name_to_id_maps() resolves them
 // (see PairNonBonded::resolve_type_names).
-void declare_nonbonded_interaction(py::module& m) {
-	py::class_<PairNonBonded>(m, "PairNonBonded")
-		.def(py::init([](const ParticleType& type_a,
-						 const ParticleType& type_b,
-						 const std::string& function_name) {
-				 return PairNonBonded(type_a.name, type_b.name, function_name);
-			 }),
-			 py::arg("type_a"),
-			 py::arg("type_b"),
-			 py::arg("function_name"))
-		.def_readonly("type_name_1", &PairNonBonded::type_name_1)
-		.def_readonly("type_name_2", &PairNonBonded::type_name_2)
-		.def_readwrite("name", &PairNonBonded::function_name)
-		.def_readwrite("form", &PairNonBonded::form)
+void declare_nonbonded_interaction(nb::module_& m) {
+	nb::class_<PairNonBonded>(m, "PairNonBonded")
+		.def("__init__",
+			 [](PairNonBonded* self,
+				const ParticleType& type_a,
+				const ParticleType& type_b,
+				const std::string& function_name) {
+				 new (self) PairNonBonded(type_a.name, type_b.name, function_name);
+			 },
+			 nb::arg("type_a"),
+			 nb::arg("type_b"),
+			 nb::arg("function_name"))
+		.def_ro("type_name_1", &PairNonBonded::type_name_1)
+		.def_ro("type_name_2", &PairNonBonded::type_name_2)
+		.def_rw("name", &PairNonBonded::function_name)
+		.def_rw("form", &PairNonBonded::form)
 		.def("__repr__", [](const PairNonBonded& p) {
 			return "PairNonBonded(type_a='" + p.type_name_1 + "', type_b='" + p.type_name_2 +
 				   "', name='" + p.function_name + "')";
@@ -235,27 +240,27 @@ void declare_nonbonded_interaction(py::module& m) {
 
 	// `type_id` is not exposed: NonBondedInteractions::assign_id() overwrites
 	// it with the term's own index, so it is an output, not an input.
-	py::class_<LongRangeNonBonded>(m, "LongRangeNonBonded")
-		.def(py::init<>())
-		.def_readwrite("name", &LongRangeNonBonded::function_name)
-		.def_readwrite("form", &LongRangeNonBonded::form)
+	nb::class_<LongRangeNonBonded>(m, "LongRangeNonBonded")
+		.def(nb::init<>())
+		.def_rw("name", &LongRangeNonBonded::function_name)
+		.def_rw("form", &LongRangeNonBonded::form)
 		.def("__repr__", [](const LongRangeNonBonded& l) {
 			return "LongRangeNonBonded(name='" + l.function_name + "')";
 		});
 
-	py::class_<NonBondedInteractions>(m, "NonBondedInteractions")
-		.def(py::init<std::vector<PairNonBonded>, std::vector<LongRangeNonBonded>>(),
-			 py::arg("pair_nonbonded") = std::vector<PairNonBonded>{},
-			 py::arg("long_range_nonbonded") = std::vector<LongRangeNonBonded>{})
-		.def("add_pair_nonbonded", &NonBondedInteractions::add_pair_nonbonded, py::arg("pair"))
+	nb::class_<NonBondedInteractions>(m, "NonBondedInteractions")
+		.def(nb::init<std::vector<PairNonBonded>, std::vector<LongRangeNonBonded>>(),
+			 nb::arg("pair_nonbonded") = std::vector<PairNonBonded>{},
+			 nb::arg("long_range_nonbonded") = std::vector<LongRangeNonBonded>{})
+		.def("add_pair_nonbonded", &NonBondedInteractions::add_pair_nonbonded, nb::arg("pair"))
 		.def("add_long_range_nonbonded",
 			 &NonBondedInteractions::add_long_range_nonbonded,
-			 py::arg("long_range"))
+			 nb::arg("long_range"))
 		.def("get_num_pair_nonbonded", &NonBondedInteractions::get_num_pair_nonbonded)
 		.def("get_num_long_range_nonbonded", &NonBondedInteractions::get_num_long_range_nonbonded)
-		.def("__repr__", [](const NonBondedInteractions& nb) {
-			return "NonBondedInteractions(pairs=" + std::to_string(nb.get_num_pair_nonbonded()) +
-				   ", long_range=" + std::to_string(nb.get_num_long_range_nonbonded()) + ")";
+		.def("__repr__", [](const NonBondedInteractions& nb_) {
+			return "NonBondedInteractions(pairs=" + std::to_string(nb_.get_num_pair_nonbonded()) +
+				   ", long_range=" + std::to_string(nb_.get_num_long_range_nonbonded()) + ")";
 		});
 }
 
@@ -263,19 +268,19 @@ void declare_nonbonded_interaction(py::module& m) {
 // POTENTIAL REGISTRATION BINDINGS
 // ============================================================================
 
-void declare_register_potential(py::module& m) {
-	py::class_<Register_Potential>(m, "RegisterPotential")
-		.def(py::init<>())
+void declare_register_potential(nb::module_& m) {
+	nb::class_<Register_Potential>(m, "RegisterPotential")
+		.def(nb::init<>())
 		.def("register_potential", &Register_Potential::register_potential)
 		.def("get_id", &Register_Potential::get_id)
-		.def("__repr__", [](const Register_Potential& rp) { return "RegisterPotential()"; });
+		.def("__repr__", [](const Register_Potential&) { return "RegisterPotential()"; });
 }
 
 // ============================================================================
 // MAIN INITIALIZATION FUNCTION
 // ============================================================================
 
-void init_pybonded(py::module_& m) {
+void init_pybonded(nb::module_& m) {
 	// Bonded interactions
 	declare_bond(m);
 	declare_angle(m);
