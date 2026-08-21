@@ -41,7 +41,7 @@ struct CalcDistance {
 
 	DEVICE static CalcDistance compute(const Vector3& from, const Vector3& to, const PeriodicBox* pbox) {
 		CalcDistance dist;
-		dist.r_ij = pbox->wrapDiff(to - from);
+		dist.r_ij = pbox->wrap_diff(to - from);
 		dist.distance = dist.r_ij.length();
 		if (dist.distance > arbd_real(1e-6)) {
 			dist.unit_vector = dist.r_ij / dist.distance;

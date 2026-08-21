@@ -173,7 +173,7 @@ void init_pysystem(py::module_& m) {
 		.def("set_periodicity", &PeriodicBox::set_periodicity, "Set periodicity")
 		.def("set_origin", &PeriodicBox::set_origin, "Set origin point")
 		.def("set_basis", &PeriodicBox::set_basis, "Set basis vectors")
-		.def("wrap_diff", &PeriodicBox::wrapDiff, "Apply minimum image convention")
+		.def("wrap_diff", &PeriodicBox::wrap_diff, "Apply minimum image convention")
 		.def("is_periodic", &PeriodicBox::is_periodic, "Check if dimension is periodic")
 		.def("get_volume", &PeriodicBox::get_volume, "Get box volume");
 

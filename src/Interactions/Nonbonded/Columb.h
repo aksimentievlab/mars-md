@@ -119,7 +119,7 @@ struct ColumbForceKernel {
 		int type_j = particle_view.type_id[pair.y];
 
 		// Get geometry
-		Vector3 r_ij = pbox->wrapDiff(pos_j - pos_i);
+		Vector3 r_ij = pbox->wrap_diff(pos_j - pos_i);
 		float distance = r_ij.length();
 		Vector3 unit_vec = r_ij / distance;
 

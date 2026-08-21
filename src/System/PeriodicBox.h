@@ -69,18 +69,18 @@ class PeriodicBox {
 	 * @param dr Vector difference between two points
 	 * @return Minimum image vector difference
 	 */
-	HOST DEVICE Vector3 wrapDiff(const Vector3& dr) const {
+	HOST DEVICE Vector3 wrap_diff(const Vector3& dr) const {
 		Vector3 wrapped_dr = dr;
 
 		// Apply wrapping for each periodic dimension
 		if (periodic_[0]) {
-			wrapped_dr.x = wrapDiffScalar(dr.x, box_size_.x);
+			wrapped_dr.x = wrap_diff_scalar(dr.x, box_size_.x);
 		}
 		if (periodic_[1]) {
-			wrapped_dr.y = wrapDiffScalar(dr.y, box_size_.y);
+			wrapped_dr.y = wrap_diff_scalar(dr.y, box_size_.y);
 		}
 		if (periodic_[2]) {
-			wrapped_dr.z = wrapDiffScalar(dr.z, box_size_.z);
+			wrapped_dr.z = wrap_diff_scalar(dr.z, box_size_.z);
 		}
 
 		return wrapped_dr;
@@ -104,13 +104,13 @@ class PeriodicBox {
 		Vector3 wrapped = r;
 
 		if (periodic_[0]) {
-			wrapped.x = wrapScalar(r.x, origin_.x, box_size_.x);
+			wrapped.x = wrap_scalar(r.x, origin_.x, box_size_.x);
 		}
 		if (periodic_[1]) {
-			wrapped.y = wrapScalar(r.y, origin_.y, box_size_.y);
+			wrapped.y = wrap_scalar(r.y, origin_.y, box_size_.y);
 		}
 		if (periodic_[2]) {
-			wrapped.z = wrapScalar(r.z, origin_.z, box_size_.z);
+			wrapped.z = wrap_scalar(r.z, origin_.z, box_size_.z);
 		}
 
 		return wrapped;
@@ -235,7 +235,7 @@ class PeriodicBox {
 	 * @param o Origin component for this axis
 	 * @param l Box length in that dimension
 	 */
-	HOST DEVICE static inline float wrapScalar(float x, float o, float l) {
+	HOST DEVICE static inline float wrap_scalar(float x, float o, float l) {
 		if (l <= 0.0f)
 			return x; // Non-periodic or invalid box size
 
@@ -254,7 +254,7 @@ class PeriodicBox {
 	 * @param l Box length in that dimension
 	 * @return Wrapped distance: -0.5*l <= x < 0.5*l
 	 */
-	HOST DEVICE static inline float wrapDiffScalar(float x, float l) {
+	HOST DEVICE static inline float wrap_diff_scalar(float x, float l) {
 		if (l <= 0.0f)
 			return x; // Non-periodic or invalid box size
 

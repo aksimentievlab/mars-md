@@ -19,9 +19,9 @@ struct AngleGeometry {
 	DEVICE static AngleGeometry
 	compute(const Vector3* positions, const int4& particle_indices, const PeriodicBox* pbox) {
 		AngleGeometry geom;
-		geom.ab = pbox->wrapDiff(positions[particle_indices.y] - positions[particle_indices.x]);
-		geom.bc = pbox->wrapDiff(positions[particle_indices.z] - positions[particle_indices.y]);
-		geom.ac = pbox->wrapDiff(positions[particle_indices.z] - positions[particle_indices.x]);
+		geom.ab = pbox->wrap_diff(positions[particle_indices.y] - positions[particle_indices.x]);
+		geom.bc = pbox->wrap_diff(positions[particle_indices.z] - positions[particle_indices.y]);
+		geom.ac = pbox->wrap_diff(positions[particle_indices.z] - positions[particle_indices.x]);
 
 		// Compute angle using law of cosines
 		arbd_real distab2 = geom.ab.length2();
@@ -61,9 +61,9 @@ struct DihedralGeometry {
 	DEVICE static DihedralGeometry
 	compute(const Vector3* positions, const int4& particle_indices, const PeriodicBox* pbox) {
 		DihedralGeometry geom;
-		geom.ab = pbox->wrapDiff(positions[particle_indices.y] - positions[particle_indices.x]);
-		geom.bc = pbox->wrapDiff(positions[particle_indices.z] - positions[particle_indices.y]);
-		geom.cd = pbox->wrapDiff(positions[particle_indices.t] - positions[particle_indices.z]);
+		geom.ab = pbox->wrap_diff(positions[particle_indices.y] - positions[particle_indices.x]);
+		geom.bc = pbox->wrap_diff(positions[particle_indices.z] - positions[particle_indices.y]);
+		geom.cd = pbox->wrap_diff(positions[particle_indices.t] - positions[particle_indices.z]);
 
 		Vector3 crossABC = geom.ab.cross(geom.bc);
 		Vector3 crossBCD = geom.bc.cross(geom.cd);

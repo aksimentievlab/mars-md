@@ -182,6 +182,9 @@ void ZOrderPairlist::find_neighbors_zorder(size_t num_particles) {
 									   shift};
 	launch_kernel(resource_, config, range_kernel).wait();
 
+	PeriodicBox box(box_len_, box_len_.x > 0.0f, box_len_.y > 0.0f, box_len_.z > 0.0f);
+	box.set_origin(box_origin_);
+
 	ZOrderCellNeighborKernel kernel{sorted_positions_.data(),
 									sorter_.get_morton_codes().data(),
 									sorter_.get_sorted_indices().data(),
@@ -194,7 +197,7 @@ void ZOrderPairlist::find_neighbors_zorder(size_t num_particles) {
 									num_particles,
 									max_pairs_,
 									shift,
-									box_len_};
+									box};
 
 	Event launch_event = launch_kernel(resource_, config, kernel);
 	launch_event.wait();

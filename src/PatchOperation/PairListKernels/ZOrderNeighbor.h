@@ -10,6 +10,7 @@
 
 #include "../ZOrderKernels/MortonCode.h"
 #include "Header.h"
+#include "System/PeriodicBox.h"
 #include "Types/Types.h"
 #include "Types/Vector3.h"
 
@@ -146,17 +147,7 @@ struct ZOrderCellNeighborKernel {
 	size_t num_particles;
 	size_t max_pairs;
 	int shift;		 ///< 3 * (bits_per_dim - m); recovers a cell index from a Morton code
-	Vector3 box_len; ///< per-axis periodic length; <= 0 marks an open axis
-
-	DEVICE inline float min_image(float d, float L) const {
-		if (L <= 0.0f)
-			return d;
-		while (d > 0.5f * L)
-			d -= L;
-		while (d < -0.5f * L)
-			d += L;
-		return d;
-	}
+	PeriodicBox box; ///< minimum-image periodic box; open axes left unwrapped
 
 	DEVICE void operator()(idx_t i) const {
 		if (i >= num_particles)
@@ -180,10 +171,8 @@ struct ZOrderCellNeighborKernel {
 
 			for (uint32_t j = j_lo; j < end; ++j) {
 				const Vector3 pos_j = sorted_positions[j];
-				const float ddx = min_image(pos_j.x - pos_i.x, box_len.x);
-				const float ddy = min_image(pos_j.y - pos_i.y, box_len.y);
-				const float ddz = min_image(pos_j.z - pos_i.z, box_len.z);
-				const float d2 = ddx * ddx + ddy * ddy + ddz * ddz;
+				const Vector3 dr = box.wrap_diff(pos_j - pos_i);
+				const float d2 = dr.length2();
 
 				if (d2 <= cutoff_squared) {
 #ifdef USE_CUDA
