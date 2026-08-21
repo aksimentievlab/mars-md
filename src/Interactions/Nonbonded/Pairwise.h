@@ -99,7 +99,7 @@ struct ResolvePairTableKernel {
 		const idx_t matrix_idx = type_i * num_particle_types + type_j;
 		const int tidx = pairwise_table_matrix[matrix_idx];
 		if (tidx < 0 || static_cast<InteractionForm>(pairwise_form_matrix[matrix_idx]) !=
-							 InteractionForm::Tabulated) {
+							InteractionForm::Tabulated) {
 			table_idx[i] = -1;
 			return;
 		}
@@ -228,7 +228,6 @@ inline Event launch_pairwise_nonbonded(const Resource& resource,
 
 	return launch_kernel(resource, config, computer);
 }
-
 } // namespace ARBD
 
 #ifdef USE_CUDA

@@ -40,8 +40,6 @@ struct BuildCellRangesKernel {
 	}
 };
 
-/// Sentinel for an unused / clipped slot in a cell's neighbor table.
-inline constexpr uint32_t kInvalidCell = 0xFFFFFFFFu;
 
 /**
  * @brief Precompute each coarse cell's up-to-27 neighbor cell indices.

@@ -1,3 +1,4 @@
+#include "ARBDException.h"
 #include "DeviceRadix.h"
 #include <cuda_runtime.h>
 #ifdef Debug
@@ -36,19 +37,17 @@ void device_radix_sort_pairs_cub(int device_id,
 													  0,
 													  sizeof(uint32_t) * 8,
 													  stream);
-	if (err != cudaSuccess) {
-		printf("CUB size query error: %s\n", cudaGetErrorString(err));
-		return;
-	}
-	// printf("CUB requires %zu bytes of temp storage for %u elements\n", temp_storage_bytes, size);
+	if (err != cudaSuccess)
+		ARBD_Exception(ExceptionType::CUDARuntimeError,
+					   "CUB SortPairs size query failed: %s",
+					   cudaGetErrorString(err));
 
-	// 3. Allocate temporary storage
-	// In production, you might want to use a caching allocator here
 	err = cudaMalloc(&d_temp_storage, temp_storage_bytes);
-	if (err != cudaSuccess) {
-		printf("cudaMalloc error: %s\n", cudaGetErrorString(err));
-		return;
-	}
+	if (err != cudaSuccess)
+		ARBD_Exception(ExceptionType::CUDARuntimeError,
+					   "cudaMalloc of %zu B radix-sort scratch failed: %s",
+					   temp_storage_bytes,
+					   cudaGetErrorString(err));
 
 	// 4. Run sorting operation
 	err = cub::DeviceRadixSort::SortPairs(d_temp_storage,
@@ -59,42 +58,42 @@ void device_radix_sort_pairs_cub(int device_id,
 										  0,
 										  sizeof(uint32_t) * 8,
 										  stream);
+	// Catch the immediate return AND an asynchronous launch failure (e.g. a
+	// missing kernel image on an untargeted arch), which the return code misses.
+	if (err == cudaSuccess)
+		err = cudaGetLastError();
 	if (err != cudaSuccess) {
-		printf("CUB sort error: %s\n", cudaGetErrorString(err));
+		cudaFree(d_temp_storage);
+		ARBD_Exception(ExceptionType::CUDARuntimeError,
+					   "CUB SortPairs failed for %u elements: %s",
+					   size,
+					   cudaGetErrorString(err));
 	}
 
-	// 5. Cleanup Temp Storage
 	cudaFree(d_temp_storage);
 
-	// 6. Ensure result is in the original buffers
-	// CUB might leave the sorted data in the "alt" buffer depending on pass
-	// count. If so, copy it back to the primary buffer to match your interface
-	// expectation.
+	// 5. CUB may leave the result in the alt buffer depending on pass count;
+	// copy back so the sorted data always lands in the caller's primary buffers.
 	if (d_keys_db.Current() != d_keys) {
-		cudaError_t err1 = cudaMemcpy(d_keys,
-									  d_keys_db.Current(),
-									  size * sizeof(uint32_t),
-									  cudaMemcpyDeviceToDevice);
-		cudaError_t err2 = cudaMemcpy(d_payloads,
-									  d_values_db.Current(),
-									  size * sizeof(uint32_t),
-									  cudaMemcpyDeviceToDevice);
-		if (err1 != cudaSuccess || err2 != cudaSuccess) {
-			printf("CUDA memcpy error: %s %s\n",
-				   cudaGetErrorString(err1),
-				   cudaGetErrorString(err2));
-		}
+		cudaError_t e1 = cudaMemcpy(d_keys,
+									d_keys_db.Current(),
+									size * sizeof(uint32_t),
+									cudaMemcpyDeviceToDevice);
+		cudaError_t e2 = cudaMemcpy(d_payloads,
+									d_values_db.Current(),
+									size * sizeof(uint32_t),
+									cudaMemcpyDeviceToDevice);
+		if (e1 != cudaSuccess || e2 != cudaSuccess)
+			ARBD_Exception(ExceptionType::CUDARuntimeError,
+						   "radix-sort result copyback failed: keys=%s payloads=%s",
+						   cudaGetErrorString(e1),
+						   cudaGetErrorString(e2));
 	}
 
-	// 7. Synchronize to ensure all CUDA operations complete before returning
-	// This is critical when called from SYCL context to avoid race conditions
-	cudaError_t sync_err = cudaDeviceSynchronize();
-	if (sync_err != cudaSuccess) {
-		printf("CUDA sync error: %s\n", cudaGetErrorString(sync_err));
-	}
-
-	// 8. Clear any pending CUDA errors before returning to SYCL
-	// This prevents SYCL from seeing stale CUDA error states
-	cudaGetLastError();
+	err = cudaDeviceSynchronize();
+	if (err != cudaSuccess)
+		ARBD_Exception(ExceptionType::CUDARuntimeError,
+					   "cudaDeviceSynchronize after radix sort failed: %s",
+					   cudaGetErrorString(err));
 }
 } // namespace ARBD

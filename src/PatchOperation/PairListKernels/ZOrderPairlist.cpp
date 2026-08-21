@@ -160,8 +160,8 @@ void ZOrderPairlist::find_neighbors_zorder(size_t num_particles) {
 
 	// Per-cell 27-neighbor table: topology depends only on the grid, so rebuild it
 	// only when coarse_bits_/periodicity change (~once, at patch init). See dev_notes.md.
-	const int per_mask = (box_len_.x > 0.0f ? 1 : 0) | (box_len_.y > 0.0f ? 2 : 0) |
-						 (box_len_.z > 0.0f ? 4 : 0);
+	const int per_mask =
+		(box_len_.x > 0.0f ? 1 : 0) | (box_len_.y > 0.0f ? 2 : 0) | (box_len_.z > 0.0f ? 4 : 0);
 	if (cell_neighbors_.size() < num_cells * static_cast<size_t>(MAX_NEIGHBORS))
 		cell_neighbors_.resize(num_cells * static_cast<size_t>(MAX_NEIGHBORS));
 	if (m != cell_neighbors_bits_ || per_mask != cell_neighbors_permask_) {

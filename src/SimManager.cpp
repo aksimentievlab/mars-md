@@ -1,6 +1,6 @@
 #include "SimManager.h"
+#include "PatchOperation/ZOrderKernels/ZOrderSort.h"
 #include "System/PatchManager.h"
-#include "PatchOperation/ZOrderKernels/ZOrderSort.h" // complete type for RB index remap
 #include <charconv>
 #include <cstdio>
 #include <fstream>
@@ -26,8 +26,6 @@ void append_restart_line(std::string& buf, int type_id, const Vector3& v) {
 	buf.push_back('\n');
 }
 
-/// Segname for a rigid body's cosmetic atoms: the type name up to its first
-/// '.', capped at the PDB segID column width. See dev_notes.md.
 std::string rigid_body_segname(const std::string& type_name) {
 	std::string s = type_name.substr(0, type_name.find('.'));
 	if (s.size() > 4) {
@@ -36,10 +34,6 @@ std::string rigid_body_segname(const std::string& type_name) {
 	return s.empty() ? std::string("RB") : s;
 }
 } // namespace
-
-//================================================================================
-// Constructor
-//================================================================================
 
 SimManager::SimManager(SimSystem& sys) : sys_(sys), sys_state_(sys) {
 	timer0_.timer = wkf_timer_create();
@@ -55,10 +49,6 @@ SimManager::SimManager(SimSystem& sys, const ConfigParser& parser) : sys_(sys), 
 	timerE_.timer = wkf_timer_create();
 	timerP_.timer = wkf_timer_create();
 }
-
-//================================================================================
-// Initialization
-//================================================================================
 
 void SimManager::load_config(const ConfigParser& parser) {
 	sys_.set_temperature(parser.get_sim_system().get_temperature());
@@ -81,13 +71,7 @@ void SimManager::load_config(const ConfigParser& parser) {
 	sys_.set_rb_update_period(parser.get_sim_system().get_rb_update_period());
 	sys_.set_base_seed(parser.get_sim_system().get_base_seed());
 
-	// Cache particles here; they are converted (type_name -> type_id) in init(),
-	// once particle type IDs have been assigned - SystemState::set_init_particle_data()
-	// would otherwise look up type names in an empty/unbuilt map.
 	pending_initial_particles_ = parser.get_init_particles();
-	// Unlike particles, ConfigParser already resolves RigidBodyIO::type_id at
-	// parse time (see ConfigParser.cpp's rigidBody block), so this can be
-	// cached as-is with no further conversion needed in init().
 	pending_initial_rigid_bodies_ = parser.get_init_rigid_bodies();
 	sys_state_.update_bonded_interactions(parser.get_init_bonded_interactions());
 }
@@ -95,19 +79,13 @@ void SimManager::load_config(const ConfigParser& parser) {
 void SimManager::init() {
 	LOGINFO("SimManager: Initializing simulation");
 
-	// Initialize output writers based on configuration
 	initialize_output_writers();
-	// Populate configuration.
 
-	// Initialize decomposer if not already set
 	if (!sys_.get_decomposer()) {
 		LOGINFO("SimManager: Setting up default spatial decomposer");
 		sys_.set_decomposer_type(sys_.get_decomposer_type());
 	}
 
-	// Particle type IDs and name->id maps must exist before any particle data
-	// referencing type names (by name) can be converted, so this must run
-	// before set_init_particle_data() below and before decomposition.
 	sys_.assign_particle_type_ids();
 	LOGINFO("SimManager: Particle type IDs assigned");
 	sys_.assign_rigid_body_type_ids();
@@ -115,9 +93,7 @@ void SimManager::init() {
 	sys_.build_name_to_id_maps();
 	LOGINFO("SimManager: Name to ID maps built");
 
-	// Load cached initial particle data (from load_config or set_initial_particles)
 	if (!pending_initial_particles_.empty()) {
-		// The staged list order *is* the global particle indexing
 		std::unordered_map<int, int> uid_to_index;
 		for (size_t i = 0; i < pending_initial_particles_.size(); ++i) {
 			auto& particle = pending_initial_particles_[i];
@@ -143,16 +119,12 @@ void SimManager::init() {
 				pending_initial_particles_.size());
 	}
 
-	// Load cached initial rigid-body data (from load_config or set_initial_rigid_bodies)
 	if (!pending_initial_rigid_bodies_.empty()) {
 		sys_state_.set_init_rigid_body_data(pending_initial_rigid_bodies_);
 		LOGINFO("SimManager: Loaded {} initial rigid bodies into system state",
 				pending_initial_rigid_bodies_.size());
 	}
 
-	// Load cached bonded interactions (from load_config or set_bonded_interactions).
-	// Every term that rides in the struct has to be in the guard, or a config
-	// carrying only that term loses it silently - see dev_notes.md.
 	if (pending_bonded_interactions_.get_num_bonds() > 0 ||
 		pending_bonded_interactions_.get_num_angles() > 0 ||
 		pending_bonded_interactions_.get_num_dihedrals() > 0 ||
@@ -168,11 +140,9 @@ void SimManager::init() {
 				pending_bonded_interactions_.get_restraints().size());
 	}
 
-	// Perform domain decomposition (creates PatchManager in SimSystem)
 	LOGINFO("SimManager: Performing domain decomposition");
 	sys_.decompose_system(sys_state_);
 
-	// Verify PatchManager was created
 	if (!sys_.has_patch_manager()) {
 		throw Exception(ExceptionType::RuntimeError,
 						SourceLocation(),
@@ -180,11 +150,9 @@ void SimManager::init() {
 	}
 	LOGINFO("SimManager: Domain decomposition complete");
 
-	// Distribute initial particles from system state into patches (device storage)
 	sys_.get_patch_manager()->distribute_particles_from_state(sys_state_);
 	LOGINFO("SimManager: Initial particles distributed to patches");
 
-	// Transfer grids to all GPU resources
 	sys_.get_grid_manager().build_device_arrays();
 	LOGINFO("SimManager: Grids transferred to all resources");
 	sys_.get_tables_registry().build_device_arrays();
@@ -192,9 +160,6 @@ void SimManager::init() {
 	sys_.get_nonbonded_interactions().prepare_device_data();
 	LOGINFO("SimManager: Nonbonded interactions transferred to all resources");
 
-	// Rigid-body manager construction needs grids already on-device
-	// (prepare_grid_grid_dispatch/prepare_particle_grid_dispatch read grid
-	// sizes/views), so this must run after build_device_arrays() above.
 	if (!sys_.get_rigid_body_types().empty()) {
 		rigid_body_manager_ = std::make_unique<RigidBodyManager>(sys_.get_resources());
 		rigid_body_manager_->initialize(
@@ -202,9 +167,6 @@ void SimManager::init() {
 			sys_state_.get_global_rigid_bodies(),
 			[this](int id) { return sys_.get_grid_manager().get_grid_format(id); },
 			sys_.get_rb_update_period());
-		// AoS -> SoA here, at the IO boundary: RigidBodyIO is a parse-time
-		// structure and must not reach the device-side managers. Mirrors what
-		// SystemState does for the fields HostRigidBodyData does carry.
 		{
 			const size_t rb_count = pending_initial_rigid_bodies_.size();
 			std::vector<Vector3> constant_force(rb_count);
@@ -218,11 +180,6 @@ void SimManager::init() {
 		rigid_body_manager_->prepare_grid_grid_dispatch(sys_.get_grid_manager(), 0);
 		rigid_body_manager_->prepare_particle_grid_dispatch(sys_.get_rigid_body_types(),
 															sys_state_.get_num_particles());
-		// Uses the AoS instance list rather than SystemState's SoA copy: the
-		// attached_start/attached_count ranges ConfigParser assigned live on
-		// RigidBodyIO and have no HostRigidBodyData counterpart. Index and
-		// RigidBodyIO::id agree (ConfigParser numbers instances sequentially),
-		// which is what lets rb_id double as the device-array index.
 		rigid_body_manager_->prepare_attached_particles(
 			sys_.get_rigid_body_types(),
 			pending_initial_rigid_bodies_,
@@ -232,8 +189,6 @@ void SimManager::init() {
 		LOGINFO("SimManager: Rigid body manager initialized with {} bodies",
 				sys_state_.get_num_rigid_bodies());
 
-		// Langevin/DLM and Brownian are implemented; VelocityVerlet is not, so
-		// warn rather than silently running something else.
 		const IntegratorType rb_algorithm = sys_.get_rigid_body_algorithm();
 		if (rb_algorithm == IntegratorType::VelocityVerlet) {
 			LOGWARN("SimManager: VelocityVerlet rigid-body dynamics is not implemented; "
@@ -244,10 +199,6 @@ void SimManager::init() {
 		}
 	}
 
-	// Structure files describing the trajectory this run is about to write.
-	// Emitted here, before any frame exists, so the DCD always has a matching
-	// PSF/PDB on disk even if the run is interrupted. Non-fatal: a failure to
-	// write a visualization file must not abort an otherwise valid simulation.
 	try {
 		write_psf();
 		write_pdb();
@@ -260,14 +211,9 @@ void SimManager::init() {
 	LOGINFO("SimManager: Initialization completed");
 }
 
-//================================================================================
-// Main Simulation Loop
-//================================================================================
-
 void SimManager::run() {
 	LOGINFO("SimManager: Starting simulation loop");
 
-	// Get simulation parameters
 	const size_t num_steps = sys_.get_num_steps();
 	const size_t output_period = static_cast<size_t>(sys_.get_output_period());
 	const size_t energy_output_period = static_cast<size_t>(sys_.get_energy_output_period());
@@ -276,7 +222,7 @@ void SimManager::run() {
 	LOGINFO("SimManager: Running {} steps with {} resources", num_steps, resources.size());
 
 	const size_t progress_period = energy_output_period > 0 ? energy_output_period : 1000;
-	const int num_replicas = 1; // TODO: expose replicas from SimSystem config
+	const int num_replicas = 1;
 
 	std::printf("Configuration: %zu particles | %d replicas\n",
 				sys_state_.get_num_particles(),
@@ -286,55 +232,45 @@ void SimManager::run() {
 	wkf_timer_start(timer0_.timer);
 	wkf_timer_start(timerP_.timer);
 
-	// DLM splits its two half-kicks around the force phase. See dev_notes.md.
 	const bool split_dlm = rigid_body_manager_ && rigid_body_manager_->size() > 0 &&
 						   sys_.get_rigid_body_algorithm() != IntegratorType::Brownian;
 	const PeriodicBox& sim_box = sys_.get_boundary_conditions();
 	const float dt = sys_.get_timestep();
 
 	if (split_dlm) {
-		execute_force_calculation(0); // prime step 1's opening half-kick
+		execute_force_calculation(0);
 	}
 
 	for (size_t step = 1; step <= num_steps; ++step) {
-		// ===== RB DRIFT PHASE (DLM substeps 0-1) =====
 		if (split_dlm) {
 			rigid_body_manager_->integrate_drift(dt, sim_box).wait();
 			sys_state_.invalidate_rigid_bodies();
 		}
 
-		// ===== FORCE CALCULATION PHASE =====
 		execute_force_calculation(step);
 
-		// ===== RB KICK PHASE (DLM substep 2) =====
 		if (split_dlm) {
 			rigid_body_manager_->integrate_kick(dt, sim_box).wait();
 			sys_state_.invalidate_rigid_bodies();
 		}
 
-		// ===== INTEGRATION PHASE =====
 		execute_integration(step);
 
-		// ===== MULTI-RESOURCE SYNCHRONIZATION =====
 		if (resources.size() > 1) {
 			synchronize_multi_resource();
 		}
 
-		// ===== OUTPUT PHASE =====
 		handle_output(step);
 
-		// ===== IMD HANDLING =====
 		if (imd_on_ && clientsock_) {
 			handle_imd_commands();
 		}
 
-		// ===== PROGRESS REPORTING =====
 		if (step % progress_period == 0) {
 			report_progress(step, num_steps, progress_period);
 		}
 	}
 
-	// ===== FINALIZATION =====
 	std::printf("\n");
 	std::fflush(stdout);
 
@@ -342,36 +278,21 @@ void SimManager::run() {
 	const float elapsed = wkf_timer_time(timer0_.timer);
 
 	report_performance(elapsed, num_steps);
-	// The final restart carries momenta, and the last step's closing half-kick
-	// is still outstanding - without this the file would resume the run from a
-	// half-step momentum treated as a whole-step one.
 	settle_momenta_for_output(num_steps);
 	write_final_restart();
 
-	// Cleanup IMD
 	if (imd_on_ && clientsock_) {
-		// TODO: imd_disconnect(clientsock_);
 	}
 
 	LOGINFO("SimManager: Simulation completed successfully");
 }
 
-//================================================================================
-// Output Writers Initialization
-//================================================================================
-
 void SimManager::initialize_output_writers() {
-	// TODO: Get output format and name from SimSystem when accessors are added
-	// For now, default to DCD format
 	std::string output_name = sys_.get_output_name();
 
 	dcd_writer_ = std::make_unique<DcdWriter>(output_name + ".dcd");
 	LOGINFO("SimManager: Initialized DCD writer for '{}.dcd'", output_name);
 
-	// TODO: Add support for other output formats (PDB, HDF5) when needed
-
-	// Momentum trajectory/restart only make sense for Langevin dynamics
-	// (matches legacy ARBD's particle_dynamic == "Langevin" gating).
 	has_momentum_output_ = (sys_.get_particle_algorithm() == IntegratorType::Langevin);
 	if (has_momentum_output_) {
 		momentum_dcd_writer_ = std::make_unique<DcdWriter>(output_name + ".0.momentum.dcd");
@@ -383,12 +304,7 @@ void SimManager::initialize_output_writers() {
 
 void SimManager::initialize_imd(int port) {
 	LOGINFO("SimManager: IMD initialization (port {}) not yet implemented", port);
-	// TODO: Implement IMD when needed
 }
-
-//================================================================================
-// Force Calculation Phase
-//================================================================================
 
 void SimManager::execute_force_calculation(size_t step) {
 	PatchManager* patch_mgr = sys_.get_patch_manager();
@@ -414,14 +330,9 @@ void SimManager::execute_force_calculation(size_t step) {
 	}
 #endif
 
-	// Legacy step order: clear RB forces -> particle nonbonded/bonded -> RB
-	// grid-grid/particle-RB -> RB Langevin (see the RB force block below).
 	if (rigid_body_manager_) {
 		rigid_body_manager_->bodies().clear_forces();
 
-		// Attached particles are slaved to their bodies, so their positions
-		// must be refreshed from the state the previous step's RB integration
-		// left behind - before the pairlist and force kernels below read them.
 		if (rigid_body_manager_->has_attached_particles()) {
 			auto& patches = patch_mgr->get_patches();
 			if (!patches.empty()) {
@@ -448,7 +359,6 @@ void SimManager::execute_force_calculation(size_t step) {
 			}
 		}
 
-		// Particle types are static for the whole run
 		if (!device_particle_types_cache_[resource_idx]) {
 			device_particle_types_cache_[resource_idx] =
 				std::make_unique<DeviceParticleTypes>(sys_.get_particle_types(),
@@ -456,9 +366,6 @@ void SimManager::execute_force_calculation(size_t step) {
 		}
 		DeviceParticleTypes& particle_types = *device_particle_types_cache_[resource_idx];
 
-		// Nonbonded clears and writes; bonded must follow and accumulate.
-		// Energy is gated to output steps - it costs an extra atomic per term.
-		// See dev_notes.md.
 		const size_t energy_output_period = static_cast<size_t>(sys_.get_energy_output_period());
 		const bool compute_energy = energy_output_period > 0 && step % energy_output_period == 0;
 		Event evt = patch->calculate_nonbonded_forces(
@@ -473,8 +380,6 @@ void SimManager::execute_force_calculation(size_t step) {
 			step,
 			static_cast<size_t>(sys_.get_neighbor_list_rebuild_period()),
 			Vector3{0.0, 0.0, 0.0},
-			// Linear grid interpolation, matching legacy default ParticleInterpolationType=0
-			// (cubic is 64-point vs linear 8-point - ~3.5x costlier per PMF eval).
 			0,
 			compute_energy);
 
@@ -484,23 +389,11 @@ void SimManager::execute_force_calculation(size_t step) {
 														  resource_idx,
 														  compute_energy);
 
-		// Both events were previously discarded, relying on the (removed)
-		// per-step DeviceParticleTypes malloc/free to accidentally serialize
-		// the pipeline. Without that, forces from this patch must be waited
-		// on explicitly before integrate_motion() reads ForceEnergy, and
-		// before the next step's clear_forces()/PMF kernel overwrites it.
 		bonded_evt.wait();
 		evt.wait();
 	}
 
-	// RB grid-grid, then particle-RB (single-patch assumption, matching
-	// Patch::calculate_bonded_forces's own documented limitation), then RB
-	// Langevin - legacy step order.
 	if (rigid_body_manager_) {
-		// Attached particles have now accumulated their full nonbonded+bonded
-		// force. That force never moves them (the integrators skip them);
-		// it acts on the parent body instead, so fold it into the body's net
-		// force/torque before the Langevin term and the integration below.
 		if (rigid_body_manager_->has_attached_particles()) {
 			auto& patches = patch_mgr->get_patches();
 			if (!patches.empty()) {
@@ -543,17 +436,12 @@ void SimManager::execute_force_calculation(size_t step) {
 	}
 }
 
-//================================================================================
-// Integration Phase
-//================================================================================
-
 void SimManager::execute_integration(size_t step) {
 	const IntegratorType particle_algorithm = sys_.get_particle_algorithm();
 	const IntegratorType rigidbody_algorithm = sys_.get_rigid_body_algorithm();
 	const float timestep = sys_.get_timestep();
 	const Temperature& temperature = sys_.get_temperature_struct();
 
-	// Access PatchManager through SimSystem
 	PatchManager* patch_mgr = sys_.get_patch_manager();
 	if (!patch_mgr) {
 		throw Exception(ExceptionType::RuntimeError,
@@ -561,13 +449,8 @@ void SimManager::execute_integration(size_t step) {
 						"PatchManager not available for integration");
 	}
 
-	// Execute integration for each patch
-	// Each patch runs independently on its assigned resource
 	for (auto& patch : patch_mgr->get_patches()) {
 		Event evt = patch->integrate_motion(timestep, temperature, particle_algorithm, step);
-		// Must complete before the next step's clear_forces()/PMF kernel
-		// touches positions again - see the matching wait in
-		// execute_force_calculation for why this can no longer be implicit.
 		evt.wait();
 	}
 
@@ -582,16 +465,11 @@ void SimManager::execute_integration(size_t step) {
 									 sys_.get_boundary_conditions())
 				.wait();
 		}
-		// DLM is integrated around the force phase in run(), not here.
 		sys_state_.invalidate_rigid_bodies();
 	}
 
-	current_step_ = step; // Update step counter for RNG state tracking
+	current_step_ = step;
 }
-
-//================================================================================
-// Multi-Resource Synchronization
-//================================================================================
 
 void SimManager::synchronize_multi_resource() {
 	PatchManager* patch_mgr = sys_.get_patch_manager();
@@ -600,10 +478,6 @@ void SimManager::synchronize_multi_resource() {
 		return;
 	}
 
-	// TODO: Implement halo exchange through PatchManager
-	// patch_mgr->exchange_halos();
-
-	// Placeholder
 	static bool logged_once = false;
 	if (!logged_once) {
 		LOGINFO("SimManager: Multi-resource synchronization not yet implemented");
@@ -611,13 +485,7 @@ void SimManager::synchronize_multi_resource() {
 	}
 }
 
-//================================================================================
-// Output Handling
-//================================================================================
-
 void SimManager::settle_momenta_for_output(size_t step) {
-	// BAOAB's closing half-kick is deferred, so momentum is half a kick behind
-	// position. Pay it before reading, which needs a fresh force. See dev_notes.md.
 	PatchManager* patch_mgr = sys_.get_patch_manager();
 	if (!patch_mgr) {
 		return;
@@ -645,37 +513,26 @@ void SimManager::handle_output(size_t step) {
 	const bool trajectory_due = output_period > 0 && step % output_period == 0;
 	const bool energy_due = energy_output_period > 0 && step % energy_output_period == 0;
 
-	// Only needed when something about to be written reads momentum: the
-	// momentum trajectory, or the energy report and the restart files it
-	// refreshes. A positions-only DCD frame does not.
 	if ((trajectory_due && momentum_dcd_writer_) || energy_due) {
 		settle_momenta_for_output(step);
 	}
 
-	// Trajectory output
 	if (output_period > 0 && step % output_period == 0) {
 		wkf_timer_start(timerS_.timer);
 
 		if (dcd_writer_) {
 			write_dcd_frame(step);
-			// Reuses the SystemState write_dcd_frame() just gathered/synced.
 			if (momentum_dcd_writer_) {
 				write_momentum_dcd_frame(step);
 			}
 		} else if (traj_writer_) {
-			// Write with generic trajectory writer
-			// traj_writer_->write_frame(step);
 		}
 
-		// Plaintext rigid-body trajectory, for direct comparison against v1's
-		// "<name>.0.rb-traj". Independent of the DCD writers above.
 		write_rb_traj_frame(step);
 
 		wkf_timer_stop(timerS_.timer);
 	}
 
-	// Energy calculation and output (also refreshes the restart files, mirroring
-	// legacy ARBD's cadence of writing restarts alongside the energy report).
 	if (energy_output_period > 0 && step % energy_output_period == 0) {
 		wkf_timer_start(timerE_.timer);
 		write_energy_output(step);
@@ -705,10 +562,8 @@ void SimManager::gather_rigid_body_data() {
 }
 
 void SimManager::write_dcd_frame(size_t step) {
-	// Gather global state from patches
 	gather_particle_data_from_patches();
 	if (sys_state_.prepare_for_dcd_output()) {
-		// Frame layout is [regular particles][attached particles][cosmetic atoms].
 		const auto& positions = sys_state_.get_global_positions();
 		std::vector<Vector3> frame(positions.begin(), positions.end());
 		if (rigid_body_manager_ && rigid_body_manager_->num_cosmetic_atoms() > 0) {
@@ -735,10 +590,6 @@ void SimManager::write_dcd_frame(size_t step) {
 					frame.size() - positions.size());
 		}
 
-		// The header's with_unitcell flag promises an extra block on every
-		// frame, so the cell must be supplied here or readers misparse the
-		// trajectory. CHARMM on-disk order is [A, cos(g), B, cos(b), cos(a), C];
-		// the box is orthorhombic, so all three cosines are 0.
 		if (with_unitcell) {
 			const Vector3 box = sys_.get_boundary_conditions().get_box_size();
 			const std::vector<double> unitcell{box.x, 0.0, box.y, 0.0, 0.0, box.z};
@@ -751,7 +602,7 @@ void SimManager::write_dcd_frame(size_t step) {
 
 void SimManager::build_structure_view() {
 	if (structure_view_) {
-		return; // atom set is fixed for the run
+		return;
 	}
 	structure_view_ = std::make_unique<PsfPdbStructure>();
 	PsfPdbStructure& s = *structure_view_;
@@ -760,7 +611,6 @@ void SimManager::build_structure_view() {
 	s.box_dimensions = box;
 	s.has_cryst1 = true;
 
-	// --- Block 1+2: the global particle array (regular, then attached) -------
 	const HostParticleData& particles = sys_state_.get_global_particles();
 	const auto& ptypes = sys_.get_particle_types();
 	const size_t num_particles = particles.size();
@@ -779,8 +629,6 @@ void SimManager::build_structure_view() {
 		a.charge = known ? ptypes[tid].charge : 0.0f;
 		a.resid = static_cast<int>(i) + 1;
 		a.chain = "A";
-		// An attached particle is tagged so it can be selected in VMD and told
-		// apart from free particles of the same type.
 		const bool is_attached =
 			i < particles.attached_rigid_body_id.size() && particles.attached_rigid_body_id[i] >= 0;
 		a.segname = is_attached ? "ATT" : "SYS";
@@ -791,15 +639,10 @@ void SimManager::build_structure_view() {
 		s.atoms.push_back(std::move(a));
 	}
 
-	// Real bonded topology: indices are already into the global particle array.
 	for (const Bond& b : sys_state_.get_bonded_interactions().get_bonds()) {
 		s.bonds.emplace_back(b.ind1, b.ind2);
 	}
 
-	// --- Block 3: cosmetic template atoms -----------------------------------
-	// Also build, per instance, template-atom index -> global index, so the
-	// template's own bonds can be emitted in this file's numbering. Attached
-	// atoms map back into block 2; cosmetic ones into the tail being appended.
 	const auto& rtypes = sys_.get_rigid_body_types();
 	for (const RigidBodyIO& rb : pending_initial_rigid_bodies_) {
 		if (rb.type_id < 0 || static_cast<size_t>(rb.type_id) >= rtypes.size()) {
@@ -823,12 +666,10 @@ void SimManager::build_structure_view() {
 			a.type_name = c.type_name.empty() ? c.resname : c.type_name;
 			a.resid = c.resid;
 			a.chain = "R";
-			// Type in segname, instance in beta - see dev_notes.md.
 			a.segname = rigid_body_segname(type.name);
 			a.beta = static_cast<float>(rb.id);
-			a.mass = 0.0f;	 // no physics
-			a.charge = 0.0f; // no physics
-			// Placed at t=0 by this instance's transform; write_pdb refreshes it.
+			a.mass = 0.0f;
+			a.charge = 0.0f;
 			a.position = rb.orientation * c.body_frame_position + rb.position;
 			s.atoms.push_back(std::move(a));
 		}
@@ -846,10 +687,6 @@ void SimManager::build_structure_view() {
 		}
 	}
 
-	// Nothing at all to describe. Throwing rather than warning-and-returning:
-	// these writers are called explicitly (including from Python), so a silent
-	// no-op just looks like a broken writer, and leaving structure_view_ set but
-	// empty would cache that emptiness for the rest of the run.
 	if (s.atoms.empty()) {
 		structure_view_.reset();
 		throw Exception(ExceptionType::RuntimeError,
@@ -916,8 +753,6 @@ void SimManager::write_rb_traj_frame(size_t step) {
 	const HostRigidBodyData& rb = sys_state_.get_global_rigid_bodies();
 
 	if (!rb_traj_file_.is_open()) {
-		// "<name>.0.rb-traj" - the "0" is v1's replica-index artifact, kept for
-		// output compatibility (same reasoning as the momentum DCD's name).
 		const std::string path = sys_.get_output_name() + ".0.rb-traj";
 		rb_traj_file_.open(path);
 		if (!rb_traj_file_) {
@@ -937,8 +772,6 @@ void SimManager::write_rb_traj_frame(size_t step) {
 		LOGINFO("SimManager: writing rigid-body trajectory to '{}'", path);
 	}
 
-	// v1 keys a body as "<typeName>#<index within that type>", numbering each
-	// type's instances from 0 independently.
 	const auto& types = sys_.get_rigid_body_types();
 	std::unordered_map<int, int> seen_per_type;
 
@@ -954,13 +787,8 @@ void SimManager::write_rb_traj_frame(size_t step) {
 		const Vector3& mom = rb.momentum[i];
 		const Vector3& ang = rb.angular_momentum[i];
 
-		// Position at the stream's default precision, everything after it at 10
-		// significant digits - exactly v1's printData() formatting.
 		rb_traj_file_ << std::setprecision(6) << step << " " << type_name << "#" << instance << " "
 					  << p.x << " " << p.y << " " << p.z;
-		// v1's legend is row-major (rotXX rotXY rotXZ | rotYX ...), while Matrix3
-		// stores columns (ex/ey/ez) - so row r of the output reads component r
-		// across all three column vectors, not one column vector.
 		rb_traj_file_ << std::setprecision(10) << " " << o.ex().x << " " << o.ey().x << " "
 					  << o.ez().x << " " << o.ex().y << " " << o.ey().y << " " << o.ez().y << " "
 					  << o.ex().z << " " << o.ey().z << " " << o.ez().z << " " << mom.x << " "
@@ -972,9 +800,6 @@ void SimManager::write_rb_traj_frame(size_t step) {
 
 void SimManager::write_momentum_dcd_frame(size_t step) {
 	(void)step;
-	// SystemState was already gathered and synced by write_dcd_frame() this
-	// tick (handle_output only calls this right after it) - no need to
-	// re-gather from patches.
 	if (!sys_state_.is_state_synced()) {
 		return;
 	}
@@ -1125,7 +950,6 @@ void SimManager::generate_initial_momentum(const Vector3& v_com) {
 		double M = particle_types[typ].mass;
 		double sigma = sqrt(kT * M) * constants::SQRT_CAL_TO_JOULE;
 
-		// Generate 3D Gaussian random vector
 		Vector3 tmp(gaussian(gen) * sigma, gaussian(gen) * sigma, gaussian(gen) * sigma);
 
 		momentum[i] = tmp;
@@ -1143,13 +967,6 @@ void SimManager::generate_initial_momentum(const Vector3& v_com) {
 	}
 
 	LOGINFO("SimManager: Generated initial momenta for {} particles at kT={}", num_particles, kT);
-}
-void SimManager::load_restart_data(const std::string& filename) {
-	// TODO: Implement restart file loading
-	LOGINFO("SimManager: Restart file loading not yet implemented");
-	throw Exception(ExceptionType::NotImplementedError,
-					SourceLocation(),
-					"Restart file loading not yet implemented");
 }
 
 //================================================================================

@@ -249,6 +249,7 @@ using threadgroup_ptr = threadgroup T*;
 
 constexpr inline short NUM_QUEUES = 4;
 inline constexpr int MAX_NEIGHBORS = 27;
+inline constexpr uint32_t kInvalidCell = 0xFFFFFFFFu; // Z-order neighbor-cell padding sentinel
 
 using idx_t = size_t;
 using patch_t = size_t;

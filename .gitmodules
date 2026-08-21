@@ -26,3 +26,6 @@
 [submodule "extern/scuff-em"]
 	path = extern/scuff-em
 	url = https://github.com/HomerReid/scuff-em.git
+[submodule "ext/nanobind"]
+	path = extern/nanobind
+	url = https://github.com/wjakob/nanobind

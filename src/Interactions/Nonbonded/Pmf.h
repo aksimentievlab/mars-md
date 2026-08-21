@@ -51,6 +51,10 @@ sample_force_grid_value(const BaseGridView<arbd_real>& grid, const Vector3& pos,
 
 /**
  * @brief Position-dependent forces from legacy GrandBrownTown.cuh
+ * This function computes the position-dependent forces acting on a particle
+ * due to the presence of PMF (Potential of Mean Force) grids.
+ * A type can reference any number of PMF grids; its terms occupy
+ * [offset, offset + count) of the flat table
  * @param pos: position of the particle
  * @param type_id: type id of the particle
  * @param types: particle type view
@@ -70,9 +74,6 @@ compute_position_dependent_force(const Vector3& pos,
 	const float charge = types.charge[type_id];
 	Vector3 force(charge * electric_field.x, charge * electric_field.y, charge * electric_field.z);
 
-	// A type can reference any number of PMF grids; its terms occupy
-	// [offset, offset + count) of the flat table (legacy: the per-type
-	// pt.pmf[i] loop over numPartGridFiles, minus the pointer chasing).
 	if (grid_configs != nullptr) {
 		const int pmf_begin = types.pmf_grid_offset[type_id];
 		const int pmf_end = pmf_begin + types.pmf_grid_count[type_id];

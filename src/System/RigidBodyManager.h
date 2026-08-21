@@ -218,10 +218,6 @@ class RigidBodyManager {
 				continue;
 			}
 
-			// Ordered instance pairs, both directions: rb_a's density through
-			// rb_b's potential and rb_b's density through rb_a's potential are
-			// generally distinct contributions (different grids), not a
-			// double-count - see RigidBodyGridBatch.h's RBGridWork doc.
 			const auto& type_j_instances = instances_by_type[gp.type_j];
 			for (int rb_a : type_i_instances) {
 				for (int rb_b : type_j_instances) {

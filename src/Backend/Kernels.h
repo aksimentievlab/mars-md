@@ -32,7 +32,6 @@
 #endif
 
 namespace ARBD {
-
 template<typename Functor, typename... Args>
 Event launch_kernel(const Resource& resource,
 					const KernelConfig& config,

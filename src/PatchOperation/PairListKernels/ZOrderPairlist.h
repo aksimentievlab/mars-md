@@ -156,10 +156,10 @@ class ZOrderPairlist : public Pairlist {
 	DeviceBuffer<uint32_t> cell_neighbors_;
 	int cell_neighbors_bits_ = -1;	  ///< coarse_bits_ the table was built for (-1 = unbuilt)
 	int cell_neighbors_permask_ = -1; ///< periodicity mask the table was built for
-	int coarse_bits_ = 0;			///< Coarse cells per dimension = 2^coarse_bits_
-	Vector3 box_len_{0.0f};			///< Per-axis periodic length; <= 0 marks an open axis
-	Vector3 box_origin_{0.0f};		///< Lower corner of the periodic box
-	Vector3 last_box_extent_{0.0f}; ///< Extent of the box used for the last Morton encoding
+	int coarse_bits_ = 0;			  ///< Coarse cells per dimension = 2^coarse_bits_
+	Vector3 box_len_{0.0f};			  ///< Per-axis periodic length; <= 0 marks an open axis
+	Vector3 box_origin_{0.0f};		  ///< Lower corner of the periodic box
+	Vector3 last_box_extent_{0.0f};	  ///< Extent of the box used for the last Morton encoding
 
   public:
 	/**
