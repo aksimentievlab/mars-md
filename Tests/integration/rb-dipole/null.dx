@@ -1,0 +1,33 @@
+# 
+object 1 class gridpositions counts 4 4 4
+origin -20 -20 -20
+delta 40 0 0
+delta 0 40 0
+delta 0 0 40
+object 2 class gridconnections counts 4 4 4
+object 3 class array type double rank 0 items 64 data follows
+0 0 0
+0 0 0
+0 0 0
+0 0 0
+0 0 0
+0 0 0
+0 0 0
+0 0 0
+0 0 0
+0 0 0
+0 0 0
+0 0 0
+0 0 0
+0 0 0
+0 0 0
+0 0 0
+0 0 0
+0 0 0
+0 0 0
+0 0 0
+0 0 0
+0 
+
+
+

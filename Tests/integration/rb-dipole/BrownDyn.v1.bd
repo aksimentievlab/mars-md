@@ -1,0 +1,45 @@
+timestep 20e-6
+steps 5000000
+
+interparticleForce 1
+fullLongRange 0
+temperature 295
+electricField 0.0
+outputPeriod 1000
+outputEnergyPeriod 1000
+outputFormat dcd
+cutoff 100.0
+
+# Potassium
+particle POT
+num 10
+# num 9000
+gridFile null.dx
+diffusion 1
+
+
+tabulatedPotential  1
+tabulatedFile 0@0@extend114_pot-pot.dat
+
+# Grid
+rigidBody point
+num 1
+mass 1e12
+inertia 100 100 100
+transDamping 1 1 1
+rotDamping 300 300 300
+position 0 0 0
+# orientation 0 0 1 1 0 0 0 1 0
+densityGrid elec dipole.dx
+gridFile elec uniform.dx
+
+# rigidBody field
+# num 1
+# mass 1e14
+# inertia 1e14 1e14 1e14
+# transDamping 0 0 0
+# rotDamping 0 0 0
+# position 0 0 0
+# # orientation 0 0 1 1 0 0 0 1 0
+# # potentialScale elec 10
+# potentialGrid elec uniform.dx
