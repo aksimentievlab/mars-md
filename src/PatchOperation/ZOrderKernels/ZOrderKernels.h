@@ -126,7 +126,7 @@ struct ValidateZOrderKernel {
 };
 
 /**
- * @brief Kernel to compute bounding box of particles
+ * @brief Kernel to compute bounding box of particles, mainly for PatchDecomposing
  */
 struct BoundingBoxKernel {
 	const Vector3* positions;

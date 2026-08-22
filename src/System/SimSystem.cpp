@@ -134,6 +134,8 @@ void SimSystem::create_single_patch_manager(SystemState& state) {
 
 	// No particle pre-assignment needed for single patch
 	plan.patch_particle_indices.resize(1);
+	plan.system_box = sim_box_;
+	plan.set_periodic_box();
 
 	// Initialize statistics
 	plan.statistics.total_particles = state.get_num_particles();

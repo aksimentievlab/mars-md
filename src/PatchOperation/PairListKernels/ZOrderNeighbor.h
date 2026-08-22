@@ -41,7 +41,6 @@ struct BuildCellRangesKernel {
 	}
 };
 
-
 /**
  * @brief Precompute each coarse cell's up-to-27 neighbor cell indices.
  *
@@ -140,7 +139,8 @@ struct ZOrderCellNeighborKernel {
 	const uint32_t* __restrict__ sorted_to_original;
 	const uint32_t* __restrict__ cell_begin;
 	const uint32_t* __restrict__ cell_end;
-	const uint32_t* __restrict__ cell_neighbors; ///< [num_cells * MAX_NEIGHBORS] from BuildCellNeighborsKernel
+	const uint32_t* __restrict__ cell_neighbors; ///< [num_cells * MAX_NEIGHBORS] from
+												 ///< BuildCellNeighborsKernel
 	int2* neighbor_pairs;
 	uint32_t* pair_count;
 	float cutoff_squared;
@@ -191,8 +191,8 @@ struct ZOrderCellNeighborKernel {
 					if (pair_idx < max_pairs) {
 						const uint32_t a = sorted_to_original[i];
 						const uint32_t b = sorted_to_original[j];
-						neighbor_pairs[pair_idx] = int2(static_cast<int>(a < b ? a : b),
-														static_cast<int>(a < b ? b : a));
+						neighbor_pairs[pair_idx] =
+							int2(static_cast<int>(a < b ? a : b), static_cast<int>(a < b ? b : a));
 					}
 				}
 			}

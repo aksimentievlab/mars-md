@@ -70,6 +70,7 @@ void PatchManager::initialize_from_plan(const DecompositionPlan& plan,
 		const Resource& res = plan.patch_resources[pid];
 		const Vector3& min_b = plan.patch_min_bounds[pid];
 		const Vector3& max_b = plan.patch_max_bounds[pid];
+		PeriodicBox box = plan.patch_boxes[pid];
 
 		patch_metadata_.emplace_back(static_cast<patch_t>(pid), res);
 		auto& meta = patch_metadata_.back();
@@ -88,10 +89,10 @@ void PatchManager::initialize_from_plan(const DecompositionPlan& plan,
 #endif
 
 		// Create patch instance
-		auto patch =
-			std::make_unique<Patch>(static_cast<patch_t>(pid), estimated_particles_per_patch, res);
-		patch->set_bounds(min_b, max_b);
-		patch->set_periodic_box(&sim_system_.get_boundary_conditions());
+		auto patch = std::make_unique<Patch>(static_cast<patch_t>(pid),
+											 estimated_particles_per_patch,
+											 res,
+											 box);
 		patch->set_base_seed(static_cast<uint64_t>(sim_system_.get_base_seed()));
 		patch->set_halo_thickness(static_cast<float>(cutoff));
 
@@ -141,9 +142,7 @@ void PatchManager::initialize_local_patches(idx_t estimated_particles, const Len
 	meta.grid_coords = {0, 0, 0};
 	meta.mpi_rank = 0;
 
-	auto patch = std::make_unique<Patch>(0, estimated_particles, res);
-	patch->set_bounds(min_bounds, max_bounds);
-	patch->set_periodic_box(&sim_system_.get_boundary_conditions());
+	auto patch = std::make_unique<Patch>(0, estimated_particles, res, box);
 	patch->set_base_seed(static_cast<uint64_t>(sim_system_.get_base_seed()));
 	patch->set_halo_thickness(static_cast<float>(cutoff));
 

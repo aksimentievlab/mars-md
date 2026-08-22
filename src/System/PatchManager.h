@@ -52,8 +52,8 @@ class PatchManager {
 		int neighbor_rank = -1;					  ///< MPI rank of neighbor patch
 		int neighbor_patch_id = -1;				  ///< Patch ID of neighbor
 		std::array<int, 3> direction = {0, 0, 0}; ///< Direction vector to neighbor
-		DeviceBuffer<arbd_real> send_buffer;		  ///< Buffer for outgoing data
-		DeviceBuffer<arbd_real> recv_buffer;		  ///< Buffer for incoming data
+		DeviceBuffer<arbd_real> send_buffer;	  ///< Buffer for outgoing data
+		DeviceBuffer<arbd_real> recv_buffer;	  ///< Buffer for incoming data
 		idx_t max_halo_particles = 0;			  ///< Maximum expected halo particles
 		bool active = false;					  ///< Whether this neighbor connection is active
 
@@ -263,16 +263,17 @@ class PatchManager {
 	 * @param particle_types Particle type data from SimSystem
 	 * @return Vector of events for async computation
 	 */
-	std::vector<Event> compute_nonbonded_forces(const NonBondedInteractions& interactions,
-												const BondedInteractions& bonded_interactions,
-												const DeviceParticleTypes& particle_types,
-												const GridManager& grid_manager,
-												const TablesRegistry& tables_registry,
-												float cutoff,
-												size_t step,
-												size_t rebuild_period,
-												const Vector3& electric_field = Vector3{0.0f, 0.0f, 0.0f},
-												int interpolation_scheme = 0);
+	std::vector<Event>
+	compute_nonbonded_forces(const NonBondedInteractions& interactions,
+							 const BondedInteractions& bonded_interactions,
+							 const DeviceParticleTypes& particle_types,
+							 const GridManager& grid_manager,
+							 const TablesRegistry& tables_registry,
+							 float cutoff,
+							 size_t step,
+							 size_t rebuild_period,
+							 const Vector3& electric_field = Vector3{0.0f, 0.0f, 0.0f},
+							 int interpolation_scheme = 0);
 
 	/**
 	 * @brief Compute bonded forces across all patches

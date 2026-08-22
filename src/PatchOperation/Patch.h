@@ -21,13 +21,11 @@
 #include "Objects/Grid.h"
 #include "Objects/Tables.h"
 #include "PatchOperation/Pairlist.h"
-#ifdef ENABLE_ZORDER_REORDER
-// Complete type needed: Patch's inline ctor holds a unique_ptr<ZOrderSort> member.
 #include "PatchOperation/ZOrderKernels/ZOrderSort.h"
-#endif
 #include "System/PeriodicBox.h"
 #include "System/SystemForward.h"
 #include "Types/Types.h"
+#include "PairListKernels/ZOrderPairlist.h"
 #include <memory>
 #include <utility>
 
@@ -38,7 +36,7 @@ class SimSystem;
 class ZOrderSort;
 
 /**
- * @brief Spatial decomposition unit for distributed particle simulation
+ * @brief
  *
  * Each Patch represents a spatial region containing particles and manages:
  * - Local particle data using DeviceParticle for optimal memory layout
@@ -59,11 +57,11 @@ class Patch {
 	Patch(patch_t patch_id,
 		  idx_t capacity,
 		  const Resource& resource,
+		  const PeriodicBox& periodic_box,
 		  PairlistBuilderType pairlist_type = PairlistBuilderType::ZOrder)
-		: patch_id_(patch_id), capacity_(capacity), resource_(resource),
-		  particles_(capacity, resource), pair_table_idx_(capacity, resource),
-		  device_bonded_(resource) {
-		// Global device-memory-bounded pair budget (Pairlist.h kPairlistMaxPairs, from GPU_MEM).
+		: patch_id_(patch_id), capacity_(capacity), resource_(resource), particles_(capacity, resource),
+		  pair_table_idx_(capacity, resource), device_bonded_(resource) {
+		set_periodic_box(periodic_box);
 		pairlist_ = create_pairlist(pairlist_type, resource, capacity, kPairlistMaxPairs);
 		initialize_spatial_structures();
 	}
@@ -92,15 +90,29 @@ class Patch {
 	std::unique_ptr<HaloBuffers> halo_buffers_{nullptr};
 
 	/**
-	 * @brief Set reference to system-wide periodic boundary conditions
+	 * @brief Set this patch's periodic wrapping box
 	 *
 	 * Also refreshes a device-resident copy of the box: bond/angle/dihedral
 	 * force kernels (see BondComputer.h) take a `const PeriodicBox*` that
-	 * they dereference on-device, so a host pointer like periodic_box_
+	 * they dereference on-device, so a host value like periodic_box_
 	 * itself is not usable there.
-	 * @param sim_box Pointer to system boundary conditions (not owned)
+	 * @param box This patch's periodic wrapping box - patch-extent basis,
+	 *        with per-axis periodicity gated off on any split axis (see
+	 *        DecompositionPlan::set_periodic_box())
 	 */
-	void set_periodic_box(const PeriodicBox* sim_box);
+	void set_periodic_box(const PeriodicBox& box){
+		periodic_box_ = box;
+		periodic_box_device_ = DeviceBuffer<PeriodicBox>(1, resource_);
+		periodic_box_device_.copy_from_host(std::vector<PeriodicBox>{box});
+
+	if (auto* zpl = dynamic_cast<ZOrderPairlist*>(pairlist_.get())) {
+		const auto bs = box.get_box_size();
+		zpl->set_periodic_box(Vector3(box.is_periodic(0) ? bs.x : 0.0f,
+		                              box.is_periodic(1) ? bs.y : 0.0f,
+		                              box.is_periodic(2) ? bs.z : 0.0f),
+		                      box.get_origin());
+	}
+	};
 
 	/**
 	 * @brief Set the run-wide RNG seed (SimSystem::get_base_seed()).
@@ -117,6 +129,7 @@ class Patch {
 	 * @brief Get a device-resident pointer to the periodic box, or nullptr if unset
 	 */
 	const PeriodicBox* get_device_periodic_box() const {
+
 		return periodic_box_device_.size() > 0 ? periodic_box_device_.device_data() : nullptr;
 	}
 
@@ -144,26 +157,6 @@ class Patch {
 	 */
 	void set_particle_types(std::unique_ptr<DeviceParticleTypes> particle_types) {
 		particle_types_ = std::move(particle_types);
-	}
-
-	/**
-	 * @brief Set spatial boundaries for this patch region
-	 * @param min_bounds Minimum corner coordinates
-	 * @param max_bounds Maximum corner coordinates
-	 */
-	void set_bounds(const Vector3& min_bounds, const Vector3& max_bounds) {
-		min_bounds_ = min_bounds;
-		max_bounds_ = max_bounds;
-		// Update any spatial acceleration structures if needed
-		update_space_partition();
-	}
-
-	/**
-	 * @brief Get reference to system-wide periodic boundary conditions
-	 * @return Pointer to periodic boundary conditions
-	 */
-	const PeriodicBox* get_periodic_box() const {
-		return periodic_box_;
 	}
 
 	/**
@@ -270,13 +263,6 @@ class Patch {
 
 	/**
 	 * @brief Get the bonded-pair exclusions consulted by the pairwise nonbonded kernel
-	 *
-	 * Exposes DeviceBondedInteractions::exclusion_pairs() (REPLACE-flagged
-	 * bonds, plus whatever BondedInteractions::make_exclusions() adds), which
-	 * calculate_nonbonded_forces() checks (linear scan per pair) before
-	 * evaluating the pairwise tabulated term. Populated lazily by
-	 * ensure_bonded_topology_ready(), called from both calculate_bonded_forces()
-	 * and calculate_nonbonded_forces() - empty/zero before either has run.
 	 */
 	DEVICE_PTR(const int2) get_exclusions() const {
 		return device_bonded_.exclusion_pairs();
@@ -305,19 +291,6 @@ class Patch {
 	/**
 	 * @brief Apply BAOAB's outstanding closing half-kick, if one is pending.
 	 *
-	 * BAOAB is B-A-O-A-B and the closing B needs the force at the *new*
-	 * positions, so integrate_motion() defers it and merges it into the next
-	 * step's opening kick. That is exact for the trajectory, but it means that
-	 * between steps the stored momentum is a half-step behind the stored
-	 * position: p lacks 0.5*dt*F(x). Positions are unaffected, so trajectory
-	 * output is correct either way, but anything that reads momentum - the
-	 * momentum DCD, restart files, kinetic energy - would record that half-step
-	 * value and, on restart, resume treating it as a whole-step momentum.
-	 *
-	 * Callers must therefore evaluate forces at the current positions first,
-	 * then call this, then read momentum. The pending flag makes it idempotent
-	 * and stops the next integrate_motion() from applying the kick twice.
-	 *
 	 * @param dt Timestep, matching the one integrate_motion() was called with
 	 * @return Event for async GPU execution; a no-op event if nothing is pending
 	 */
@@ -339,17 +312,17 @@ class Patch {
 	}
 
 	/**
-	 * @brief Get patch minimum spatial bounds
+	 * @brief Get patch minimum spatial bounds (this patch's periodic box origin)
 	 */
 	const Vector3& get_min_bounds() const {
-		return min_bounds_;
+		return periodic_box_.get_origin();
 	}
 
 	/**
-	 * @brief Get patch maximum spatial bounds
+	 * @brief Get patch maximum spatial bounds (origin + this patch's box size)
 	 */
-	const Vector3& get_max_bounds() const {
-		return max_bounds_;
+	Vector3 get_max_bounds() const {
+		return periodic_box_.get_origin() + periodic_box_.get_box_size();
 	}
 
 	/**
@@ -366,9 +339,10 @@ class Patch {
 	 * @return True if position is in halo/ghost region
 	 */
 	bool is_in_halo_region(const Vector3& position) const {
-		return position.x < min_bounds_.x || position.x >= max_bounds_.x ||
-			   position.y < min_bounds_.y || position.y >= max_bounds_.y ||
-			   position.z < min_bounds_.z || position.z >= max_bounds_.z;
+		const Vector3& lo = get_min_bounds();
+		const Vector3 hi = get_max_bounds();
+		return position.x < lo.x || position.x >= hi.x || position.y < lo.y || position.y >= hi.y ||
+			   position.z < lo.z || position.z >= hi.z;
 	}
 
 	/**
@@ -385,17 +359,19 @@ class Patch {
 	 * @return Migration direction: 0=x-, 1=x+, 2=y-, 3=y+, 4=z-, 5=z+, -1=no migration
 	 */
 	int check_migration_direction(const Vector3& position) const {
-		if (position.x < min_bounds_.x)
+		const Vector3& lo = get_min_bounds();
+		const Vector3 hi = get_max_bounds();
+		if (position.x < lo.x)
 			return 0; // x-
-		if (position.x >= max_bounds_.x)
+		if (position.x >= hi.x)
 			return 1; // x+
-		if (position.y < min_bounds_.y)
+		if (position.y < lo.y)
 			return 2; // y-
-		if (position.y >= max_bounds_.y)
+		if (position.y >= hi.y)
 			return 3; // y+
-		if (position.z < min_bounds_.z)
+		if (position.z < lo.z)
 			return 4; // z-
-		if (position.z >= max_bounds_.z)
+		if (position.z >= hi.z)
 			return 5; // z+
 		return -1;	  // No migration needed
 	}
@@ -408,19 +384,21 @@ class Patch {
 	 * @return True if position is in boundary region
 	 */
 	bool is_in_boundary_region(const Vector3& position, int direction, float halo_width) const {
+		const Vector3& lo = get_min_bounds();
+		const Vector3 hi = get_max_bounds();
 		switch (direction) {
 		case 0: // x-
-			return position.x >= min_bounds_.x && position.x < min_bounds_.x + halo_width;
+			return position.x >= lo.x && position.x < lo.x + halo_width;
 		case 1: // x+
-			return position.x >= max_bounds_.x - halo_width && position.x < max_bounds_.x;
+			return position.x >= hi.x - halo_width && position.x < hi.x;
 		case 2: // y-
-			return position.y >= min_bounds_.y && position.y < min_bounds_.y + halo_width;
+			return position.y >= lo.y && position.y < lo.y + halo_width;
 		case 3: // y+
-			return position.y >= max_bounds_.y - halo_width && position.y < max_bounds_.y;
+			return position.y >= hi.y - halo_width && position.y < hi.y;
 		case 4: // z-
-			return position.z >= min_bounds_.z && position.z < min_bounds_.z + halo_width;
+			return position.z >= lo.z && position.z < lo.z + halo_width;
 		case 5: // z+
-			return position.z >= max_bounds_.z - halo_width && position.z < max_bounds_.z;
+			return position.z >= hi.z - halo_width && position.z < hi.z;
 		default:
 			return false;
 		}
@@ -433,33 +411,35 @@ class Patch {
 	 * @return Pair of (halo_min, halo_max) bounds
 	 */
 	std::pair<Vector3, Vector3> calculate_halo_bounds(int direction, float halo_width) const {
-		Vector3 halo_min = min_bounds_;
-		Vector3 halo_max = max_bounds_;
+		const Vector3 lo = get_min_bounds();
+		const Vector3 hi = get_max_bounds();
+		Vector3 halo_min = lo;
+		Vector3 halo_max = hi;
 
 		switch (direction) {
 		case 0: // x-
-			halo_max.x = min_bounds_.x;
-			halo_min.x = min_bounds_.x - halo_width;
+			halo_max.x = lo.x;
+			halo_min.x = lo.x - halo_width;
 			break;
 		case 1: // x+
-			halo_min.x = max_bounds_.x;
-			halo_max.x = max_bounds_.x + halo_width;
+			halo_min.x = hi.x;
+			halo_max.x = hi.x + halo_width;
 			break;
 		case 2: // y-
-			halo_max.y = min_bounds_.y;
-			halo_min.y = min_bounds_.y - halo_width;
+			halo_max.y = lo.y;
+			halo_min.y = lo.y - halo_width;
 			break;
 		case 3: // y+
-			halo_min.y = max_bounds_.y;
-			halo_max.y = max_bounds_.y + halo_width;
+			halo_min.y = hi.y;
+			halo_max.y = hi.y + halo_width;
 			break;
 		case 4: // z-
-			halo_max.z = min_bounds_.z;
-			halo_min.z = min_bounds_.z - halo_width;
+			halo_max.z = lo.z;
+			halo_min.z = lo.z - halo_width;
 			break;
 		case 5: // z+
-			halo_min.z = max_bounds_.z;
-			halo_max.z = max_bounds_.z + halo_width;
+			halo_min.z = hi.z;
+			halo_max.z = hi.z + halo_width;
 			break;
 		}
 
@@ -587,11 +567,6 @@ class Patch {
 	void initialize_spatial_structures();
 
 	/**
-	 * @brief Update space partitioning after bounds change
-	 */
-	void update_space_partition();
-
-	/**
 	 * @brief Lazily build device-side bonded topology (bonds/angles/dihedrals/exclusions/tables)
 	 *
 	 * Extracted so both calculate_bonded_forces() and calculate_nonbonded_forces()
@@ -618,27 +593,29 @@ class Patch {
 	HostParticleData host_particles_;	 ///< used for staging on HOST.
 	DeviceParticle particles_;			 ///< Local particle data in SoA format
 	std::unique_ptr<Pairlist> pairlist_; ///< Pairlist for neighbor finding and spatial organization
-	DeviceBuffer<int> pair_table_idx_;	 ///< Per-pair tabulated-table index, resolved each rebuild (-1 = skip)
+	DeviceBuffer<int>
+		pair_table_idx_; ///< Per-pair tabulated-table index, resolved each rebuild (-1 = skip)
 	bool pairlist_built_{
 		false}; ///< True once pairlist_ has been built; gates the displacement skip check
 #ifdef ENABLE_ZORDER_REORDER
-	std::unique_ptr<ZOrderSort> reorder_sorter_; ///< Morton sorter for canonical reorder (System mode)
-	bool force_rebuild_{false};					 ///< Set by reorder_particles(); forces next pairlist rebuild
+	std::unique_ptr<ZOrderSort>
+		reorder_sorter_;		///< Morton sorter for canonical reorder (System mode)
+	bool force_rebuild_{false}; ///< Set by reorder_particles(); forces next pairlist rebuild
 #endif
 	std::unique_ptr<DeviceParticleTypes> particle_types_; ///< Device buffers for all particle types
 
-	float halo_thickness_{0.0f}; ///< Halo region thickness for ghost particles
+	float halo_thickness_{arbd_real(0.0)}; ///< Halo region thickness for ghost particles
 
 	//================================================================================
 	// Spatial Bounds and Geometry
 	//================================================================================
-	Vector3 min_bounds_{arbd_real(0)}; ///< Patch minimum spatial bounds
-	Vector3 max_bounds_{arbd_real(0)}; ///< Patch maximum spatial bounds
+	// min/max bounds are derived from periodic_box_ (see get_min_bounds/get_max_bounds) -
+	// no separate storage, so they can never drift out of sync with the box.
 
 	//================================================================================
-	// System References (not owned)
+	// Periodic wrapping box (owned by value - see set_periodic_box)
 	//================================================================================
-	const PeriodicBox* periodic_box_{nullptr};		///< System boundary conditions
+	PeriodicBox periodic_box_{}; ///< This patch's periodic wrapping box (patch-extent basis)
 	DeviceBuffer<PeriodicBox> periodic_box_device_; ///< Device-resident copy for kernels that
 													///< dereference PeriodicBox* on-device
 
@@ -649,19 +626,12 @@ class Patch {
 	//================================================================================
 	const BaseGridView<arbd_real>* pmf_grid_configs_{nullptr}; ///< PMF/force grids, nullptr = none
 	Vector3 electric_field_{0.0f, 0.0f, 0.0f};				   ///< Uniform global E field
-	int interpolation_scheme_{1};							   ///< 0=linear, 1=cubic
+	int interpolation_scheme_{0};							   ///< 0=linear, 1=cubic
 
-	// Device-side bonded topology (bonds/angles/dihedrals/exclusions/tables)
-	// for calculate_bonded_forces(), lazily built on first call and cached
-	// (bond topology is static for the run). Constructed with resource_ in
-	// Patch's constructor - DeviceBondedInteractions has no default ctor.
 	DeviceBondedInteractions device_bonded_;
 	bool bonded_device_data_prepared_{false};
 
-	// Device-side pairwise nonbonded topology (type-pair -> table matrix) for
-	// calculate_nonbonded_forces(), lazily built on first call. unique_ptr
-	// because construction needs num_particle_types, unknown at Patch
-	// construction time (unlike device_bonded_, which only needs the resource).
+	// Device-side pairwise nonbonded topology (type-pair -> table matrix)
 	std::unique_ptr<DevicePairNonBondedInteractions> device_pair_nb_;
 	bool pairwise_nb_device_data_prepared_{false};
 };

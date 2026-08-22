@@ -42,6 +42,8 @@ DecompositionPlan ZOrderDecomposer::decompose(SimSystem& sys, SystemState& state
 		plan.periodicity = {bcs.get_periodicity()[0],
 							bcs.get_periodicity()[1],
 							bcs.get_periodicity()[2]};
+		plan.system_box = bcs;
+		plan.set_periodic_box();
 		return plan;
 	}
 
@@ -110,6 +112,8 @@ DecompositionPlan ZOrderDecomposer::decompose(SimSystem& sys, SystemState& state
 	// This is simplified - full implementation would compute bounds from Morton ranges
 	const auto& periodicity = bcs.get_periodicity();
 	plan.periodicity = {periodicity[0], periodicity[1], periodicity[2]};
+	plan.system_box = bcs;
+	plan.set_periodic_box();
 
 	// Determine grid dimensions (for Z-order, patches may not form a regular grid)
 	// For now, create a simple 1D arrangement
@@ -167,6 +171,8 @@ DecompositionPlan ZOrderDecomposer::decompose(SimSystem& sys, SystemState& state
 
 		start_idx = end_idx;
 	}
+
+	plan.set_periodic_box();
 
 	// Validate plan
 	if (!plan.is_valid()) {

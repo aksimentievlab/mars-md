@@ -53,6 +53,7 @@ DecompositionPlan SpatialPatchDecomposer::decompose(SimSystem& system, SystemSta
 
 	const auto& periodicity = boundary.get_periodicity();
 	plan.periodicity = {periodicity[0], periodicity[1], periodicity[2]};
+	plan.system_box = boundary;
 
 	// Reserve space for patch data
 	plan.patch_min_bounds.reserve(total_patches);
@@ -119,6 +120,8 @@ DecompositionPlan SpatialPatchDecomposer::decompose(SimSystem& system, SystemSta
 												  std::max(1.0f, static_cast<float>(*minmax.first));
 		}
 	}
+
+	plan.set_periodic_box();
 
 	// Validate the plan
 	if (!validate_decomposition_plan(plan)) {

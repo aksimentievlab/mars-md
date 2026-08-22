@@ -11,6 +11,7 @@
 
 #include "Backend/Buffer.h"
 #include "Backend/Resource.h"
+#include "System/PeriodicBox.h"
 #include "Types/Types.h"
 #include "Types/Vector3.h"
 
@@ -176,6 +177,7 @@ class Pairlist {
 	uint32_t num_pairs_;
 	float cutoff_;
 	float cutoff_squared_;
+	PeriodicBox box_; ///< Reference to periodic box per patch
 
 	DeviceBuffer<int2> neighbor_pairs_; ///< Neighbor particle pairs (i, j)
 	DeviceBuffer<uint32_t> pair_count_; ///< Atomic counter for pair generation

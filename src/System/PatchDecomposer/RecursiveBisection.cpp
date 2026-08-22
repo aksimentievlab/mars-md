@@ -52,6 +52,7 @@ DecompositionPlan RecursiveBisectionPatchDecomposer::decompose(SimSystem& system
 	const PeriodicBox& boundary = system.get_boundary_conditions();
 	const auto& periodicity = boundary.get_periodicity();
 	plan.periodicity = {periodicity[0], periodicity[1], periodicity[2]};
+	plan.system_box = boundary;
 
 	// Fill plan data
 	for (const auto& node : result_nodes) {
@@ -85,6 +86,8 @@ DecompositionPlan RecursiveBisectionPatchDecomposer::decompose(SimSystem& system
 			plan.total_patches(),
 			plan.statistics.load_balance_factor,
 			plan.statistics.decomposition_time_ms);
+
+	plan.set_periodic_box();
 
 	return plan;
 }

@@ -15,12 +15,13 @@ using sycl::asin;
 using sycl::atan;
 using sycl::atan2;
 using sycl::cos;
+using sycl::cosh;
 using sycl::exp;
 using sycl::floor;
 using sycl::log;
+using sycl::round;
 using sycl::sin;
 using sycl::sinh;
-using sycl::cosh;
 using sycl::sqrt;
 
 #elif defined(__CUDA_ARCH__)
@@ -90,6 +91,14 @@ HOST DEVICE inline T floor(T x) {
 }
 
 template<typename T>
+HOST DEVICE inline T round(T x) {
+	if constexpr (sizeof(T) == sizeof(float))
+		return ::roundf(x);
+	else
+		return ::round(x);
+}
+
+template<typename T>
 HOST DEVICE inline T exp(T x) {
 	if constexpr (sizeof(T) == sizeof(float))
 		return ::expf(x);
@@ -128,12 +137,12 @@ using metal::asin;
 using metal::atan;
 using metal::atan2;
 using metal::cos;
+using metal::cosh;
 using metal::exp;
 using metal::floor;
 using metal::log;
 using metal::sin;
 using metal::sinh;
-using metal::cosh;
 using metal::sqrt;
 
 #else
@@ -143,12 +152,13 @@ using std::asin;
 using std::atan;
 using std::atan2;
 using std::cos;
+using std::cosh;
 using std::exp;
 using std::floor;
 using std::log;
+using std::round;
 using std::sin;
 using std::sinh;
-using std::cosh;
 using std::sqrt;
 #endif
 
@@ -190,8 +200,7 @@ HOST DEVICE inline T sinh_minus_x(T x) {
 	if (x >= T(1) || x <= T(-1))
 		return sinh(x) - x;
 	const T w = x * x;
-	return x * w *
-		   (T(1.0 / 6) + w * (T(1.0 / 120) + w * (T(1.0 / 5040) + w * T(1.0 / 362880))));
+	return x * w * (T(1.0 / 6) + w * (T(1.0 / 120) + w * (T(1.0 / 5040) + w * T(1.0 / 362880))));
 }
 
 /**
@@ -203,8 +212,7 @@ HOST DEVICE inline T x_cosh_minus_sinh(T x) {
 	if (x >= T(1) || x <= T(-1))
 		return x * cosh(x) - sinh(x);
 	const T w = x * x;
-	return x * w *
-		   (T(1.0 / 3) + w * (T(1.0 / 30) + w * (T(1.0 / 840) + w * T(1.0 / 45360))));
+	return x * w * (T(1.0 / 3) + w * (T(1.0 / 30) + w * (T(1.0 / 840) + w * T(1.0 / 45360))));
 }
 
 } // namespace math

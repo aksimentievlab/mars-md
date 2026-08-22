@@ -17,6 +17,7 @@
 #include "Backend/Resource.h"
 #include "Objects/ParticleProperties.h"
 #include "SimParam.h"
+#include "System/PeriodicBox.h"
 #include "Types/Types.h"
 #include <array>
 #include <memory>
@@ -49,12 +50,13 @@ struct DecompositionStats {
  */
 struct DecompositionPlan {
 	// Grid structure
-	std::array<int, 3> grid_dimensions = {0, 0, 0};		  ///< Number of patches (nx, ny, nz)
+	std::array<int, 3> grid_dimensions = {1, 1, 1};		  ///< Number of patches (nx, ny, nz)
 	std::array<bool, 3> periodicity = {true, true, true}; ///< Periodic boundary flags
 
 	// Patch boundaries (one per patch in the grid)
 	std::vector<Vector3> patch_min_bounds; ///< Minimum bounds for each patch
 	std::vector<Vector3> patch_max_bounds; ///< Maximum bounds for each patch
+	std::vector<PeriodicBox> patch_boxes;  ///< Periodic boxes for each patch
 
 	// Resource assignment
 	std::vector<Resource> patch_resources; ///< Resource assigned to each patch
@@ -62,6 +64,7 @@ struct DecompositionPlan {
 	// System-wide information
 	Vector3 system_min = Vector3(0.0f); ///< Global system minimum bounds
 	Vector3 system_max = Vector3(0.0f); ///< Global system maximum bounds
+	PeriodicBox system_box;				///< System periodic box probalby needs a const
 
 	// Particle assignment (for non-regular decompositions)
 	std::vector<std::vector<idx_t>> patch_particle_indices; ///< Particle indices per patch
@@ -76,7 +79,94 @@ struct DecompositionPlan {
 		return static_cast<size_t>(grid_dimensions[0]) * static_cast<size_t>(grid_dimensions[1]) *
 			   static_cast<size_t>(grid_dimensions[2]);
 	}
+	/**
+	 * @brief Populate per-patch bounds and periodic boxes from the grid.
+	 */
+	void set_periodic_box() {
+		const Vector3 origin = system_box.get_origin();
+		const auto& basis = system_box.get_basis();
+		const bool* sys_per = system_box.get_periodicity();
 
+		const int nx = grid_dimensions[0] > 0 ? grid_dimensions[0] : 1;
+		const int ny = grid_dimensions[1] > 0 ? grid_dimensions[1] : 1;
+		const int nz = grid_dimensions[2] > 0 ? grid_dimensions[2] : 1;
+		const size_t n = total_patches();
+
+		// System bounds span the full basis from the origin.
+		// NOTE: For triclinic boxes, this is the opposite vertex of the parallelipiped,
+		// NOT necessarily the maximum Cartesian bounding box extent!
+		system_min = origin;
+		system_max = origin + basis.ex() + basis.ey() + basis.ez();
+
+		// A split axis is non-periodic per patch.
+		const bool per_x = sys_per[0] && nx == 1;
+		const bool per_y = sys_per[1] && ny == 1;
+		const bool per_z = sys_per[2] && nz == 1;
+
+		// Fill regular-grid bounds only if a decomposer left them empty
+		const bool have_bounds = patch_min_bounds.size() == n && patch_max_bounds.size() == n;
+		if (!have_bounds) {
+			patch_min_bounds.clear();
+			patch_max_bounds.clear();
+			patch_min_bounds.reserve(n);
+			patch_max_bounds.reserve(n);
+			for (int k = 0; k < nz; ++k)
+				for (int j = 0; j < ny; ++j)
+					for (int i = 0; i < nx; ++i) {
+						patch_min_bounds.push_back(origin +
+												   basis.ex() * (static_cast<arbd_real>(i) / nx) +
+												   basis.ey() * (static_cast<arbd_real>(j) / ny) +
+												   basis.ez() * (static_cast<arbd_real>(k) / nz));
+						patch_max_bounds.push_back(
+							origin + basis.ex() * (static_cast<arbd_real>(i + 1) / nx) +
+							basis.ey() * (static_cast<arbd_real>(j + 1) / ny) +
+							basis.ez() * (static_cast<arbd_real>(k + 1) / nz));
+					}
+		}
+
+		patch_boxes.clear();
+		patch_boxes.reserve(n);
+		if (system_box.is_triclinic()) {
+			// Uniform per-patch basis for the regular grid (constant across patches).
+			const Vector3 pv1 = basis.ex() / static_cast<arbd_real>(nx);
+			const Vector3 pv2 = basis.ey() / static_cast<arbd_real>(ny);
+			const Vector3 pv3 = basis.ez() / static_cast<arbd_real>(nz);
+			for (size_t p = 0; p < n; ++p) {
+				PeriodicBox pbox;
+				pbox.set_origin(patch_min_bounds[p]);
+
+				if (!have_bounds) {
+					pbox.set_basis(pv1, pv2, pv3);
+				} else {
+					// Irregular cuts: solve h * s = diff for the fractional spans s.
+					// Columns are upper-triangular, so back-substitute z -> y -> x.
+					const Vector3 e1 = basis.ex();
+					const Vector3 e2 = basis.ey();
+					const Vector3 e3 = basis.ez();
+					const Vector3 diff = patch_max_bounds[p] - patch_min_bounds[p];
+					const arbd_real sz = (e3.z != arbd_real(0.0)) ? diff.z / e3.z : arbd_real(0.0);
+					const arbd_real sy =
+						(e2.y != arbd_real(0.0)) ? (diff.y - sz * e3.y) / e2.y : arbd_real(0.0);
+					const arbd_real sx = (e1.x != arbd_real(0.0))
+											 ? (diff.x - sy * e2.x - sz * e3.x) / e1.x
+											 : arbd_real(0.0);
+					pbox.set_basis(e1 * sx, e2 * sy, e3 * sz);
+				}
+
+				pbox.set_periodicity(per_x, per_y, per_z);
+				patch_boxes.push_back(pbox);
+			}
+		} else {
+			// Orthogonal fast-path: extent is the per-axis span (regular or irregular).
+			for (size_t p = 0; p < n; ++p) {
+				PeriodicBox pbox;
+				pbox.set_box_size(patch_max_bounds[p] - patch_min_bounds[p]);
+				pbox.set_origin(patch_min_bounds[p]);
+				pbox.set_periodicity(per_x, per_y, per_z);
+				patch_boxes.push_back(pbox);
+			}
+		}
+	}
 	/**
 	 * @brief Validate that the decomposition plan is consistent
 	 */
@@ -151,17 +241,11 @@ class PatchDecomposer {
   protected:
 	DecomposerType type_;
 
-	/**
-	 * @brief Helper function to validate decomposition plan
-	 */
 	bool validate_decomposition_plan(const DecompositionPlan& plan) const {
 		return plan.is_valid() && plan.patch_min_bounds.size() == plan.patch_max_bounds.size() &&
 			   plan.patch_min_bounds.size() == plan.patch_resources.size();
 	}
 
-	/**
-	 * @brief Helper to distribute particles to patches based on position
-	 */
 	std::vector<std::vector<idx_t>>
 	assign_particles_to_patches(const HostParticleData& particles,
 								const std::vector<Vector3>& patch_min_bounds,

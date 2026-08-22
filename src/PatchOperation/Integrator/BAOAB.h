@@ -123,7 +123,6 @@ template<typename TemperatureType = float>
 struct BAOAB_LastUpdate {
 	ParticleView particle_view;
 	const ParticleTypeView particle_types;
-	Vector3 box_size;
 	float timestep;
 	TemperatureType kT;
 	idx_t num_particles;
@@ -136,7 +135,6 @@ struct BAOAB_LastUpdate {
 
 	BAOAB_LastUpdate(ParticleView pv,
 					 const ParticleTypeView pt,
-					 const Vector3& box,
 					 float dt,
 					 size_t current_step,
 					 TemperatureType temp,
@@ -146,7 +144,7 @@ struct BAOAB_LastUpdate {
 					 const BaseGridView<arbd_real>* grids,
 					 const Vector3& efield,
 					 int scheme)
-		: particle_view(pv), particle_types(pt), box_size(box), timestep(dt),
+		: particle_view(pv), particle_types(pt), timestep(dt),
 		  current_step(current_step), kT(temp), num_particles(n), base_seed(seed), base_ctr(ctr),
 		  grid_configs(grids), electric_field(efield), interpolation_scheme(scheme) {}
 

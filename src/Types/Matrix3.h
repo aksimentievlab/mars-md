@@ -79,6 +79,9 @@ struct alignas(4 * sizeof(T)) Matrix3_t {
 	HOST DEVICE Vector3 operator*(const Vector3& v) const {
 		return transform(v);
 	}
+	HOST DEVICE Vector3 operator[](const int index) const {
+		return cols[index];
+	}
 
 	// Matrix multiplication - same type only for Metal safety
 	HOST DEVICE Matrix3 operator*(const Matrix3& m) const {
@@ -117,7 +120,13 @@ struct alignas(4 * sizeof(T)) Matrix3_t {
 					   Vector3(r0.y, r1.y, r2.y) * inv_det,
 					   Vector3(r0.z, r1.z, r2.z) * inv_det);
 	}
+	HOST DEVICE Vector3 get_norm() {
+		return Vector3(cols[0].length(), cols[1].length(), cols[2].length());
+	}
 
+	HOST DEVICE T get_scalar_norm() {
+		return math::sqrt(cols[0].length2() + cols[1].length2() + cols[2].length2());
+	}
 	// Determinant
 	HOST DEVICE T det() const {
 		return cols[0].dot(cols[1].cross(cols[2]));
@@ -145,7 +154,7 @@ struct alignas(4 * sizeof(T)) Matrix3_t {
 	}
 
 #ifdef HOST_GUARD
-	//to string would be in row major for IO.
+	// to string would be in row major for IO.
 	auto to_string() const {
 		Matrix3 transposed = transpose();
 		return string_format("%2.8f %2.8f %2.8f\n%2.8f %2.8f %2.8f\n%2.8f %2.8f %2.8f",

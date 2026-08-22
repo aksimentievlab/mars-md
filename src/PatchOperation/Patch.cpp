@@ -17,28 +17,6 @@
 #include "PatchOperation/Pairlist.h"
 namespace ARBD {
 
-void Patch::set_periodic_box(const PeriodicBox* sim_box) {
-	periodic_box_ = sim_box;
-	if (sim_box) {
-		periodic_box_device_ = DeviceBuffer<PeriodicBox>(1, resource_);
-		periodic_box_device_.copy_from_host(std::vector<PeriodicBox>{*sim_box});
-	} else {
-		periodic_box_device_ = DeviceBuffer<PeriodicBox>();
-	}
-	// Periodicity is passed per axis.
-	if (auto* zpl = dynamic_cast<ZOrderPairlist*>(pairlist_.get())) {
-		if (sim_box) {
-			const auto bs = sim_box->get_box_size();
-			zpl->set_periodic_box(Vector3(sim_box->is_periodic(0) ? bs.x : 0.0f,
-										  sim_box->is_periodic(1) ? bs.y : 0.0f,
-										  sim_box->is_periodic(2) ? bs.z : 0.0f),
-								  sim_box->get_origin());
-		} else {
-			zpl->set_periodic_box(Vector3(0.0f, 0.0f, 0.0f));
-		}
-	}
-}
-
 //================================================================================
 // Force Calculation Methods
 //================================================================================
@@ -266,17 +244,6 @@ Event Patch::integrate_motion(float dt,
 				   ? temperature.kT
 				   : temperature.kT; // TODO: Sample from grid if gridded (for now use constant)
 
-	// Get the periodic box; wrapping needs its origin as well as its size, so
-	// pass the box itself rather than just the extents. A default-constructed
-	// box is non-periodic, so positions pass through unwrapped.
-	PeriodicBox sim_box;
-	if (periodic_box_) {
-		sim_box = *periodic_box_;
-	}
-
-	// Derive the Philox stream key. Philox takes a 64-bit seed and a 32-bit
-	// counter, so everything that must vary independently goes in the seed and
-	// the counter carries the particle index alone.
 	// Mixing with the golden-ratio constant decorrelates neighbouring seeds and
 	// steps; patch_id occupies the high half so patches never collide.
 	uint64_t base_seed = (static_cast<uint64_t>(base_seed_) * 0x9E3779B97F4A7C15ULL) ^
@@ -309,7 +276,7 @@ Event Patch::integrate_motion(float dt,
 							   step,
 							   kT,
 							   particle_count_,
-							   sim_box,
+							   periodic_box_,
 							   base_seed,
 							   base_ctr,
 							   pmf_grid_configs_,
@@ -328,7 +295,6 @@ Event Patch::integrate_motion(float dt,
 			launch_PMF(resource_,
 					   particle_view,
 					   particle_type_view,
-					   sim_box.get_box_size(),
 					   particle_count_,
 					   pmf_grid_configs_,
 					   electric_field_,
@@ -340,7 +306,6 @@ Event Patch::integrate_motion(float dt,
 			launch_BAOAB_LastUpdate<float>(resource_,
 										   particle_view,
 										   particle_type_view,
-										   sim_box.get_box_size(),
 										   dt,
 										   step,
 										   kT,
@@ -361,7 +326,7 @@ Event Patch::integrate_motion(float dt,
 		evt = launch_BAOAB<float>(resource_,
 								  particle_view,
 								  particle_type_view,
-								  sim_box,
+								  periodic_box_,
 								  dt,
 								  step,
 								  kT,
@@ -389,16 +354,10 @@ Event Patch::finish_deferred_kick(float dt) {
 	}
 	deferred_kick_pending_ = false;
 
-	PeriodicBox sim_box;
-	if (periodic_box_) {
-		sim_box = *periodic_box_;
-	}
-
 	return launch_BAOAB_LastUpdate<float>(resource_,
 										  particles_.view(),
 										  particle_types_ ? particle_types_->view()
 														  : ParticleTypeView{},
-										  sim_box.get_box_size(),
 										  dt,
 										  /*current_step=*/0,
 										  /*kT=*/0.0f,
@@ -498,12 +457,9 @@ void Patch::reorder_particles() {
 	}
 
 	// Morton box: prefer the periodic box, else this patch's spatial bounds.
-	Vector3 box_min = min_bounds_;
-	Vector3 box_max = max_bounds_;
-	if (periodic_box_) {
-		box_min = periodic_box_->get_origin();
-		box_max = box_min + periodic_box_->get_box_size();
-	}
+	Vector3 box_min = periodic_box_.get_origin();
+	Vector3 box_max = box_min + periodic_box_.get_box_size();
+
 	if (!(box_max.x > box_min.x && box_max.y > box_min.y && box_max.z > box_min.z)) {
 		LOGWARN("Patch {}: skipping reorder - degenerate Morton box", patch_id_);
 		return;
@@ -637,20 +593,6 @@ void Patch::initialize_spatial_structures() {
 	halo_buffers_ = std::make_unique<HaloBuffers>(resource_, capacity_);
 
 	LOGTRACE("Patch {}: Initialized spatial structures with capacity {}", patch_id_, capacity_);
-}
-
-void Patch::update_space_partition() {
-	// Update any spatial acceleration structures when bounds change
-	// This could include cell lists, neighbor lists, etc.
-
-	LOGTRACE("Patch {}: Updated space partition with bounds [{}, {}] to [{}, {}]",
-			 patch_id_,
-			 min_bounds_.x,
-			 min_bounds_.y,
-			 min_bounds_.z,
-			 max_bounds_.x,
-			 max_bounds_.y,
-			 max_bounds_.z);
 }
 
 } // namespace ARBD
