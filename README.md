@@ -1,8 +1,5 @@
 <div align="center">
 
-  <!-- Replace the src with the actual path to your logo in your repo -->
-  <img src="resources/mars.pdf " alt="MARS-MD Logo" width="500"/>
-
   <h1>MARS-MD: Mesoscale to Atomistic Resolution Software for Molecular Dynamics</h1>
 
   <p>
@@ -12,9 +9,11 @@
     <em>Developed by the <a href="https://bionano.physics.illinois.edu/">Aksimentiev Lab</a> at the University of Illinois Urbana-Champaign.</em>
   </p>
 
+  <img src="resources/mars.png " alt="MARS-MD Logo" width="300"/>
+
   <!-- Eye-catching Badges -->
   <a href=""><img src="https://img.shields.io/badge/C%2B%2B-20-blue.svg" alt="C++20"></a>
-  <a href=""><img src="https://img.shields.io/badge/Backend-CUDA%20%7C%20SYCL%20%7C%20Metal-orange.svg" alt="Backends"></a>
+  <a href=""><img src="https://img.shields.io/badge/Backend-CUDA%20%7C%20SYCL-orange.svg" alt="Backends"></a>
   <a href=""><img src="https://img.shields.io/badge/Status-Alpha-red.svg" alt="Alpha Status"></a>
 
 </div>
