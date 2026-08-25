@@ -62,18 +62,6 @@ If CMake cannot find your CUDA installation:
 - Set the CUDA compiler path: `export CMAKE_CUDA_COMPILER=/path/to/nvcc`
 - Specify CUDA include directory: `export CUDA_INCLUDE_DIRS="$CUDA_HOME/include"`
 
-### macOS-arm64 with SYCL
-
-```bash
-mkdir build && cd build
-/opt/homebrew/bin/cmake \
-  -DCMAKE_OSX_ARCHITECTURES=arm64 \
-  -DUSE_SYCL_ACPP=ON \
-  -DCMAKE_CXX_COMPILER=acpp \
-  ..
-make -j$(sysctl -n hw.ncpu)
-```
-
 > **Note**: Use `-DCMAKE_CXX_COMPILER=icpx` for Intel DPC++ instead of AdaptiveCpp.
 
 ### API Reference
