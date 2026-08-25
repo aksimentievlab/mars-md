@@ -1,4 +1,25 @@
-# Mesoscale to Atomistic Resolution Software for Molecular Dynamics (MARS-MD/arbd2, a successor of arbd)
+<div align="center">
+
+  <!-- Replace the src with the actual path to your logo in your repo -->
+  <img src="resources/mars.pdf " alt="MARS-MD Logo" width="500"/>
+
+  <h1>MARS-MD: Mesoscale to Atomistic Resolution Software for Molecular Dynamics</h1>
+
+  <p>
+    <b>A completely rewritten, next-generation C++20 GPU engine that vastly expands upon the Atomic Resolution Brownian Dynamics (ARBD) framework.</b>
+  </p>
+  <p>
+    <em>Developed by the <a href="https://bionano.physics.illinois.edu/">Aksimentiev Lab</a> at the University of Illinois Urbana-Champaign.</em>
+  </p>
+
+  <!-- Eye-catching Badges -->
+  <a href=""><img src="https://img.shields.io/badge/C%2B%2B-20-blue.svg" alt="C++20"></a>
+  <a href=""><img src="https://img.shields.io/badge/Backend-CUDA%20%7C%20SYCL%20%7C%20Metal-orange.svg" alt="Backends"></a>
+  <a href=""><img src="https://img.shields.io/badge/Status-Alpha-red.svg" alt="Alpha Status"></a>
+
+</div>
+
+<br/>
 
 This development branch of MARS focuses on scaling simulations to larger systems and accelerating performance to hardware limits, while keeping the codebase maintainable and its features diverse. In particular we are targeting speed and good scaling on multi-GPU clusters. Our primary objectives are:
 
