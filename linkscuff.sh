@@ -23,7 +23,6 @@
 #                     (e.g. the zgetrf/zgetrs call itself), linked
 #                     against libgomp so it shares scuff-em's runtime
 #                     instead of pulling in libiomp5.
-#sed -i '35a #include <stdlib.h>' libs/libSpherical/machcon.c
 set -euo pipefail
 mkdir -p build/scuff-link
 SCUFF_PREFIX="$(pwd -P)/build/scuff-link"
@@ -55,10 +54,28 @@ esac
 # declares plain `int` arguments. Do NOT use the ilp64 libs here.
 MKL_LINK="-Wl,--start-group -L${MKL_LIBDIR} -lmkl_intel_lp64 -l${MKL_THREAD_LIB} -lmkl_core -Wl,--end-group -lpthread -lm -ldl"
 
+# --- HDF5 ----------------------------------------------------------------
+
+if [ -z "${HDF5_PREFIX:-}" ]; then
+  if command -v h5cc >/dev/null 2>&1; then
+    HDF5_PREFIX="$(dirname "$(dirname "$(command -v h5cc)")")"
+  else
+    HDF5_PREFIX="/software/HDF5-1.14.3-ubuntu22"
+  fi
+fi
+HDF5_INCDIR="$HDF5_PREFIX/include"
+HDF5_LIBDIR="$HDF5_PREFIX/lib"
+if [ ! -f "$HDF5_INCDIR/hdf5.h" ] || [ ! -e "$HDF5_LIBDIR/libhdf5.so" ]; then
+  echo "error: HDF5 not found under $HDF5_PREFIX" >&2
+  echo "  'module load hdf5/ubuntu/1.14.3' or set HDF5_PREFIX=<dir>." >&2
+  exit 1
+fi
+
 echo "== Building scuff-em against oneMKL =="
 echo "   MKLROOT       = $MKLROOT"
 echo "   MKL lib dir   = $MKL_LIBDIR"
 echo "   threading     = $MKL_THREADING"
+echo "   HDF5 prefix   = $HDF5_PREFIX"
 echo "   install prefix= $SCUFF_PREFIX"
 echo
 
@@ -66,20 +83,19 @@ echo
 touch ChangeLog
 autoreconf --verbose --install --symlink --force
 
-# --- configure ------------------------------------------------------------
-# Both BLAS_LIBS/LAPACK_LIBS (env vars honored directly by ACX_BLAS/
-# ACX_LAPACK, bypassing their autodetection probes) and --with-blas=/
-# --with-lapack= are set, since exact option names can differ slightly
-# between versions of these macros -- belt and suspenders.
+GCC14_COMPAT="-Wno-error=implicit-function-declaration -Wno-error=implicit-int -Wno-error=int-conversion"
+
 BLAS_LIBS="$MKL_LINK" \
 LAPACK_LIBS="$MKL_LINK" \
+CFLAGS="${CFLAGS:-} ${GCC14_COMPAT}" \
+CXXFLAGS="${CXXFLAGS:-} ${GCC14_COMPAT}" \
 ./configure \
   --enable-maintainer-mode \
   --prefix="$SCUFF_PREFIX" \
   --with-blas="$MKL_LINK" \
   --with-lapack="$MKL_LINK" \
   --without-hdf5 \
-  LDFLAGS="-L${MKL_LIBDIR} -Wl,-rpath,${MKL_LIBDIR} ${LDFLAGS:-}" \
+  LDFLAGS="-L${MKL_LIBDIR} -Wl,-rpath,${MKL_LIBDIR} -L${HDF5_LIBDIR} -Wl,-rpath,${HDF5_LIBDIR} ${LDFLAGS:-}" \
   "$@"
 make -j 20
 make install
