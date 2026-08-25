@@ -12,7 +12,10 @@
 # ${CMAKE_SOURCE_DIR}/build/scuff-link (headers under include/scuff-em, one
 # merged libscuff.so under lib/ carrying its own rpath to MKL).
 
-option(USE_SCUFF "Build the scuff-em plasmonic rigid-body coupling" OFF)
+# WARNING: scuff-em is GPL-licensed (copyleft). Keep this OFF for any MARS
+# build you DISTRIBUTE -- linking it makes the combined binary GPL. ON is for
+# internal/private use only; never ship a USE_SCUFF=ON binary. Default: OFF.
+option(USE_SCUFF "Build the scuff-em plasmonic rigid-body coupling (GPL; internal-only, do not distribute)" OFF)
 
 # --- Always built: host-set rigid-body forces, no scuff-em dependency --------
 # RBHostFTManager is the single path for host-computed per-body external

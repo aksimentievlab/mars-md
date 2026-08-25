@@ -1,7 +1,3 @@
-[submodule "extern/pybind11"]
-	path = extern/pybind11
-	url = https://github.com/pybind/pybind11.git
-	branch = stable
 [submodule "extern/Catch2"]
 	path = extern/Catch2
 	url = https://github.com/catchorg/Catch2.git
