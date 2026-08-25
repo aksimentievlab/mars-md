@@ -4,7 +4,7 @@
 #include "nanovdb/NanoVDB.h"
 #include "nanovdb/math/Stencils.h"
 
-namespace ARBD {
+namespace MARS {
 using GridData = nanovdb::GridData;
 using GridHandleMetaData = nanovdb::GridHandleMetaData;
 
@@ -59,4 +59,4 @@ template Event launch_cuda_kernel(
 	const KernelConfig& config,
 	TrilinearInterpolationFunctor<float, nanovdb::math::Vec3<float>>& kernel_func);
 
-} // namespace ARBD
+} // namespace MARS

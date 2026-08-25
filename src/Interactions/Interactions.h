@@ -16,37 +16,37 @@
 #include <vector>
 #endif
 
-namespace ARBD {
+namespace MARS {
 
 /**
  * @brief Scalar force magnitude and energy from a potential evaluation
  *
  * The named fields must stay the same type as `float2`'s components: they
- * alias the same storage, and `float2` is `Vec2<arbd_real>`.
+ * alias the same storage, and `float2` is `Vec2<mars_real>`.
  */
 struct ScalarForceEnergy {
 	union {
-		float2 fe{arbd_real(0), arbd_real(0)};
+		float2 fe{mars_real(0), mars_real(0)};
 		struct {
-			arbd_real force_magnitude;
-			arbd_real energy;
+			mars_real force_magnitude;
+			mars_real energy;
 		};
 	};
 };
 
 struct CalcDistance {
 	Vector3 r_ij;		 // vector between two particles
-	arbd_real distance;	 // distance between two particles
+	mars_real distance;	 // distance between two particles
 	Vector3 unit_vector; // unit vector in the direction of the vector
 
 	DEVICE static CalcDistance compute(const Vector3& from, const Vector3& to, const PeriodicBox* pbox) {
 		CalcDistance dist;
 		dist.r_ij = pbox->wrap_diff(to - from);
 		dist.distance = dist.r_ij.length();
-		if (dist.distance > arbd_real(1e-6)) {
+		if (dist.distance > mars_real(1e-6)) {
 			dist.unit_vector = dist.r_ij / dist.distance;
 		} else {
-			dist.unit_vector = Vector3(arbd_real(0));
+			dist.unit_vector = Vector3(mars_real(0));
 		}
 		return dist;
 	}
@@ -84,11 +84,11 @@ class Register_Potential {
 };
 #endif
 
-} // namespace ARBD
+} // namespace MARS
 #ifdef USE_SYCL
 #include <sycl/sycl.hpp>
 template<>
-struct sycl::is_device_copyable<ARBD::ScalarForceEnergy> : std::true_type {};
+struct sycl::is_device_copyable<MARS::ScalarForceEnergy> : std::true_type {};
 template<>
-struct sycl::is_device_copyable<ARBD::CalcDistance> : std::true_type {};
+struct sycl::is_device_copyable<MARS::CalcDistance> : std::true_type {};
 #endif

@@ -7,7 +7,7 @@
 #include <numbers>
 
 using Catch::Approx;
-using namespace ARBD;
+using namespace MARS;
 
 namespace {
 
@@ -127,7 +127,7 @@ TEST_CASE("Cayley parameter encodes 2*atan(t/2), not t", "[matrix3][rotation]") 
 
 TEST_CASE("Rotation matrices match legacy RigidBody::Rx/Ry/Rz", "[matrix3][rotation][legacy]") {
 	// Legacy builds these from nine row-major scalars (RigidBody.cu:528-557),
-	// arbd2 from three columns. The two conventions must agree element for
+	// mars2 from three columns. The two conventions must agree element for
 	// element or every ported DLM trajectory diverges.
 	const double t = 0.6;
 	const double qt = 0.25 * t * t;
@@ -175,7 +175,7 @@ TEST_CASE("normalize_orientation returns a right-handed orthonormal frame", "[ma
 }
 
 TEST_CASE("Matrix3 float rotations stay orthonormal", "[matrix3][rotation]") {
-	// The DLM kernel runs in whatever arbd_real is; make sure the float
+	// The DLM kernel runs in whatever mars_real is; make sure the float
 	// instantiation is not quietly worse than the double one.
 	using M3f = Matrix3_t<float>;
 	const M3f r = rotation_matrix_z(0.25f) * rotation_matrix_x(-0.75f);

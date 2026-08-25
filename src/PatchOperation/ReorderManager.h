@@ -6,7 +6,7 @@
 
 #include "Types/Types.h"
 
-namespace ARBD {
+namespace MARS {
 
 class Patch;
 
@@ -30,4 +30,4 @@ class ParticleReorderManager {
 };
 #endif
 
-} // namespace ARBD
+} // namespace MARS

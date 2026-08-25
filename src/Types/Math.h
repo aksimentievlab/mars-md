@@ -1,7 +1,7 @@
 #pragma once
 #include "Header.h"
 
-namespace ARBD {
+namespace MARS {
 namespace math {
 
 // ============================================================================
@@ -216,4 +216,4 @@ HOST DEVICE inline T x_cosh_minus_sinh(T x) {
 }
 
 } // namespace math
-} // namespace ARBD
+} // namespace MARS

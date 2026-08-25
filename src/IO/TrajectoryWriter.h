@@ -1,12 +1,12 @@
 // Author: Jeff Comer <jcomer2@illinois.edu>
-// Refactored for the arbd2/cpp20 branch with on 2025
+// Refactored for the mars2/cpp20 branch with on 2025
 // Author: Pin-Yi Li <pinyili2@illinois.edu> with Claude 4.0 sonnet
 
 #pragma once
 
 // #ifdef HOST_GUARD
-#include "ARBDException.h"
-#include "ARBDLogger.h"
+#include "MARSException.h"
+#include "MARSLogger.h"
 #include "FileHandle.h"
 #include "IO/DcdWriter.h"
 #include "Types/Matrix3.h"
@@ -22,7 +22,7 @@
 #include <string_view>
 #include <vector>
 
-namespace ARBD {
+namespace MARS {
 
 constexpr std::string_view PDB_TEMPLATE_LINE =
 	"ATOM      1  CA  MOL S   1      -6.210  -9.711   3.288  0.00  0.00      ION";
@@ -31,11 +31,11 @@ constexpr std::string_view PDB_TEMPLATE_LINE =
  * @brief Modern C++20 trajectory writer supporting multiple formats
  *
  * Supports DCD (binary), PDB (text), and TRAJ (custom text) formats.
- * Refactored for arbd2/cpp20 with:
+ * Refactored for mars2/cpp20 with:
  * - Modern C++20 features
  * - RAII resource management
  * - Exception safety
- * - Integration with ARBD2 systems
+ * - Integration with MARS2 systems
  */
 class TrajectoryWriter {
   public:
@@ -53,7 +53,7 @@ class TrajectoryWriter {
 	 * @param numAtoms Number of atoms
 	 * @param timestep Timestep size
 	 * @param outputPeriod Steps between outputs
-	 * @throws ARBD::Exception on initialization failure
+	 * @throws MARS::Exception on initialization failure
 	 */
 	TrajectoryWriter(std::string_view filePrefix,
 					 Format format,
@@ -523,4 +523,4 @@ class TrajectoryWriter {
 		std::fprintf(fp, "END\n");
 	}
 };
-} // namespace ARBD
+} // namespace MARS

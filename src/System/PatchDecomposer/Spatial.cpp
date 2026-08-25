@@ -1,12 +1,12 @@
 #include "System/PatchDecomposer/Spatial.h"
-#include "ARBDException.h"
-#include "ARBDLogger.h"
+#include "MARSException.h"
+#include "MARSLogger.h"
 #include "System/PeriodicBox.h"
 #include "System/SystemState.h"
 #include <algorithm>
 #include <chrono>
 
-namespace ARBD {
+namespace MARS {
 
 DecompositionPlan SpatialPatchDecomposer::decompose(SimSystem& system, SystemState& state) {
 	auto start_time = std::chrono::high_resolution_clock::now();
@@ -190,4 +190,4 @@ float SpatialPatchDecomposer::estimate_communication_cost(const std::array<int, 
 	// Communication volume proportional to surface area and cutoff width
 	return patch_surface * static_cast<float>(cutoff);
 }
-} // namespace ARBD
+} // namespace MARS

@@ -7,7 +7,7 @@
 #include <memory>
 #include <vector>
 
-using namespace ARBD;
+using namespace MARS;
 
 // Test fixture for Metal Bitmask tests
 struct MetalBitmaskTestFixture {
@@ -15,16 +15,16 @@ struct MetalBitmaskTestFixture {
 
 	MetalBitmaskTestFixture() {
 		try {
-			ARBD::METAL::Manager::init();
-			ARBD::METAL::Manager::load_info();
+			MARS::METAL::Manager::init();
+			MARS::METAL::Manager::load_info();
 
-			if (ARBD::METAL::Manager::devices().empty()) {
+			if (MARS::METAL::Manager::devices().empty()) {
 				WARN("No Metal devices found. Skipping Metal Bitmask tests.");
 				return;
 			}
 
 			metal_resource = Resource(ResourceType::METAL, 0);
-			ARBD::METAL::Manager::use(0);
+			MARS::METAL::Manager::use(0);
 
 		} catch (const std::exception& e) {
 			FAIL("Failed to initialize Manager in Bitmask test fixture: " << e.what());
@@ -33,7 +33,7 @@ struct MetalBitmaskTestFixture {
 
 	~MetalBitmaskTestFixture() {
 		try {
-			ARBD::METAL::Manager::finalize();
+			MARS::METAL::Manager::finalize();
 		} catch (const std::exception& e) {
 			std::cerr << "Error during Manager finalization in Bitmask test fixture: "
 					  << e.what() << std::endl;
@@ -42,7 +42,7 @@ struct MetalBitmaskTestFixture {
 };
 
 TEST_CASE_METHOD(MetalBitmaskTestFixture, "Metal Bitmask Basic Operations", "[metal][bitmask]") {
-	if (ARBD::METAL::Manager::devices().empty()) {
+	if (MARS::METAL::Manager::devices().empty()) {
 		SKIP("No Metal devices available");
 	}
 
@@ -140,7 +140,7 @@ TEST_CASE_METHOD(MetalBitmaskTestFixture,
 TEST_CASE_METHOD(MetalBitmaskTestFixture,
 				 "Metal SparseBitmask Operations",
 				 "[metal][bitmask][sparse]") {
-	if (ARBD::METAL::Manager::devices().empty()) {
+	if (MARS::METAL::Manager::devices().empty()) {
 		SKIP("No Metal devices available");
 	}
 
@@ -195,7 +195,7 @@ TEST_CASE_METHOD(MetalBitmaskTestFixture,
 TEST_CASE_METHOD(MetalBitmaskTestFixture,
 				 "Metal Bitmask Stress Tests",
 				 "[metal][bitmask][stress]") {
-	if (ARBD::METAL::Manager::devices().empty()) {
+	if (MARS::METAL::Manager::devices().empty()) {
 		SKIP("No Metal devices available");
 	}
 
@@ -227,7 +227,7 @@ TEST_CASE_METHOD(MetalBitmaskTestFixture,
 TEST_CASE_METHOD(MetalBitmaskTestFixture,
 				 "Metal Bitmask Performance Tests",
 				 "[metal][bitmask][performance]") {
-	if (ARBD::METAL::Manager::devices().empty()) {
+	if (MARS::METAL::Manager::devices().empty()) {
 		SKIP("No Metal devices available");
 	}
 
@@ -274,7 +274,7 @@ TEST_CASE_METHOD(MetalBitmaskTestFixture,
 TEST_CASE_METHOD(MetalBitmaskTestFixture,
 				 "Metal Bitmask Memory Management",
 				 "[metal][bitmask][memory]") {
-	if (ARBD::METAL::Manager::devices().empty()) {
+	if (MARS::METAL::Manager::devices().empty()) {
 		SKIP("No Metal devices available");
 	}
 

@@ -14,8 +14,8 @@
 #include <string>	// For std::string (modern C++)
 #include <vector>	// For std::vector
 
-#include "ARBDException.h"
 #include "Backend/Resource.h"
+#include "MARSException.h"
 #ifdef USE_CUDA
 #include "Backend/CUDA/CUDAManager.h"
 #endif
@@ -145,7 +145,7 @@ bool parse_basic_args(int argc, char* argv[], ProgramOptions& opts) {
 int main(int argc, char* argv[]) {
 	// MPI Initialization (kept as is, conditional)
 
-	ARBD::SignalManager::manage_segfault();
+	MARS::SignalManager::manage_segfault();
 
 	ProgramOptions options;
 	if (!parse_basic_args(argc, argv, options)) {
@@ -159,17 +159,17 @@ int main(int argc, char* argv[]) {
 
 	// Print a startup message
 	// Use std::cout for modern C++
-	std::cout << "--- Atomic Resolution Brownian Dynamics (ARBD) ---" << std::endl;
+	std::cout << "--- Atomic Resolution Brownian Dynamics (MARS) ---" << std::endl;
 	std::cout << "Version: " << VERSION << std::endl;
 	std::cout << "Config File: " << options.configFile << std::endl;
 	std::cout << "Output Target: " << options.outputFile << std::endl;
 
 	std::cout << "Initializing Simulation Manager..." << std::endl;
 
-	std::vector<ARBD::Resource> resource_collection;
+	std::vector<MARS::Resource> resource_collection;
 
 #ifdef USE_CUDA
-	std::cout << "ARBD compiled with CUDA support." << std::endl;
+	std::cout << "MARS compiled with CUDA support." << std::endl;
 
 	// Discover CUDA devices before building any Resource. Querying the driver
 	// directly with cudaGetDeviceCount() is not enough: CUDA::Manager caches
@@ -181,9 +181,9 @@ int main(int argc, char* argv[]) {
 	// failure. Mirrors the SYCL branch below.
 	int deviceCount = 0;
 	try {
-		ARBD::CUDA::Manager::init();
-		deviceCount = ARBD::CUDA::Manager::device_count();
-	} catch (const ARBD::Exception& e) {
+		MARS::CUDA::Manager::init();
+		deviceCount = MARS::CUDA::Manager::device_count();
+	} catch (const MARS::Exception& e) {
 		std::cout << "CUDA device discovery failed: " << e.what() << std::endl;
 	}
 
@@ -193,7 +193,7 @@ int main(int argc, char* argv[]) {
 			for (int gpuId : options.gpuIds) {
 				if (gpuId >= 0 && gpuId < deviceCount) {
 					resource_collection.push_back(
-						ARBD::Resource::create_cuda_device(static_cast<short>(gpuId)));
+						MARS::Resource::create_cuda_device(static_cast<short>(gpuId)));
 				} else {
 					std::cout << "Warning: GPU ID " << gpuId << " is invalid (available: 0-"
 							  << (deviceCount - 1) << ")" << std::endl;
@@ -205,14 +205,14 @@ int main(int argc, char* argv[]) {
 			int gpusToUse = std::min(options.numGpus, deviceCount);
 			for (int i = 0; i < gpusToUse; ++i) {
 				resource_collection.push_back(
-					ARBD::Resource::create_cuda_device(static_cast<short>(i)));
+					MARS::Resource::create_cuda_device(static_cast<short>(i)));
 			}
 		}
 		// Default: use all available GPUs
 		else {
 			for (int i = 0; i < deviceCount; ++i) {
 				resource_collection.push_back(
-					ARBD::Resource::create_cuda_device(static_cast<short>(i)));
+					MARS::Resource::create_cuda_device(static_cast<short>(i)));
 			}
 		}
 	}
@@ -220,20 +220,20 @@ int main(int argc, char* argv[]) {
 	// Fallback to CPU if no GPUs available or selected
 	if (resource_collection.empty()) {
 		std::cout << "No GPUs available. Falling back to CPU." << std::endl;
-		resource_collection.push_back(ARBD::Resource(ARBD::ResourceType::CPU));
+		resource_collection.push_back(MARS::Resource(MARS::ResourceType::CPU));
 	}
 
 #elif defined(USE_SYCL)
-	std::cout << "ARBD compiled with SYCL support." << std::endl;
+	std::cout << "MARS compiled with SYCL support." << std::endl;
 
 	// Discover SYCL devices before building/validating any SYCL Resource -
 	// Resource::validate() checks id_ against SYCL::Manager::device_count(),
 	// which always returns 0 until Manager::init() has run.
 	size_t deviceCount = 0;
 	try {
-		ARBD::SYCL::Manager::init();
-		deviceCount = ARBD::SYCL::Manager::device_count();
-	} catch (const ARBD::Exception& e) {
+		MARS::SYCL::Manager::init();
+		deviceCount = MARS::SYCL::Manager::device_count();
+	} catch (const MARS::Exception& e) {
 		std::cout << "SYCL device discovery failed: " << e.what() << std::endl;
 	}
 
@@ -242,7 +242,7 @@ int main(int argc, char* argv[]) {
 			for (int gpuId : options.gpuIds) {
 				if (gpuId >= 0 && static_cast<size_t>(gpuId) < deviceCount) {
 					resource_collection.push_back(
-						ARBD::Resource::create_sycl_device(static_cast<short>(gpuId)));
+						MARS::Resource::create_sycl_device(static_cast<short>(gpuId)));
 				} else {
 					std::cout << "Warning: GPU ID " << gpuId << " is invalid (available: 0-"
 							  << (deviceCount - 1) << ")" << std::endl;
@@ -254,44 +254,44 @@ int main(int argc, char* argv[]) {
 			size_t gpusToUse = std::min(static_cast<size_t>(options.numGpus), deviceCount);
 			for (size_t i = 0; i < gpusToUse; ++i) {
 				resource_collection.push_back(
-					ARBD::Resource::create_sycl_device(static_cast<short>(i)));
+					MARS::Resource::create_sycl_device(static_cast<short>(i)));
 			}
 		}
 		// Default: try device 0
 		else {
-			resource_collection.push_back(ARBD::Resource::create_sycl_device(0));
+			resource_collection.push_back(MARS::Resource::create_sycl_device(0));
 		}
 	}
 
 	// Fallback to CPU if no SYCL devices available or selected
 	if (resource_collection.empty()) {
 		std::cout << "No SYCL devices available. Falling back to CPU." << std::endl;
-		resource_collection.push_back(ARBD::Resource(ARBD::ResourceType::CPU));
+		resource_collection.push_back(MARS::Resource(MARS::ResourceType::CPU));
 	}
 
 #elif defined(USE_METAL)
-	std::cout << "ARBD compiled with METAL support." << std::endl;
+	std::cout << "MARS compiled with METAL support." << std::endl;
 	// For SYCL/Metal/OpenMP, force GPU ID to 0 and ignore user GPU specifications
 	options.gpuIds.clear();
 	options.gpuIds.push_back(0);
 	options.numGpus = 1;
 
-	resource_collection.push_back(ARBD::Resource(0));
+	resource_collection.push_back(MARS::Resource(0));
 #endif
 
 	// Validate all selected resources and remove invalid ones
 	std::cout << "Validating " << resource_collection.size() << " compute resource(s)..."
 			  << std::endl;
-	std::vector<ARBD::Resource> validResources;
+	std::vector<MARS::Resource> validResources;
 
 	for (const auto& res : resource_collection) {
 		try {
 			// Create a copy to validate (validate() is const)
-			ARBD::Resource resCopy = res;
+			MARS::Resource resCopy = res;
 			resCopy.validate();
 			validResources.push_back(res);
 			std::cout << "✓ " << res.toString() << " validated successfully" << std::endl;
-		} catch (const ARBD::Exception& e) {
+		} catch (const MARS::Exception& e) {
 			std::cout << "✗ " << res.toString() << " validation failed: " << e.what() << std::endl;
 		}
 	}
@@ -310,8 +310,8 @@ int main(int argc, char* argv[]) {
 	}
 	std::cout << std::endl;
 
-	ARBD::SimSystem sys(resource_collection);
-	ARBD::ConfigParser parser(sys, options.configFile);
+	MARS::SimSystem sys(resource_collection);
+	MARS::ConfigParser parser(sys, options.configFile);
 	// OUTPUT is a required CLI positional (see usage), so it always takes
 	// precedence over any outputName/output_name set in the config file.
 	sys.set_output_name(options.outputFile);
@@ -319,11 +319,11 @@ int main(int argc, char* argv[]) {
 	sys.validate_method_parameters();
 	sys.validate_output_parameters();
 	if (!sys.is_valid()) {
-		throw ARBD::Exception(ARBD::ExceptionType::ValueError,
-							  ARBD::SourceLocation(),
+		throw MARS::Exception(MARS::ExceptionType::ValueError,
+							  MARS::SourceLocation(),
 							  "Invalid system configuration");
 	}
-	ARBD::SimManager manager(sys);
+	MARS::SimManager manager(sys);
 	manager.set_initial_particles(parser.get_init_particles());
 	manager.set_bonded_interactions(parser.get_init_bonded_interactions());
 
@@ -332,8 +332,8 @@ int main(int argc, char* argv[]) {
 	manager.run();
 
 	// Build system and manager
-	// ARBD::SimSystem sys(conf, resource_collection);
-	// ARBD::SimManager manager(sys, resource_collection);
+	// MARS::SimSystem sys(conf, resource_collection);
+	// MARS::SimManager manager(sys, resource_collection);
 
 	// Single initialization-time domain decomposition
 	// sys.decompose_system();

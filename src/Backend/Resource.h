@@ -1,8 +1,8 @@
 // src/Backend/Resource.h
 #pragma once
 
-#include "ARBDException.h"
 #include "Header.h"
+#include "MARSException.h"
 
 #ifdef USE_CUDA
 #include "CUDA/CUDAManager.h"
@@ -27,7 +27,7 @@
 #include <vector>
 #endif
 
-namespace ARBD {
+namespace MARS {
 
 /**
  * @brief Enumeration of supported compute resource types.
@@ -68,7 +68,7 @@ enum class StreamType {
 	Optional = 3	 ///< Optional async work (stream 3)
 };
 
-// namespace ARBD
+// namespace MARS
 /**
  * @brief A production-ready resource identifier that owns its streams/queues.
  *
@@ -276,4 +276,4 @@ class Resource {
 	void* get_stream_impl(size_t stream_id, StreamType stream_type = StreamType::Compute) const;
 };
 
-} // namespace ARBD
+} // namespace MARS

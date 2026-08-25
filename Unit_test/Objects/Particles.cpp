@@ -3,7 +3,7 @@
 #include "Object_gen.h"
 #include "Objects/DeviceParticleManager.h"
 #include "Objects/ParticleProperties.h"
-using namespace ARBD;
+using namespace MARS;
 
 TEST_CASE("Device Particle Copy From Host To Device", "[device][particles]") {
 	initialize_backend_once();

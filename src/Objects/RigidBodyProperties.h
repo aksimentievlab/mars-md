@@ -3,7 +3,7 @@
 // Author: Pin-Yi Li <pinyili2@illinois.edu>
 // Metal does not support inheritance, so create a new class.
 #pragma once
-#include "ARBDException.h"
+#include "MARSException.h"
 #include "Header.h"
 #include "Objects/ParticleProperties.h"
 #include "SimParam.h"
@@ -12,7 +12,7 @@
 #include "Types/Types.h"
 #include <vector>
 
-namespace ARBD {
+namespace MARS {
 // not real particles, only using for dcd output visualization.
 struct CosmeticParticle {
 	std::string name, resname, segname, type_name;
@@ -56,23 +56,23 @@ class RigidBodyType {
   public:
 	std::string name;
 	int id = -1;						// Default to invalid, will be set after initialization
-	arbd_real mass = 1.0f;				// Avoid divide-by-zero if missed
+	mars_real mass = 1.0f;				// Avoid divide-by-zero if missed
 	Vector3 inertia = Vector3(1, 1, 1); // Avoid divide-by-zero if missed
 	Vector3 trans_damping = Vector3(0., 0, 0); // Avoid divide-by-zero if missed
 	Vector3 rot_damping = Vector3(0, 0, 0);
 	Vector3 trans_force_coeff = Vector3(0, 0, 0);
 	Vector3 rot_torque_coeff = Vector3(0.0, 0.0, 0.0);
-	arbd_real rot_diffusivity = 0.0f;
-	arbd_real rot_damping_coefficient = 0.0f;
-	arbd_real charge = 0.0f;
-	arbd_real radius = 0.0f;
-	arbd_real eps = 0.0f;
-	arbd_real diffusion = 0.0f;
-	arbd_real mu = 0.0f; // for Nose-Hoover Langevin dynamics
+	mars_real rot_diffusivity = 0.0f;
+	mars_real rot_damping_coefficient = 0.0f;
+	mars_real charge = 0.0f;
+	mars_real radius = 0.0f;
+	mars_real eps = 0.0f;
+	mars_real diffusion = 0.0f;
+	mars_real mu = 0.0f; // for Nose-Hoover Langevin dynamics
 	int num_grid_files = 0;
-	// arbd_real meanPmf;
-	arbd_real pmf_scale = 1.0f;
-	arbd_real pmf_scale_slope = 0.0f;
+	// mars_real meanPmf;
+	mars_real pmf_scale = 1.0f;
+	mars_real pmf_scale_slope = 0.0f;
 	uint32_t pmf_smd_freq = 0;
 	bool is_plasmonic = false;
 
@@ -236,4 +236,4 @@ struct HostRigidBodyData {
 	}
 };
 
-} // namespace ARBD
+} // namespace MARS

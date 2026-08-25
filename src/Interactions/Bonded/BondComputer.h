@@ -7,7 +7,7 @@
 #include "System/PeriodicBox.h"
 #include "Types/Types.h"
 
-namespace ARBD {
+namespace MARS {
 
 // ============================================================================
 // BOND COMPUTERS - Functor pattern for launch_kernel
@@ -23,7 +23,7 @@ struct AnalyticalBondComputer {
 	DEVICE_PTR(const int2) __restrict__ particle_indices;
 	DEVICE_PTR(const Vector3) __restrict__ positions;
 	DEVICE_PTR(Vector3) force_energy;
-	DEVICE_PTR(const arbd_real) __restrict__ params;
+	DEVICE_PTR(const mars_real) __restrict__ params;
 	const PeriodicBox* __restrict__ pbox;
 	bool get_energy;
 	idx_t num_bonds;
@@ -32,7 +32,7 @@ struct AnalyticalBondComputer {
 	AnalyticalBondComputer(DEVICE_PTR(const int2) indices,
 						   DEVICE_PTR(Vector3) pos,
 						   DEVICE_PTR(Vector3) fe,
-						   DEVICE_PTR(const arbd_real) p,
+						   DEVICE_PTR(const mars_real) p,
 						   const PeriodicBox* box,
 						   bool energy,
 						   idx_t n)
@@ -48,7 +48,7 @@ struct AnalyticalBondComputer {
 
 		// Phase 1: Compute geometry
 		BondGeometry geom = BondGeometry::compute(positions, indices, pbox);
-		if (geom.distance < arbd_real(1e-6))
+		if (geom.distance < mars_real(1e-6))
 			return;
 
 		// Phase 2: Compute force using analytical formula
@@ -58,7 +58,7 @@ struct AnalyticalBondComputer {
 
 		// Phase 3: Apply forces
 		const Vector3 force = geom.unit_vector * fe.force_magnitude;
-		const arbd_real energy = fe.energy * arbd_real(0.5);
+		const mars_real energy = fe.energy * mars_real(0.5);
 
 		atomic_add(&force_energy[indices.x], -force);
 		atomic_add(&force_energy[indices.y], force);
@@ -81,7 +81,7 @@ struct HarmonicRestraintComputer {
 	DEVICE_PTR(const Vector3) __restrict__ positions;
 	DEVICE_PTR(Vector3) force_energy;
 	DEVICE_PTR(const Vector3) __restrict__ anchors;
-	DEVICE_PTR(const arbd_real) __restrict__ spring_constants;
+	DEVICE_PTR(const mars_real) __restrict__ spring_constants;
 	const PeriodicBox* __restrict__ pbox;
 	bool get_energy;
 	idx_t num_restraints;
@@ -90,7 +90,7 @@ struct HarmonicRestraintComputer {
 							  DEVICE_PTR(Vector3) pos,
 							  DEVICE_PTR(Vector3) fe,
 							  DEVICE_PTR(const Vector3) r0,
-							  DEVICE_PTR(const arbd_real) k,
+							  DEVICE_PTR(const mars_real) k,
 							  const PeriodicBox* box,
 							  bool energy,
 							  idx_t n)
@@ -107,8 +107,8 @@ struct HarmonicRestraintComputer {
 
 		const CalcDistance geom = CalcDistance::compute(anchors[i], positions[id], pbox);
 
-		const arbd_real params[AnalyticalForceComputer<0>::NUM_PARAMS] = {spring_constants[i],
-																		  arbd_real(0)};
+		const mars_real params[AnalyticalForceComputer<0>::NUM_PARAMS] = {spring_constants[i],
+																		  mars_real(0)};
 		const ScalarForceEnergy fe = AnalyticalForceComputer<0>::compute(geom.distance, params);
 
 		atomic_add(&force_energy[id], geom.unit_vector * fe.force_magnitude);
@@ -159,7 +159,7 @@ struct TabulatedBondComputer {
 
 		// Phase 1: Compute geometry
 		BondGeometry geom = BondGeometry::compute(positions, indices, pbox);
-		if (geom.distance < arbd_real(1e-6))
+		if (geom.distance < mars_real(1e-6))
 			return;
 
 		// Phase 2: Lookup force from tabulated potential
@@ -168,7 +168,7 @@ struct TabulatedBondComputer {
 
 		// Phase 3: Apply forces
 		const Vector3 force = geom.unit_vector * fe.force_magnitude;
-		const arbd_real energy = fe.energy * arbd_real(0.5);
+		const mars_real energy = fe.energy * mars_real(0.5);
 
 		atomic_add(&force_energy[indices.x], -force);
 		atomic_add(&force_energy[indices.y], force);
@@ -233,17 +233,17 @@ struct TabulatedAngleComputer {
 			TabulatedPotential::compute(geom.angle, &tables[table_indices[i]]);
 
 		// Phase 3: Apply forces (force1 on i, force3 on k; see BondComputer.md)
-		constexpr arbd_real sin_floor = arbd_real(1e-3);
-		const arbd_real sin_angle = geom.sin_angle > sin_floor ? geom.sin_angle : sin_floor;
-		const arbd_real dUdtheta = -fe.force_magnitude / sin_angle;
-		const arbd_real inv_ab = arbd_real(1) / math::sqrt(geom.ab.length2());
-		const arbd_real inv_bc = arbd_real(1) / math::sqrt(geom.bc.length2());
+		constexpr mars_real sin_floor = mars_real(1e-3);
+		const mars_real sin_angle = geom.sin_angle > sin_floor ? geom.sin_angle : sin_floor;
+		const mars_real dUdtheta = -fe.force_magnitude / sin_angle;
+		const mars_real inv_ab = mars_real(1) / math::sqrt(geom.ab.length2());
+		const mars_real inv_bc = mars_real(1) / math::sqrt(geom.bc.length2());
 
 		const Vector3 force1 =
 			(dUdtheta * inv_ab) * (geom.ab * (geom.cos_angle * inv_ab) + geom.bc * inv_bc);
 		const Vector3 force3 =
 			-(dUdtheta * inv_bc) * (geom.bc * (geom.cos_angle * inv_bc) + geom.ab * inv_ab);
-		const arbd_real energy = fe.energy * arbd_real(1.0 / 3.0);
+		const mars_real energy = fe.energy * mars_real(1.0 / 3.0);
 
 		atomic_add(&force_energy[indices.x], force1);
 		atomic_add(&force_energy[indices.y], -(force1 + force3));
@@ -313,7 +313,7 @@ struct TabulatedDihedralComputer {
 		const Vector3 f1 = geom.f1 * fe.force_magnitude;
 		const Vector3 f2 = geom.f2 * fe.force_magnitude;
 		const Vector3 f3 = geom.f3 * fe.force_magnitude;
-		const arbd_real energy = fe.energy * arbd_real(0.25);
+		const mars_real energy = fe.energy * mars_real(0.25);
 
 		atomic_add(&force_energy[indices.x], f1);
 		atomic_add(&force_energy[indices.y], f2 - f1);
@@ -329,12 +329,12 @@ struct TabulatedDihedralComputer {
 	}
 };
 
-} // namespace ARBD
+} // namespace MARS
 
 // Explicit template instantiation declarations to prevent host instantiation
 #ifdef USE_CUDA
 #include "Backend/CUDA/KernelHelper.cuh"
-namespace ARBD {
+namespace MARS {
 extern template struct AnalyticalBondComputer<0>;
 extern template struct AnalyticalBondComputer<1>;
 extern template Event launch_cuda_kernel(const Resource& resource,
@@ -355,23 +355,23 @@ extern template Event launch_cuda_kernel(const Resource& resource,
 extern template Event launch_cuda_kernel(const Resource& resource,
 										 const KernelConfig& config,
 										 HarmonicRestraintComputer kernel_func);
-} // namespace ARBD
+} // namespace MARS
 #endif
 
 #ifdef USE_SYCL
 #include <sycl/sycl.hpp>
 template<int T>
-struct sycl::is_device_copyable<ARBD::AnalyticalBondComputer<T>> : std::true_type {};
+struct sycl::is_device_copyable<MARS::AnalyticalBondComputer<T>> : std::true_type {};
 
 template<>
-struct sycl::is_device_copyable<ARBD::TabulatedBondComputer> : std::true_type {};
+struct sycl::is_device_copyable<MARS::TabulatedBondComputer> : std::true_type {};
 
 template<>
-struct sycl::is_device_copyable<ARBD::TabulatedAngleComputer> : std::true_type {};
+struct sycl::is_device_copyable<MARS::TabulatedAngleComputer> : std::true_type {};
 
 template<>
-struct sycl::is_device_copyable<ARBD::TabulatedDihedralComputer> : std::true_type {};
+struct sycl::is_device_copyable<MARS::TabulatedDihedralComputer> : std::true_type {};
 
 template<>
-struct sycl::is_device_copyable<ARBD::HarmonicRestraintComputer> : std::true_type {};
+struct sycl::is_device_copyable<MARS::HarmonicRestraintComputer> : std::true_type {};
 #endif

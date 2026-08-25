@@ -14,7 +14,7 @@
 #include "../catch_boiler.h"
 #include <unordered_map>
 
-using namespace ARBD;
+using namespace MARS;
 
 namespace {
 
@@ -123,5 +123,5 @@ TEST_CASE("RigidBodyForcePairList: format-uniformity check fires on a mismatched
 												{300, GridFormat::Dense}});
 
 	RigidBodyForcePairList pairs;
-	REQUIRE_THROWS_AS(pairs.build(types, grid_format), ARBD::Exception);
+	REQUIRE_THROWS_AS(pairs.build(types, grid_format), MARS::Exception);
 }

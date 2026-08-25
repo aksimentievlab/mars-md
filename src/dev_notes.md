@@ -1,6 +1,6 @@
 # Constants.h
 ## langevin_damping_unit = 2.3900574e-9f;
-  Converts transDamping/rotDamping from config units (1/ns, acting on a omentum in amu AA/ns) into kcal/mol/AA. Legacy applies this ONCE at setup (RigidBodyType::setDampingCoeffs), so every later use of transDamping/rotDamping there is already scaled. arbd2 stores them unscaled, so it must be applied at use - in BOTH the noise coefficient and the drag term, exactly as legacy's addLangevin sees them. Omitting it entirely is what let the drag dwarf the momentum it acted on and diverged every rigid body to NaN.
+  Converts transDamping/rotDamping from config units (1/ns, acting on a omentum in amu AA/ns) into kcal/mol/AA. Legacy applies this ONCE at setup (RigidBodyType::setDampingCoeffs), so every later use of transDamping/rotDamping there is already scaled. mars2 stores them unscaled, so it must be applied at use - in BOTH the noise coefficient and the drag term, exactly as legacy's addLangevin sees them. Omitting it entirely is what let the drag dwarf the momentum it acted on and diverged every rigid body to NaN.
 
 # SimManager.cpp
 
@@ -46,7 +46,7 @@ Same total record length (76), and the truncation cap moved from 6 to 4 to match
 
 ## init() — the bonded-interaction guard must name every term
 
-`src/arbd.cpp` drives the executable through `set_bonded_interactions()`, not
+`src/mars.cpp` drives the executable through `set_bonded_interactions()`, not
 `load_config()`, so the staged `pending_bonded_interactions_` only reaches
 `sys_state_` if `init()`'s guard says it is non-empty. That guard tested bonds,
 angles, dihedrals and exclusions — not restraints. A config whose *only* bonded
@@ -94,7 +94,7 @@ accumulate on top; it only ever atomic-adds and never clears.
 Energy accumulation costs an extra atomic write (`ForceEnergy.t`) alongside the
 three force-component atomics on every pairwise-neighbour and bonded-term
 evaluation. It is therefore enabled only on steps `handle_output()` will report
-energy for, matching legacy ARBD, which likewise computes energy every
+energy for, matching legacy MARS, which likewise computes energy every
 `outputEnergyPeriod` steps rather than every step.
 
 ## handle_output — paying BAOAB's deferred kick before reading momentum

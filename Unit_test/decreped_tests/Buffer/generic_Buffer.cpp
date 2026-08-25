@@ -8,7 +8,7 @@
 #include <memory>
 #include <vector>
 
-using namespace ARBD;
+using namespace MARS;
 
 // Include the Catch2 test runner
 DEF_RUN_TRIAL

@@ -14,7 +14,7 @@ silently never run.
 
 ## Why
 
-The rotor fixture (`~/server3/rotor/rotor_center_debye_30ms2`) put arbd2's
+The rotor fixture (`~/server3/rotor/rotor_center_debye_30ms2`) put mars2's
 total potential energy ~13,400 kcal/mol above v1's, and the decomposition put
 essentially all of it in the nonbonded term (8,000 of it, versus 486 for bonds
 and 6,360 for angles + dihedrals). v1's own number turned out not to be a
@@ -32,7 +32,7 @@ over pairs, which is the quantity the rotor comparison actually needed.
 
 `U(r) = (r-3)^2 - 1` is used throughout: it has a real negative well (minimum
 -1 at r=3) and a positive repulsive wall. That matters because the open
-question on the rotor was a *sign* — whether arbd2 can report negative
+question on the rotor was a *sign* — whether mars2 can report negative
 nonbonded energy at all. The second test pins exactly that.
 
 ## Accounting

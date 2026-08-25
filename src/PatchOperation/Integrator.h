@@ -20,7 +20,7 @@
 #include "Types/Types.h"
 #include "Types/Vector3.h"
 
-namespace ARBD {
+namespace MARS {
 
 template<typename T>
 Event launch_BD(const Resource& resource,
@@ -33,7 +33,7 @@ Event launch_BD(const Resource& resource,
 				const PeriodicBox& sim_box,
 				uint64_t base_seed,
 				uint32_t base_ctr,
-				const BaseGridView<arbd_real>* grid_configs,
+				const BaseGridView<mars_real>* grid_configs,
 				const Vector3& electric_field,
 				int interpolation_scheme) {
 	KernelConfig config = KernelConfig::for_1d(num_particles, resource);
@@ -64,7 +64,7 @@ Event launch_BAOAB(const Resource& resource,
 				   idx_t num_particles,
 				   uint64_t base_seed,
 				   uint32_t base_ctr,
-				   const BaseGridView<arbd_real>* grid_configs,
+				   const BaseGridView<mars_real>* grid_configs,
 				   const Vector3& electric_field,
 				   int interpolation_scheme) {
 	KernelConfig config = KernelConfig::for_1d(num_particles, resource);
@@ -104,7 +104,7 @@ Event launch_BAOAB_LastUpdate(const Resource& resource,
 							  idx_t num_particles,
 							  uint64_t base_seed,
 							  uint32_t base_ctr,
-							  const BaseGridView<arbd_real>* grid_configs,
+							  const BaseGridView<mars_real>* grid_configs,
 							  const Vector3& electric_field,
 							  int interpolation_scheme) {
 	KernelConfig config = KernelConfig::for_1d(num_particles, resource);
@@ -128,7 +128,7 @@ inline Event launch_PMF(const Resource& resource,
 				 ParticleView particle_view,
 				 const ParticleTypeView particle_types,
 				 idx_t num_particles,
-				 const BaseGridView<arbd_real>* grid_configs,
+				 const BaseGridView<mars_real>* grid_configs,
 				 const Vector3& electric_field,
 				 int interpolation_scheme) {
 	const KernelConfig config = KernelConfig::for_1d(num_particles, resource);
@@ -142,4 +142,4 @@ inline Event launch_PMF(const Resource& resource,
 						 grid_configs,
 						 num_particles);
 }
-} // namespace ARBD
+} // namespace MARS

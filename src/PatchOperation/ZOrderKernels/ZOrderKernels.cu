@@ -4,7 +4,7 @@
 
 // Explicit template instantiations for ZOrderKernels
 // These ensure CUDA compilation units provide implementations used by host code.
-namespace ARBD {
+namespace MARS {
 
 template Event launch_cuda_kernel(const Resource& resource,
 								  const KernelConfig& config,
@@ -24,7 +24,7 @@ template Event launch_cuda_kernel(const Resource& resource,
 
 template Event launch_cuda_kernel(const Resource& resource,
 								  const KernelConfig& config,
-								  ReorderDataKernel<Vector3_t<arbd_real>> kernel_func);
+								  ReorderDataKernel<Vector3_t<mars_real>> kernel_func);
 
 template Event launch_cuda_kernel(const Resource& resource,
 								  const KernelConfig& config,
@@ -46,4 +46,4 @@ template Event launch_cuda_kernel(const Resource& resource,
 								  const KernelConfig& config,
 								  ReorderDataKernel<uint32_t> kernel_func);
 
-} // namespace ARBD
+} // namespace MARS

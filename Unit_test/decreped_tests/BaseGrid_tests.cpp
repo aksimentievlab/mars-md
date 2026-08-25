@@ -13,7 +13,7 @@
 #include "Backend/METAL/METALManager.h"
 #endif
 
-using namespace ARBD;
+using namespace MARS;
 
 class BaseGridTestFixture {
   protected:

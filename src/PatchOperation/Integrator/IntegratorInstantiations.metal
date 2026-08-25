@@ -9,7 +9,7 @@ using namespace metal;
 
 #include "BAOAB.h"
 
-namespace ARBD{
+namespace MARS{
 // 3. Wrapper for BAOABIntegrate<float>
 kernel void baoab_integrate_kernel(
     // Auto-bound grid dimensions (Indices 0, 1, 2)

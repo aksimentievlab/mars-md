@@ -3,7 +3,7 @@
 #include "Interactions/Interactions.h"
 #include "Objects/DeviceParticle.h"
 
-namespace ARBD {
+namespace MARS {
 
 // ============================================================================
 // Columb Potential
@@ -28,16 +28,16 @@ struct ColumbPotential {
  * @param epsilon Relative dielectric
  */
 struct DebyeHuckelPotential {
-	arbd_real screen_length = arbd_real(10);
-	arbd_real epsilon = arbd_real(80);
+	mars_real screen_length = mars_real(10);
+	mars_real epsilon = mars_real(80);
 
-	DEVICE ScalarForceEnergy compute(arbd_real distance, arbd_real qi, arbd_real qj) const {
-		const arbd_real inv_r = arbd_real(1) / distance;
-		const arbd_real a = qi * qj * constants::COULOMB / epsilon;
-		const arbd_real screen = math::exp(-distance / screen_length);
-		const arbd_real energy = a * screen * inv_r;
+	DEVICE ScalarForceEnergy compute(mars_real distance, mars_real qi, mars_real qj) const {
+		const mars_real inv_r = mars_real(1) / distance;
+		const mars_real a = qi * qj * constants::COULOMB / epsilon;
+		const mars_real screen = math::exp(-distance / screen_length);
+		const mars_real energy = a * screen * inv_r;
 		// F = -dU/dr = A exp(-r/l) (1/r^2 + 1/(l r))
-		const arbd_real force = energy * (inv_r + arbd_real(1) / screen_length);
+		const mars_real force = energy * (inv_r + mars_real(1) / screen_length);
 		return ScalarForceEnergy{float2{force, energy}};
 	}
 };
@@ -55,42 +55,42 @@ struct DebyeHuckelPotential {
  *       reference implementation's d = 1e-2 guard.
  */
 struct OnckElecPotential {
-	static constexpr arbd_real MIN_DISTANCE = arbd_real(1e-2);
+	static constexpr mars_real MIN_DISTANCE = mars_real(1e-2);
 
-	arbd_real kappa = arbd_real(0.1);
-	arbd_real sz = arbd_real(80);
-	arbd_real z = arbd_real(6.86);
+	mars_real kappa = mars_real(0.1);
+	mars_real sz = mars_real(80);
+	mars_real z = mars_real(6.86);
 
 	/// Below this, eps -> Sz v^2/3 and deps/dr -> Sz v/(3z); avoids 0/0 at r=0.
-	static constexpr arbd_real SMALL_V = arbd_real(1e-5);
+	static constexpr mars_real SMALL_V = mars_real(1e-5);
 
 	/// @brief Sigmoidal dielectric, eps = Sz (sinh v - v)(sinh v + v)/sinh^2 v
-	DEVICE arbd_real dielectric(arbd_real r) const {
-		const arbd_real v = r / (arbd_real(2) * z);
+	DEVICE mars_real dielectric(mars_real r) const {
+		const mars_real v = r / (mars_real(2) * z);
 		if (v < SMALL_V)
-			return sz * v * v / arbd_real(3);
-		const arbd_real s = math::sinh(v);
+			return sz * v * v / mars_real(3);
+		const mars_real s = math::sinh(v);
 		return sz * math::sinh_minus_x(v) * (s + v) / (s * s);
 	}
 
 	/// @brief d(eps)/dr = Sz v (v cosh v - sinh v) / (z sinh^3 v)
-	DEVICE arbd_real dielectric_deriv(arbd_real r) const {
-		const arbd_real v = r / (arbd_real(2) * z);
+	DEVICE mars_real dielectric_deriv(mars_real r) const {
+		const mars_real v = r / (mars_real(2) * z);
 		if (v < SMALL_V)
-			return sz * v / (arbd_real(3) * z);
-		const arbd_real s = math::sinh(v);
+			return sz * v / (mars_real(3) * z);
+		const mars_real s = math::sinh(v);
 		return sz * v * math::x_cosh_minus_sinh(v) / (z * s * s * s);
 	}
 
-	DEVICE ScalarForceEnergy compute(arbd_real distance, arbd_real qi, arbd_real qj) const {
-		const arbd_real r = distance < MIN_DISTANCE ? MIN_DISTANCE : distance;
-		const arbd_real a = qi * qj * constants::COULOMB;
-		const arbd_real screen = math::exp(-kappa * r);
-		const arbd_real eps = dielectric(r);
-		const arbd_real energy = a * screen / (eps * r);
+	DEVICE ScalarForceEnergy compute(mars_real distance, mars_real qi, mars_real qj) const {
+		const mars_real r = distance < MIN_DISTANCE ? MIN_DISTANCE : distance;
+		const mars_real a = qi * qj * constants::COULOMB;
+		const mars_real screen = math::exp(-kappa * r);
+		const mars_real eps = dielectric(r);
+		const mars_real energy = a * screen / (eps * r);
 		// F = -dU/dr = A exp(-kr) [ k/(eps r) + (eps' r + eps)/(eps^2 r^2) ]
-		const arbd_real eps_p = dielectric_deriv(r);
-		const arbd_real force =
+		const mars_real eps_p = dielectric_deriv(r);
+		const mars_real force =
 			a * screen * (kappa / (eps * r) + (eps_p * r + eps) / (eps * eps * r * r));
 		return ScalarForceEnergy{float2{force, energy}};
 	}
@@ -143,15 +143,15 @@ struct ColumbForceKernel {
 	}
 };
 
-} // namespace ARBD
+} // namespace MARS
 #ifdef USE_SYCL
 #include <sycl/sycl.hpp>
 template<>
-struct sycl::is_device_copyable<ARBD::ColumbPotential> : std::true_type {};
+struct sycl::is_device_copyable<MARS::ColumbPotential> : std::true_type {};
 template<>
-struct sycl::is_device_copyable<ARBD::ColumbForceKernel> : std::true_type {};
+struct sycl::is_device_copyable<MARS::ColumbForceKernel> : std::true_type {};
 template<>
-struct sycl::is_device_copyable<ARBD::DebyeHuckelPotential> : std::true_type {};
+struct sycl::is_device_copyable<MARS::DebyeHuckelPotential> : std::true_type {};
 template<>
-struct sycl::is_device_copyable<ARBD::OnckElecPotential> : std::true_type {};
+struct sycl::is_device_copyable<MARS::OnckElecPotential> : std::true_type {};
 #endif

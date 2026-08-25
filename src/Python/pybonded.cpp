@@ -8,7 +8,7 @@
 #include <nanobind/stl/vector.h>
 
 namespace nb = nanobind;
-using namespace ARBD;
+using namespace MARS;
 
 // ============================================================================
 // BONDED INTERACTION BINDINGS
@@ -55,16 +55,17 @@ void declare_bond(nb::module_& m) {
 	// exposed: they are outputs of that resolution, not inputs.
 	nb::class_<Bond>(m, "Bond")
 		.def(nb::init<>())
-		.def("__init__",
-			 [](Bond* self, const ParticleIO& i, const ParticleIO& j, const std::string& name) {
-				 new (self) Bond{};
-				 self->uids.uid1 = i.uid;
-				 self->uids.uid2 = j.uid;
-				 self->function_name = name;
-			 },
-			 nb::arg("i"),
-			 nb::arg("j"),
-			 nb::arg("bond"))
+		.def(
+			"__init__",
+			[](Bond* self, const ParticleIO& i, const ParticleIO& j, const std::string& name) {
+				new (self) Bond{};
+				self->uids.uid1 = i.uid;
+				self->uids.uid2 = j.uid;
+				self->function_name = name;
+			},
+			nb::arg("i"),
+			nb::arg("j"),
+			nb::arg("bond"))
 		.def_rw("name", &Bond::function_name)
 		.def_rw("form", &Bond::form)
 		.def_rw("flag", &Bond::flag)
@@ -75,22 +76,23 @@ void declare_bond(nb::module_& m) {
 void declare_angle(nb::module_& m) {
 	nb::class_<Angle>(m, "Angle")
 		.def(nb::init<>())
-		.def("__init__",
-			 [](Angle* self,
-				const ParticleIO& i,
-				const ParticleIO& j,
-				const ParticleIO& k,
-				const std::string& name) {
-				 new (self) Angle{};
-				 self->uids.uid1 = i.uid;
-				 self->uids.uid2 = j.uid;
-				 self->uids.uid3 = k.uid;
-				 self->function_name = name;
-			 },
-			 nb::arg("i"),
-			 nb::arg("j"),
-			 nb::arg("k"),
-			 nb::arg("angle"))
+		.def(
+			"__init__",
+			[](Angle* self,
+			   const ParticleIO& i,
+			   const ParticleIO& j,
+			   const ParticleIO& k,
+			   const std::string& name) {
+				new (self) Angle{};
+				self->uids.uid1 = i.uid;
+				self->uids.uid2 = j.uid;
+				self->uids.uid3 = k.uid;
+				self->function_name = name;
+			},
+			nb::arg("i"),
+			nb::arg("j"),
+			nb::arg("k"),
+			nb::arg("angle"))
 		.def_rw("name", &Angle::function_name)
 		.def_rw("form", &Angle::form)
 		.def("__repr__", [](const Angle& a) { return "Angle(name='" + a.function_name + "')"; });
@@ -99,25 +101,26 @@ void declare_angle(nb::module_& m) {
 void declare_dihedral(nb::module_& m) {
 	nb::class_<Dihedral>(m, "Dihedral")
 		.def(nb::init<>())
-		.def("__init__",
-			 [](Dihedral* self,
-				const ParticleIO& i,
-				const ParticleIO& j,
-				const ParticleIO& k,
-				const ParticleIO& l,
-				const std::string& name) {
-				 new (self) Dihedral{};
-				 self->uids.uid1 = i.uid;
-				 self->uids.uid2 = j.uid;
-				 self->uids.uid3 = k.uid;
-				 self->uids.uid4 = l.uid;
-				 self->function_name = name;
-			 },
-			 nb::arg("i"),
-			 nb::arg("j"),
-			 nb::arg("k"),
-			 nb::arg("l"),
-			 nb::arg("dihedral"))
+		.def(
+			"__init__",
+			[](Dihedral* self,
+			   const ParticleIO& i,
+			   const ParticleIO& j,
+			   const ParticleIO& k,
+			   const ParticleIO& l,
+			   const std::string& name) {
+				new (self) Dihedral{};
+				self->uids.uid1 = i.uid;
+				self->uids.uid2 = j.uid;
+				self->uids.uid3 = k.uid;
+				self->uids.uid4 = l.uid;
+				self->function_name = name;
+			},
+			nb::arg("i"),
+			nb::arg("j"),
+			nb::arg("k"),
+			nb::arg("l"),
+			nb::arg("dihedral"))
 		.def_rw("name", &Dihedral::function_name)
 		.def_rw("form", &Dihedral::form)
 		.def("__repr__",
@@ -127,14 +130,15 @@ void declare_dihedral(nb::module_& m) {
 void declare_exclude(nb::module_& m) {
 	nb::class_<Exclude>(m, "Exclude")
 		.def(nb::init<>())
-		.def("__init__",
-			 [](Exclude* self, const ParticleIO& i, const ParticleIO& j) {
-				 new (self) Exclude{};
-				 self->uids.uid1 = i.uid;
-				 self->uids.uid2 = j.uid;
-			 },
-			 nb::arg("i"),
-			 nb::arg("j"))
+		.def(
+			"__init__",
+			[](Exclude* self, const ParticleIO& i, const ParticleIO& j) {
+				new (self) Exclude{};
+				self->uids.uid1 = i.uid;
+				self->uids.uid2 = j.uid;
+			},
+			nb::arg("i"),
+			nb::arg("j"))
 		.def("__eq__", [](const Exclude& a, const Exclude& b) { return a == b; })
 		.def("__ne__", [](const Exclude& a, const Exclude& b) { return a != b; })
 		.def("__lt__", [](const Exclude& a, const Exclude& b) { return a < b; })
@@ -147,16 +151,17 @@ void declare_exclude(nb::module_& m) {
 void declare_restraint(nb::module_& m) {
 	nb::class_<Restraint>(m, "Restraint")
 		.def(nb::init<>())
-		.def("__init__",
-			 [](Restraint* self, const ParticleIO& i, Vector3 r0, float k) {
-				 new (self) Restraint{};
-				 self->uids.uid1 = i.uid;
-				 self->r0 = r0;
-				 self->k = k;
-			 },
-			 nb::arg("i"),
-			 nb::arg("r0"),
-			 nb::arg("k"))
+		.def(
+			"__init__",
+			[](Restraint* self, const ParticleIO& i, Vector3 r0, float k) {
+				new (self) Restraint{};
+				self->uids.uid1 = i.uid;
+				self->r0 = r0;
+				self->k = k;
+			},
+			nb::arg("i"),
+			nb::arg("r0"),
+			nb::arg("k"))
 		.def_rw("r0", &Restraint::r0)
 		.def_rw("k", &Restraint::k)
 		.def("__repr__", [](const Restraint& r) {
@@ -206,29 +211,24 @@ void declare_bonded_interaction(nb::module_& m) {
 // ============================================================================
 // NONBONDED INTERACTION BINDINGS
 // ============================================================================
-// Unlike Bond/Angle/Dihedral (per-run topology, staged into SimManager via
-// send_bonded_interactions - see pysim.cpp), NonBondedInteractions lives on
-// SimSystem itself (SimSystem::get_nonbonded_interactions(), pysystem.cpp):
-// pair/long-range parameters are tied to particle type definitions, which
-// are also SimSystem-owned.
-
 // A pair is declared between two ParticleType objects, not raw type ids -
 // ParticleType.id isn't assigned until SimSystem::assign_particle_type_ids()
 // runs, so an id read at construction time would be meaningless. Only the
 // names are captured here; SimSystem::build_name_to_id_maps() resolves them
-// (see PairNonBonded::resolve_type_names).
+// (see PairNonBonded::resolve_type_names).s
 void declare_nonbonded_interaction(nb::module_& m) {
 	nb::class_<PairNonBonded>(m, "PairNonBonded")
-		.def("__init__",
-			 [](PairNonBonded* self,
-				const ParticleType& type_a,
-				const ParticleType& type_b,
-				const std::string& function_name) {
-				 new (self) PairNonBonded(type_a.name, type_b.name, function_name);
-			 },
-			 nb::arg("type_a"),
-			 nb::arg("type_b"),
-			 nb::arg("function_name"))
+		.def(
+			"__init__",
+			[](PairNonBonded* self,
+			   const ParticleType& type_a,
+			   const ParticleType& type_b,
+			   const std::string& function_name) {
+				new (self) PairNonBonded(type_a.name, type_b.name, function_name);
+			},
+			nb::arg("type_a"),
+			nb::arg("type_b"),
+			nb::arg("function_name"))
 		.def_ro("type_name_1", &PairNonBonded::type_name_1)
 		.def_ro("type_name_2", &PairNonBonded::type_name_2)
 		.def_rw("name", &PairNonBonded::function_name)

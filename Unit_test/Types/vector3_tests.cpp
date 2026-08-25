@@ -1,6 +1,6 @@
 #include "../catch_boiler.h"
 
-#include "ARBDException.h"
+#include "MARSException.h"
 #include "Backend/Buffer.h"
 #include "Types/Matrix3.h"
 #include "Types/Vector3.h"
@@ -11,7 +11,7 @@
 #include <type_traits>
 
 using Catch::Approx;
-using namespace ARBD;
+using namespace MARS;
 // Static traits --------------------------------------------------------------
 static_assert(sizeof(Vector3_t<float>) == 4 * sizeof(float),
 			  "Vector3_t<float> must occupy four scalars");
@@ -65,7 +65,7 @@ TEST_CASE("Vector3 constructors and indexing", "[vector3]") {
 
 #ifdef HOST_GUARD
 	Vector3_t<float> idx_vec;
-	CHECK_THROWS_AS(static_cast<void>(idx_vec[4]), ARBD::Exception);
+	CHECK_THROWS_AS(static_cast<void>(idx_vec[4]), MARS::Exception);
 #endif
 }
 

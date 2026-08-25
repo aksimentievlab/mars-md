@@ -1,7 +1,7 @@
 /*********************************************************************
  * @file  BaseGrid.h
  *
- * @brief Modern C++20 BaseGrid class for arbd2/cpp20 branch
+ * @brief Modern C++20 BaseGrid class for mars2/cpp20 branch
  *        Host-side BaseGrid Manager.
  *        Multi-backend support (CUDA, SYCL, CPU) with clean separation
  *
@@ -9,9 +9,9 @@
  *********************************************************************/
 #pragma once
 
-#include "ARBDException.h"
-#include "ARBDLogger.h"
 #include "IO/FileHandle.h"
+#include "MARSException.h"
+#include "MARSLogger.h"
 #include <span>
 #include <string_view>
 #include <vector>
@@ -25,7 +25,7 @@
 #include "Vector3.h"
 #include <cmath>
 
-namespace ARBD {
+namespace MARS {
 
 // Forward declarations
 class FileHandle;
@@ -60,7 +60,7 @@ void write_average_profile(const BaseGrid<T>&, std::string_view, int);
  * @param config Configuration for the grid
  * @param values Values stored in the grid
  */
-template<typename T = arbd_real>
+template<typename T = mars_real>
 class BaseGrid {
   public:
 	using value_type = T;
@@ -852,7 +852,7 @@ class BaseGrid {
 	 * @return Gradient vector
 	 */
 	Vector3 compute_gradient(const Vector3& world_pos) const {
-		return ARBD::compute_gradient<T>(values_.data(),
+		return MARS::compute_gradient<T>(values_.data(),
 										 world_pos,
 										 config_.origin,
 										 config_.basis,
@@ -868,7 +868,7 @@ class BaseGrid {
 	 * @return Gradient vector
 	 */
 	Vector3 compute_gradient(const T* data_ptr, const Vector3& world_pos) const {
-		return ARBD::compute_gradient<T>(data_ptr,
+		return MARS::compute_gradient<T>(data_ptr,
 										 world_pos,
 										 config_.origin,
 										 config_.basis,
@@ -1019,4 +1019,4 @@ class BaseGrid {
 using BaseGridf = BaseGrid<float>;
 using BaseGridd = BaseGrid<double>;
 
-} // namespace ARBD
+} // namespace MARS

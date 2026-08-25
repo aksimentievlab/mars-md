@@ -3,7 +3,7 @@
 #include "Types/Types.h"
 #include <thrust/device_vector.h>
 
-namespace ARBD {
+namespace MARS {
 
 struct ClusterCompute {
 	HOST DEVICE int excl_idx(int i, int j) const {
@@ -53,4 +53,4 @@ struct ClusterCompute {
 	float computeTabulated(bool get_energy, const ComputeForce& compute);
 };
 
-} // namespace ARBD
+} // namespace MARS

@@ -23,7 +23,7 @@
  *   - This maintains constant chemical potential rather than constant particle number
  */
 
-namespace ARBD {
+namespace MARS {
 struct Reservoir {
 	HOST Vector3 start;
 	HOST Vector3 end;
@@ -56,4 +56,4 @@ class ReservoirManager { // ON host only
 	std::vector<Reservoir> reservoirs;
 	void validateRegions();
 };
-} // namespace ARBD
+} // namespace MARS

@@ -1,8 +1,8 @@
-"""Direct CPU pair sum reference for a tabulated-nonbonded ARBD config.
+"""Direct CPU pair sum reference for a tabulated-nonbonded MARS config.
 
-Independent check on arbd2's reported nonbonded (and tabulated-bond) energy:
+Independent check on mars2's reported nonbonded (and tabulated-bond) energy:
 reproduces TabulatedPotential::compute's linear interpolation, including the
-past-the-end rule, in double precision, and rebuilds arbd2's exclusion set
+past-the-end rule, in double precision, and rebuilds mars2's exclusion set
 from the EXCLUDE lines plus bond pairs.
 
 Takes the config path as an argument and reads the fixture in place - it
@@ -12,7 +12,7 @@ Usage:
     python3 rotor_pair_sum_reference.py <config.bd> [--cutoff 50]
                                         [--no-bond-exclusions] [--no-exclusions]
 
-Compare the printed totals against arbd2 run on the same frame with a tiny
+Compare the printed totals against mars2 run on the same frame with a tiny
 timestep (so nothing moves) and the matching terms enabled.
 """
 import argparse

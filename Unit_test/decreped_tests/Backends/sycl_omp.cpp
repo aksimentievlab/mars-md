@@ -5,7 +5,7 @@
 
 #ifdef USE_SYCL
 
-using namespace ARBD::SYCL;
+using namespace MARS::SYCL;
 
 // Helper function for floating point comparison
 bool within_tolerance(float a, float b, float tolerance = 1e-6f) {
@@ -89,7 +89,7 @@ TEST_CASE("SYCL OpenMP Memory Operations", "[SYCL][OpenMP]") {
 		std::vector<float> host_data(SIZE);
 		std::iota(host_data.begin(), host_data.end(), 0.0f);
 
-		ARBD::DeviceBuffer<float> device_mem(SIZE);
+		MARS::DeviceBuffer<float> device_mem(SIZE);
 		device_mem.copy_from_host(host_data);
 
 		std::vector<float> result(SIZE, -1.0f); // Initialize with different value
@@ -112,10 +112,10 @@ TEST_CASE("SYCL OpenMP Parallel For", "[SYCL][OpenMP]") {
 		std::vector<float> b(SIZE, 2.0f);
 		std::vector<float> c(SIZE, 0.0f);
 
-		// Use ARBD DeviceBuffer for automatic USM management
-		ARBD::DeviceBuffer<float> d_a(SIZE);
-		ARBD::DeviceBuffer<float> d_b(SIZE);
-		ARBD::DeviceBuffer<float> d_c(SIZE);
+		// Use MARS DeviceBuffer for automatic USM management
+		MARS::DeviceBuffer<float> d_a(SIZE);
+		MARS::DeviceBuffer<float> d_b(SIZE);
+		MARS::DeviceBuffer<float> d_c(SIZE);
 
 		d_a.copy_from_host(a.data(), SIZE);
 		d_b.copy_from_host(b.data(), SIZE);
@@ -152,8 +152,8 @@ TEST_CASE("SYCL OpenMP Reduction", "[SYCL][OpenMP]") {
 		std::vector<int> data(SIZE);
 		std::iota(data.begin(), data.end(), 1); // Fill with 1, 2, 3, ..., SIZE
 
-		ARBD::DeviceBuffer<int> d_data(SIZE);
-		ARBD::DeviceBuffer<int> d_result(1);
+		MARS::DeviceBuffer<int> d_data(SIZE);
+		MARS::DeviceBuffer<int> d_result(1);
 
 		d_data.copy_from_host(data);
 

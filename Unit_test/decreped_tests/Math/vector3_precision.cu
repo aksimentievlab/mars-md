@@ -1,6 +1,6 @@
 #include "../catch_boiler.h"
-#include "ARBDException.h"
-#include "ARBDLogger.h"
+#include "MARSException.h"
+#include "MARSLogger.h"
 #include "Backend/CUDA/CUDAManager.h"
 #include "Backend/Resource.h"
 #include "Math/TypeName.h"
@@ -15,7 +15,7 @@
 #include <iostream>
 #include <nvfunctional>
 
-using namespace ARBD;
+using namespace MARS;
 
 namespace Tests::Vector3 {
 enum BinaryOp_t { ADD, CROSS, DOT, SUB, FINAL };
@@ -79,7 +79,7 @@ R get_cpu_result(BinaryOp_t op, T in1, U in2) {
 
 template<typename T, typename U>
 void check_vectors_equal(T&& cpu, U&& gpu) {
-	CHECK(ARBD::type_name<decltype(cpu)>() == ARBD::type_name<decltype(gpu)>());
+	CHECK(MARS::type_name<decltype(cpu)>() == MARS::type_name<decltype(gpu)>());
 	CHECK(cpu.x == gpu.x);
 	CHECK(cpu.y == gpu.y);
 	CHECK(cpu.z == gpu.z);
@@ -88,23 +88,23 @@ void check_vectors_equal(T&& cpu, U&& gpu) {
 
 template<typename A, typename B>
 void run_tests() {
-	using T = ARBD::Vector3_t<A>;
-	using U = ARBD::Vector3_t<B>;
+	using T = MARS::Vector3_t<A>;
+	using U = MARS::Vector3_t<B>;
 	using R = std::common_type_t<T, U>;
 
 	T v1(1, 1.005, 0);
 	U v2(0, 2, 0);
 	R *gpu_result_d, gpu_result, cpu_result;
-	ARBD::check_cuda_error(cudaMalloc((void**)&gpu_result_d, sizeof(R)), __FILE__, __LINE__);
+	MARS::check_cuda_error(cudaMalloc((void**)&gpu_result_d, sizeof(R)), __FILE__, __LINE__);
 
 	for (BinaryOp_t op = ADD; op < FINAL; ++op) {
 		LOGINFO("Testing operation: {}", get_binary_op_name(op));
 		binary_op_test_kernel<R, T, U><<<1, 1>>>(op, gpu_result_d, v1, v2);
-		ARBD::check_cuda_error(
+		MARS::check_cuda_error(
 			cudaMemcpy(&gpu_result, gpu_result_d, sizeof(R), cudaMemcpyDeviceToHost),
 			__FILE__,
 			__LINE__);
-		ARBD::check_cuda_error(cudaDeviceSynchronize(), __FILE__, __LINE__);
+		MARS::check_cuda_error(cudaDeviceSynchronize(), __FILE__, __LINE__);
 
 		// Get cpu_result
 		cpu_result = get_cpu_result<R, T, U>(op, v1, v2);
@@ -112,7 +112,7 @@ void run_tests() {
 		// Check consistency
 		check_vectors_equal(cpu_result, gpu_result);
 	}
-	ARBD::check_cuda_error(cudaFree(gpu_result_d), __FILE__, __LINE__);
+	MARS::check_cuda_error(cudaFree(gpu_result_d), __FILE__, __LINE__);
 }
 
 TEST_CASE("Check that Vector3_t binary operations are identical on GPU and CPU", "[Vector3]") {

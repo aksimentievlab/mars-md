@@ -11,7 +11,7 @@
 #include <metal_stdlib>
 using namespace metal;
 
-namespace ARBD {
+namespace MARS {
 
 /**
  * Metal-specific 3D vector utility class.
@@ -235,7 +235,7 @@ inline Vector3_t<size_t> index_to_ijk(size_t idx, Vector3_t<size_t> n) {
 }
 
 // Metal type aliases for common usage
-using MetalVector3 = Vector3_t<arbd_real>;
+using MetalVector3 = Vector3_t<mars_real>;
 
-} // namespace ARBD
+} // namespace MARS
 #endif

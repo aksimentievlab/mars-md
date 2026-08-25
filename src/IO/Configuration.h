@@ -1,7 +1,7 @@
 #pragma once
 
-#include "ARBDException.h"
-#include "ARBDLogger.h"
+#include "MARSException.h"
+#include "MARSLogger.h"
 #include "Constants.h"
 #include "IO/DxIO.h"
 #include "IO/Reader.h"
@@ -20,7 +20,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace ARBD {
+namespace MARS {
 
 /**
  * @brief Container for initial simulation configuration and state.
@@ -57,7 +57,7 @@ struct Configuration {
 	std::string output_name{"out"};
 	OutputFormat output_format{OutputFormat::DCD};
 
-	// arbd2 additions start
+	// mars2 additions start
 	DecomposerType decomposer{DecomposerType::Spatial};
 	DecomposeDirection decompose_direction{DecomposeDirection::Z};
 
@@ -71,7 +71,7 @@ struct Configuration {
 	// BarostatType barostat{BarostatType::Isobaric};
 	bool calculate_pressure{false};
 	float pressure_output_period{100.0f};
-	// arbd2 additions end
+	// mars2 additions end
 
 	std::vector<RigidBodyType> rigid_body_types{};
 	std::vector<ParticleType> particle_types{};
@@ -81,7 +81,7 @@ struct Configuration {
 	std::unordered_map<std::string, int>
 		fname_tab_dictionary{}; // Filename -> tabulated function ID
 	std::unordered_map<std::string, int> fname_grid_dictionary{}; // Filename -> grid ID
-	std::unordered_map<int, std::vector<BaseGrid<arbd_real>>>
+	std::unordered_map<int, std::vector<BaseGrid<mars_real>>>
 		grid_id_dictionary{}; // Grid ID -> loaded grids
 
 	// Initial Objects
@@ -199,4 +199,4 @@ struct Configuration {
 	}
 };
 
-} // namespace ARBD
+} // namespace MARS

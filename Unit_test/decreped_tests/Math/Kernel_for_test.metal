@@ -1,7 +1,7 @@
 #include <metal_stdlib>
 #include "Types/Vector3.h"
 using namespace metal;
-using namespace ARBD;
+using namespace MARS;
 
 // ============================================================================
 // Metal Kernel Functions for Test Suite
@@ -22,13 +22,13 @@ kernel void combine_kernel(const device float* uniform [[buffer(3)]],
     combined[index] = 0.7f * uniform[index] + 0.3f * gaussian[index];
 }
 
-// Initialize walker positions to origin using ARBD::Vector3_t<float>
+// Initialize walker positions to origin using MARS::Vector3_t<float>
 kernel void initialize_walkers_kernel(device Vector3_t<float>* positions [[buffer(3)]],
                                     uint index [[thread_position_in_grid]]) {
     positions[index] = Vector3_t<float>(0.0f, 0.0f, 0.0f);
 }
 
-// Random walk simulation kernel using ARBD::Vector3_t<float>
+// Random walk simulation kernel using MARS::Vector3_t<float>
 kernel void random_walk_kernel(const device Vector3_t<float>* steps [[buffer(3)]],
                               device Vector3_t<float>* positions [[buffer(4)]],
                               constant uint& grid_width [[buffer(0)]],
@@ -60,7 +60,7 @@ kernel void random_walk_kernel(const device Vector3_t<float>* steps [[buffer(3)]
     positions[walker_id] = pos;
 }
 
-// Calculate distances from origin using ARBD::Vector3_t<float>
+// Calculate distances from origin using MARS::Vector3_t<float>
 kernel void calculate_distances_kernel(const device Vector3_t<float>* positions [[buffer(3)]],
                                      device float* distances [[buffer(4)]],
                                      uint index [[thread_position_in_grid]]) {

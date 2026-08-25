@@ -41,7 +41,7 @@
 #include <nanobind/stl/vector.h>
 
 namespace nb = nanobind;
-using namespace ARBD;
+using namespace MARS;
 
 namespace {
 
@@ -58,13 +58,13 @@ using InArray = nb::ndarray<float, nb::ndim<3>, nb::c_contig, nb::device::cpu>;
  * @param spacing Per-axis grid spacing (dx, dy, dz); use `basis` instead for
  *        a non-orthogonal grid.
  */
-BaseGrid<arbd_real> grid_from_numpy(InArray values, Vector3 origin, Vector3 spacing) {
+BaseGrid<mars_real> grid_from_numpy(InArray values, Vector3 origin, Vector3 spacing) {
 	const auto nx = static_cast<idx_t>(values.shape(0));
 	const auto ny = static_cast<idx_t>(values.shape(1));
 	const auto nz = static_cast<idx_t>(values.shape(2));
 
 	Matrix3 basis(spacing.x, spacing.y, spacing.z);
-	BaseGrid<arbd_real> grid(basis, origin, nx, ny, nz);
+	BaseGrid<mars_real> grid(basis, origin, nx, ny, nz);
 	std::memcpy(grid.data(), values.data(), values.size() * sizeof(float));
 	return grid;
 }
@@ -73,12 +73,12 @@ BaseGrid<arbd_real> grid_from_numpy(InArray values, Vector3 origin, Vector3 spac
  * @brief Same as grid_from_numpy, but for a non-orthogonal grid: takes a
  *        full basis matrix instead of per-axis spacing.
  */
-BaseGrid<arbd_real> grid_from_numpy_basis(InArray values, Vector3 origin, Matrix3 basis) {
+BaseGrid<mars_real> grid_from_numpy_basis(InArray values, Vector3 origin, Matrix3 basis) {
 	const auto nx = static_cast<idx_t>(values.shape(0));
 	const auto ny = static_cast<idx_t>(values.shape(1));
 	const auto nz = static_cast<idx_t>(values.shape(2));
 
-	BaseGrid<arbd_real> grid(basis, origin, nx, ny, nz);
+	BaseGrid<mars_real> grid(basis, origin, nx, ny, nz);
 	std::memcpy(grid.data(), values.data(), values.size() * sizeof(float));
 	return grid;
 }
@@ -87,7 +87,7 @@ BaseGrid<arbd_real> grid_from_numpy_basis(InArray values, Vector3 origin, Matrix
  * @brief Grid values as a 3D numpy array, shape (nx, ny, nz), matching
  *        grid_from_numpy's expected layout.
  */
-nb::ndarray<float, nb::numpy, nb::ndim<3>> grid_to_numpy(const BaseGrid<arbd_real>& grid) {
+nb::ndarray<float, nb::numpy, nb::ndim<3>> grid_to_numpy(const BaseGrid<mars_real>& grid) {
 	const size_t n = static_cast<size_t>(grid.size());
 	float* data = new float[n];
 	std::memcpy(data, grid.data(), n * sizeof(float));
@@ -104,7 +104,7 @@ nb::ndarray<float, nb::numpy, nb::ndim<3>> grid_to_numpy(const BaseGrid<arbd_rea
 // part of its device-shared API), so the linear-index formula - z fastest,
 // x slowest, matching numpy's default C order for shape (nx, ny, nz) - is
 // duplicated here from its public nx()/ny()/nz() instead.
-idx_t grid_flat_index(const BaseGrid<arbd_real>& grid, nb::tuple ijk) {
+idx_t grid_flat_index(const BaseGrid<mars_real>& grid, nb::tuple ijk) {
 	if (ijk.size() != 3)
 		throw nb::index_error("Grid index must be a length-3 (ix, iy, iz) tuple");
 	const auto ix = nb::cast<idx_t>(ijk[0]);
@@ -146,20 +146,24 @@ void declare_loadfile(nb::module_& m) {
 		});
 
 	//========================================================================
-	// Grid - host-side dense grid data (BaseGrid<arbd_real>)
+	// Grid - host-side dense grid data (BaseGrid<mars_real>)
 	//========================================================================
-	nb::class_<BaseGrid<arbd_real>>(m, "Grid")
+	nb::class_<BaseGrid<mars_real>>(m, "Grid")
 		.def(nb::init<>(), "Create an empty 1x1x1 grid")
-		.def("__init__",
-			 [](BaseGrid<arbd_real>* self, Vector3 origin, Matrix3 basis, idx_t nx, idx_t ny, idx_t nz) {
-				 new (self) BaseGrid<arbd_real>(basis, origin, nx, ny, nz);
-			 },
-			 nb::arg("origin"),
-			 nb::arg("basis"),
-			 nb::arg("nx"),
-			 nb::arg("ny"),
-			 nb::arg("nz"),
-			 "Create a grid with an explicit basis matrix and dimensions")
+		.def(
+			"__init__",
+			[](BaseGrid<mars_real>* self,
+			   Vector3 origin,
+			   Matrix3 basis,
+			   idx_t nx,
+			   idx_t ny,
+			   idx_t nz) { new (self) BaseGrid<mars_real>(basis, origin, nx, ny, nz); },
+			nb::arg("origin"),
+			nb::arg("basis"),
+			nb::arg("nx"),
+			nb::arg("ny"),
+			nb::arg("nz"),
+			"Create a grid with an explicit basis matrix and dimensions")
 		.def(nb::init<const Vector3&, float>(),
 			 nb::arg("box_size"),
 			 nb::arg("dx"),
@@ -181,32 +185,29 @@ void declare_loadfile(nb::module_& m) {
 					"Build a dense grid from a 3D numpy array with a full (possibly "
 					"non-orthogonal) basis matrix")
 		.def("to_numpy", &grid_to_numpy, "Grid values as a 3D numpy array, shape (nx, ny, nz)")
-		.def("nx", &BaseGrid<arbd_real>::nx)
-		.def("ny", &BaseGrid<arbd_real>::ny)
-		.def("nz", &BaseGrid<arbd_real>::nz)
-		.def("size", &BaseGrid<arbd_real>::size)
+		.def("nx", &BaseGrid<mars_real>::nx)
+		.def("ny", &BaseGrid<mars_real>::ny)
+		.def("nz", &BaseGrid<mars_real>::nz)
+		.def("size", &BaseGrid<mars_real>::size)
 		.def_prop_ro("origin",
-					 static_cast<const Vector3& (BaseGrid<arbd_real>::*)() const>(
-						 &BaseGrid<arbd_real>::origin))
-		.def_prop_ro(
-			"basis",
-			static_cast<const Matrix3& (BaseGrid<arbd_real>::*)() const>(&BaseGrid<arbd_real>::basis))
+					 static_cast<const Vector3& (BaseGrid<mars_real>::*)() const>(
+						 &BaseGrid<mars_real>::origin))
+		.def_prop_ro("basis",
+					 static_cast<const Matrix3& (BaseGrid<mars_real>::*)() const>(
+						 &BaseGrid<mars_real>::basis))
+		.def("__getitem__", [](const BaseGrid<mars_real>& g, idx_t i) { return g[i]; })
 		.def("__getitem__",
-			 [](const BaseGrid<arbd_real>& g, idx_t i) { return g[i]; })
-		.def("__getitem__",
-			 [](const BaseGrid<arbd_real>& g, nb::tuple ijk) { return g[grid_flat_index(g, ijk)]; })
+			 [](const BaseGrid<mars_real>& g, nb::tuple ijk) { return g[grid_flat_index(g, ijk)]; })
+		.def("__setitem__", [](BaseGrid<mars_real>& g, idx_t i, float value) { g[i] = value; })
 		.def("__setitem__",
-			 [](BaseGrid<arbd_real>& g, idx_t i, float value) { g[i] = value; })
-		.def("__setitem__",
-			 [](BaseGrid<arbd_real>& g, nb::tuple ijk, float value) {
+			 [](BaseGrid<mars_real>& g, nb::tuple ijk, float value) {
 				 g[grid_flat_index(g, ijk)] = value;
 			 })
-		.def("__len__", &BaseGrid<arbd_real>::size)
-		.def("__repr__", [](const BaseGrid<arbd_real>& g) {
+		.def("__len__", &BaseGrid<mars_real>::size)
+		.def("__repr__", [](const BaseGrid<mars_real>& g) {
 			return "Grid(nx=" + std::to_string(g.nx()) + ", ny=" + std::to_string(g.ny()) +
 				   ", nz=" + std::to_string(g.nz()) + ")";
 		});
-
 	//========================================================================
 	// GridManager - unified grid loading/lookup (dense grids only for now;
 	// sparse/.vdb loading is deferred, see file docstring)
@@ -214,24 +215,34 @@ void declare_loadfile(nb::module_& m) {
 	nb::class_<GridManager>(m, "GridManager")
 		.def(nb::init<>())
 		.def("add_grid",
-			 &GridManager::add_grid,
-			 nb::arg("name"),
-			 "Load a grid, dispatching on file extension (.dx -> dense; anything else -> "
-			 "sparse, which currently raises NotImplementedError)")
+			 [](GridManager& gm, const std::string& name) { return gm.add_grid(name); },
+			 nb::arg("name"))
 		.def("add_dense_grid",
-			 &GridManager::add_dense_grid,
+			 [](GridManager& gm, const std::string& filename) {
+				 return gm.add_dense_grid(filename);
+			 },
 			 nb::arg("filename"),
 			 "Load a dense grid from a .dx file")
 		.def("add_sparse_grid",
-			 &GridManager::add_sparse_grid,
+			 [](GridManager& gm, const std::string& filename) {
+				 return gm.add_sparse_grid(filename);
+			 },
 			 nb::arg("filename"),
 			 "Not yet implemented - sparse/.vdb grid support is deferred (see Objects/Grid.h)")
-		.def("get_grid_key", &GridManager::get_grid_key, nb::arg("filename"))
-		.def("has_grid", &GridManager::has_grid, nb::arg("filename"))
-		.def("get_grid_format", &GridManager::get_grid_format, nb::arg("grid_id"))
-		.def("num_grids", &GridManager::num_grids)
+		.def("get_grid_key",
+			 [](GridManager& gm, const std::string& filename) {
+				 return gm.get_grid_key(filename);
+			 },
+			 nb::arg("filename"))
+		.def("has_grid",
+			 [](GridManager& gm, const std::string& filename) { return gm.has_grid(filename); },
+			 nb::arg("filename"))
+		.def("get_grid_format",
+			 [](GridManager& gm, idx_t grid_id) { return gm.get_grid_format(grid_id); },
+			 nb::arg("grid_id"))
+		.def("num_grids", [](const GridManager& gm) { return gm.num_grids(); })
 		.def("build_device_arrays",
-			 &GridManager::build_device_arrays,
+			 [](GridManager& gm) { gm.build_device_arrays(); },
 			 "Replicate all loaded grids to device memory on every configured resource")
 		.def("__repr__", [](const GridManager& gm) {
 			return "GridManager(num_grids=" + std::to_string(gm.num_grids()) + ")";

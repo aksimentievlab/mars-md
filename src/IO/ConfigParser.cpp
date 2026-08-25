@@ -1,6 +1,6 @@
 #include "ConfigParser.h"
-#include "ARBDException.h"
-#include "ARBDLogger.h"
+#include "MARSException.h"
+#include "MARSLogger.h"
 #include "IO/BondConfigReader.h"
 #include "IO/Reader.h"
 #include "IO/RigidBodyCoordReader.h"
@@ -25,7 +25,7 @@
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/vector.h>
 #endif
-namespace ARBD {
+namespace MARS {
 
 namespace {
 // Helper function to check for parameter with both camelCase and snake_case variants
@@ -149,7 +149,7 @@ void ConfigParser::parse_parameters(const Reader& reader) {
 	if (hasParameterVariant(reader, "temperature_grid", "temperature_grid")) {
 		std::string key = findParameterVariant(reader, "temperature_grid", "temperature_grid");
 		std::string grid_file = reader.findValue(key);
-		BaseGrid<arbd_real> grid = DXReader::read_from_file<float>(grid_file);
+		BaseGrid<mars_real> grid = DXReader::read_from_file<float>(grid_file);
 		sim_system_ref_->set_temperature(grid);
 	} else if (hasParameterVariant(reader, "temperature", "temperature")) {
 		std::string key = findParameterVariant(reader, "temperature", "temperature");
@@ -497,7 +497,7 @@ static void load_particles_file(const std::string& path,
 								const std::string& config_file_path) {
 	std::string resolved_path = resolve_file_path(path, config_file_path);
 	try {
-		ARBD::FileHandle fh(resolved_path.c_str(), "r");
+		MARS::FileHandle fh(resolved_path.c_str(), "r");
 		FILE* fp = fh.get();
 		char* line = nullptr;
 		size_t len = 0;
@@ -539,7 +539,7 @@ static void load_restart_file(const std::string& path,
 	// particle_id is the line order (0-based index)
 	std::string resolved_path = resolve_file_path(path, config_file_path);
 	try {
-		ARBD::FileHandle fh(resolved_path.c_str(), "r");
+		MARS::FileHandle fh(resolved_path.c_str(), "r");
 		FILE* fp = fh.get();
 		char* line = nullptr;
 		size_t len = 0;
@@ -1327,4 +1327,4 @@ void ConfigParser::validate() const {
 
 	LOGINFO("ConfigParser: Configuration validation passed");
 }
-} // namespace ARBD
+} // namespace MARS

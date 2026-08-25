@@ -19,7 +19,7 @@
 #include <numeric>
 #include <vector>
 
-using namespace ARBD;
+using namespace MARS;
 
 // ============================================================================
 // Test Fixture for Production Buffer Tests

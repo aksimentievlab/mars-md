@@ -9,7 +9,7 @@
 #include "Objects/ParticleProperties.h"
 #include "SimParam.h"
 
-namespace ARBD {
+namespace MARS {
 
 enum class BondFlag { DEFAULT = 1, REPLACE = 1, ADD = 2 };
 enum BondedPotentialType { UNSET, BOND, ANGLE, DIHEDRAL, VECANGLE };
@@ -370,4 +370,4 @@ class BondedInteractions {
 	std::vector<Restraint> restraints_{};
 };
 
-} // namespace ARBD
+} // namespace MARS

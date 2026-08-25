@@ -7,7 +7,7 @@
 
 #include <vector>
 using Catch::Approx;
-using namespace ARBD;
+using namespace MARS;
 
 TEST_CASE("BaseGrid device interpolate and nearest", "[basegrid][device]") {
 	initialize_backend_once();

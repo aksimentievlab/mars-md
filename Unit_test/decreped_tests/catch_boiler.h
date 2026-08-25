@@ -24,7 +24,7 @@
 #endif
 
 // Common includes
-#include "ARBDLogger.h"
+#include "MARSLogger.h"
 #include "Backend/Buffer.h"
 #include "Backend/Events.h"
 #include "Backend/Resource.h"
@@ -108,28 +108,28 @@ class TestBackendManager {
 
 		try {
 #ifdef USE_CUDA
-			ARBD::SignalManager::manage_segfault();
+			MARS::SignalManager::manage_segfault();
 			// Initialize CUDA GPU Manager
-			ARBD::CUDA::Manager::init();
-			ARBD::CUDA::Manager::load_info();
+			MARS::CUDA::Manager::init();
+			MARS::CUDA::Manager::load_info();
 #endif
 #ifdef USE_SYCL
 			// Add error handling around SYCL initialization to prevent memory corruption
 			try {
-				ARBD::SYCL::Manager::init();
-				ARBD::SYCL::Manager::load_info();
-			} catch (const ARBD::Exception& e) {
+				MARS::SYCL::Manager::init();
+				MARS::SYCL::Manager::load_info();
+			} catch (const MARS::Exception& e) {
 				std::cerr << "Warning: SYCL initialization failed: " << e.what() << std::endl;
 				// Don't mark as initialized if SYCL fails
 				return;
 			}
 #endif
 #ifdef USE_METAL
-			ARBD::METAL::Manager::init();
-			ARBD::METAL::Manager::load_info();
+			MARS::METAL::Manager::init();
+			MARS::METAL::Manager::load_info();
 #endif
 			initialized_ = true;
-		} catch (const ARBD::Exception& e) {
+		} catch (const MARS::Exception& e) {
 			std::cerr << "Warning: Backend initialization failed: " << e.what() << std::endl;
 			// Don't mark as initialized if any backend fails
 			return;
@@ -141,13 +141,13 @@ class TestBackendManager {
 			return;
 
 #ifdef USE_CUDA
-		ARBD::CUDA::Manager::finalize();
+		MARS::CUDA::Manager::finalize();
 #endif
 #ifdef USE_SYCL
-		ARBD::SYCL::Manager::finalize();
+		MARS::SYCL::Manager::finalize();
 #endif
 #ifdef USE_METAL
-		ARBD::METAL::Manager::finalize();
+		MARS::METAL::Manager::finalize();
 #endif
 		initialized_ = false;
 	}
@@ -166,10 +166,10 @@ class TestBackendManager {
 		cudaDeviceSynchronize();
 #endif
 #ifdef USE_SYCL
-		ARBD::SYCL::Manager::sync();
+		MARS::SYCL::Manager::sync();
 #endif
 #ifdef USE_METAL
-		ARBD::METAL::Manager::sync();
+		MARS::METAL::Manager::sync();
 #endif
 	}
 
@@ -182,15 +182,15 @@ class TestBackendManager {
 		}
 #ifdef USE_CUDA
 		R* ptr;
-		ARBD::check_cuda_error(cudaMalloc((void**)&ptr, count * sizeof(R)), __FILE__, __LINE__);
+		MARS::check_cuda_error(cudaMalloc((void**)&ptr, count * sizeof(R)), __FILE__, __LINE__);
 		// Initialize device memory to zero
-		ARBD::check_cuda_error(cudaMemset(ptr, 0, count * sizeof(R)), __FILE__, __LINE__);
+		MARS::check_cuda_error(cudaMemset(ptr, 0, count * sizeof(R)), __FILE__, __LINE__);
 		return ptr;
 #elif defined(USE_SYCL)
-		auto& queue = ARBD::SYCL::Manager::get_current_queue();
+		auto& queue = MARS::SYCL::Manager::get_current_queue();
 		return sycl::malloc_device<R>(count, queue.get());
 #elif defined(USE_METAL)
-		auto& device = ARBD::METAL::Manager::get_current_device();
+		auto& device = MARS::METAL::Manager::get_current_device();
 		// Metal uses unified memory, so we can allocate using DeviceMemory
 		// For simplicity, we'll use the manager's allocate function
 		// Note: This is conceptual - actual Metal allocation would be different
@@ -215,7 +215,7 @@ class TestBackendManager {
 #ifdef USE_CUDA
 		cudaFree(ptr);
 #elif defined(USE_SYCL)
-		auto& queue = ARBD::SYCL::Manager::get_current_queue();
+		auto& queue = MARS::SYCL::Manager::get_current_queue();
 		sycl::free(ptr, queue.get());
 #elif defined(USE_METAL)
 		std::free(ptr);
@@ -232,12 +232,12 @@ class TestBackendManager {
 			return;
 		}
 #ifdef USE_CUDA
-		ARBD::check_cuda_error(
+		MARS::check_cuda_error(
 			cudaMemcpy(device_ptr, host_ptr, count * sizeof(R), cudaMemcpyHostToDevice),
 			__FILE__,
 			__LINE__);
 #elif defined(USE_SYCL)
-		auto& queue = ARBD::SYCL::Manager::get_current_queue();
+		auto& queue = MARS::SYCL::Manager::get_current_queue();
 		queue.get().memcpy(device_ptr, host_ptr, count * sizeof(R)).wait();
 #elif defined(USE_METAL)
 		std::memcpy(device_ptr, host_ptr, count * sizeof(R));
@@ -254,12 +254,12 @@ class TestBackendManager {
 			return;
 		}
 #ifdef USE_CUDA
-		ARBD::check_cuda_error(
+		MARS::check_cuda_error(
 			cudaMemcpy(host_ptr, device_ptr, count * sizeof(R), cudaMemcpyDeviceToHost),
 			__FILE__,
 			__LINE__);
 #elif defined(USE_SYCL)
-		auto& queue = ARBD::SYCL::Manager::get_current_queue();
+		auto& queue = MARS::SYCL::Manager::get_current_queue();
 		queue.get().memcpy(host_ptr, device_ptr, count * sizeof(R)).wait();
 #elif defined(USE_METAL)
 		std::memcpy(host_ptr, device_ptr, count * sizeof(R));
@@ -280,14 +280,14 @@ class TestBackendManager {
 #if defined(__CUDACC__)
 		// Launch the kernel using the defined cuda_op_kernel
 		cuda_op_kernel<Op_t, R, T...><<<1, 1>>>(result_device, args...);
-		ARBD::check_cuda_error(cudaGetLastError(), __FILE__, __LINE__);
-		ARBD::check_cuda_error(cudaDeviceSynchronize(), __FILE__, __LINE__);
+		MARS::check_cuda_error(cudaGetLastError(), __FILE__, __LINE__);
+		MARS::check_cuda_error(cudaDeviceSynchronize(), __FILE__, __LINE__);
 #else
 		// Fallback: execute on host when not compiled with nvcc
 		*result_device = Op_t::op(args...);
 #endif
 #elif defined(USE_SYCL)
-		auto& queue = ARBD::SYCL::Manager::get_current_queue();
+		auto& queue = MARS::SYCL::Manager::get_current_queue();
 		queue
 			.submit([=](sycl::handler& h) {
 				h.single_task([=]() { *result_device = Op_t::op(args...); });
@@ -314,7 +314,7 @@ class TestBackendManager {
  */
 template<typename Op_t, typename R, typename... T>
 void run_trial(std::string name, R expected_result, T... args) {
-	using namespace ARBD;
+	using namespace MARS;
 
 	INFO(name);
 

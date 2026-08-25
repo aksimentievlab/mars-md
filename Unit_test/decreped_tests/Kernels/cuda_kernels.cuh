@@ -5,7 +5,7 @@
 #include <cstddef>
 #include <cuda_runtime.h>
 
-namespace ARBD {
+namespace MARS {
 
 struct ScaleKernel {
 	__device__ void operator()(size_t i, const float* input, float* output) {
@@ -25,6 +25,6 @@ struct SquareKernel {
 	}
 };
 
-} // namespace ARBD
+} // namespace MARS
 
 #endif

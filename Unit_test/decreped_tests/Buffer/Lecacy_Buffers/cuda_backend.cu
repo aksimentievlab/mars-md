@@ -10,8 +10,8 @@
 #include <vector>
 #include <memory>
 
-using namespace ARBD;
-using namespace ARBD::CUDA;
+using namespace MARS;
+using namespace MARS::CUDA;
 
 // Test fixture for CUDA Backend tests
 class CUDATestFixture {

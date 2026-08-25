@@ -7,7 +7,7 @@
 #include <memory>
 #include <unistd.h>
 
-namespace ARBD::SignalManager {
+namespace MARS::SignalManager {
 volatile sig_atomic_t shutdown_requested = 0;
 
 struct BacktraceSymbolsDeleter {
@@ -97,4 +97,4 @@ void manage_segfault() {
 
 	sigaction(SIGSEGV, &sa, NULL);
 }
-} // namespace ARBD::SignalManager
+} // namespace MARS::SignalManager

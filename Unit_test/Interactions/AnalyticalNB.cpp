@@ -9,7 +9,7 @@
 #include <cmath>
 #include <utility>
 #include <vector>
-using namespace ARBD;
+using namespace MARS;
 using Catch::Approx;
 
 namespace {
@@ -46,7 +46,7 @@ double fd_force(F u, double r) {
 /**
  * @brief Helper to create simple 2-particle system
  */
-std::pair<HostParticleData, std::vector<ParticleType>> create_two_particles(arbd_real separation) {
+std::pair<HostParticleData, std::vector<ParticleType>> create_two_particles(mars_real separation) {
 	HostParticleData host_data(std::vector<int>{0, 1});
 	host_data.global_id = {0, 1};
 	host_data.type_id = {0, 0};
@@ -78,9 +78,9 @@ std::pair<HostParticleData, std::vector<ParticleType>> create_two_particles(arbd
  */
 HostParticleData run_pair(const Resource& res,
 						  uint32_t terms,
-						  arbd_real separation,
+						  mars_real separation,
 						  float q1 = 1.0f,
-						  arbd_real cutoff_squared = arbd_real(0)) {
+						  mars_real cutoff_squared = mars_real(0)) {
 	auto [host_data, types] = create_two_particles(separation);
 	types.push_back(types[0]);
 	types[0].charge = 1.0f;
@@ -96,8 +96,8 @@ HostParticleData run_pair(const Resource& res,
 	DeviceBuffer<PeriodicBox> pbox_buffer(1, res);
 	pbox_buffer.copy_from_host(&pbox_host, 1);
 
-	const ARBD::int2 pair_host{0, 1};
-	DeviceBuffer<ARBD::int2> pairs(1, res);
+	const MARS::int2 pair_host{0, 1};
+	DeviceBuffer<MARS::int2> pairs(1, res);
 	pairs.copy_from_host(&pair_host, 1);
 
 	auto view = particles.view();
@@ -109,9 +109,9 @@ HostParticleData run_pair(const Resource& res,
 	kernel.types = type_manager.view();
 	kernel.pbox = pbox_buffer.data();
 	kernel.enabled_terms = terms;
-	kernel.debye_huckel = DebyeHuckelPotential{arbd_real(kLambda), arbd_real(kEpsilon)};
-	kernel.onck = OnckElecPotential{arbd_real(kKappa), arbd_real(kSz), arbd_real(kZ)};
-	kernel.gaussian = GaussianPotential{arbd_real(kAmp), arbd_real(kSigma), arbd_real(0)};
+	kernel.debye_huckel = DebyeHuckelPotential{mars_real(kLambda), mars_real(kEpsilon)};
+	kernel.onck = OnckElecPotential{mars_real(kKappa), mars_real(kSz), mars_real(kZ)};
+	kernel.gaussian = GaussianPotential{mars_real(kAmp), mars_real(kSigma), mars_real(0)};
 	kernel.get_energy = true;
 	kernel.num_pairs = 1;
 	kernel.cutoff_squared = cutoff_squared;
@@ -136,7 +136,7 @@ TEST_CASE("Coulomb pair matches closed form", "[nonbonded][analytical][coulomb]"
 
 	const double r = 2.0;
 	auto u = [&](double d) { return constants::COULOMB / d; };
-	const HostParticleData out = run_pair(res, PAIR_TERM_COULOMB, arbd_real(r));
+	const HostParticleData out = run_pair(res, PAIR_TERM_COULOMB, mars_real(r));
 
 	// unit vector points 0 -> 1, and force_magnitude is -dU/dr, applied as
 	// -force to particle 0. Like charges therefore push 0 toward -x.
@@ -151,7 +151,7 @@ TEST_CASE("Debye-Huckel pair matches closed form", "[nonbonded][analytical][deby
 
 	const double r = 4.0;
 	auto u = [&](double d) { return dh_energy(d, 1.0, 1.0); };
-	const HostParticleData out = run_pair(res, PAIR_TERM_DEBYE_HUCKEL, arbd_real(r));
+	const HostParticleData out = run_pair(res, PAIR_TERM_DEBYE_HUCKEL, mars_real(r));
 
 	REQUIRE(out.force[0].x == Approx(-fd_force(u, r)).epsilon(1e-3));
 	REQUIRE(out.energy[0] + out.energy[1] == Approx(u(r)).epsilon(1e-3));
@@ -163,7 +163,7 @@ TEST_CASE("ONC pair matches closed form", "[nonbonded][analytical][onc]") {
 
 	const double r = 5.0;
 	auto u = [&](double d) { return onc_energy(d, 1.0, 1.0); };
-	const HostParticleData out = run_pair(res, PAIR_TERM_ONCK, arbd_real(r));
+	const HostParticleData out = run_pair(res, PAIR_TERM_ONCK, mars_real(r));
 
 	REQUIRE(out.force[0].x == Approx(-fd_force(u, r)).epsilon(2e-2));
 	REQUIRE(out.energy[0] + out.energy[1] == Approx(u(r)).epsilon(1e-3));
@@ -175,13 +175,13 @@ TEST_CASE("Gaussian pair matches closed form and ignores charge",
 	Resource res(Global::single_resource_id);
 
 	const double r = 2.0;
-	const HostParticleData out = run_pair(res, PAIR_TERM_GAUSSIAN, arbd_real(r));
+	const HostParticleData out = run_pair(res, PAIR_TERM_GAUSSIAN, mars_real(r));
 
 	REQUIRE(out.force[0].x == Approx(-fd_force(gauss_energy, r)).epsilon(1e-3));
 	REQUIRE(out.energy[0] + out.energy[1] == Approx(gauss_energy(r)).epsilon(1e-3));
 
 	// No charge dependence: flipping the sign of q1 must change nothing.
-	const HostParticleData flipped = run_pair(res, PAIR_TERM_GAUSSIAN, arbd_real(r), -1.0f);
+	const HostParticleData flipped = run_pair(res, PAIR_TERM_GAUSSIAN, mars_real(r), -1.0f);
 	REQUIRE(flipped.force[0].x == Approx(out.force[0].x).epsilon(1e-5));
 }
 
@@ -189,8 +189,8 @@ TEST_CASE("Opposite charges attract", "[nonbonded][analytical][coulomb]") {
 	initialize_backend_once();
 	Resource res(Global::single_resource_id);
 
-	const HostParticleData like = run_pair(res, PAIR_TERM_COULOMB, arbd_real(2), 1.0f);
-	const HostParticleData opp = run_pair(res, PAIR_TERM_COULOMB, arbd_real(2), -1.0f);
+	const HostParticleData like = run_pair(res, PAIR_TERM_COULOMB, mars_real(2), 1.0f);
+	const HostParticleData opp = run_pair(res, PAIR_TERM_COULOMB, mars_real(2), -1.0f);
 
 	REQUIRE(like.force[0].x < 0.0f);           // pushed away from particle 1
 	REQUIRE(opp.force[0].x > 0.0f);            // pulled toward particle 1
@@ -204,7 +204,7 @@ TEST_CASE("Analytical pair forces obey Newton's third law",
 
 	const uint32_t all = PAIR_TERM_COULOMB | PAIR_TERM_DEBYE_HUCKEL | PAIR_TERM_ONCK |
 						 PAIR_TERM_GAUSSIAN | PAIR_TERM_SOFTCORE;
-	const HostParticleData out = run_pair(res, all, arbd_real(2));
+	const HostParticleData out = run_pair(res, all, mars_real(2));
 
 	REQUIRE(out.force[0].x + out.force[1].x == Approx(0.0f).margin(1e-3));
 	REQUIRE(out.force[0].y + out.force[1].y == Approx(0.0f).margin(1e-6));
@@ -216,7 +216,7 @@ TEST_CASE("One launch applying two terms equals the sum of each alone",
 	initialize_backend_once();
 	Resource res(Global::single_resource_id);
 
-	const arbd_real r = arbd_real(2);
+	const mars_real r = mars_real(2);
 	const float f_coulomb = run_pair(res, PAIR_TERM_COULOMB, r).force[0].x;
 	const float f_gauss = run_pair(res, PAIR_TERM_GAUSSIAN, r).force[0].x;
 	const float f_both = run_pair(res, PAIR_TERM_COULOMB | PAIR_TERM_GAUSSIAN, r).force[0].x;
@@ -228,7 +228,7 @@ TEST_CASE("An empty term mask leaves forces untouched", "[nonbonded][analytical]
 	initialize_backend_once();
 	Resource res(Global::single_resource_id);
 
-	const HostParticleData out = run_pair(res, PAIR_TERM_NONE, arbd_real(2));
+	const HostParticleData out = run_pair(res, PAIR_TERM_NONE, mars_real(2));
 	REQUIRE(out.force[0].x == Approx(0.0f).margin(1e-9));
 	REQUIRE(out.force[1].x == Approx(0.0f).margin(1e-9));
 	REQUIRE(out.energy[0] == Approx(0.0f).margin(1e-9));
@@ -239,11 +239,11 @@ TEST_CASE("Pairs beyond the cutoff contribute nothing", "[nonbonded][analytical]
 	Resource res(Global::single_resource_id);
 
 	// cutoff 3 keeps a pair at r=2 and drops one at r=5.
-	const arbd_real cutoff2 = arbd_real(9);
+	const mars_real cutoff2 = mars_real(9);
 	const HostParticleData inside =
-		run_pair(res, PAIR_TERM_COULOMB, arbd_real(2), 1.0f, cutoff2);
+		run_pair(res, PAIR_TERM_COULOMB, mars_real(2), 1.0f, cutoff2);
 	const HostParticleData outside =
-		run_pair(res, PAIR_TERM_COULOMB, arbd_real(5), 1.0f, cutoff2);
+		run_pair(res, PAIR_TERM_COULOMB, mars_real(5), 1.0f, cutoff2);
 
 	REQUIRE(inside.force[0].x != Approx(0.0f).margin(1e-6));
 	REQUIRE(outside.force[0].x == Approx(0.0f).margin(1e-9));
@@ -256,8 +256,8 @@ TEST_CASE("Softcore repels harder as particles are pushed together",
 	Resource res(Global::single_resource_id);
 
 	// Unit radius and eps for both types, so the core sits at r = 1.
-	const float near = run_pair(res, PAIR_TERM_SOFTCORE, arbd_real(0.7)).force[0].x;
-	const float far = run_pair(res, PAIR_TERM_SOFTCORE, arbd_real(0.9)).force[0].x;
+	const float near = run_pair(res, PAIR_TERM_SOFTCORE, mars_real(0.7)).force[0].x;
+	const float far = run_pair(res, PAIR_TERM_SOFTCORE, mars_real(0.9)).force[0].x;
 
 	// Inside the core the pair repels, so particle 0 is pushed toward -x, and
 	// the push grows as they close.

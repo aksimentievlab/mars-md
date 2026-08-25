@@ -2,20 +2,20 @@
 #pragma once
 #include "Backend/CUDA/CUDAManager.h"
 #ifdef USE_CUDA
-#include "ARBDException.h"
 #include "Backend/Resource.h"
+#include "MARSException.h"
 // Forward declarations for CUDA memory operations
-namespace ARBD {
+namespace MARS {
 namespace CUDA {
 template<typename T>
 void fill_impl(void* dst, T value, size_t num_elements, void* queue, bool sync);
 } // namespace CUDA
-} // namespace ARBD
+} // namespace MARS
 #include <cstddef>
 #include <cstring>
 #include <cuda_runtime.h>
 
-namespace ARBD {
+namespace MARS {
 namespace CUDA {
 
 /// Maps a device ordinal to a cudaMemLocation. cudaCpuDeviceId (-1) means host.
@@ -56,7 +56,7 @@ struct Policy {
 	static void*
 	allocate(const Resource& resource, size_t bytes, void* queue = nullptr, bool sync = true) {
 		if (resource.type() != ResourceType::CUDA) {
-			ARBD_Exception(ExceptionType::ValueError,
+			MARS_Exception(ExceptionType::ValueError,
 						   "CUDA Policy requires CUDA resource, got {}",
 						   resource.getTypeString());
 		}
@@ -89,7 +89,7 @@ struct Policy {
 		} else {
 			cudaStream_t stream = static_cast<cudaStream_t>(queue);
 			if (!stream) {
-				ARBD_Exception(ExceptionType::RuntimeError, "Async CUDA copy requires a stream");
+				MARS_Exception(ExceptionType::RuntimeError, "Async CUDA copy requires a stream");
 			}
 			CUDA_CHECK(cudaMemcpyAsync(host_dst, device_src, bytes, cudaMemcpyDefault, stream));
 		}
@@ -108,7 +108,7 @@ struct Policy {
 		} else {
 			cudaStream_t stream = static_cast<cudaStream_t>(queue);
 			if (!stream) {
-				ARBD_Exception(ExceptionType::RuntimeError, "Async CUDA copy requires a stream");
+				MARS_Exception(ExceptionType::RuntimeError, "Async CUDA copy requires a stream");
 			}
 			CUDA_CHECK(cudaMemcpyAsync(device_dst, host_src, bytes, cudaMemcpyDefault, stream));
 		}
@@ -127,7 +127,7 @@ struct Policy {
 		} else {
 			cudaStream_t stream = static_cast<cudaStream_t>(queue);
 			if (!stream) {
-				ARBD_Exception(ExceptionType::RuntimeError, "Async CUDA copy requires a stream");
+				MARS_Exception(ExceptionType::RuntimeError, "Async CUDA copy requires a stream");
 			}
 			CUDA_CHECK(cudaMemcpyAsync(dst, src, bytes, cudaMemcpyDefault, stream));
 		}
@@ -142,7 +142,7 @@ struct PinnedPolicy {
 	static void*
 	allocate(const Resource& resource, size_t bytes, void* queue = nullptr, bool sync = true) {
 		if (resource.type() != ResourceType::CUDA) {
-			ARBD_Exception(ExceptionType::ValueError,
+			MARS_Exception(ExceptionType::ValueError,
 						   "CUDA PinnedPolicy requires CUDA resource, got {}",
 						   resource.getTypeString());
 		}
@@ -166,7 +166,7 @@ struct PinnedPolicy {
 		cudaStream_t stream = queue ? static_cast<cudaStream_t>(queue)
 									: static_cast<cudaStream_t>(resource.get_stream());
 		if (!stream) {
-			ARBD_Exception(ExceptionType::RuntimeError, "Upload requires a stream");
+			MARS_Exception(ExceptionType::RuntimeError, "Upload requires a stream");
 		}
 		CUDA_CHECK(cudaMemcpyAsync(device_dst, pinned_src, bytes, cudaMemcpyHostToDevice, stream));
 	}
@@ -179,7 +179,7 @@ struct PinnedPolicy {
 		cudaStream_t stream = queue ? static_cast<cudaStream_t>(queue)
 									: static_cast<cudaStream_t>(resource.get_stream());
 		if (!stream) {
-			ARBD_Exception(ExceptionType::RuntimeError, "Download requires a stream");
+			MARS_Exception(ExceptionType::RuntimeError, "Download requires a stream");
 		}
 		CUDA_CHECK(cudaMemcpyAsync(pinned_dst, device_src, bytes, cudaMemcpyDeviceToHost, stream));
 	}
@@ -189,7 +189,7 @@ struct UnifiedPolicy {
 	static void*
 	allocate(const Resource& resource, size_t bytes, void* queue = nullptr, bool sync = true) {
 		if (resource.type() != ResourceType::CUDA) {
-			ARBD_Exception(ExceptionType::ValueError,
+			MARS_Exception(ExceptionType::ValueError,
 						   "CUDA UnifiedPolicy requires CUDA resource, got {}",
 						   resource.getTypeString());
 		}
@@ -262,7 +262,7 @@ struct UnifiedPolicy {
 		} else {
 			cudaStream_t stream = static_cast<cudaStream_t>(queue);
 			if (!stream) {
-				ARBD_Exception(ExceptionType::RuntimeError, "Async copy requires a stream");
+				MARS_Exception(ExceptionType::RuntimeError, "Async copy requires a stream");
 			}
 			CUDA_CHECK(cudaMemcpyAsync(dst, src, bytes, cudaMemcpyDefault, stream));
 		}
@@ -283,7 +283,7 @@ struct TexturePolicy {
 						  const void* src_data = nullptr,
 						  bool is_host_data = false) {
 		if (resource.type() != ResourceType::CUDA) {
-			ARBD_Exception(ExceptionType::ValueError,
+			MARS_Exception(ExceptionType::ValueError,
 						   "CUDA TexturePolicy requires CUDA resource, got {}",
 						   resource.getTypeString());
 		}
@@ -338,7 +338,7 @@ struct TexturePolicy {
 				width * effective_height * effective_depth * element_size_bytes;
 		} else {
 			delete texture;
-			ARBD_Exception(ExceptionType::ValueError, "CUDA TexturePolicy requires source data");
+			MARS_Exception(ExceptionType::ValueError, "CUDA TexturePolicy requires source data");
 			return nullptr;
 		}
 
@@ -380,7 +380,7 @@ struct TexturePolicy {
 
 		Texture* texture = static_cast<Texture*>(texture_ptr);
 		if (!texture->array) {
-			ARBD_Exception(ExceptionType::RuntimeError,
+			MARS_Exception(ExceptionType::RuntimeError,
 						   "Cannot copy to texture without cudaArray backing");
 			return;
 		}
@@ -397,5 +397,5 @@ struct TexturePolicy {
 };
 
 } // namespace CUDA
-} // namespace ARBD
+} // namespace MARS
 #endif

@@ -7,7 +7,7 @@
 #include "System/PeriodicBox.h"
 #include "Types/Types.h"
 
-namespace ARBD {
+namespace MARS {
 template<typename TemperatureType = float>
 struct BDIntegrate {
 	ParticleView particle_view; // Pass by value (pointers are copied, data is shared)
@@ -19,7 +19,7 @@ struct BDIntegrate {
 	uint64_t base_seed;
 	uint32_t base_ctr;
 	size_t current_step;
-	const BaseGridView<arbd_real>* grid_configs; ///< PMF/force grids (nullptr = none); fused per v1
+	const BaseGridView<mars_real>* grid_configs; ///< PMF/force grids (nullptr = none); fused per v1
 	Vector3 electric_field;						 ///< Uniform global E field applied here
 	int interpolation_scheme;					 ///< 0=linear, 1=cubic
 	constexpr static uint32_t rng_stream = 0x5324120u; // Arbitrary stream ID for Philox RNG
@@ -34,7 +34,7 @@ struct BDIntegrate {
 				idx_t n,
 				uint64_t seed,
 				uint32_t ctr,
-				const BaseGridView<arbd_real>* grids,
+				const BaseGridView<mars_real>* grids,
 				const Vector3& efield,
 				int scheme)
 		: particle_view(pv), particle_types(pt), sim_box(box), timestep(dt), kT(temp),
@@ -90,21 +90,21 @@ struct BDIntegrate {
 	}
 };
 
-} // namespace ARBD
+} // namespace MARS
 
 // Explicit template instantiation declarations to prevent host instantiation
 #ifdef USE_CUDA
-namespace ARBD {
+namespace MARS {
 extern template struct BDIntegrate<float>;
 extern template Event launch_cuda_kernel(const Resource& resource,
 										 const KernelConfig& config,
 										 BDIntegrate<float> kernel_func);
-} // namespace ARBD
+} // namespace MARS
 #endif
 
 // SYCL device copyable trait
 #ifdef USE_SYCL
 #include <sycl/sycl.hpp>
 template<typename TemperatureType>
-struct sycl::is_device_copyable<ARBD::BDIntegrate<TemperatureType>> : std::true_type {};
+struct sycl::is_device_copyable<MARS::BDIntegrate<TemperatureType>> : std::true_type {};
 #endif

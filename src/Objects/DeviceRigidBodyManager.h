@@ -4,7 +4,7 @@
 #include "RigidBodyProperties.h"
 #include "Types/Types.h"
 
-namespace ARBD {
+namespace MARS {
 
 class DeviceRigidBody {
   public:
@@ -170,14 +170,14 @@ class DeviceRigidBodyTypes {
   public:
 	DeviceRigidBodyTypes(const std::vector<RigidBodyType>& types, const Resource& res) {
 		const idx_t n = types.size();
-		mass_ = DeviceBuffer<arbd_real>(n, res);
+		mass_ = DeviceBuffer<mars_real>(n, res);
 		inertia_ = DeviceBuffer<Vector3>(n, res);
 		trans_damping_ = DeviceBuffer<Vector3>(n, res);
 		rot_damping_ = DeviceBuffer<Vector3>(n, res);
 		trans_force_coeff_ = DeviceBuffer<Vector3>(n, res);
 		rot_torque_coeff_ = DeviceBuffer<Vector3>(n, res);
-		rot_diffusivity_ = DeviceBuffer<arbd_real>(n, res);
-		rot_damping_coefficient_ = DeviceBuffer<arbd_real>(n, res);
+		rot_diffusivity_ = DeviceBuffer<mars_real>(n, res);
+		rot_damping_coefficient_ = DeviceBuffer<mars_real>(n, res);
 		potential_grid_offset_ = DeviceBuffer<int>(n, res);
 		potential_grid_count_ = DeviceBuffer<int>(n, res);
 		density_grid_offset_ = DeviceBuffer<int>(n, res);
@@ -263,7 +263,7 @@ class DeviceRigidBodyTypes {
 		}
 	}
 
-	DeviceBuffer<arbd_real>& mass() {
+	DeviceBuffer<mars_real>& mass() {
 		return mass_;
 	}
 	DeviceBuffer<Vector3>& inertia() {
@@ -281,10 +281,10 @@ class DeviceRigidBodyTypes {
 	DeviceBuffer<Vector3>& rot_torque_coeff() {
 		return rot_torque_coeff_;
 	}
-	DeviceBuffer<arbd_real>& rot_diffusivity() {
+	DeviceBuffer<mars_real>& rot_diffusivity() {
 		return rot_diffusivity_;
 	}
-	DeviceBuffer<arbd_real>& rot_damping_coefficient() {
+	DeviceBuffer<mars_real>& rot_damping_coefficient() {
 		return rot_damping_coefficient_;
 	}
 	DeviceBuffer<GridTerm>& grid_terms() {
@@ -333,14 +333,14 @@ class DeviceRigidBodyTypes {
 	}
 
   private:
-	DeviceBuffer<arbd_real> mass_;
+	DeviceBuffer<mars_real> mass_;
 	DeviceBuffer<Vector3> inertia_;
 	DeviceBuffer<Vector3> trans_damping_;
 	DeviceBuffer<Vector3> rot_damping_;
 	DeviceBuffer<Vector3> trans_force_coeff_;
 	DeviceBuffer<Vector3> rot_torque_coeff_;
-	DeviceBuffer<arbd_real> rot_diffusivity_;
-	DeviceBuffer<arbd_real> rot_damping_coefficient_;
+	DeviceBuffer<mars_real> rot_diffusivity_;
+	DeviceBuffer<mars_real> rot_damping_coefficient_;
 	DeviceBuffer<int> potential_grid_offset_;
 	DeviceBuffer<int> potential_grid_count_;
 	DeviceBuffer<int> density_grid_offset_;
@@ -352,4 +352,4 @@ class DeviceRigidBodyTypes {
 	DeviceBuffer<GridTerm> grid_terms_;
 };
 
-} // namespace ARBD
+} // namespace MARS

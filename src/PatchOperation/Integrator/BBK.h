@@ -7,7 +7,7 @@
 #include "Types/Types.h"
 #include "Types/Vector3.h"
 
-namespace ARBD {
+namespace MARS {
 
 // Needs work.
 struct BBKIntegrate {
@@ -32,4 +32,4 @@ struct BBKIntegrate {
 		float mass = pt.mass;
 	}
 };
-} // namespace ARBD
+} // namespace MARS

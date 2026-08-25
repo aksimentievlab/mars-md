@@ -2,10 +2,10 @@
 #include "Objects/DeviceRigidBody.h"
 #include "Objects/RigidBodyCosmeticsKernel.h"
 
-namespace ARBD {
+namespace MARS {
 
 template Event launch_cuda_kernel(const Resource& resource,
 								  const KernelConfig& config,
 								  RBCosmeticPositionsKernel kernel_func);
 
-} // namespace ARBD
+} // namespace MARS

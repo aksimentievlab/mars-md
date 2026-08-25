@@ -3,22 +3,22 @@
 #include "Interactions.h"
 #include "Types/Types.h"
 
-namespace ARBD {
+namespace MARS {
 
 struct TabulatedPotential {
-	DEVICE_PTR(arbd_real) __restrict__ pot; // Device pointer to potential table
-	arbd_real step_inv;						// 1/step_size for interpolation
+	DEVICE_PTR(mars_real) __restrict__ pot; // Device pointer to potential table
+	mars_real step_inv;						// 1/step_size for interpolation
 	unsigned int size;						// Table size
-	arbd_real start;						// Starting value (e.g., 0 for bonds, -PI for dihedrals)
+	mars_real start;						// Starting value (e.g., 0 for bonds, -PI for dihedrals)
 	bool is_periodic;						// Whether to wrap around (dihedrals)
 
 	/**
 	 * @usage:
 	 * const ScalarForceEnergy fe = TabulatedPotential::compute(geom.distance, &tables[i]);
 	 */
-	DEVICE static inline ScalarForceEnergy compute(arbd_real dx, const TabulatedPotential* table) {
+	DEVICE static inline ScalarForceEnergy compute(mars_real dx, const TabulatedPotential* table) {
 		// Table lookup with linear interpolation
-		arbd_real w = (dx - table->start) * table->step_inv;
+		mars_real w = (dx - table->start) * table->step_inv;
 		int home = static_cast<int>(floorf(w));
 		w = w - home;
 
@@ -31,7 +31,7 @@ struct TabulatedPotential {
 		} else {
 			if (home >= static_cast<int>(table->size) - 1) {
 				return ScalarForceEnergy{
-					Vec2<arbd_real>{arbd_real(0), table->pot[table->size - 1]}};
+					Vec2<mars_real>{mars_real(0), table->pot[table->size - 1]}};
 			}
 
 			if (home < 0) {
@@ -44,11 +44,11 @@ struct TabulatedPotential {
 			home1 = table->size - 1;
 		}
 
-		arbd_real U0 = table->pot[home];
-		arbd_real dU = table->pot[home1] - U0;
+		mars_real U0 = table->pot[home];
+		mars_real dU = table->pot[home1] - U0;
 
 		return ScalarForceEnergy{
-			Vec2<arbd_real>{-dU * table->step_inv, dU * w + U0}}; // Force magnitude, energy
+			Vec2<mars_real>{-dU * table->step_inv, dU * w + U0}}; // Force magnitude, energy
 	}
 };
-} // namespace ARBD
+} // namespace MARS

@@ -16,7 +16,7 @@
 #include <utility>
 #include <vector>
 
-using namespace ARBD;
+using namespace MARS;
 // ============================================================================
 // TABULATED PAIRWISE NONBONDED ENERGY
 // See NonbondedEnergy.md
@@ -25,37 +25,37 @@ using namespace ARBD;
 namespace {
 
 constexpr size_t NB_TABLE_N = 2048;
-constexpr arbd_real NB_RMAX = arbd_real(10.0);
+constexpr mars_real NB_RMAX = mars_real(10.0);
 
 /// @brief Tabulated pair potential sampled from an arbitrary U(r).
 struct PairTable {
-	std::vector<arbd_real> pot;
-	arbd_real step;
+	std::vector<mars_real> pot;
+	mars_real step;
 
 	template<typename Fn>
-	explicit PairTable(Fn u) : pot(NB_TABLE_N), step(NB_RMAX / arbd_real(NB_TABLE_N)) {
+	explicit PairTable(Fn u) : pot(NB_TABLE_N), step(NB_RMAX / mars_real(NB_TABLE_N)) {
 		for (size_t i = 0; i < NB_TABLE_N; ++i) {
-			pot[i] = u(step * arbd_real(i));
+			pot[i] = u(step * mars_real(i));
 		}
 	}
 
 	/// @brief Energy the kernel's linear interpolation will report at r.
-	arbd_real interpolated(arbd_real r) const {
-		const arbd_real w = r / step;
+	mars_real interpolated(mars_real r) const {
+		const mars_real w = r / step;
 		const int home = static_cast<int>(std::floor(w));
 		if (home >= static_cast<int>(NB_TABLE_N) - 1) {
 			return pot[NB_TABLE_N - 1];
 		}
 		const int h = home < 0 ? 0 : home;
-		return (pot[h + 1] - pot[h]) * (w - static_cast<arbd_real>(home)) + pot[h];
+		return (pot[h + 1] - pot[h]) * (w - static_cast<mars_real>(home)) + pot[h];
 	}
 
-	TabulatedPotential descriptor(const arbd_real* device_pot) const {
+	TabulatedPotential descriptor(const mars_real* device_pot) const {
 		TabulatedPotential t{};
-		t.pot = const_cast<arbd_real*>(device_pot);
-		t.step_inv = arbd_real(1) / step;
+		t.pot = const_cast<mars_real*>(device_pot);
+		t.step_inv = mars_real(1) / step;
 		t.size = static_cast<unsigned int>(pot.size());
-		t.start = arbd_real(0);
+		t.start = mars_real(0);
 		t.is_periodic = false;
 		return t;
 	}
@@ -63,18 +63,18 @@ struct PairTable {
 
 /// @brief Total nonbonded energy from launch_pairwise_nonbonded.
 /// @return {sum over particles of ForceEnergy.t, per-particle energies}
-std::pair<arbd_real, std::vector<Vector3>> run_pairwise(const Resource& res,
+std::pair<mars_real, std::vector<Vector3>> run_pairwise(const Resource& res,
 														const std::vector<Vector3>& positions,
 														const std::vector<int>& type_ids,
-														const std::vector<ARBD::int2>& pairs,
+														const std::vector<MARS::int2>& pairs,
 														const PairTable& table,
 														int num_types,
 														const std::vector<int>& excl_offsets,
 														const std::vector<int>& excl_neighbors,
-														arbd_real cutoff) {
+														mars_real cutoff) {
 	const idx_t n = static_cast<idx_t>(positions.size());
 
-	DeviceBuffer<arbd_real> pot(table.pot.size(), res);
+	DeviceBuffer<mars_real> pot(table.pot.size(), res);
 	pot.copy_from_host(table.pot.data(), table.pot.size());
 	const TabulatedPotential desc = table.descriptor(pot.data());
 	DeviceBuffer<TabulatedPotential> tables(1, res);
@@ -89,7 +89,7 @@ std::pair<arbd_real, std::vector<Vector3>> run_pairwise(const Resource& res,
 	DeviceBuffer<int> types_buf(n, res);
 	types_buf.copy_from_host(type_ids.data(), n);
 
-	DeviceBuffer<ARBD::int2> pairs_buf(pairs.size(), res);
+	DeviceBuffer<MARS::int2> pairs_buf(pairs.size(), res);
 	pairs_buf.copy_from_host(pairs.data(), pairs.size());
 
 	// Every type pair maps to table 0 and is Tabulated.
@@ -144,12 +144,12 @@ std::pair<arbd_real, std::vector<Vector3>> run_pairwise(const Resource& res,
 							  box_buf.data(),
 							  /*get_energy=*/true,
 							  num_pairs,
-							  cutoff > 0 ? cutoff * cutoff : arbd_real(0))
+							  cutoff > 0 ? cutoff * cutoff : mars_real(0))
 		.wait();
 
 	std::vector<Vector3> out(n);
 	force_buf.copy_to_host(out.data(), n);
-	arbd_real total = arbd_real(0);
+	mars_real total = mars_real(0);
 	for (const auto& v : out) {
 		total += v.t;
 	}
@@ -166,21 +166,21 @@ TEST_CASE("Pairwise nonbonded energy of one pair equals U(r)",
 	// U(r) = (r - 3)^2 - 1: has a genuine negative well, so this also pins
 	// down that a negative table yields a negative reported energy.
 	const PairTable table(
-		[](arbd_real r) { return (r - arbd_real(3)) * (r - arbd_real(3)) - arbd_real(1); });
-	const arbd_real r = arbd_real(3.5);
+		[](mars_real r) { return (r - mars_real(3)) * (r - mars_real(3)) - mars_real(1); });
+	const mars_real r = mars_real(3.5);
 
 	auto [total, per_particle] =
 		run_pairwise(res,
 					 {Vector3(0.0f, 0.0f, 0.0f), Vector3(float(r), 0.0f, 0.0f)},
 					 {0, 0},
-					 {ARBD::int2{0, 1}},
+					 {MARS::int2{0, 1}},
 					 table,
 					 1,
 					 {},
 					 {},
-					 arbd_real(0));
+					 mars_real(0));
 
-	const arbd_real expected = table.interpolated(r);
+	const mars_real expected = table.interpolated(r);
 	REQUIRE(total == Catch::Approx(expected).epsilon(1e-4));
 	// Each endpoint carries exactly half, so the particle sum is U, not 2U.
 	REQUIRE(per_particle[0].t == Catch::Approx(expected / 2).epsilon(1e-4));
@@ -193,31 +193,31 @@ TEST_CASE("Pairwise nonbonded energy is negative inside an attractive well",
 	Resource res(Global::single_resource_id);
 
 	const PairTable table(
-		[](arbd_real r) { return (r - arbd_real(3)) * (r - arbd_real(3)) - arbd_real(1); });
+		[](mars_real r) { return (r - mars_real(3)) * (r - mars_real(3)) - mars_real(1); });
 
 	auto [at_min, ignored1] = run_pairwise(res,
 										   {Vector3(0.0f, 0.0f, 0.0f), Vector3(3.0f, 0.0f, 0.0f)},
 										   {0, 0},
-										   {ARBD::int2{0, 1}},
+										   {MARS::int2{0, 1}},
 										   table,
 										   1,
 										   {},
 										   {},
-										   arbd_real(0));
+										   mars_real(0));
 	auto [on_wall, ignored2] = run_pairwise(res,
 											{Vector3(0.0f, 0.0f, 0.0f), Vector3(1.0f, 0.0f, 0.0f)},
 											{0, 0},
-											{ARBD::int2{0, 1}},
+											{MARS::int2{0, 1}},
 											table,
 											1,
 											{},
 											{},
-											arbd_real(0));
+											mars_real(0));
 	(void)ignored1;
 	(void)ignored2;
 
-	REQUIRE(at_min == Catch::Approx(arbd_real(-1)).epsilon(1e-3));
-	REQUIRE(on_wall > arbd_real(0));
+	REQUIRE(at_min == Catch::Approx(mars_real(-1)).epsilon(1e-3));
+	REQUIRE(on_wall > mars_real(0));
 }
 
 TEST_CASE("Pairwise nonbonded energy matches a direct CPU pair sum",
@@ -226,7 +226,7 @@ TEST_CASE("Pairwise nonbonded energy matches a direct CPU pair sum",
 	Resource res(Global::single_resource_id);
 
 	const PairTable table(
-		[](arbd_real r) { return (r - arbd_real(3)) * (r - arbd_real(3)) - arbd_real(1); });
+		[](mars_real r) { return (r - mars_real(3)) * (r - mars_real(3)) - mars_real(1); });
 
 	// A jittered lattice: many distinct separations, none degenerate.
 	std::vector<Vector3> pos;
@@ -238,20 +238,20 @@ TEST_CASE("Pairwise nonbonded energy matches a direct CPU pair sum",
 	const int n = static_cast<int>(pos.size());
 	std::vector<int> types(n, 0);
 
-	std::vector<ARBD::int2> pairs;
+	std::vector<MARS::int2> pairs;
 	for (int i = 0; i < n; ++i) {
 		for (int j = i + 1; j < n; ++j) {
-			pairs.push_back(ARBD::int2{i, j});
+			pairs.push_back(MARS::int2{i, j});
 		}
 	}
 
 	auto [total, per_particle] =
-		run_pairwise(res, pos, types, pairs, table, 1, {}, {}, arbd_real(0));
+		run_pairwise(res, pos, types, pairs, table, 1, {}, {}, mars_real(0));
 
-	arbd_real expected = arbd_real(0);
+	mars_real expected = mars_real(0);
 	for (const auto& p : pairs) {
 		const Vector3 d = pos[p.y] - pos[p.x];
-		expected += table.interpolated(static_cast<arbd_real>(d.length()));
+		expected += table.interpolated(static_cast<mars_real>(d.length()));
 	}
 
 	INFO("pairs = " << pairs.size());
@@ -264,25 +264,25 @@ TEST_CASE("Pairwise nonbonded energy drops excluded pairs",
 	Resource res(Global::single_resource_id);
 
 	const PairTable table(
-		[](arbd_real r) { return (r - arbd_real(3)) * (r - arbd_real(3)) - arbd_real(1); });
+		[](mars_real r) { return (r - mars_real(3)) * (r - mars_real(3)) - mars_real(1); });
 	const std::vector<Vector3> pos{Vector3(0.0f, 0.0f, 0.0f),
 								   Vector3(3.5f, 0.0f, 0.0f),
 								   Vector3(7.0f, 0.0f, 0.0f)};
 	const std::vector<int> types(3, 0);
-	const std::vector<ARBD::int2> pairs{ARBD::int2{0, 1}, ARBD::int2{0, 2}, ARBD::int2{1, 2}};
+	const std::vector<MARS::int2> pairs{MARS::int2{0, 1}, MARS::int2{0, 2}, MARS::int2{1, 2}};
 
 	auto [unexcluded, ignored] =
-		run_pairwise(res, pos, types, pairs, table, 1, {}, {}, arbd_real(0));
+		run_pairwise(res, pos, types, pairs, table, 1, {}, {}, mars_real(0));
 	(void)ignored;
 
 	// CSR over 3 particles excluding the (0,1) pair, stored on both endpoints.
 	const std::vector<int> excl_offsets{0, 1, 2, 2};
 	const std::vector<int> excl_neighbors{1, 0};
 	auto [excluded, ignored2] =
-		run_pairwise(res, pos, types, pairs, table, 1, excl_offsets, excl_neighbors, arbd_real(0));
+		run_pairwise(res, pos, types, pairs, table, 1, excl_offsets, excl_neighbors, mars_real(0));
 	(void)ignored2;
 
-	const arbd_real dropped = table.interpolated(arbd_real(3.5));
+	const mars_real dropped = table.interpolated(mars_real(3.5));
 	REQUIRE(excluded == Catch::Approx(unexcluded - dropped).epsilon(1e-3));
 }
 
@@ -292,18 +292,18 @@ TEST_CASE("Pairwise nonbonded energy drops pairs beyond the cutoff",
 	Resource res(Global::single_resource_id);
 
 	const PairTable table(
-		[](arbd_real r) { return (r - arbd_real(3)) * (r - arbd_real(3)) - arbd_real(1); });
+		[](mars_real r) { return (r - mars_real(3)) * (r - mars_real(3)) - mars_real(1); });
 	const std::vector<Vector3> pos{Vector3(0.0f, 0.0f, 0.0f),
 								   Vector3(3.5f, 0.0f, 0.0f),
 								   Vector3(8.0f, 0.0f, 0.0f)};
 	const std::vector<int> types(3, 0);
-	const std::vector<ARBD::int2> pairs{ARBD::int2{0, 1}, ARBD::int2{0, 2}, ARBD::int2{1, 2}};
+	const std::vector<MARS::int2> pairs{MARS::int2{0, 1}, MARS::int2{0, 2}, MARS::int2{1, 2}};
 
 	// Cutoff 5 keeps (0,1) at 3.5 and (1,2) at 4.5, drops (0,2) at 8.
-	auto [total, ignored] = run_pairwise(res, pos, types, pairs, table, 1, {}, {}, arbd_real(5));
+	auto [total, ignored] = run_pairwise(res, pos, types, pairs, table, 1, {}, {}, mars_real(5));
 	(void)ignored;
 
-	const arbd_real expected =
-		table.interpolated(arbd_real(3.5)) + table.interpolated(arbd_real(4.5));
+	const mars_real expected =
+		table.interpolated(mars_real(3.5)) + table.interpolated(mars_real(4.5));
 	REQUIRE(total == Catch::Approx(expected).epsilon(1e-3));
 }

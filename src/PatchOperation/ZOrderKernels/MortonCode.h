@@ -14,7 +14,7 @@
 #include "Types/Types.h"
 #include "Types/Vector3.h"
 
-namespace ARBD {
+namespace MARS {
 
 struct MortonConfig {
 	Vector3 box_min;
@@ -180,4 +180,4 @@ class MortonCode {
 	}
 };
 
-} // namespace ARBD
+} // namespace MARS

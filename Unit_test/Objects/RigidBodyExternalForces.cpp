@@ -14,7 +14,7 @@
 #include "Objects/RigidBodyProperties.h"
 #include "RBOperation/RBHostFTManager.h"
 
-using namespace ARBD;
+using namespace MARS;
 
 namespace {
 

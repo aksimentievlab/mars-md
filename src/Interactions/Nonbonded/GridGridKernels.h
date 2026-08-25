@@ -2,7 +2,7 @@
 #include "Types/BaseGridDevice.h"
 #include "Types/Types.h"
 
-namespace ARBD {
+namespace MARS {
 
 namespace gridgrid_detail {
 
@@ -11,7 +11,7 @@ namespace gridgrid_detail {
  * sampled through u's (potential) field, ported from legacy
  * RigidBody's ComputeGridGrid.cu common_computeGridGridForce.
  *
- * rho/u grids are ordinary BaseGridView<arbd_real> (see Types/BaseGridDevice.h) -
+ * rho/u grids are ordinary BaseGridView<mars_real> (see Types/BaseGridDevice.h) -
  * unlike legacy's separate local-frame-only RigidBodyGrid, no extra grid type
  * is needed here. The lab-frame transform (rigid body orientation/position
  * combined with each grid's own static local origin/basis) is computed once
@@ -39,8 +39,8 @@ namespace gridgrid_detail {
  * work (see arbd2v/plan.md Phase 3+); this function only needs the offset
  * updated to include a wrapDiff() against a PeriodicBox when that lands.
  */
-HOST DEVICE inline void grid_grid_voxel_force_torque(const BaseGridView<arbd_real>& rho,
-													 const BaseGridView<arbd_real>& u,
+HOST DEVICE inline void grid_grid_voxel_force_torque(const BaseGridView<mars_real>& rho,
+													 const BaseGridView<mars_real>& u,
 													 const Matrix3& basis_rho,
 													 const Matrix3& basis_u_inv,
 													 const Vector3& origin_offset,
@@ -58,7 +58,7 @@ HOST DEVICE inline void grid_grid_voxel_force_torque(const BaseGridView<arbd_rea
 	const Vector3 u_local = basis_u_inv.transform(r_pos + origin_offset);
 
 	const Matrix3 identity(1.0f);
-	const GridSample<arbd_real> sample = (scheme == 0) ? sample_grid_linear(u.data,
+	const GridSample<mars_real> sample = (scheme == 0) ? sample_grid_linear(u.data,
 																		u_local,
 																		Vector3(0.0f),
 																		identity,
@@ -108,8 +108,8 @@ struct ComputeGridGridForceKernel {
 	template<typename WorkItemT>
 	KERNEL_FUNC void operator()(size_t i,
 								WorkItemT& item,
-								const BaseGridView<arbd_real> rho,
-								const BaseGridView<arbd_real> u,
+								const BaseGridView<mars_real> rho,
+								const BaseGridView<mars_real> u,
 								Vector3* __restrict__ ret_force_energy,
 								Vector3* __restrict__ ret_torque) const {
 		Vector3* force = item.template get_shared_mem<Vector3>(0);
@@ -264,52 +264,52 @@ struct ConvolveGridKernel {
 	}
 };
 
-} // namespace ARBD
+} // namespace MARS
 
 // Explicit template instantiation declaration to prevent host instantiation
 // (see Pmf.h for why - real definition lives in
 // Nonbonded/NonbondedInstantiations.cu).
 #ifdef USE_CUDA
 #include "Backend/CUDA/KernelHelper.cuh"
-namespace ARBD {
+namespace MARS {
 extern template Event launch_cuda_kernel_with_workitem(const Resource& resource,
 													   const KernelConfig& config,
 													   ComputeGridGridForceKernel kernel_func,
-													   const BaseGridView<arbd_real> rho,
-													   const BaseGridView<arbd_real> u,
+													   const BaseGridView<mars_real> rho,
+													   const BaseGridView<mars_real> u,
 													   Vector3* ret_force_energy,
 													   Vector3* ret_torque);
 
 extern template Event launch_cuda_kernel(const Resource& resource,
 										 const KernelConfig& config,
-										 ZeroGridKernel<arbd_real> kernel_func);
+										 ZeroGridKernel<mars_real> kernel_func);
 extern template Event launch_cuda_kernel(const Resource& resource,
 										 const KernelConfig& config,
-										 ScaleGridKernel<arbd_real> kernel_func);
+										 ScaleGridKernel<mars_real> kernel_func);
 extern template Event launch_cuda_kernel(const Resource& resource,
 										 const KernelConfig& config,
-										 ShiftGridKernel<arbd_real> kernel_func);
+										 ShiftGridKernel<mars_real> kernel_func);
 extern template Event launch_cuda_kernel(const Resource& resource,
 										 const KernelConfig& config,
-										 MultiplyGridKernel<arbd_real> kernel_func);
+										 MultiplyGridKernel<mars_real> kernel_func);
 extern template Event launch_cuda_kernel(const Resource& resource,
 										 const KernelConfig& config,
-										 ConvolveGridKernel<arbd_real> kernel_func);
-} // namespace ARBD
+										 ConvolveGridKernel<mars_real> kernel_func);
+} // namespace MARS
 #endif
 
 #ifdef USE_SYCL
 #include <sycl/sycl.hpp>
 template<>
-struct sycl::is_device_copyable<ARBD::ComputeGridGridForceKernel> : std::true_type {};
+struct sycl::is_device_copyable<MARS::ComputeGridGridForceKernel> : std::true_type {};
 template<typename T>
-struct sycl::is_device_copyable<ARBD::ZeroGridKernel<T>> : std::true_type {};
+struct sycl::is_device_copyable<MARS::ZeroGridKernel<T>> : std::true_type {};
 template<typename T>
-struct sycl::is_device_copyable<ARBD::ScaleGridKernel<T>> : std::true_type {};
+struct sycl::is_device_copyable<MARS::ScaleGridKernel<T>> : std::true_type {};
 template<typename T>
-struct sycl::is_device_copyable<ARBD::ShiftGridKernel<T>> : std::true_type {};
+struct sycl::is_device_copyable<MARS::ShiftGridKernel<T>> : std::true_type {};
 template<typename T>
-struct sycl::is_device_copyable<ARBD::MultiplyGridKernel<T>> : std::true_type {};
+struct sycl::is_device_copyable<MARS::MultiplyGridKernel<T>> : std::true_type {};
 template<typename T>
-struct sycl::is_device_copyable<ARBD::ConvolveGridKernel<T>> : std::true_type {};
+struct sycl::is_device_copyable<MARS::ConvolveGridKernel<T>> : std::true_type {};
 #endif

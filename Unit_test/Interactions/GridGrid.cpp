@@ -18,7 +18,7 @@
 #include <cmath>
 
 using Catch::Approx;
-using namespace ARBD;
+using namespace MARS;
 
 namespace {
 

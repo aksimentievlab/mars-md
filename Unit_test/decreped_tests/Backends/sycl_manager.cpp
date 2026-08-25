@@ -4,8 +4,8 @@
 #include <vector>
 #include "../catch_boiler.h"
 #include "Backend/SYCL/SYCLManager.h"
-using namespace ARBD;
-using namespace ARBD::SYCL;
+using namespace MARS;
+using namespace MARS::SYCL;
 //status: works on Mac M3
 
 TEST_CASE("SYCL Manager Initialization", "[sycl][manager]") {

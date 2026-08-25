@@ -10,18 +10,18 @@
 #include <string>
 using std::to_string;
 
-using namespace ARBD;
+using namespace MARS;
 namespace Catch {
 template<>
-struct StringMaker<ARBD::Bitmask> {
-	static std::string convert(ARBD::Bitmask const& value) {
+struct StringMaker<MARS::Bitmask> {
+	static std::string convert(MARS::Bitmask const& value) {
 		return value.to_string();
 	}
 };
 } // namespace Catch
 
 // Test functions
-namespace ARBD::BitmaskTests {
+namespace MARS::BitmaskTests {
 inline HOST bool test_basic_bitmask() {
 	LOGINFO("Testing basic Bitmask functionality...");
 
@@ -145,12 +145,12 @@ inline HOST bool run_all_tests() {
 
 	return success;
 }
-} // namespace ARBD::BitmaskTests
+} // namespace MARS::BitmaskTests
 
 namespace Tests::Bitmask {
 
 void run_basic_tests() {
-	using T = ARBD::Bitmask;
+	using T = MARS::Bitmask;
 	INFO("Testing Bitmask functionally");
 	{
 		int i = 10;
@@ -171,7 +171,7 @@ void run_basic_tests() {
 }
 
 void run_backend_tests() {
-	using T = ARBD::Bitmask;
+	using T = MARS::Bitmask;
 
 	// Test different sizes
 	for (size_t size : {8, 16, 32, 64, 128, 256}) {
@@ -184,7 +184,7 @@ void run_backend_tests() {
 
 #ifdef USE_CUDA
 		// Test CUDA backend operations
-		ARBD::Resource cuda_resource(ARBD::ResourceType::CUDA, 0);
+		MARS::Resource cuda_resource(MARS::ResourceType::CUDA, 0);
 		T* device_bitmask = host_bitmask.send_to_backend(cuda_resource);
 		REQUIRE(device_bitmask != nullptr);
 
@@ -197,7 +197,7 @@ void run_backend_tests() {
 }
 
 void run_sparse_tests() {
-	using SparseBitmask = ARBD::SparseBitmask<64>;
+	using SparseBitmask = MARS::SparseBitmask<64>;
 
 	// Test large sparse bitmask
 	SparseBitmask sparse(100000);
@@ -225,7 +225,7 @@ void run_sparse_tests() {
 }
 
 void run_stress_tests() {
-	using T = ARBD::Bitmask;
+	using T = MARS::Bitmask;
 
 	// Test large bitmask
 	const size_t large_size = 10000;
@@ -254,7 +254,7 @@ void run_stress_tests() {
 }
 
 void run_edge_case_tests() {
-	using T = ARBD::Bitmask;
+	using T = MARS::Bitmask;
 
 	// Zero-length bitmask
 	T empty_bitmask(0);
@@ -314,11 +314,11 @@ TEST_CASE("Testing Bitmask edge cases", "[Bitmask][edge]") {
 }
 
 TEST_CASE("Testing built-in Bitmask test functions", "[Bitmask][builtin]") {
-	REQUIRE(ARBD::BitmaskTests::run_all_tests());
+	REQUIRE(MARS::BitmaskTests::run_all_tests());
 }
 
 TEST_CASE("Testing Bitmask atomic operations", "[Bitmask][atomic]") {
-	using T = ARBD::Bitmask;
+	using T = MARS::Bitmask;
 
 	T bitmask(32);
 

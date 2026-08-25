@@ -14,10 +14,10 @@ TEST_CASE("Metal Vector Addition", "[metal][kernels][simple_test]") {
 	// Initialize Metal manager properly
 	LOGINFO("Initializing Metal manager...");
 	try {
-		ARBD::METAL::Manager::init();
+		MARS::METAL::Manager::init();
 		LOGINFO("Metal manager init() completed");
 
-		ARBD::METAL::Manager::load_info();
+		MARS::METAL::Manager::load_info();
 		LOGINFO("Metal manager load_info() completed");
 	} catch (const std::exception& e) {
 		LOGINFO("Exception during Metal manager initialization:{} ", e.what());
@@ -26,7 +26,7 @@ TEST_CASE("Metal Vector Addition", "[metal][kernels][simple_test]") {
 
 	// Check if we have Metal devices
 	try {
-		auto& device = ARBD::METAL::Manager::get_current_device();
+		auto& device = MARS::METAL::Manager::get_current_device();
 		LOGINFO("Metal device available: {}", (void*)device.metal_device());
 	} catch (const std::exception& e) {
 		LOGINFO("No Metal device available: {}", e.what());
@@ -40,7 +40,7 @@ TEST_CASE("Metal Vector Addition", "[metal][kernels][simple_test]") {
 	}
 
 		// Check if Metal library is loaded
-	auto* library = ARBD::METAL::Manager::get_library();
+	auto* library = MARS::METAL::Manager::get_library();
 	if (!library) {
 		LOGINFO("Metal library not loaded from file");
 	} else {
@@ -48,7 +48,7 @@ TEST_CASE("Metal Vector Addition", "[metal][kernels][simple_test]") {
 	}
 
 	// Test runtime shader compilation like the working metal-cpp examples
-	auto& device = ARBD::METAL::Manager::get_current_device();
+	auto& device = MARS::METAL::Manager::get_current_device();
 	auto& queue = device.get_next_queue();
 
 	const char* testKernelSrc = R"(
@@ -113,7 +113,7 @@ TEST_CASE("Metal Vector Addition", "[metal][kernels][simple_test]") {
 
 	// Debug Metal device information
 	try {
-		auto& device = ARBD::METAL::Manager::get_current_device();
+		auto& device = MARS::METAL::Manager::get_current_device();
 		LOGINFO("Current Metal device: {}", device.metal_device()->name()->utf8String());
 		auto& queue = device.get_next_queue();
 		LOGINFO("Metal command queue created successfully");
@@ -123,12 +123,12 @@ TEST_CASE("Metal Vector Addition", "[metal][kernels][simple_test]") {
 
 	try {
 		// Use Metal resource instead of CPU
-		ARBD::Resource metal_res(ARBD::ResourceType::METAL, 0);
+		MARS::Resource metal_res(MARS::ResourceType::METAL, 0);
 		const size_t n = 10;  // Test with more elements
 
-		auto buffer_a = ARBD::DeviceBuffer<float>(n);
-		auto buffer_b = ARBD::DeviceBuffer<float>(n);
-		auto buffer_result = ARBD::DeviceBuffer<float>(n);
+		auto buffer_a = MARS::DeviceBuffer<float>(n);
+		auto buffer_b = MARS::DeviceBuffer<float>(n);
+		auto buffer_result = MARS::DeviceBuffer<float>(n);
 
 		// Initialize data
 		std::vector<float> host_a(n, 1.0f);
@@ -150,7 +150,7 @@ TEST_CASE("Metal Vector Addition", "[metal][kernels][simple_test]") {
 		REQUIRE(verify_a[0] == 1.0f);
 		REQUIRE(verify_b[0] == 2.0f);
 
-		ARBD::KernelConfig config;
+		MARS::KernelConfig config;
 		config.async = false;  // Force synchronous execution for testing
 
 		LOGINFO("Launching Metal kernel...");
@@ -165,9 +165,9 @@ TEST_CASE("Metal Vector Addition", "[metal][kernels][simple_test]") {
 		LOGINFO("Buffer result device pointer: {}", (void*)buffer_result.data());
 		
 		// Check if Metal buffers can be retrieved
-		auto* metal_buffer_a = ARBD::METAL::Manager::get_metal_buffer_from_ptr(buffer_a.data());
-		auto* metal_buffer_b = ARBD::METAL::Manager::get_metal_buffer_from_ptr(buffer_b.data());
-		auto* metal_buffer_result = ARBD::METAL::Manager::get_metal_buffer_from_ptr(buffer_result.data());
+		auto* metal_buffer_a = MARS::METAL::Manager::get_metal_buffer_from_ptr(buffer_a.data());
+		auto* metal_buffer_b = MARS::METAL::Manager::get_metal_buffer_from_ptr(buffer_b.data());
+		auto* metal_buffer_result = MARS::METAL::Manager::get_metal_buffer_from_ptr(buffer_result.data());
 		
 		LOGINFO("Metal buffer A: {}", metal_buffer_a ? (void*)metal_buffer_a : nullptr);
 		LOGINFO("Metal buffer B: {}", metal_buffer_b ? (void*)metal_buffer_b : nullptr);
@@ -212,7 +212,7 @@ TEST_CASE("Metal Vector Addition", "[metal][kernels][simple_test]") {
 			)";
 
 			try {
-				auto& device = ARBD::METAL::Manager::get_current_device();
+				auto& device = MARS::METAL::Manager::get_current_device();
 				auto& queue = device.get_next_queue();
 
 				LOGINFO("Trying runtime kernel compilation...");
@@ -246,7 +246,7 @@ TEST_CASE("Metal Vector Addition", "[metal][kernels][simple_test]") {
 							encoder->setComputePipelineState(runtimePSO);
 
 							// Bind buffer
-							auto* metal_buffer = ARBD::METAL::Manager::get_metal_buffer_from_ptr(buffer_result.data());
+							auto* metal_buffer = MARS::METAL::Manager::get_metal_buffer_from_ptr(buffer_result.data());
 							if (metal_buffer) {
 								encoder->setBuffer(metal_buffer, 0, 0);
 								LOGINFO("Bound buffer to runtime kernel");
@@ -298,7 +298,7 @@ TEST_CASE("Metal Vector Addition", "[metal][kernels][simple_test]") {
 				LOGINFO("Testing pre-compiled zero_buffer kernel");
 
 				// Check if Metal library is loaded
-				auto* library = ARBD::METAL::Manager::get_library();
+				auto* library = MARS::METAL::Manager::get_library();
 					LOGINFO("Metal library loaded: {}", (library ? "YES" : "NO"));
 
 				if (library) {
@@ -308,7 +308,7 @@ TEST_CASE("Metal Vector Addition", "[metal][kernels][simple_test]") {
 					if (kernelFunc) kernelFunc->release();
 				}
 
-				ARBD::Event event = ARBD::launch_metal_kernel(
+				MARS::Event event = MARS::launch_metal_kernel(
 					metal_res,
 					n,
 					config,
@@ -350,7 +350,7 @@ TEST_CASE("Metal Vector Addition", "[metal][kernels][simple_test]") {
 		LOGINFO("Buffer data direct access: {}", *((float*)buffer_result.data()));
 
 		// Double-check that we still have the same Metal buffer mapping
-		auto* metal_buffer_result_after = ARBD::METAL::Manager::get_metal_buffer_from_ptr(buffer_result.data());
+		auto* metal_buffer_result_after = MARS::METAL::Manager::get_metal_buffer_from_ptr(buffer_result.data());
 		LOGINFO("Metal buffer result after kernel: {}", metal_buffer_result_after ? (void*)metal_buffer_result_after : nullptr);
 		if (metal_buffer_result != metal_buffer_result_after) {
 			LOGINFO("WARNING: Metal buffer mapping changed during kernel execution!");
@@ -424,9 +424,9 @@ TEST_CASE("Metal Vector Addition", "[metal][kernels][simple_test]") {
 	LOGINFO("=== Testing add_arrays Kernel (Runtime + Precompiled) ===");
 
 	// Create separate buffers for add_arrays test
-	auto add_buffer_a = ARBD::DeviceBuffer<float>(n);
-	auto add_buffer_b = ARBD::DeviceBuffer<float>(n);
-	auto add_buffer_result = ARBD::DeviceBuffer<float>(n);
+	auto add_buffer_a = MARS::DeviceBuffer<float>(n);
+	auto add_buffer_b = MARS::DeviceBuffer<float>(n);
+	auto add_buffer_result = MARS::DeviceBuffer<float>(n);
 
 	// Initialize input buffers: a = [1, 2, 3, ...], b = [2, 3, 4, ...]
 	std::vector<float> host_a_vals(n), host_b_vals(n);
@@ -459,7 +459,7 @@ TEST_CASE("Metal Vector Addition", "[metal][kernels][simple_test]") {
 		)";
 
 		try {
-			auto& device = ARBD::METAL::Manager::get_current_device();
+			auto& device = MARS::METAL::Manager::get_current_device();
 			auto& queue = device.get_next_queue();
 
 			LOGINFO("Compiling runtime add_arrays kernel...");
@@ -492,9 +492,9 @@ TEST_CASE("Metal Vector Addition", "[metal][kernels][simple_test]") {
 						encoder->setComputePipelineState(runtimePSO);
 
 						// Bind buffers
-						auto* metal_buffer_a = ARBD::METAL::Manager::get_metal_buffer_from_ptr(add_buffer_a.data());
-						auto* metal_buffer_b = ARBD::METAL::Manager::get_metal_buffer_from_ptr(add_buffer_b.data());
-						auto* metal_buffer_result = ARBD::METAL::Manager::get_metal_buffer_from_ptr(add_buffer_result.data());
+						auto* metal_buffer_a = MARS::METAL::Manager::get_metal_buffer_from_ptr(add_buffer_a.data());
+						auto* metal_buffer_b = MARS::METAL::Manager::get_metal_buffer_from_ptr(add_buffer_b.data());
+						auto* metal_buffer_result = MARS::METAL::Manager::get_metal_buffer_from_ptr(add_buffer_result.data());
 
 						if (metal_buffer_a && metal_buffer_b && metal_buffer_result) {
 							encoder->setBuffer(metal_buffer_a, 0, 0);
@@ -546,7 +546,7 @@ TEST_CASE("Metal Vector Addition", "[metal][kernels][simple_test]") {
 			LOGINFO("Testing pre-compiled add_arrays kernel");
 
 			// Check if Metal library is loaded
-			auto* library = ARBD::METAL::Manager::get_library();
+			auto* library = MARS::METAL::Manager::get_library();
 			LOGINFO("Metal library loaded: {}", (library ? "YES" : "NO"));
 
 			if (library) {
@@ -576,11 +576,11 @@ TEST_CASE("Metal Vector Addition", "[metal][kernels][simple_test]") {
 			// First try the debug kernel to see what values it reads
 			LOGINFO("Testing debug_add_arrays kernel to diagnose buffer reading...");
 			std::vector<float> debug_results(n, -1.0f);
-			auto debug_buffer_result = ARBD::DeviceBuffer<float>(n);
+			auto debug_buffer_result = MARS::DeviceBuffer<float>(n);
 			debug_buffer_result.copy_from_host(debug_results.data(), n);
 
 			try {
-				ARBD::Event debug_event = ARBD::launch_metal_kernel(
+				MARS::Event debug_event = MARS::launch_metal_kernel(
 					metal_res,
 					n,
 					config,
@@ -599,7 +599,7 @@ TEST_CASE("Metal Vector Addition", "[metal][kernels][simple_test]") {
 			}
 
 			// Now test the regular add_arrays kernel
-			ARBD::Event event = ARBD::launch_metal_kernel(
+			MARS::Event event = MARS::launch_metal_kernel(
 				metal_res,
 				n,
 				config,
@@ -689,5 +689,5 @@ TEST_CASE("Metal Vector Addition", "[metal][kernels][simple_test]") {
 		LOGERROR("Metal test failed with exception: {}", e.what());
 	}
 
-	ARBD::METAL::Manager::finalize();
+	MARS::METAL::Manager::finalize();
 }

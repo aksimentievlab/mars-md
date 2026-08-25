@@ -9,12 +9,12 @@
 // use new instead
 /**
  * @file Constants.h
- * @brief Physical and mathematical constants for ARBD simulations. Device constants are defined in
+ * @brief Physical and mathematical constants for MARS simulations. Device constants are defined in
  * Header.h.
- * @details Contains all constant values used throughout the ARBD project
+ * @details Contains all constant values used throughout the MARS project
  */
 
-namespace ARBD {
+namespace MARS {
 namespace constants {
 constexpr float PI = 3.141592653589793f;
 constexpr float TWOPI = 2.0f * PI;
@@ -59,11 +59,11 @@ constexpr const char* kCosmeticTypeName =
 } // namespace constants
 // namespace constants
 /**
- * @brief Unit conversions between SCUFF-EM's reporting units and ARBD's.
+ * @brief Unit conversions between SCUFF-EM's reporting units and MARS's.
  *
  * SCUFF meshes are in microns, reports force in nanonewtons and torque in
  * nanonewton*microns (see scuff-em applications/scuff-scatter/OutputModules.cc).
- * ARBD uses Angstroms, kcal/mol/Angstrom and kcal/mol.
+ * MARS uses Angstroms, kcal/mol/Angstrom and kcal/mol.
  */
 namespace scuff_units {
 /// constants::PNPERKCALMOL is pN per (kcal/mol/Angstrom), so 1 nN = 1000/that.
@@ -73,4 +73,4 @@ constexpr double NN_MICRON_TO_KCAL_PER_MOL =
 constexpr double lambda_nm_to_omega_rad_per_sec = 2.0 * constants::PI * 1.0e3;
 } // namespace scuff_units
 
-} // namespace ARBD
+} // namespace MARS

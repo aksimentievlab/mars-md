@@ -9,7 +9,7 @@
 #include "System/PeriodicBox.h"
 #include <filesystem>
 
-using namespace ARBD;
+using namespace MARS;
 using Catch::Approx;
 
 namespace {
@@ -92,7 +92,7 @@ TEST_CASE("IntegratorTest", "[free][bd]") {
 	// Simulation parameters
 	float dt = 2e-5f; // 20 fs in ns
 	float temperature = 300.0f;
-	float kT = ARBD::constants::BOLTZMANN * temperature; // 0.596 kcal/mol
+	float kT = MARS::constants::BOLTZMANN * temperature; // 0.596 kcal/mol
 	int num_steps = 10000;								 // 0.2 ns total
 	Vector3 box_size(100.0f, 100.0f, 100.0f);
 	// Origin defaults to (0,0,0), so the primary image is [0,100) per axis -
@@ -114,8 +114,18 @@ TEST_CASE("IntegratorTest", "[free][bd]") {
 	auto type_view = device_types.view();
 
 	for (int step = 0; step < num_steps; step++) {
-		launch_BD<float>(res, particle_view, type_view, dt, step, kT, 100, sim_box, 5, step,
-						 /*grid_configs=*/nullptr, /*electric_field=*/Vector3{0.0f, 0.0f, 0.0f},
+		launch_BD<float>(res,
+						 particle_view,
+						 type_view,
+						 dt,
+						 step,
+						 kT,
+						 100,
+						 sim_box,
+						 5,
+						 step,
+						 /*grid_configs=*/nullptr,
+						 /*electric_field=*/Vector3{0.0f, 0.0f, 0.0f},
 						 /*interpolation_scheme=*/1);
 	}
 
@@ -185,7 +195,8 @@ TEST_CASE("BondedForcesTest", "[free][bonded]") {
 	// Match the real mpipi_k18 patch's capacity (from the spatial decomposer)
 	// rather than num_particles, in case scale/capacity is what triggers the
 	// illegal-address crash rather than particle/bond count.
-	Patch patch(0, 1024000, res);
+	PeriodicBox box(Vector3(500.0f, 500.0f, 500.0f));
+	Patch patch(0, 1024000, res, box);
 	patch.set_particle_count(num_particles);
 
 	HostParticleData init;
@@ -196,9 +207,6 @@ TEST_CASE("BondedForcesTest", "[free][bonded]") {
 		init.force[i] = Vector3(0, 0, 0);
 	}
 	patch.copy_particles_from_host(init, 0, num_particles);
-
-	PeriodicBox box(Vector3(500.0f, 500.0f, 500.0f));
-	patch.set_periodic_box(&box);
 
 	DeviceParticleTypes device_types(std::vector<ParticleType>{ParticleType("Ar")}, res);
 
@@ -268,10 +276,10 @@ TEST_CASE("DirectTabulatedBondKernelTest", "[free][bonded][direct]") {
 	const Table& table = tables_registry.get_bond_functions()[function_index];
 	TabulatedPotential pot{};
 	pot.pot =
-		const_cast<arbd_real*>(tables_registry.get_device_bond_buffer(0, function_index).data());
-	pot.step_inv = static_cast<arbd_real>(1.0 / table.step_size);
+		const_cast<mars_real*>(tables_registry.get_device_bond_buffer(0, function_index).data());
+	pot.step_inv = static_cast<mars_real>(1.0 / table.step_size);
 	pot.size = static_cast<unsigned int>(table.Y.size());
-	pot.start = static_cast<arbd_real>(table.start);
+	pot.start = static_cast<mars_real>(table.start);
 	pot.is_periodic = false;
 	std::cout << "pot.step_inv=" << pot.step_inv << " pot.size=" << pot.size
 			  << " pot.start=" << pot.start << " pot.pot=" << (void*)pot.pot << std::endl;
@@ -285,16 +293,16 @@ TEST_CASE("DirectTabulatedBondKernelTest", "[free][bonded][direct]") {
 	DeviceBuffer<int> forms_buf(1, res);
 	forms_buf.copy_from_host(std::vector<int>{static_cast<int>(InteractionForm::Tabulated)});
 
-	DeviceBuffer<ARBD::int2> indices_buf(1, res);
-	indices_buf.copy_from_host(std::vector<ARBD::int2>{ARBD::int2{0, 1}});
+	DeviceBuffer<MARS::int2> indices_buf(1, res);
+	indices_buf.copy_from_host(std::vector<MARS::int2>{MARS::int2{0, 1}});
 
-	DeviceBuffer<ARBD::Vector3> positions_buf(2, res);
+	DeviceBuffer<MARS::Vector3> positions_buf(2, res);
 	positions_buf.copy_from_host(
-		std::vector<ARBD::Vector3>{ARBD::Vector3(0, 0, 0), ARBD::Vector3(0, 0, 1.885f)});
+		std::vector<MARS::Vector3>{MARS::Vector3(0, 0, 0), MARS::Vector3(0, 0, 1.885f)});
 
-	DeviceBuffer<ARBD::Vector3> force_buf(2, res);
+	DeviceBuffer<MARS::Vector3> force_buf(2, res);
 	force_buf.copy_from_host(
-		std::vector<ARBD::Vector3>{ARBD::Vector3(0, 0, 0), ARBD::Vector3(0, 0, 0)});
+		std::vector<MARS::Vector3>{MARS::Vector3(0, 0, 0), MARS::Vector3(0, 0, 0)});
 
 	PeriodicBox box(Vector3(500.0f, 500.0f, 500.0f));
 	DeviceBuffer<PeriodicBox> box_buf(1, res);

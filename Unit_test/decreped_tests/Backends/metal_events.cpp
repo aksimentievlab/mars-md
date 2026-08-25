@@ -6,7 +6,7 @@
 #include "Backend/Events.h"
 #include "Backend/METAL/METALManager.h"
 
-using namespace ARBD;
+using namespace MARS;
 
 TEST_CASE("Metal Event Basic Operations", "[events]") {
 	// Setup: Initialize Metal manager with device selection

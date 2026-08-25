@@ -5,13 +5,13 @@
 #include "Backend/Resource.h"
 #include "Backend/Buffer.h"
 #include "Backend/Events.h"
-#include "ARBDLogger.h"
-#include "ARBDException.h"
+#include "MARSLogger.h"
+#include "MARSException.h"
 #include "Math/TypeName.h"
 namespace Catch {
     template<typename T, bool b1, bool b2>
-    struct StringMaker<ARBD::Matrix3_t<T,b1,b2>> {
-        static std::string convert( ARBD::Matrix3_t<T,b1,b2> const& value ) {
+    struct StringMaker<MARS::Matrix3_t<T,b1,b2>> {
+        static std::string convert( MARS::Matrix3_t<T,b1,b2> const& value ) {
             return value.to_string();
         }
     };
@@ -35,12 +35,12 @@ namespace Tests::Unary::Matrix3 {
 
     template<typename A, bool is_diag=false, bool check_diag=false>
     void run_tests() {
-	using T = ARBD::Matrix3_t<A, is_diag, check_diag>;
+	using T = MARS::Matrix3_t<A, is_diag, check_diag>;
 	// std::ostream test_info;
-	INFO( "Testing " << ARBD::type_name<T>() << " unary operators that" );
+	INFO( "Testing " << MARS::type_name<T>() << " unary operators that" );
 	{
 	    using R = A;
-	    INFO(  "    return " << ARBD::type_name<R>() );
+	    INFO(  "    return " << MARS::type_name<R>() );
 	    run_trial<DeterminantOp<R,T>,R,T>( "Testing determinant", R(6), T(1,2,3) );
 	    run_trial<NormalizeDetOp<R,T>,R,T>( "Testing that normalized matrix has determinant == 1", R(1), T(1,1,1) );
 	    // run_trial<NormalizeDetOp<R,T>,R,T>( "Testing that normalized matrix has determinant == 1", R(1), T(2,2,2) );
@@ -49,7 +49,7 @@ namespace Tests::Unary::Matrix3 {
 
 	{ // Test operators that return Matrix
 	    using R = T;
-	    INFO( "    return " << ARBD::type_name<R>() );
+	    INFO( "    return " << MARS::type_name<R>() );
 	    run_trial<TransposeOp<R,T>,R,T>( "Testing transpose",
 					     R(1,4,7,
 					       2,5,8,
@@ -88,7 +88,7 @@ namespace Tests::Binary::Matrix3 {
     // Run
     template<typename A, typename B, bool is_diag=false, bool check_diag=false>
     void run_tests() {
-	using T = ARBD::Matrix3_t<A, is_diag, check_diag>;
+	using T = MARS::Matrix3_t<A, is_diag, check_diag>;
 
 	{ // Test binary operators that return Matrix where U b is a scalar
 	    using U = B;
@@ -97,7 +97,7 @@ namespace Tests::Binary::Matrix3 {
 	}
 
 	{ // Test binary operators that return Vector where U b is Vector
-	    using U = ARBD::Vector3_t<B>;
+	    using U = MARS::Vector3_t<B>;
 	    using R = U;
 	    run_trial<MultOp<R,T,U>,R,T,U>( "Matrix.transform(Vector)",
 					    R(1+4+9,
@@ -110,7 +110,7 @@ namespace Tests::Binary::Matrix3 {
 	}
 
 	{ // Test binary operators that return Vector and U b is Vector
-	    using U = ARBD::Vector3_t<B>;
+	    using U = MARS::Vector3_t<B>;
 	    using R = U;
 	    run_trial<MultOp<R,T,U>,R,T,U>( "Matrix element multiplication",
 					    R(1+4+9,
@@ -123,7 +123,7 @@ namespace Tests::Binary::Matrix3 {
 	}
 
 	{ // Test binary operators that return Matrix and U b is Matrix
-	    using U = ARBD::Matrix3_t<B,is_diag,check_diag>;
+	    using U = MARS::Matrix3_t<B,is_diag,check_diag>;
 	    using R = std::common_type_t<T,U>;
 	    run_trial<AddOp<R,T,U>,R,T,U>( "Matrix addition",
 					    R(2,4,6,

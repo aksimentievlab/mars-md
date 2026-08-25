@@ -8,7 +8,7 @@
 #include <nanobind/stl/vector.h>
 
 namespace nb = nanobind;
-using namespace ARBD;
+using namespace MARS;
 
 namespace {
 
@@ -36,7 +36,7 @@ void def_float_property(nb::class_<Class>& cls, const char* py_name) {
 /**
  * @note Example usage (in Python):
  * ```python
- * >>> from pyarbd import ConfigParser, SimSystem, Resource, ResourceType, ParticleIO
+ * >>> from pymars import ConfigParser, SimSystem, Resource, ResourceType, ParticleIO
  * >>> sys = SimSystem([Resource(ResourceType.CUDA, 0)])
  * >>> parser = ConfigParser(sys, "circovirus.bd")
  * >>> p = parser.get_init_particles()[0]
@@ -83,7 +83,7 @@ void declare_particle_io(nb::module_& m) {
 /**
  * @note Example usage (in Python):
  * ```python
- * >>> from pyarbd import ParticleType
+ * >>> from pymars import ParticleType
  * >>> pt = ParticleType("A")
  * >>> pt.diffusivity = [43.5, 43.5, 43.5]
  * >>> pt.damping_coefficient = [10.0, 10.0, 10.0]

@@ -4,7 +4,7 @@
 #include "Backend/Kernels.h"
 #include "Backend/Resource.h"
 #include "RandomKernels.h"
-namespace ARBD {
+namespace MARS {
 
 template<typename Resource>
 class Random {
@@ -146,13 +146,13 @@ extern template Event launch_cuda_kernel(const Resource& resource,
 										 Vector3_t<float>* output);
 #endif
 
-} // namespace ARBD
+} // namespace MARS
 #ifdef USE_SYCL
 #include <sycl/sycl.hpp>
 
 template<typename T>
-struct sycl::is_device_copyable<ARBD::GaussianFunctor<T>> : std::true_type {};
+struct sycl::is_device_copyable<MARS::GaussianFunctor<T>> : std::true_type {};
 template<typename T>
-struct sycl::is_device_copyable<ARBD::UniformFunctor<T>> : std::true_type {};
+struct sycl::is_device_copyable<MARS::UniformFunctor<T>> : std::true_type {};
 
 #endif

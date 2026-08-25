@@ -4,7 +4,7 @@
 #include <random>
 #include <vector>
 
-using namespace ARBD;
+using namespace MARS;
 
 TEST_CASE("ZOrderPairlist Integration", "[zorder][pairlist][integration]") {
 	initialize_backend_once();

@@ -3,7 +3,7 @@
 //
 // They live in the ordinary particle array, so every existing force path
 // (pairlist, nonbonded, bonded) sees them with no special casing - matching
-// legacy ARBD, which counts them in every `num + num_rb_attached_particles`
+// legacy MARS, which counts them in every `num + num_rb_attached_particles`
 // kernel bound. Only two things differ, and both live here:
 //
 //   1. Their position is not integrated. It is rewritten each step from the
@@ -14,12 +14,12 @@
 //      which is what actually responds.
 //
 // Ports of legacy update_particle_positions_kernel and
-// RigidBody::apply_attached_particle_forces (arbd1 RigidBody.cu:108, :336).
+// RigidBody::apply_attached_particle_forces (mars1 RigidBody.cu:108, :336).
 #pragma once
 #include "Objects/DeviceParticle.h"
 #include "Objects/DeviceRigidBody.h"
 
-namespace ARBD {
+namespace MARS {
 
 /**
  * @brief One attached particle's binding to its parent rigid body.
@@ -146,24 +146,24 @@ struct RBReduceAttachedForcesKernel {
 	}
 };
 
-} // namespace ARBD
+} // namespace MARS
 
 #ifdef USE_CUDA
 #include "Backend/CUDA/KernelHelper.cuh"
-namespace ARBD {
+namespace MARS {
 extern template Event launch_cuda_kernel(const Resource& resource,
 										 const KernelConfig& config,
 										 RBSyncAttachedPositionsKernel kernel_func);
 extern template Event launch_cuda_kernel_with_workitem(const Resource& resource,
 													   const KernelConfig& config,
 													   RBReduceAttachedForcesKernel kernel_func);
-} // namespace ARBD
+} // namespace MARS
 #endif
 
 #ifdef USE_SYCL
 #include <sycl/sycl.hpp>
 template<>
-struct sycl::is_device_copyable<ARBD::RBSyncAttachedPositionsKernel> : std::true_type {};
+struct sycl::is_device_copyable<MARS::RBSyncAttachedPositionsKernel> : std::true_type {};
 template<>
-struct sycl::is_device_copyable<ARBD::RBReduceAttachedForcesKernel> : std::true_type {};
+struct sycl::is_device_copyable<MARS::RBReduceAttachedForcesKernel> : std::true_type {};
 #endif

@@ -13,8 +13,8 @@
 #include <numeric>
 #include <vector>
 
-using namespace ARBD;
-using namespace ARBD::CUDA;
+using namespace MARS;
+using namespace MARS::CUDA;
 
 // Test fixture for CUDA Random tests
 class CUDARandomTestFixture {

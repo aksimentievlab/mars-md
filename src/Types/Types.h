@@ -8,7 +8,7 @@
 #include "Vector2.h"
 #include "Vector3.h"
 
-namespace ARBD {
+namespace MARS {
 
 // Simplified string formatting function for CUDA compatibility
 #ifdef HOST_GUARD
@@ -37,17 +37,17 @@ struct GridSample {
 // The two scalar types every other alias below is expressed in, so switching
 // the engine's precision is a change here rather than a sweep over each alias.
 
-using Vector3 = Vector3_t<arbd_real>;
-using Matrix3 = Matrix3_t<arbd_real>;
+using Vector3 = Vector3_t<mars_real>;
+using Matrix3 = Matrix3_t<mars_real>;
 using NeighborList = IndexList<morton_t, 27>;
 // For 3-component indices (Angles)
-using int3 = ARBD::Vector3_t<arbd_int>;
+using int3 = MARS::Vector3_t<mars_int>;
 // For 4-component indices (Dihedrals)
-using int4 = ARBD::Vector3_t<arbd_int>;
-using float4 = ARBD::Vector3_t<arbd_real>;
+using int4 = MARS::Vector3_t<mars_int>;
+using float4 = MARS::Vector3_t<mars_real>;
 
-using int2 = Vec2<arbd_int>;
-using float2 = Vec2<arbd_real>;
+using int2 = Vec2<mars_int>;
+using float2 = Vec2<mars_real>;
 
 /**
  * @brief Backend-agnostic atomic add operation
@@ -163,4 +163,4 @@ inline T atomic_reduce_batch(const T* local_values, size_t count, T* global_sum)
 	atomic_add(global_sum, local_total);
 	return local_total;
 }
-} // namespace ARBD
+} // namespace MARS

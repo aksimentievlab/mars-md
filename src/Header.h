@@ -51,7 +51,7 @@
 namespace sx = std::experimental;
 #endif
 
-namespace ARBD {
+namespace MARS {
 
 /**
  * @brief Resolve file path relative to a configuration file
@@ -87,22 +87,22 @@ inline std::string resolve_file_path(const std::string& file_path,
 	return config_dir + file_path;
 }
 
-} // namespace ARBD
+} // namespace MARS
 
 #elif defined(__CUDACC__) && !defined(__CUDA_ARCH__)
 // Host code in CUDA files - need to include string for host-side usage
 #include <string>
-namespace ARBD {
+namespace MARS {
 inline std::string resolve_file_path(const std::string&, const std::string&) {
 	return ""; // Stub for host code in .cu files
 }
-} // namespace ARBD
+} // namespace MARS
 #elif defined(USE_SYCL) && defined(__SYCL_COMPILER_VERSION) && !defined(__SYCL_DEVICE_ONLY__)
 // SYCL host code - need to include string and filesystem for host-side usage
 #include <cstdlib>
 #include <filesystem>
 #include <string>
-namespace ARBD {
+namespace MARS {
 /**
  * @brief Resolve file path relative to a configuration file
  * @param file_path The file path to resolve (can be absolute, relative, or ~/ home path)
@@ -136,20 +136,20 @@ inline std::string resolve_file_path(const std::string& file_path,
 
 	return config_dir + file_path;
 }
-} // namespace ARBD
+} // namespace MARS
 #elif defined(__SYCL_DEVICE_ONLY__)
 // SYCL device compilation: provide a stub to satisfy parsing
 #include <string>
-namespace ARBD {
+namespace MARS {
 inline std::string resolve_file_path(const std::string&, const std::string&) {
 	return "";
 }
-} // namespace ARBD
+} // namespace MARS
 #else
 // Device compilation: no declaration needed
-namespace ARBD {
+namespace MARS {
 // resolve_file_path not available in device code
-} // namespace ARBD
+} // namespace MARS
 #endif
 
 #ifndef KERNEL_FUNC
@@ -258,5 +258,5 @@ using device_id_t = unsigned short;
 using grid_t = size_t; // grid ids
 using morton_t = uint32_t;
 using coord_t = uint32_t;
-using arbd_int = int;
-using arbd_real = float;
+using mars_int = int;
+using mars_real = float;

@@ -13,7 +13,7 @@
 #pragma once
 #include "Objects/DeviceRigidBody.h"
 
-namespace ARBD {
+namespace MARS {
 
 /**
  * @brief A template atom that exists only to be drawn.
@@ -51,19 +51,19 @@ struct RBCosmeticPositionsKernel {
 	}
 };
 
-} // namespace ARBD
+} // namespace MARS
 
 #ifdef USE_CUDA
 #include "Backend/CUDA/KernelHelper.cuh"
-namespace ARBD {
+namespace MARS {
 extern template Event launch_cuda_kernel(const Resource& resource,
 										 const KernelConfig& config,
 										 RBCosmeticPositionsKernel kernel_func);
-} // namespace ARBD
+} // namespace MARS
 #endif
 
 #ifdef USE_SYCL
 #include <sycl/sycl.hpp>
 template<>
-struct sycl::is_device_copyable<ARBD::RBCosmeticPositionsKernel> : std::true_type {};
+struct sycl::is_device_copyable<MARS::RBCosmeticPositionsKernel> : std::true_type {};
 #endif

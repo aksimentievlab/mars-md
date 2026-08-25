@@ -53,8 +53,8 @@ struct CombineKernel {
 // ============================================================================
 
 struct InitializeWalkersKernel {
-	HOST DEVICE void operator()(size_t i, ARBD::Vector3_t<float>* positions) const {
-		positions[i] = ARBD::Vector3_t<float>{0.0f, 0.0f, 0.0f};
+	HOST DEVICE void operator()(size_t i, MARS::Vector3_t<float>* positions) const {
+		positions[i] = MARS::Vector3_t<float>{0.0f, 0.0f, 0.0f};
 	}
 };
 
@@ -63,9 +63,9 @@ struct RandomWalkKernel {
 	size_t NUM_WALKERS;
 
 	HOST DEVICE void operator()(size_t walker_id,
-								const ARBD::Vector3_t<float>* steps,
-								ARBD::Vector3_t<float>* positions) const {
-		ARBD::Vector3_t<float> pos = positions[walker_id];
+								const MARS::Vector3_t<float>* steps,
+								MARS::Vector3_t<float>* positions) const {
+		MARS::Vector3_t<float> pos = positions[walker_id];
 
 		// Take NUM_STEPS/NUM_WALKERS steps per walker
 		size_t steps_per_walker = NUM_STEPS / NUM_WALKERS;
@@ -73,7 +73,7 @@ struct RandomWalkKernel {
 
 		for (size_t step = 0; step < steps_per_walker && (start_step + step) < NUM_STEPS; ++step) {
 			size_t step_idx = start_step + step;
-			ARBD::Vector3_t<float> step_vec = steps[step_idx];
+			MARS::Vector3_t<float> step_vec = steps[step_idx];
 
 			// Normalize step to unit length
 			float length = std::sqrt(step_vec.x * step_vec.x + step_vec.y * step_vec.y +
@@ -96,8 +96,8 @@ struct RandomWalkKernel {
 
 struct CalculateDistancesKernel {
 	HOST DEVICE void
-	operator()(size_t i, const ARBD::Vector3_t<float>* positions, float* distances) const {
-		ARBD::Vector3_t<float> pos = positions[i];
+	operator()(size_t i, const MARS::Vector3_t<float>* positions, float* distances) const {
+		MARS::Vector3_t<float> pos = positions[i];
 		distances[i] = pos.length();
 	}
 };

@@ -14,7 +14,7 @@
 #include "SimParam.h"
 #include "Types/BaseGrid.h"
 
-namespace ARBD {
+namespace MARS {
 namespace AnalyticalNameList {
 const std::vector<std::string> pair_nonbonded_types = {"LJ"};
 const std::vector<std::string> long_range_nonbonded_types = {"E-field", "Pmf"};
@@ -193,4 +193,4 @@ BaseGrid<T> convolve_grids(const BaseGrid<T>& density,
 	return out;
 }
 
-} // namespace ARBD
+} // namespace MARS

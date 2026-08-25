@@ -7,7 +7,7 @@
 #include <cuda_runtime.h>
 #endif
 
-namespace ARBD {
+namespace MARS {
 
 // ============================================================================
 // Device Context Management
@@ -63,7 +63,7 @@ void Resource::ensure_context() const {
 	}
 
 	if (!device_available_) {
-		ARBD_Exception(ExceptionType::ValueError,
+		MARS_Exception(ExceptionType::ValueError,
 					   "Device {} of type {} is not available",
 					   id_,
 					   getTypeString());
@@ -147,25 +147,25 @@ Resource Resource::create_cuda_device(short device_id) {
 	int device_count;
 	CUDA_CHECK(cudaGetDeviceCount(&device_count));
 	if (device_id >= device_count) {
-		ARBD_Exception(ExceptionType::ValueError,
+		MARS_Exception(ExceptionType::ValueError,
 					   "CUDA device {} not available (found {} devices)",
 					   device_id,
 					   device_count);
 	}
 	return Resource{ResourceType::CUDA, device_id};
 #else
-	ARBD_Exception(ExceptionType::ValueError, "CUDA not available");
+	MARS_Exception(ExceptionType::ValueError, "CUDA not available");
 #endif
 }
 
 Resource Resource::create_sycl_device(short device_id) {
 #ifdef USE_SYCL
 	if (device_id >= static_cast<short>(SYCL::Manager::device_count())) {
-		ARBD_Exception(ExceptionType::ValueError, "SYCL device {} not available", device_id);
+		MARS_Exception(ExceptionType::ValueError, "SYCL device {} not available", device_id);
 	}
 	return Resource{ResourceType::SYCL, device_id};
 #else
-	ARBD_Exception(ExceptionType::ValueError, "SYCL not available");
+	MARS_Exception(ExceptionType::ValueError, "SYCL not available");
 #endif
 }
 
@@ -214,7 +214,7 @@ void Resource::validate() const {
 	if (type_ == ResourceType::CUDA) {
 		int device_count;
 		if (cudaGetDeviceCount(&device_count) != cudaSuccess || id_ >= device_count) {
-			ARBD_Exception(ExceptionType::ValueError,
+			MARS_Exception(ExceptionType::ValueError,
 						   "CUDA device {} does not exist (count: {})",
 						   id_,
 						   device_count);
@@ -226,15 +226,15 @@ void Resource::validate() const {
 #ifdef USE_SYCL
 	if (type_ == ResourceType::SYCL) {
 		if (id_ >= static_cast<short>(SYCL::Manager::device_count())) {
-			ARBD_Exception(ExceptionType::ValueError, "SYCL device {} does not exist", id_);
+			MARS_Exception(ExceptionType::ValueError, "SYCL device {} does not exist", id_);
 		}
 		return;
 	}
 #endif
 
-	ARBD_Exception(ExceptionType::ValueError,
+	MARS_Exception(ExceptionType::ValueError,
 				   "Unsupported resource type {}",
 				   static_cast<int>(type_));
 }
 
-} // namespace ARBD
+} // namespace MARS

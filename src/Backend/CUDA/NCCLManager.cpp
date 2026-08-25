@@ -4,7 +4,7 @@
 #include <algorithm>
 #include <vector>
 
-namespace ARBD {
+namespace MARS {
 namespace CUDA {
 
 // Static member initialization
@@ -19,7 +19,7 @@ void NCCLManager::init(const int* gpu_ids, size_t count) {
 	}
 
 	if (count == 0) {
-		ARBD_Exception(ExceptionType::ValueError, "No GPU IDs provided for NCCL initialization");
+		MARS_Exception(ExceptionType::ValueError, "No GPU IDs provided for NCCL initialization");
 	}
 
 	if (count == 1) {
@@ -37,7 +37,7 @@ void NCCLManager::init(const int* gpu_ids, size_t count) {
 	NCCL_CHECK(cudaGetDeviceCount(&device_count));
 	for (int gpu_id : gpu_ids_) {
 		if (gpu_id >= device_count) {
-			ARBD_Exception(ExceptionType::ValueError,
+			MARS_Exception(ExceptionType::ValueError,
 						   "GPU ID {} not available (only {} GPUs found)",
 						   gpu_id,
 						   device_count);
@@ -66,7 +66,7 @@ void NCCLManager::init(const int* gpu_ids, size_t count) {
 	} catch (const std::exception& e) {
 		comms_.clear();
 		gpu_ids_.clear();
-		ARBD_Exception(ExceptionType::CUDARuntimeError, "Failed to initialize NCCL: {}", e.what());
+		MARS_Exception(ExceptionType::CUDARuntimeError, "Failed to initialize NCCL: {}", e.what());
 	}
 }
 
@@ -151,7 +151,7 @@ int NCCLManager::get_rank(int device_id) {
 
 cudaStream_t NCCLManager::get_stream(int rank, int stream_id) {
 	if (rank < 0 || rank >= static_cast<int>(gpu_ids_.size())) {
-		ARBD_Exception(ExceptionType::ValueError, "Invalid NCCL rank: {}", rank);
+		MARS_Exception(ExceptionType::ValueError, "Invalid NCCL rank: {}", rank);
 	}
 
 	if (stream_id < 0) {
@@ -170,6 +170,6 @@ cudaStream_t NCCLManager::get_stream(int rank, int stream_id) {
 }
 
 } // namespace CUDA
-} // namespace ARBD
+} // namespace MARS
 
 #endif // USE_CUDA && USE_NCCL

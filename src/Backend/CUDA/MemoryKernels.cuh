@@ -1,7 +1,7 @@
 #pragma once
 #include <cuda_runtime.h>
 
-namespace ARBD {
+namespace MARS {
 namespace CUDA {
 
 template<typename T>
@@ -41,4 +41,4 @@ void fill_impl(void* dst, T value, size_t num_elements, void* queue, bool sync) 
 }
 
 } // namespace CUDA
-} // namespace ARBD
+} // namespace MARS

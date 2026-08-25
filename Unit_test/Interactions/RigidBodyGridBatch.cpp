@@ -15,7 +15,7 @@
 #include "Types/BaseGrid.h"
 
 using Catch::Approx;
-using namespace ARBD;
+using namespace MARS;
 
 #if defined(USE_CUDA) || defined(USE_SYCL)
 
@@ -139,9 +139,9 @@ TEST_CASE("RBGridBatch: batched kernel matches Phase 1's per-pair kernel for the
 	DeviceBuffer<RigidBodyGridPair> grid_pairs(1, res);
 	grid_pairs.copy_from_host(&pair, 1, true);
 
-	ARBD::int2 candidate(0, 1);
+	MARS::int2 candidate(0, 1);
 	int candidate_idx = 0;
-	DeviceBuffer<ARBD::int2> candidates(1, res);
+	DeviceBuffer<MARS::int2> candidates(1, res);
 	DeviceBuffer<int> candidates_pair_idx(1, res);
 	candidates.copy_from_host(&candidate, 1, true);
 	candidates_pair_idx.copy_from_host(&candidate_idx, 1, true);
@@ -279,9 +279,9 @@ TEST_CASE("RBGridBatch: cull kernel sets the overflow flag on an undersized work
 	DeviceBuffer<RigidBodyGridPair> grid_pairs(1, res);
 	grid_pairs.copy_from_host(&pair, 1, true);
 
-	ARBD::int2 candidate(0, 1);
+	MARS::int2 candidate(0, 1);
 	int candidate_idx = 0;
-	DeviceBuffer<ARBD::int2> candidates(1, res);
+	DeviceBuffer<MARS::int2> candidates(1, res);
 	DeviceBuffer<int> candidates_pair_idx(1, res);
 	candidates.copy_from_host(&candidate, 1, true);
 	candidates_pair_idx.copy_from_host(&candidate_idx, 1, true);

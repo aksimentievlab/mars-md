@@ -1,9 +1,9 @@
 #pragma once
 #ifdef USE_METAL
 #ifndef __METAL_VERSION__
-#include "ARBDException.h"
-#include "ARBDLogger.h"
 #include "Header.h"
+#include "MARSException.h"
+#include "MARSLogger.h"
 #include "Metal/Metal.hpp"
 #include <array>
 #include <memory>
@@ -25,12 +25,12 @@ namespace MTL4 {
 class CommandQueue;
 } // namespace MTL4
 
-namespace ARBD {
+namespace MARS {
 namespace METAL {
 
 inline void check_metal_error(void* object, std::string_view file, int line) {
 	if (object == nullptr) {
-		ARBD_Exception(ExceptionType::MetalRuntimeError,
+		MARS_Exception(ExceptionType::MetalRuntimeError,
 					   "Metal error at {}:{}: Object is null",
 					   file,
 					   line);
@@ -61,7 +61,7 @@ inline void check_metal_error(void* object, std::string_view file, int line) {
  * ```cpp
  * // Create a device and allocate memory for 1000 integers
  * auto device = MTLCreateSystemDefaultDevice();
- * ARBD::DeviceMemory<int> device_mem(device, 1000);
+ * MARS::DeviceMemory<int> device_mem(device, 1000);
  *
  * // Copy data from host to device
  * std::vector<int> host_data(1000, 42);
@@ -74,8 +74,8 @@ inline void check_metal_error(void* object, std::string_view file, int line) {
  *
  * @example Move Semantics:
  * ```cpp
- * ARBD::DeviceMemory<float> mem1(device, 1000);
- * ARBD::DeviceMemory<float> mem2 = std::move(mem1); // mem1 is now empty
+ * MARS::DeviceMemory<float> mem1(device, 1000);
+ * MARS::DeviceMemory<float> mem2 = std::move(mem1); // mem1 is now empty
  * ```
  *
  * @note The class prevents copying to avoid accidental memory leaks.
@@ -132,7 +132,7 @@ class DeviceMemory {
  * @brief Metal command queue wrapper with additional functionality
  *
  * This class extends MTLCommandQueue with additional convenience methods
- * and RAII semantics for better integration with the ARBD framework.
+ * and RAII semantics for better integration with the MARS framework.
  *
  * Features:
  * - Automatic queue creation and management
@@ -143,7 +143,7 @@ class DeviceMemory {
  * @example Basic Usage:
  * ```cpp
  * // Create a queue for a specific device
- * ARBD::Queue queue(device);
+ * MARS::Queue queue(device);
  *
  * // Create command buffer and commit
  * auto cmd_buffer = queue.create_command_buffer();
@@ -212,7 +212,7 @@ class Queue {
  * @example Basic Usage:
  * ```cpp
  * // Create and use a command buffer
- * ARBD::Event event = queue.create_command_buffer();
+ * MARS::Event event = queue.create_command_buffer();
  * // ... encode commands ...
  * event.commit();
  *
@@ -307,15 +307,15 @@ static std::mutex buffer_map_mutex_;
  * @example Basic Usage:
  * ```cpp
  * // Initialize the Metal manager
- * ARBD::METAL::Manager::init();
+ * MARS::METAL::Manager::init();
  *
  * // Get the current device
- * auto& device = ARBD::METAL::Manager::get_current_device();
+ * auto& device = MARS::METAL::Manager::get_current_device();
  *
  * // Use the device...
  *
  * // Finalize the manager when done
- * ARBD::METAL::Manager::finalize();
+ * MARS::METAL::Manager::finalize();
  * ```
  */
 class Manager {
@@ -355,7 +355,7 @@ class Manager {
 		// Accessors
 		[[nodiscard]] const Queue& get_queue(idx_t queue_id) const {
 			if (queue_id >= queues_.size()) {
-				ARBD_Exception(ExceptionType::ValueError, "Invalid queue ID: {}", queue_id);
+				MARS_Exception(ExceptionType::ValueError, "Invalid queue ID: {}", queue_id);
 			}
 			return queues_[queue_id];
 		}
@@ -417,7 +417,7 @@ class Manager {
 		auto* buffer = device->newBuffer(count * sizeof(T), options);
 
 		if (!buffer) {
-			ARBD_Exception(ExceptionType::MetalRuntimeError,
+			MARS_Exception(ExceptionType::MetalRuntimeError,
 						   "Failed to allocate buffer for {} elements of type {}",
 						   count,
 						   typeid(T).name());
@@ -431,7 +431,7 @@ class Manager {
 		auto* buffer = device->newBuffer(bytes, options);
 
 		if (!buffer) {
-			ARBD_Exception(ExceptionType::MetalRuntimeError,
+			MARS_Exception(ExceptionType::MetalRuntimeError,
 						   "Failed to allocate raw buffer of {} bytes",
 						   bytes);
 		}
@@ -464,8 +464,8 @@ class Manager {
 	static MTL::Buffer* get_metal_buffer_from_ptr(void* ptr) {
 		std::lock_guard<std::mutex> lock(buffer_map_mutex_);
 		LOGDEBUG("Looking for buffer with ptr: {} in map with {} entries",
-				ptr,
-				raw_buffer_map_.size());
+				 ptr,
+				 raw_buffer_map_.size());
 		for (const auto& entry : raw_buffer_map_) {
 			LOGDEBUG("Map entry: ptr={}, buffer={}", entry.first, (void*)entry.second.get());
 		}
@@ -525,7 +525,7 @@ class Manager {
 };
 
 } // namespace METAL
-} // namespace ARBD
+} // namespace MARS
 
 #endif
 #endif // USE_METAL

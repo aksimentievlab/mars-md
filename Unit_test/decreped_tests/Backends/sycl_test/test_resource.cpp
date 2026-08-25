@@ -12,7 +12,7 @@
 // Mock MPI function
 size_t mock_mpi_rank() { return 0; }
 
-namespace ARBD {
+namespace MARS {
 
 /**
  * @brief Get current resource index (device ID or MPI rank)
@@ -117,10 +117,10 @@ struct Resource {
     }
 };
 
-} // namespace ARBD
+} // namespace MARS
 
 int main() {
-    using namespace ARBD;
+    using namespace MARS;
     
     std::cout << "Testing Resource refactoring...\n";
     

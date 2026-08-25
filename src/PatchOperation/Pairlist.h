@@ -15,7 +15,7 @@
 #include "Types/Types.h"
 #include "Types/Vector3.h"
 
-namespace ARBD {
+namespace MARS {
 
 #ifndef GPU_MEM
 #define GPU_MEM 10 // GiB; worst-case RTX 3080. Override via CMake (-DGPU_MEM=...).
@@ -218,4 +218,4 @@ std::unique_ptr<Pairlist> create_pairlist(PairlistBuilderType type,
 										  size_t max_particles,
 										  size_t max_pairs);
 
-} // namespace ARBD
+} // namespace MARS

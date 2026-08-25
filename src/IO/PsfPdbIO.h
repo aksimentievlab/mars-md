@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-namespace ARBD {
+namespace MARS {
 
 struct PdbAtomRecord {
 	int serial = 0;
@@ -60,4 +60,4 @@ struct PsfPdbStructure {
 	Vector3 output_box(const Vector3& dimensions) const;
 };
 
-} // namespace ARBD
+} // namespace MARS

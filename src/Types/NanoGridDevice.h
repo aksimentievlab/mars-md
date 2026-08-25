@@ -21,7 +21,7 @@
 #endif
 #include "PNanoVDB.h"
 
-namespace ARBD {
+namespace MARS {
 
 /*===================*\
 |  VEC3 CONVERSIONS   |
@@ -295,10 +295,10 @@ HOST DEVICE GridSample<T> sample_grid_cubic(NanoGridContext& ctx, const Vector3_
 	return result;
 }
 
-} // namespace ARBD
+} // namespace MARS
 
 #ifdef USE_SYCL
 #include <sycl/sycl.hpp>
 template<>
-struct sycl::is_device_copyable<ARBD::NanoGridContext> : std::true_type {};
+struct sycl::is_device_copyable<MARS::NanoGridContext> : std::true_type {};
 #endif

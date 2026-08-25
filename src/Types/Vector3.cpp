@@ -2,7 +2,7 @@
 
 #ifdef HOST_GUARD
 
-namespace ARBD {
+namespace MARS {
 
 template<typename T>
 HOST void Vector3_t<T>::print() const {
@@ -28,6 +28,6 @@ template std::string Vector3_t<float>::to_string() const;
 template std::string Vector3_t<double>::to_string() const;
 template std::string Vector3_t<int>::to_string() const;
 
-} // namespace ARBD
+} // namespace MARS
 
 #endif // HOST_GUARD

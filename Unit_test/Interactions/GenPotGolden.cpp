@@ -11,7 +11,7 @@
 #include <filesystem>
 #include <string>
 
-using namespace ARBD;
+using namespace MARS;
 using Catch::Approx;
 
 namespace {
@@ -36,8 +36,8 @@ double wca(double r2, double c6, double c12) {
  * @param n Width per axis; even n gives gen_pot's half-integer sampling, odd n
  *        samples r=0 (where WCA saturates at the cap).
  */
-BaseGrid<arbd_real> build_wca_kernel(arbd_real dx, idx_t n, double c6, double c12) {
-	BaseGrid<arbd_real> k(Matrix3(dx), Vector3(0, 0, 0), n, n, n);
+BaseGrid<mars_real> build_wca_kernel(mars_real dx, idx_t n, double c6, double c12) {
+	BaseGrid<mars_real> k(Matrix3(dx), Vector3(0, 0, 0), n, n, n);
 	const double center = (double(n) - 1.0) / 2.0;
 	for (idx_t a = 0; a < n; ++a) {
 		for (idx_t b = 0; b < n; ++b) {
@@ -46,14 +46,14 @@ BaseGrid<arbd_real> build_wca_kernel(arbd_real dx, idx_t n, double c6, double c1
 				const double y = (double(b) - center) * double(dx);
 				const double z = (double(c) - center) * double(dx);
 				k[c + b * n + a * n * n] =
-					static_cast<arbd_real>(wca(x * x + y * y + z * z, c6, c12));
+					static_cast<mars_real>(wca(x * x + y * y + z * z, c6, c12));
 			}
 		}
 	}
 	return k;
 }
 
-double sum_of(const BaseGrid<arbd_real>& g) {
+double sum_of(const BaseGrid<mars_real>& g) {
 	double s = 0;
 	for (idx_t i = 0; i < g.size(); ++i)
 		s += double(g[i]);
@@ -72,8 +72,8 @@ TEST_CASE("convolve_grids reproduces gen_pot's WCA potential", "[grid][convoluti
 	const double c6 = 1228.8;
 	const double c12 = 2516582.4;
 
-	const auto density = DXReader::read_from_file<arbd_real>(stem + ".Density.dx");
-	const auto reference = DXReader::read_from_file<arbd_real>(stem + ".pot.dx");
+	const auto density = DXReader::read_from_file<mars_real>(stem + ".Density.dx");
+	const auto reference = DXReader::read_from_file<mars_real>(stem + ".pot.dx");
 
 	REQUIRE(density.nx() == reference.nx());
 	REQUIRE(density.ny() == reference.ny());
@@ -86,7 +86,7 @@ TEST_CASE("convolve_grids reproduces gen_pot's WCA potential", "[grid][convoluti
 	// core - which would show up as a bogus normalization error.
 	const double sigma = std::sqrt(std::pow(c12 / c6, 1.0 / 3.0));
 	const double cutoff = std::pow(2.0, 1.0 / 6.0) * sigma;
-	const arbd_real dx = density.basis().ex().x;
+	const mars_real dx = density.basis().ex().x;
 	const idx_t n = 2 * static_cast<idx_t>(std::ceil(cutoff / double(dx)));
 
 	const auto kernel = build_wca_kernel(dx, n, c6, c12);

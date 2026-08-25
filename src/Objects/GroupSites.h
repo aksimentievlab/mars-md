@@ -3,7 +3,7 @@
 
 #include "Backend/Buffer.h"
 
-namespace ARBD {
+namespace MARS {
 
 class GroupSite {
   public:
@@ -11,4 +11,4 @@ class GroupSite {
 	~GroupSite();
 };
 
-} // namespace ARBD
+} // namespace MARS

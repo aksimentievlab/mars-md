@@ -3,7 +3,7 @@ using namespace metal;
 
 #include "Types/Matrix3.h"
 
-using namespace ARBD;
+using namespace MARS;
 
 // Element-wise matrix multiplication kernel - matches test expectations
 kernel void matrix3_mult_kernel(

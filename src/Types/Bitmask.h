@@ -1,8 +1,8 @@
 #pragma once
-#include "ARBDException.h"
-#include "ARBDLogger.h"
 #include "Backend/Buffer.h"
 #include "Backend/Resource.h"
+#include "MARSException.h"
+#include "MARSLogger.h"
 #include <cassert>
 
 // Backend-specific includes
@@ -32,7 +32,7 @@
 #include <string>
 #endif
 
-namespace ARBD {
+namespace MARS {
 
 // Backend-agnostic atomic operations
 namespace detail {
@@ -332,13 +332,13 @@ class Bitmask {
 		// Allocate device memory for the Bitmask object itself
 		if (device_obj == nullptr) {
 			device_obj =
-				static_cast<Bitmask*>(ARBD::BackendPolicy::allocate(resource, sizeof(Bitmask)));
+				static_cast<Bitmask*>(MARS::BackendPolicy::allocate(resource, sizeof(Bitmask)));
 		}
 
 		// Allocate and copy mask data if needed
 		if (sz > 0) {
-			mask_d = static_cast<data_t*>(ARBD::BackendPolicy::allocate(resource, sz));
-			ARBD::BackendPolicy::copy_from_host(mask_d, mask, sz);
+			mask_d = static_cast<data_t*>(MARS::BackendPolicy::allocate(resource, sz));
+			MARS::BackendPolicy::copy_from_host(mask_d, mask, sz);
 		}
 
 		// Set up temporary object with device pointers
@@ -346,7 +346,7 @@ class Bitmask {
 		obj_tmp.mask = mask_d;
 
 		// Copy the Bitmask object to device
-		ARBD::BackendPolicy::copy_from_host(device_obj, &obj_tmp, sizeof(Bitmask));
+		MARS::BackendPolicy::copy_from_host(device_obj, &obj_tmp, sizeof(Bitmask));
 
 		// Clear the temporary object's mask pointer to avoid double-free
 		obj_tmp.mask = nullptr;
@@ -361,7 +361,7 @@ class Bitmask {
 		Bitmask obj_tmp(0);
 
 		// Copy the Bitmask object from device to host
-		ARBD::BackendPolicy::copy_to_host(&obj_tmp, device_obj, sizeof(Bitmask));
+		MARS::BackendPolicy::copy_to_host(&obj_tmp, device_obj, sizeof(Bitmask));
 
 		if (obj_tmp.len > 0) {
 			size_t array_size = obj_tmp.get_array_size();
@@ -372,7 +372,7 @@ class Bitmask {
 			obj_tmp.mask = new data_t[array_size];
 
 			// Copy mask data from device to host
-			ARBD::BackendPolicy::copy_to_host(obj_tmp.mask, device_mask_addr, sz);
+			MARS::BackendPolicy::copy_to_host(obj_tmp.mask, device_mask_addr, sz);
 		} else {
 			obj_tmp.mask = nullptr;
 		}
@@ -392,30 +392,30 @@ class Bitmask {
 
 		try {
 			// Copy the Bitmask object from device to get mask pointer
-			ARBD::BackendPolicy::copy_to_host(&obj_tmp, device_obj, sizeof(Bitmask));
+			MARS::BackendPolicy::copy_to_host(&obj_tmp, device_obj, sizeof(Bitmask));
 
 			// Free the device mask data if it exists and is valid
 			if (obj_tmp.len > 0 && obj_tmp.mask != nullptr) {
 				// Validate pointer before deallocation
 				if (obj_tmp.mask !=
 					reinterpret_cast<data_t*>(0x4110000041000000)) { // Check for corrupted pointer
-					ARBD::BackendPolicy::deallocate(obj_tmp.mask);
+					MARS::BackendPolicy::deallocate(obj_tmp.mask);
 				}
 			}
 
 			// Clear the mask pointer on device (set to nullptr)
 			obj_tmp.mask = nullptr;
-			ARBD::BackendPolicy::copy_from_host(device_obj, &obj_tmp, sizeof(Bitmask));
+			MARS::BackendPolicy::copy_from_host(device_obj, &obj_tmp, sizeof(Bitmask));
 
 			// Free the device Bitmask object itself
-			ARBD::BackendPolicy::deallocate(device_obj);
+			MARS::BackendPolicy::deallocate(device_obj);
 		} catch (const std::exception& e) {
 			// Log the error but don't throw from cleanup
 			LOGWARN("Warning: Failed to cleanup device Bitmask properly: {}", e.what());
 
 			// Try to free the device object even if mask cleanup failed
 			try {
-				ARBD::BackendPolicy::deallocate(device_obj);
+				MARS::BackendPolicy::deallocate(device_obj);
 			} catch (...) {
 				// Ignore cleanup errors
 			}
@@ -731,4 +731,4 @@ class SparseBitmask : public BitmaskBase {
 };
 #endif
 
-} // namespace ARBD
+} // namespace MARS

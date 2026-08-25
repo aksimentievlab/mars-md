@@ -13,7 +13,7 @@
 #endif
 #include "Header.h"
 
-namespace ARBD {
+namespace MARS {
 
 template<typename T>
 concept Demangable = requires { typeid(T).name(); };
@@ -196,6 +196,6 @@ std::string pretty_type_name() {
 	return name;
 }
 
-} // namespace ARBD
+} // namespace MARS
 
 #endif

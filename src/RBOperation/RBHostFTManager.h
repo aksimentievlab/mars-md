@@ -1,5 +1,5 @@
 #pragma once
-#include "ARBDException.h"
+#include "MARSException.h"
 #include "ApplyHostForce.h"
 #include "Backend/Buffer.h"
 #include "Backend/Events.h"
@@ -14,7 +14,7 @@
 #include <algorithm>
 #include <span>
 #include <vector>
-namespace ARBD {
+namespace MARS {
 /**
  * @brief Pushes host-computed per-body external force/torque onto the device.
  *
@@ -44,7 +44,7 @@ class RBHostFTManager {
 	 */
 	void set_baseline(std::span<const Vector3> force, std::span<const Vector3> torque) {
 		if (force.size() != torque.size()) {
-			ARBD_Exception(ExceptionType::ValueError,
+			MARS_Exception(ExceptionType::ValueError,
 						   "RBHostFTManager: %zu baseline forces but %zu torques",
 						   force.size(),
 						   torque.size());
@@ -66,7 +66,7 @@ class RBHostFTManager {
 							 RigidBodyView rb) {
 		const idx_t n = static_cast<idx_t>(rigid_body_index.size());
 		if (force.size() != n || torque.size() != n) {
-			ARBD_Exception(ExceptionType::ValueError,
+			MARS_Exception(ExceptionType::ValueError,
 						   "RBHostFTManager: %zu indices but %zu forces and %zu torques",
 						   n,
 						   force.size(),
@@ -77,7 +77,7 @@ class RBHostFTManager {
 		for (idx_t i = 0; i < n; ++i) {
 			const idx_t slot = static_cast<idx_t>(rigid_body_index[i]);
 			if (slot >= capacity_) {
-				ARBD_Exception(ExceptionType::ValueError,
+				MARS_Exception(ExceptionType::ValueError,
 							   "RBHostFTManager: body index %zu out of range [0,%zu)",
 							   slot,
 							   capacity_);
@@ -115,7 +115,7 @@ class RBHostFTManager {
 			   RigidBodyView rb) {
 		const idx_t n = static_cast<idx_t>(rigid_body_index.size());
 		if (force.size() != n || torque.size() != n) {
-			ARBD_Exception(ExceptionType::ValueError,
+			MARS_Exception(ExceptionType::ValueError,
 						   "RBHostFTManager: %zu indices but %zu forces and %zu torques",
 						   n,
 						   force.size(),
@@ -125,7 +125,7 @@ class RBHostFTManager {
 			return Event(nullptr, resource_);
 		}
 		if (n > capacity_) {
-			ARBD_Exception(ExceptionType::RuntimeError,
+			MARS_Exception(ExceptionType::RuntimeError,
 						   "RBHostFTManager overflow: %zu entries into capacity %zu",
 						   n,
 						   capacity_);
@@ -156,4 +156,4 @@ class RBHostFTManager {
 	std::vector<Vector3> staged_torque_;
 	std::vector<int> staged_id_;
 };
-} // namespace ARBD
+} // namespace MARS

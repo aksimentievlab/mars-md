@@ -12,8 +12,8 @@
  * @copyright Copyright (c) 2025
  */
 
-#include "ARBDException.h"
-#include "ARBDLogger.h"
+#include "MARSException.h"
+#include "MARSLogger.h"
 #include "Backend/Resource.h"
 #include "Objects/ParticleProperties.h"
 #include "SimParam.h"
@@ -24,7 +24,7 @@
 #include <string>
 #include <vector>
 
-namespace ARBD {
+namespace MARS {
 
 // Forward declarations
 class SimSystem;
@@ -114,13 +114,13 @@ struct DecompositionPlan {
 				for (int j = 0; j < ny; ++j)
 					for (int i = 0; i < nx; ++i) {
 						patch_min_bounds.push_back(origin +
-												   basis.ex() * (static_cast<arbd_real>(i) / nx) +
-												   basis.ey() * (static_cast<arbd_real>(j) / ny) +
-												   basis.ez() * (static_cast<arbd_real>(k) / nz));
+												   basis.ex() * (static_cast<mars_real>(i) / nx) +
+												   basis.ey() * (static_cast<mars_real>(j) / ny) +
+												   basis.ez() * (static_cast<mars_real>(k) / nz));
 						patch_max_bounds.push_back(
-							origin + basis.ex() * (static_cast<arbd_real>(i + 1) / nx) +
-							basis.ey() * (static_cast<arbd_real>(j + 1) / ny) +
-							basis.ez() * (static_cast<arbd_real>(k + 1) / nz));
+							origin + basis.ex() * (static_cast<mars_real>(i + 1) / nx) +
+							basis.ey() * (static_cast<mars_real>(j + 1) / ny) +
+							basis.ez() * (static_cast<mars_real>(k + 1) / nz));
 					}
 		}
 
@@ -128,9 +128,9 @@ struct DecompositionPlan {
 		patch_boxes.reserve(n);
 		if (system_box.is_triclinic()) {
 			// Uniform per-patch basis for the regular grid (constant across patches).
-			const Vector3 pv1 = basis.ex() / static_cast<arbd_real>(nx);
-			const Vector3 pv2 = basis.ey() / static_cast<arbd_real>(ny);
-			const Vector3 pv3 = basis.ez() / static_cast<arbd_real>(nz);
+			const Vector3 pv1 = basis.ex() / static_cast<mars_real>(nx);
+			const Vector3 pv2 = basis.ey() / static_cast<mars_real>(ny);
+			const Vector3 pv3 = basis.ez() / static_cast<mars_real>(nz);
 			for (size_t p = 0; p < n; ++p) {
 				PeriodicBox pbox;
 				pbox.set_origin(patch_min_bounds[p]);
@@ -144,12 +144,12 @@ struct DecompositionPlan {
 					const Vector3 e2 = basis.ey();
 					const Vector3 e3 = basis.ez();
 					const Vector3 diff = patch_max_bounds[p] - patch_min_bounds[p];
-					const arbd_real sz = (e3.z != arbd_real(0.0)) ? diff.z / e3.z : arbd_real(0.0);
-					const arbd_real sy =
-						(e2.y != arbd_real(0.0)) ? (diff.y - sz * e3.y) / e2.y : arbd_real(0.0);
-					const arbd_real sx = (e1.x != arbd_real(0.0))
+					const mars_real sz = (e3.z != mars_real(0.0)) ? diff.z / e3.z : mars_real(0.0);
+					const mars_real sy =
+						(e2.y != mars_real(0.0)) ? (diff.y - sz * e3.y) / e2.y : mars_real(0.0);
+					const mars_real sx = (e1.x != mars_real(0.0))
 											 ? (diff.x - sy * e2.x - sz * e3.x) / e1.x
-											 : arbd_real(0.0);
+											 : mars_real(0.0);
 					pbox.set_basis(e1 * sx, e2 * sy, e3 * sz);
 				}
 
@@ -252,4 +252,4 @@ class PatchDecomposer {
 								const std::vector<Vector3>& patch_max_bounds) const;
 };
 
-} // namespace ARBD
+} // namespace MARS

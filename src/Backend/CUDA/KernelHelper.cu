@@ -6,7 +6,7 @@
 
 // Explicit template instantiations for fill_impl to support CUDA separable compilation
 // These are needed because CUDA uses separable compilation (-rdc=true)
-namespace ARBD {
+namespace MARS {
 namespace CUDA {
 template void fill_impl<float>(void* dst, float value, size_t num_elements, void* queue, bool sync);
 template void
@@ -14,10 +14,10 @@ fill_impl<uint32_t>(void* dst, uint32_t value, size_t num_elements, void* queue,
 template void fill_impl<int>(void* dst, int value, size_t num_elements, void* queue, bool sync);
 template void
 fill_impl<double>(void* dst, double value, size_t num_elements, void* queue, bool sync);
-template void fill_impl<Vector3_t<arbd_real>>(void* dst,
-										  Vector3_t<arbd_real> value,
-										  size_t num_elements,
-										  void* queue,
-										  bool sync);
+template void fill_impl<Vector3_t<mars_real>>(void* dst,
+											  Vector3_t<mars_real> value,
+											  size_t num_elements,
+											  void* queue,
+											  bool sync);
 } // namespace CUDA
-} // namespace ARBD
+} // namespace MARS

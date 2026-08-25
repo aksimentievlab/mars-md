@@ -19,7 +19,7 @@
 #include <thrust/sort.h>
 #endif
 
-namespace ARBD {
+namespace MARS {
 
 /**
  * @brief Cell-based pairlist implementation
@@ -184,4 +184,4 @@ class CellListPairlist : public Pairlist {
 	void find_neighbors_celllist(const DeviceBuffer<Vector3>& positions, size_t num_particles);
 };
 
-} // namespace ARBD
+} // namespace MARS

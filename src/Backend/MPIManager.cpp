@@ -1,9 +1,9 @@
 // src/Backend/MPI/MPIManager.cpp
 #include "Backend/MPIManager.h"
-#include "ARBDLogger.h"
+#include "MARSLogger.h"
 #include <optional>
 
-namespace ARBD::MPI {
+namespace MARS::MPI {
 
 void Manager::init(bool assume_gpu_aware) {
 	if (initialized_) {
@@ -180,8 +180,8 @@ bool Manager::validate_communication(const Resource& resource) {
 
 	try {
 		// Create test buffers
-		DeviceBuffer<arbd_real> send_buffer(test_size, 0);
-		DeviceBuffer<arbd_real> recv_buffer(test_size, 0);
+		DeviceBuffer<mars_real> send_buffer(test_size, 0);
+		DeviceBuffer<mars_real> recv_buffer(test_size, 0);
 
 		// Initialize send buffer with rank-specific pattern
 		std::vector<float> host_data(test_size);
@@ -327,4 +327,4 @@ void Manager::print_info() const {
 		LOGINFO("===================================");
 	}
 }
-} // namespace ARBD::MPI
+} // namespace MARS::MPI

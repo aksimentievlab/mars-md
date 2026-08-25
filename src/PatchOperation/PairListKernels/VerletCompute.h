@@ -1,7 +1,7 @@
 #pragma once
 #include "../Pairlist.h"
 
-namespace ARBD {
+namespace MARS {
 
 class VerletPairlist : public Pairlist {
   public:
@@ -32,4 +32,4 @@ class VerletPairlist : public Pairlist {
 
 	cudaTextureObject_t neighbors_tex;
 };
-} // namespace ARBD
+} // namespace MARS

@@ -8,7 +8,7 @@
 #include "Types/Matrix3.h"
 #include "Types/Types.h"
 
-namespace ARBD {
+namespace MARS {
 
 /**
  * @brief Port of legacy RigidBody::integrate onto SoA RigidBodyView.
@@ -53,7 +53,7 @@ struct RBIntegrateBDKernel {
 		const Vector3 inertia = types.inertia[type];
 		const Matrix3 orientation = rb.orientation[idx];
 
-		// Legacy scales these once in RigidBodyType::setDampingCoeffs; arbd2
+		// Legacy scales these once in RigidBodyType::setDampingCoeffs; mars2
 		// stores them unscaled, so the factor is applied here. No
 		// langevin_damp_scale: that literal 10000 belongs to addLangevin's drag
 		// term, which this path never runs.
@@ -116,19 +116,19 @@ struct RBIntegrateBDKernel {
 	}
 };
 
-} // namespace ARBD
+} // namespace MARS
 
 #ifdef USE_CUDA
-namespace ARBD {
+namespace MARS {
 extern template struct RBIntegrateBDKernel<float>;
 extern template Event launch_cuda_kernel(const Resource& resource,
 										 const KernelConfig& config,
 										 RBIntegrateBDKernel<float> kernel_func);
-} // namespace ARBD
+} // namespace MARS
 #endif
 
 #ifdef USE_SYCL
 #include <sycl/sycl.hpp>
 template<>
-struct sycl::is_device_copyable<ARBD::RBIntegrateBDKernel<float>> : std::true_type {};
+struct sycl::is_device_copyable<MARS::RBIntegrateBDKernel<float>> : std::true_type {};
 #endif

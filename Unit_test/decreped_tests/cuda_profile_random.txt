@@ -156,7 +156,7 @@ Randomness seeded to: 2597141340
 [INFO] CUDA/CUDAManager.cpp:284 CUDA manager finalized
 
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-arbd_test_cuda is a Catch2 v3.8.1 host application.
+mars_test_cuda is a Catch2 v3.8.1 host application.
 Run with -? for options
 
 -------------------------------------------------------------------------------

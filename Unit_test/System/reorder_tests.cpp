@@ -14,7 +14,7 @@
 #include <algorithm>
 #include <vector>
 
-using namespace ARBD;
+using namespace MARS;
 
 namespace {
 
@@ -87,17 +87,17 @@ TEST_CASE("remap_indices maps slots through the inverse permutation", "[reorder]
 
 	SECTION("int2 reinterpret (the bonded-edge path): endpoints remap independently") {
 		// Mirror exactly how DeviceBondedInteractions remaps bond_indices_.
-		// Qualify ARBD::int2 (Vec2<int>) - CUDA's builtin ::int2 is also in scope.
-		std::vector<ARBD::int2> edges(n);
+		// Qualify MARS::int2 (Vec2<int>) - CUDA's builtin ::int2 is also in scope.
+		std::vector<MARS::int2> edges(n);
 		for (size_t i = 0; i < n; ++i) {
-			edges[i] = ARBD::int2{static_cast<int>(i), static_cast<int>((i + 1) % n)};
+			edges[i] = MARS::int2{static_cast<int>(i), static_cast<int>((i + 1) % n)};
 		}
-		DeviceBuffer<ARBD::int2> d_edges(n, device);
+		DeviceBuffer<MARS::int2> d_edges(n, device);
 		d_edges.copy_from_host(edges.data(), n);
 
 		sorter.remap_indices(reinterpret_cast<int*>(d_edges.data()), n * 2);
 
-		std::vector<ARBD::int2> out(n);
+		std::vector<MARS::int2> out(n);
 		d_edges.copy_to_host(out.data(), n);
 		for (size_t i = 0; i < n; ++i) {
 			REQUIRE(out[i].x == static_cast<int>(inv[i]));

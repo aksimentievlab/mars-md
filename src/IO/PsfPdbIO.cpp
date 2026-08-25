@@ -1,6 +1,6 @@
 #include "PsfPdbIO.h"
 
-#include "../ARBDException.h"
+#include "../MARSException.h"
 #include "FileHandle.h"
 
 #include <cctype>
@@ -9,7 +9,7 @@
 #include <cstring>
 #include <unordered_set>
 
-namespace ARBD {
+namespace MARS {
 namespace {
 
 constexpr int kPdbRecordLength = 80;
@@ -709,4 +709,4 @@ void PsfPdbStructure::write_pqr(const std::string& path, const Vector3& dimensio
 	write_pqr_atoms(file.get(), atoms, output_box(dimensions));
 }
 
-} // namespace ARBD
+} // namespace MARS

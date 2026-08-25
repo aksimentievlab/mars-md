@@ -2,13 +2,13 @@
 // Phase 3 of the rigid-body suite: host-side force-pair construction.
 // Port of legacy RigidBodyController::initializeForcePairs.
 #pragma once
-#include "ARBDException.h"
+#include "MARSException.h"
 #include "Objects/RigidBodyProperties.h"
 #include "Types/GridTerm.h"
 #include <functional>
 #include <vector>
 
-namespace ARBD {
+namespace MARS {
 
 /**
  * @brief One matched (density, potential) grid pair between two rigid body
@@ -167,4 +167,4 @@ class RigidBodyForcePairList {
 	std::vector<RigidBodyGridPair> dense_pairs_;
 };
 
-} // namespace ARBD
+} // namespace MARS

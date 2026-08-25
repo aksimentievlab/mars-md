@@ -2,20 +2,20 @@
 #pragma once
 #ifdef USE_SYCL
 #include "../Resource.h"
-#include "ARBDException.h"
+#include "MARSException.h"
 #include "SYCLManager.h"
 #include <cstddef>
 #include <cstring>
 #include <sycl/sycl.hpp>
 
-namespace ARBD {
+namespace MARS {
 namespace SYCL {
 
 struct Policy {
 	static void*
 	allocate(const Resource& resource, size_t bytes, void* queue = nullptr, bool sync = true) {
 		if (resource.type() != ResourceType::SYCL) {
-			ARBD_Exception(ExceptionType::ValueError,
+			MARS_Exception(ExceptionType::ValueError,
 						   "SYCL Policy requires SYCL resource, got {}",
 						   resource.getTypeString());
 		}
@@ -26,14 +26,14 @@ struct Policy {
 						: static_cast<sycl::queue*>(resource.get_stream(StreamType::Memory));
 
 		if (!q) {
-			ARBD_Exception(ExceptionType::RuntimeError,
+			MARS_Exception(ExceptionType::RuntimeError,
 						   "Failed to get queue for SYCL device {}",
 						   resource.id());
 		}
 
 		ptr = sycl::malloc_device(bytes, *q);
 		if (!ptr) {
-			ARBD_Exception(ExceptionType::RuntimeError,
+			MARS_Exception(ExceptionType::RuntimeError,
 						   "Failed to allocate {} bytes on SYCL device {}",
 						   bytes,
 						   resource.id());
@@ -45,7 +45,7 @@ struct Policy {
 	static void deallocate(void* ptr, void* queue = nullptr, bool sync = true) {
 		if (ptr) {
 			if (!queue) {
-				ARBD_Exception(ExceptionType::RuntimeError, "SYCL deallocation requires a queue");
+				MARS_Exception(ExceptionType::RuntimeError, "SYCL deallocation requires a queue");
 			}
 			sycl::free(ptr, *static_cast<sycl::queue*>(queue));
 		}
@@ -57,7 +57,7 @@ struct Policy {
 							 void* queue = nullptr,
 							 bool sync = false) {
 		if (!queue) {
-			ARBD_Exception(ExceptionType::RuntimeError, "SYCL copy_to_host requires a queue");
+			MARS_Exception(ExceptionType::RuntimeError, "SYCL copy_to_host requires a queue");
 		}
 		auto& q = *static_cast<sycl::queue*>(queue);
 
@@ -74,7 +74,7 @@ struct Policy {
 							   void* queue = nullptr,
 							   bool sync = false) {
 		if (!queue) {
-			ARBD_Exception(ExceptionType::RuntimeError, "SYCL copy_from_host requires a queue");
+			MARS_Exception(ExceptionType::RuntimeError, "SYCL copy_from_host requires a queue");
 		}
 		auto& q = *static_cast<sycl::queue*>(queue);
 
@@ -91,7 +91,7 @@ struct Policy {
 									  void* queue = nullptr,
 									  bool sync = false) {
 		if (!queue) {
-			ARBD_Exception(ExceptionType::RuntimeError,
+			MARS_Exception(ExceptionType::RuntimeError,
 						   "SYCL copy_device_to_device requires a queue");
 		}
 		auto& q = *static_cast<sycl::queue*>(queue);
@@ -119,7 +119,7 @@ struct PinnedPolicy {
 	static void*
 	allocate(const Resource& resource, size_t bytes, void* queue = nullptr, bool sync = true) {
 		if (resource.type() != ResourceType::SYCL) {
-			ARBD_Exception(ExceptionType::ValueError,
+			MARS_Exception(ExceptionType::ValueError,
 						   "SYCL PinnedPolicy requires SYCL resource, got {}",
 						   resource.getTypeString());
 		}
@@ -128,14 +128,14 @@ struct PinnedPolicy {
 						: static_cast<sycl::queue*>(resource.get_stream(StreamType::Memory));
 
 		if (!q) {
-			ARBD_Exception(ExceptionType::RuntimeError,
+			MARS_Exception(ExceptionType::RuntimeError,
 						   "Failed to get queue for SYCL device {}",
 						   resource.id());
 		}
 
 		void* ptr = sycl::malloc_host(bytes, *q);
 		if (!ptr) {
-			ARBD_Exception(ExceptionType::RuntimeError,
+			MARS_Exception(ExceptionType::RuntimeError,
 						   "Failed to allocate {} bytes of SYCL host memory",
 						   bytes);
 		}
@@ -157,7 +157,7 @@ struct PinnedPolicy {
 						: static_cast<sycl::queue*>(resource.get_stream(StreamType::Memory));
 
 		if (!q) {
-			ARBD_Exception(ExceptionType::RuntimeError, "Failed to get queue for upload");
+			MARS_Exception(ExceptionType::RuntimeError, "Failed to get queue for upload");
 		}
 
 		q->memcpy(device_dst, pinned_src, bytes).wait();
@@ -172,7 +172,7 @@ struct PinnedPolicy {
 						: static_cast<sycl::queue*>(resource.get_stream(StreamType::Memory));
 
 		if (!q) {
-			ARBD_Exception(ExceptionType::RuntimeError, "Failed to get queue for download");
+			MARS_Exception(ExceptionType::RuntimeError, "Failed to get queue for download");
 		}
 
 		q->memcpy(pinned_dst, device_src, bytes).wait();
@@ -207,7 +207,7 @@ struct UnifiedPolicy {
 	static void*
 	allocate(const Resource& resource, size_t bytes, void* queue = nullptr, bool sync = true) {
 		if (resource.type() != ResourceType::SYCL) {
-			ARBD_Exception(ExceptionType::ValueError,
+			MARS_Exception(ExceptionType::ValueError,
 						   "SYCL UnifiedPolicy requires a SYCL resource, got {}",
 						   resource.getTypeString());
 		}
@@ -216,14 +216,14 @@ struct UnifiedPolicy {
 						: static_cast<sycl::queue*>(resource.get_stream(StreamType::Memory));
 
 		if (!q) {
-			ARBD_Exception(ExceptionType::RuntimeError,
+			MARS_Exception(ExceptionType::RuntimeError,
 						   "Failed to get queue for SYCL device {}",
 						   resource.id());
 		}
 
 		void* ptr = sycl::malloc_shared(bytes, *q);
 		if (!ptr) {
-			ARBD_Exception(ExceptionType::RuntimeError,
+			MARS_Exception(ExceptionType::RuntimeError,
 						   "Failed to allocate {} bytes of SYCL shared memory",
 						   bytes);
 		}
@@ -273,7 +273,7 @@ struct UnifiedPolicy {
 	}
 };
 
-#if defined(ARBD_SYCL_DISABLE_TEXTURES)
+#if defined(MARS_SYCL_DISABLE_TEXTURES)
 struct TexturePolicy {
 	static void* allocate(const Resource&,
 						  size_t,
@@ -281,19 +281,15 @@ struct TexturePolicy {
 						  size_t,
 						  sycl::image_channel_order,
 						  sycl::image_channel_type) {
-		ARBD_Exception(ExceptionType::RuntimeError,
+		MARS_Exception(ExceptionType::RuntimeError,
 					   "SYCL textures are unavailable on this Intel GPU target");
 		return nullptr;
 	}
 
 	static void deallocate(void*, void* = nullptr, bool = true) {}
 
-	static void copy_from_buffer(void*,
-								 const void*,
-								 size_t,
-								 const Resource&,
-								 StreamType) {
-		ARBD_Exception(ExceptionType::RuntimeError,
+	static void copy_from_buffer(void*, const void*, size_t, const Resource&, StreamType) {
+		MARS_Exception(ExceptionType::RuntimeError,
 					   "SYCL textures are unavailable on this Intel GPU target");
 	}
 };
@@ -364,20 +360,20 @@ struct TexturePolicy {
 		// Currently only support RGBA FP32
 		if (tex->order != sycl::image_channel_order::rgba ||
 			tex->type != sycl::image_channel_type::fp32) {
-			ARBD_Exception(ExceptionType::RuntimeError,
+			MARS_Exception(ExceptionType::RuntimeError,
 						   "SYCL TexturePolicy currently supports only RGBA FP32");
 			return;
 		}
 
 		auto* q = static_cast<sycl::queue*>(resource.get_stream(stream_type));
 		if (!q) {
-			ARBD_Exception(ExceptionType::RuntimeError, "Failed to get queue for texture upload");
+			MARS_Exception(ExceptionType::RuntimeError, "Failed to get queue for texture upload");
 		}
 
 		size_t num_pixels = tex->width * tex->height * (is3D ? tex->depth : 1);
 		size_t expected_bytes = num_pixels * sizeof(sycl::float4);
 		if (bytes < expected_bytes) {
-			ARBD_Exception(ExceptionType::RuntimeError,
+			MARS_Exception(ExceptionType::RuntimeError,
 						   "Insufficient bytes for image upload: have {}, need {}",
 						   bytes,
 						   expected_bytes);
@@ -422,5 +418,5 @@ struct TexturePolicy {
 #endif
 
 } // namespace SYCL
-} // namespace ARBD
+} // namespace MARS
 #endif

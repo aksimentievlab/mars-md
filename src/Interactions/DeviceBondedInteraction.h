@@ -14,7 +14,7 @@
 #include <algorithm>
 #include <utility>
 
-namespace ARBD {
+namespace MARS {
 
 /**
  * @brief Device-side bonded interaction data (SoA format)
@@ -185,7 +185,7 @@ class DeviceBondedInteractions {
 			restraint_particle_ids_.copy_from_host(rest_ids.data(), num_restraints_);
 			restraint_positions_ = DeviceBuffer<Vector3>(num_restraints_, resource_);
 			restraint_positions_.copy_from_host(rest_pos.data(), num_restraints_);
-			restraint_spring_constants_ = DeviceBuffer<arbd_real>(num_restraints_, resource_);
+			restraint_spring_constants_ = DeviceBuffer<mars_real>(num_restraints_, resource_);
 			restraint_spring_constants_.copy_from_host(rest_k.data(), num_restraints_);
 		}
 	}
@@ -209,9 +209,9 @@ class DeviceBondedInteractions {
 			auto& device_buffer = tables_registry.get_device_bond_buffer(resource_idx, i);
 
 			TabulatedPotential pot;
-			pot.pot = const_cast<arbd_real*>(device_buffer.data()); // Device pointer
-			pot.step_inv = table.step_size > 0.0 ? static_cast<arbd_real>(1.0 / table.step_size)
-												 : arbd_real(0);
+			pot.pot = const_cast<mars_real*>(device_buffer.data()); // Device pointer
+			pot.step_inv = table.step_size > 0.0 ? static_cast<mars_real>(1.0 / table.step_size)
+												 : mars_real(0);
 			pot.size = static_cast<unsigned int>(table.Y.size());
 			pot.start = table.start;
 			pot.is_periodic = false; // Bonds are not periodic
@@ -226,9 +226,9 @@ class DeviceBondedInteractions {
 			const auto& device_buffer = tables_registry.get_device_angle_buffer(resource_idx, i);
 
 			TabulatedPotential pot;
-			pot.pot = const_cast<arbd_real*>(device_buffer.data());
-			pot.step_inv = table.step_size > 0.0 ? static_cast<arbd_real>(1.0 / table.step_size)
-												 : arbd_real(0);
+			pot.pot = const_cast<mars_real*>(device_buffer.data());
+			pot.step_inv = table.step_size > 0.0 ? static_cast<mars_real>(1.0 / table.step_size)
+												 : mars_real(0);
 			pot.size = static_cast<unsigned int>(table.Y.size());
 			pot.start = table.start;
 			pot.is_periodic = true;
@@ -242,9 +242,9 @@ class DeviceBondedInteractions {
 			const auto& device_buffer = tables_registry.get_device_dihedral_buffer(resource_idx, i);
 
 			TabulatedPotential pot;
-			pot.pot = const_cast<arbd_real*>(device_buffer.data());
-			pot.step_inv = table.step_size > 0.0 ? static_cast<arbd_real>(1.0 / table.step_size)
-												 : arbd_real(0);
+			pot.pot = const_cast<mars_real*>(device_buffer.data());
+			pot.step_inv = table.step_size > 0.0 ? static_cast<mars_real>(1.0 / table.step_size)
+												 : mars_real(0);
 			pot.size = static_cast<unsigned int>(table.Y.size());
 			pot.start = table.start;
 			pot.is_periodic = true; // Dihedrals ARE periodic
@@ -350,7 +350,7 @@ class DeviceBondedInteractions {
 	DEVICE_PTR(const Vector3) restraint_positions() const {
 		return restraint_positions_.data();
 	}
-	DEVICE_PTR(const arbd_real) restraint_spring_constants() const {
+	DEVICE_PTR(const mars_real) restraint_spring_constants() const {
 		return restraint_spring_constants_.data();
 	}
 	idx_t num_restraints() const {
@@ -479,7 +479,7 @@ class DeviceBondedInteractions {
 	// === RESTRAINTS ===
 	DeviceBuffer<int> restraint_particle_ids_;
 	DeviceBuffer<Vector3> restraint_positions_;
-	DeviceBuffer<arbd_real> restraint_spring_constants_;
+	DeviceBuffer<mars_real> restraint_spring_constants_;
 	idx_t num_restraints_{0};
 };
 
@@ -579,7 +579,7 @@ inline Event launch_analytical_bonds(const Resource& resource,
 									 DEVICE_PTR(const int2) particle_indices,
 									 DEVICE_PTR(Vector3) positions,
 									 DEVICE_PTR(Vector3) force_energy,
-									 DEVICE_PTR(const arbd_real) params,
+									 DEVICE_PTR(const mars_real) params,
 									 const PeriodicBox* pbox,
 									 bool get_energy,
 									 idx_t num_bonds) {
@@ -599,7 +599,7 @@ inline Event launch_harmonic_restraints(const Resource& resource,
 										DEVICE_PTR(Vector3) positions,
 										DEVICE_PTR(Vector3) force_energy,
 										DEVICE_PTR(const Vector3) anchors,
-										DEVICE_PTR(const arbd_real) spring_constants,
+										DEVICE_PTR(const mars_real) spring_constants,
 										const PeriodicBox* pbox,
 										bool get_energy,
 										idx_t num_restraints) {
@@ -617,4 +617,4 @@ inline Event launch_harmonic_restraints(const Resource& resource,
 	return launch_kernel(resource, config, computer);
 }
 
-} // namespace ARBD
+} // namespace MARS

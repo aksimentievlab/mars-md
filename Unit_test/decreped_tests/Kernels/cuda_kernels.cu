@@ -10,7 +10,7 @@
 
 #ifdef USE_CUDA
 
-namespace ARBD {
+namespace MARS {
 
 // ============================================================================
 // Explicit template instantiations for test kernels
@@ -48,5 +48,5 @@ template Event launch_cuda_kernel<std::tuple<DeviceBuffer<float>&>,
 												 const KernelConfig& config,
 												 SquareKernel& kernel_func);
 
-} // namespace ARBD
+} // namespace MARS
 #endif

@@ -1,10 +1,10 @@
 #pragma once
 
-#include "ARBDException.h"
 #include "Backend/Buffer.h"
 #include "Backend/Events.h"
 #include "Backend/KernelConfig.h"
 #include "Backend/Resource.h"
+#include "MARSException.h"
 
 #ifdef __CUDACC__
 // Only include CUDA headers when compiling with nvcc
@@ -13,7 +13,7 @@
 #include <thrust/tuple.h>
 #endif
 
-namespace ARBD {
+namespace MARS {
 
 namespace CUDA {
 
@@ -31,10 +31,13 @@ struct WorkItem {
 	size_t shared_mem_size_;
 
 #ifdef __CUDACC__
-	__device__ WorkItem(idx_t global_id, idx_t local_id, idx_t group_id, void* shared_mem,
+	__device__ WorkItem(idx_t global_id,
+						idx_t local_id,
+						idx_t group_id,
+						void* shared_mem,
 						size_t shared_mem_size)
-		: global_id_(global_id), local_id_(local_id), group_id_(group_id),
-		  shared_mem_(shared_mem), shared_mem_size_(shared_mem_size) {}
+		: global_id_(global_id), local_id_(local_id), group_id_(group_id), shared_mem_(shared_mem),
+		  shared_mem_size_(shared_mem_size) {}
 
 	__device__ idx_t global_id() const {
 		return global_id_;
@@ -103,8 +106,8 @@ __global__ void cuda_kernel_wrapper(idx_t n, Functor kernel, Args... args) {
  * to participate; out-of-range handling is the functor's responsibility.
  */
 template<typename Functor, typename... Args>
-__global__ void cuda_kernel_wrapper_with_workitem(idx_t n, size_t shared_mem_size, Functor kernel,
-												  Args... args) {
+__global__ void
+cuda_kernel_wrapper_with_workitem(idx_t n, size_t shared_mem_size, Functor kernel, Args... args) {
 	extern __shared__ char shared_mem[];
 
 	idx_t global_id = blockIdx.x * blockDim.x + threadIdx.x;
@@ -215,7 +218,10 @@ Event launch_cuda_kernel_with_workitem(const Resource& resource,
 		local_config.problem_size.x * local_config.problem_size.y * local_config.problem_size.z;
 
 	cuda_kernel_wrapper_with_workitem<<<grid, block, local_config.shared_memory, stream>>>(
-		thread_count, local_config.shared_memory, kernel_func, args...);
+		thread_count,
+		local_config.shared_memory,
+		kernel_func,
+		args...);
 
 	CUDA_CHECK(cudaGetLastError());
 
@@ -237,8 +243,8 @@ Event launch_cuda_kernel(const Resource& resource,
 						 Functor kernel_func,
 						 Args... args) {
 	// Non-CUDA compilation unit - provide stub implementation
-	throw ARBD::Exception(ARBD::ExceptionType::NotImplementedError,
-						  ARBD::SourceLocation(),
+	throw MARS::Exception(MARS::ExceptionType::NotImplementedError,
+						  MARS::SourceLocation(),
 						  "launch_cuda_kernel can only be used in CUDA compilation units");
 }
 
@@ -247,12 +253,12 @@ Event launch_cuda_kernel_with_workitem(const Resource& resource,
 									   const KernelConfig& config,
 									   Functor kernel_func,
 									   Args... args) {
-	throw ARBD::Exception(
-		ARBD::ExceptionType::NotImplementedError,
-		ARBD::SourceLocation(),
+	throw MARS::Exception(
+		MARS::ExceptionType::NotImplementedError,
+		MARS::SourceLocation(),
 		"launch_cuda_kernel_with_workitem can only be used in CUDA compilation units");
 }
 
 #endif // __CUDACC__
 
-} // namespace ARBD
+} // namespace MARS

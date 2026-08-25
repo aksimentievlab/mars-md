@@ -9,7 +9,7 @@ SYCL: Buffer, Events, Resource, Backend.
 ```cpp
 // Complete flow: Resource → Stream → Kernel → Event
 
-namespace ARBD {
+namespace MARS {
 
 // ============================================================================
 // 1. Resource.h manages stream access
@@ -229,5 +229,5 @@ void example_multi_device() {
 
     final_event.wait();
 }
-} // namespace ARBD
+} // namespace MARS
 ```

@@ -12,7 +12,7 @@
 // Explicit template instantiations for Bonded interaction kernels
 // These are needed so templates can be instantiated in CUDA compilation units
 // instead of C++ files where they would get stub implementations
-namespace ARBD {
+namespace MARS {
 
 // AnalyticalBondComputer instantiations
 template struct AnalyticalBondComputer<0>;
@@ -56,4 +56,4 @@ template Event launch_cuda_kernel(const Resource& resource,
 								  int max_exclusion_depth,
 								  int num_particles);
 
-} // namespace ARBD
+} // namespace MARS

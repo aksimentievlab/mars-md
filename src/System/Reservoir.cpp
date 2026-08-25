@@ -1,5 +1,5 @@
 #include "Reservoir.h"
-namespace ARBD {
+namespace MARS {
 
 ReservoirManager::ReservoirManager(const char* reservoirFile) {
 	char line[STRLEN];
@@ -62,4 +62,4 @@ int ReservoirManager::getCurrentMeanNum() const {
 	return sum / reservoirs.size();
 }
 
-} // namespace ARBD
+} // namespace MARS

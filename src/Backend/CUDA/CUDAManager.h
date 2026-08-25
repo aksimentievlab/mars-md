@@ -6,7 +6,7 @@
 #define _GLIBCXX_USE_CXX11_ABI 1
 #endif
 
-#include "ARBDException.h"
+#include "MARSException.h"
 #include <algorithm>
 #include <array>
 #include <iostream>
@@ -21,10 +21,10 @@
 #include <cuda_runtime.h>
 #include <cuda_runtime_api.h>
 
-namespace ARBD {
+namespace MARS {
 inline void check_cuda_error(cudaError_t error, const char* file, int line) {
 	if (error != cudaSuccess) {
-		ARBD_Exception(ExceptionType::CUDARuntimeError,
+		MARS_Exception(ExceptionType::CUDARuntimeError,
 					   "CUDA error at %s:%d: %s",
 					   file,
 					   line,
@@ -121,5 +121,5 @@ class Manager {
 };
 } // namespace CUDA
 
-} // namespace ARBD
+} // namespace MARS
 #endif

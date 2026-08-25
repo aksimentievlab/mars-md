@@ -4,7 +4,7 @@
 #include "Types/Math.h"
 #include "Types/Types.h"
 #include "Types/Vector3.h"
-namespace ARBD {
+namespace MARS {
 
 using BondGeometry = CalcDistance;
 // CalcDistance is already defined in Interactions.h since it is also used in non-bonded
@@ -12,9 +12,9 @@ using BondGeometry = CalcDistance;
 
 struct AngleGeometry {
 	Vector3 ab, bc, ac;	 ///< Vectors
-	arbd_real angle;	 ///< Computed angle
-	arbd_real cos_angle; ///< Cosine of angle
-	arbd_real sin_angle; ///< Sine of angle
+	mars_real angle;	 ///< Computed angle
+	mars_real cos_angle; ///< Cosine of angle
+	mars_real sin_angle; ///< Sine of angle
 
 	DEVICE static AngleGeometry
 	compute(const Vector3* positions, const int4& particle_indices, const PeriodicBox* pbox) {
@@ -24,21 +24,21 @@ struct AngleGeometry {
 		geom.ac = pbox->wrap_diff(positions[particle_indices.z] - positions[particle_indices.x]);
 
 		// Compute angle using law of cosines
-		arbd_real distab2 = geom.ab.length2();
-		arbd_real distbc2 = geom.bc.length2();
-		arbd_real distac2 = geom.ac.length2();
+		mars_real distab2 = geom.ab.length2();
+		mars_real distbc2 = geom.bc.length2();
+		mars_real distac2 = geom.ac.length2();
 
-		geom.cos_angle = (distab2 + distbc2 - distac2) * arbd_real(0.5) /
+		geom.cos_angle = (distab2 + distbc2 - distac2) * mars_real(0.5) /
 						 (math::sqrt(distab2) * math::sqrt(distbc2));
 
 		// Clamp cosine to valid range
-		if (geom.cos_angle < arbd_real(-1.0))
-			geom.cos_angle = arbd_real(-1.0);
-		if (geom.cos_angle > arbd_real(1.0))
-			geom.cos_angle = arbd_real(1.0);
+		if (geom.cos_angle < mars_real(-1.0))
+			geom.cos_angle = mars_real(-1.0);
+		if (geom.cos_angle > mars_real(1.0))
+			geom.cos_angle = mars_real(1.0);
 
 		geom.angle = acos(geom.cos_angle);
-		geom.sin_angle = math::sqrt(arbd_real(1.0) - geom.cos_angle * geom.cos_angle);
+		geom.sin_angle = math::sqrt(mars_real(1.0) - geom.cos_angle * geom.cos_angle);
 
 		return geom;
 	}
@@ -55,7 +55,7 @@ struct AngleGeometry {
  */
 struct DihedralGeometry {
 	Vector3 ab, bc, cd;		  // Vectors
-	arbd_real dihedral_angle; // Computed dihedral angle
+	mars_real dihedral_angle; // Computed dihedral angle
 	Vector3 f1, f2, f3;		  // force directions
 
 	DEVICE static DihedralGeometry
@@ -69,8 +69,8 @@ struct DihedralGeometry {
 		Vector3 crossBCD = geom.bc.cross(geom.cd);
 		Vector3 crossX = geom.bc.cross(crossABC);
 
-		arbd_real cos_phi = crossABC.dot(crossBCD) / (crossABC.length() * crossBCD.length());
-		arbd_real sin_phi = crossX.dot(crossBCD) / (crossX.length() * crossBCD.length());
+		mars_real cos_phi = crossABC.dot(crossBCD) / (crossABC.length() * crossBCD.length());
+		mars_real sin_phi = crossX.dot(crossBCD) / (crossX.length() * crossBCD.length());
 
 		geom.dihedral_angle = atan2(sin_phi, cos_phi);
 
@@ -104,7 +104,7 @@ struct ProductPotentialGeometry {
 	BondGeometry bond_b;
 
 	// Combined metrics (for coupled potentials)
-	arbd_real combined_metric;
+	mars_real combined_metric;
 	bool is_singular;
 	ProductPotentialGeometry() = default;
 	ProductPotentialGeometry(const AngleGeometry& angle1,
@@ -115,7 +115,7 @@ struct ProductPotentialGeometry {
 		: angle_a(angle_a), angle_b(angle_b) {}
 	ProductPotentialGeometry(const BondGeometry& bond_a, const BondGeometry& bond_b)
 		: bond_a(bond_a), bond_b(bond_b) {}
-	ProductPotentialGeometry(const arbd_real combined_metric, const bool is_singular)
+	ProductPotentialGeometry(const mars_real combined_metric, const bool is_singular)
 		: combined_metric(combined_metric), is_singular(is_singular) {}
 
 	/**
@@ -143,8 +143,8 @@ struct ProductPotentialGeometry {
 
 		// Check for singularities
 		geom.is_singular =
-			(geom.angle1.angle < arbd_real(1e-6) || geom.bond.distance < arbd_real(1e-6) ||
-			 geom.angle2.angle < arbd_real(1e-6));
+			(geom.angle1.angle < mars_real(1e-6) || geom.bond.distance < mars_real(1e-6) ||
+			 geom.angle2.angle < mars_real(1e-6));
 
 		// Optional: compute combined metric for coupled potentials
 		// geom.combined_metric = f(geom.angle1.angle, geom.bond.distance, geom.angle2.angle);
@@ -174,7 +174,7 @@ struct ProductPotentialGeometry {
 
 		// Check for singularities
 		geom.is_singular =
-			(geom.angle_a.angle < arbd_real(1e-6) || geom.angle_b.angle < arbd_real(1e-6));
+			(geom.angle_a.angle < mars_real(1e-6) || geom.angle_b.angle < mars_real(1e-6));
 
 		return geom;
 	}
@@ -199,19 +199,19 @@ struct ProductPotentialGeometry {
 
 		// Check for singularities
 		geom.is_singular =
-			(geom.bond_a.distance < arbd_real(1e-6) || geom.bond_b.distance < arbd_real(1e-6));
+			(geom.bond_a.distance < mars_real(1e-6) || geom.bond_b.distance < mars_real(1e-6));
 
 		return geom;
 	}
 };
 
-} // namespace ARBD
+} // namespace MARS
 #ifdef USE_SYCL
 #include <sycl/sycl.hpp>
 template<>
-struct sycl::is_device_copyable<ARBD::ProductPotentialGeometry> : std::true_type {};
+struct sycl::is_device_copyable<MARS::ProductPotentialGeometry> : std::true_type {};
 template<>
-struct sycl::is_device_copyable<ARBD::AngleGeometry> : std::true_type {};
+struct sycl::is_device_copyable<MARS::AngleGeometry> : std::true_type {};
 template<>
-struct sycl::is_device_copyable<ARBD::DihedralGeometry> : std::true_type {};
+struct sycl::is_device_copyable<MARS::DihedralGeometry> : std::true_type {};
 #endif

@@ -20,8 +20,8 @@
  *
  */
 
-#include "ARBDException.h"
-#include "ARBDLogger.h"
+#include "MARSException.h"
+#include "MARSLogger.h"
 #include "Backend/Buffer.h"
 #include "Backend/Resource.h"
 #include "IO/DxIO.h"
@@ -36,7 +36,7 @@
 #include <memory>
 #include <vector>
 
-namespace ARBD {
+namespace MARS {
 
 class SystemState;
 
@@ -66,7 +66,7 @@ class SimSystem {
 		return global_seed_;
 	}
 
-	void set_temperature(const BaseGrid<arbd_real>& grid) {
+	void set_temperature(const BaseGrid<mars_real>& grid) {
 		temperature_ = Temperature(grid);
 	}
 
@@ -714,4 +714,4 @@ class SimSystem {
 	NonBondedInteractions nonbonded_interactions_;
 };
 
-} // namespace ARBD
+} // namespace MARS

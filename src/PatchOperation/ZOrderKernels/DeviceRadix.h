@@ -1,12 +1,12 @@
 #pragma once
 #include <cstdint>
 
-namespace ARBD {
+namespace MARS {
 // Forward declaration to avoid pulling in full Resource.h
 class Resource;
 
-#ifndef ARBD_SORT_CONFIG_H
-#define ARBD_SORT_CONFIG_H
+#ifndef MARS_SORT_CONFIG_H
+#define MARS_SORT_CONFIG_H
 
 // ----------------------------------------------------------------------------
 // 1. Hardware Detection (Wave32 vs Wave64)
@@ -81,4 +81,4 @@ void device_radix_sort_pairs_cub(int device_id,
 								 uint32_t* alt_payloads,
 								 uint32_t size);
 
-} // namespace ARBD
+} // namespace MARS

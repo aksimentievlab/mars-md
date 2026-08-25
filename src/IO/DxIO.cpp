@@ -9,7 +9,7 @@
  *********************************************************************/
 #include "DxIO.h"
 
-namespace ARBD {
+namespace MARS {
 
 namespace {
 constexpr size_t BUFFER_SIZE = 512;
@@ -394,14 +394,14 @@ void write_average_profile(const BaseGrid<T>& grid, std::string_view filename, i
 }
 
 // Explicit template instantiations for common types
-template void write_grid<float>(const BaseGrid<arbd_real>&, std::string_view);
-template void write_grid<float>(const BaseGrid<arbd_real>&, std::string_view, std::string_view);
-template void write_dx_format<float>(const BaseGrid<arbd_real>&, const FileHandle&, std::string_view);
-template void write_data_format<float>(const BaseGrid<arbd_real>&, const FileHandle&);
-template BaseGrid<arbd_real> read_from_file<float>(std::string_view);
-template void read_dx_format<float>(BaseGrid<arbd_real>&, const FileHandle&);
-template void write_average_profile<float>(const BaseGrid<arbd_real>&, std::string_view, int);
+template void write_grid<float>(const BaseGrid<mars_real>&, std::string_view);
+template void write_grid<float>(const BaseGrid<mars_real>&, std::string_view, std::string_view);
+template void write_dx_format<float>(const BaseGrid<mars_real>&, const FileHandle&, std::string_view);
+template void write_data_format<float>(const BaseGrid<mars_real>&, const FileHandle&);
+template BaseGrid<mars_real> read_from_file<float>(std::string_view);
+template void read_dx_format<float>(BaseGrid<mars_real>&, const FileHandle&);
+template void write_average_profile<float>(const BaseGrid<mars_real>&, std::string_view, int);
 
 } // namespace DXReader
 
-} // namespace ARBD
+} // namespace MARS

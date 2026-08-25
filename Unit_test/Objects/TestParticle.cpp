@@ -4,7 +4,7 @@
 #include "Types/Types.h"
 #include <random>
 #include <vector>
-using namespace ARBD;
+using namespace MARS;
 
 HostParticleData create_test_particles(int count, const std::string& pattern, float box_size) {
 	std::vector<ParticleIO> particles;

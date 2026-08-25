@@ -14,7 +14,7 @@
 #include "PatchOperation/Pairlist.h"
 #include "Types/Types.h"
 
-namespace ARBD {
+namespace MARS {
 
 /**
  * @brief Z-order based pairlist implementation
@@ -207,4 +207,4 @@ class ZOrderPairlist : public Pairlist {
 						  Vector3& box_max) const;
 };
 
-} // namespace ARBD
+} // namespace MARS

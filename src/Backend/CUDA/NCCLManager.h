@@ -1,21 +1,21 @@
 #pragma once
 
 #if defined(USE_CUDA) && defined(USE_NCCL)
-#include "ARBDException.h"
-#include "ARBDLogger.h"
 #include "Backend/CUDA/CUDAManager.h"
+#include "MARSException.h"
+#include "MARSLogger.h"
 #include <concepts>
 #include <cuda_runtime.h>
 #include <nccl.h>
 #include <type_traits>
 #include <vector>
 
-namespace ARBD {
+namespace MARS {
 namespace CUDA {
 
 inline void check_nccl_error(ncclResult_t result, std::string_view file, int line) {
 	if (result != ncclSuccess) {
-		ARBD_Exception(ExceptionType::CUDARuntimeError,
+		MARS_Exception(ExceptionType::CUDARuntimeError,
 					   "NCCL error at {}:{}: {}",
 					   file,
 					   line,
@@ -53,17 +53,17 @@ concept NCCLSupported =
  * ```cpp
  * // Initialize NCCL for specific GPUs
  * std::vector<int> gpu_ids = {0, 1, 2, 3};
- * ARBD::CUDA::NCCLManager::init(gpu_ids);
+ * MARS::CUDA::NCCLManager::init(gpu_ids);
  *
  * // Broadcast data from GPU 0 to all GPUs
  * std::vector<float*> device_ptrs = {ptr0, ptr1, ptr2, ptr3};
- * ARBD::CUDA::NCCLManager::broadcast<float>(0, device_ptrs, 1000);
+ * MARS::CUDA::NCCLManager::broadcast<float>(0, device_ptrs, 1000);
  *
  * // All-reduce operation
- * ARBD::CUDA::NCCLManager::allreduce<float>(device_ptrs, 1000, ncclSum);
+ * MARS::CUDA::NCCLManager::allreduce<float>(device_ptrs, 1000, ncclSum);
  *
  * // Cleanup
- * ARBD::CUDA::NCCLManager::finalize();
+ * MARS::CUDA::NCCLManager::finalize();
  * ```
  *
  * @note This class requires NCCL to be installed and USE_NCCL to be defined
@@ -313,11 +313,11 @@ void NCCLManager::broadcast(int root,
 							size_t count,
 							int stream_id) {
 	if (!is_initialized()) {
-		ARBD_Exception(ExceptionType::ValueError, "NCCL not initialized");
+		MARS_Exception(ExceptionType::ValueError, "NCCL not initialized");
 	}
 
 	if (num_gpus != comms_.size()) {
-		ARBD_Exception(ExceptionType::ValueError,
+		MARS_Exception(ExceptionType::ValueError,
 					   "Device pointer count ({}) doesn't match GPU count ({})",
 					   num_gpus,
 					   comms_.size());
@@ -344,11 +344,11 @@ void NCCLManager::allreduce(T** device_ptrs,
 							ncclRedOp_t op,
 							int stream_id) {
 	if (!is_initialized()) {
-		ARBD_Exception(ExceptionType::ValueError, "NCCL not initialized");
+		MARS_Exception(ExceptionType::ValueError, "NCCL not initialized");
 	}
 
 	if (device_ptrs.size() != comms_.size()) {
-		ARBD_Exception(ExceptionType::ValueError,
+		MARS_Exception(ExceptionType::ValueError,
 					   "Device pointer count ({}) doesn't match GPU count ({})",
 					   device_ptrs.size(),
 					   comms_.size());
@@ -377,11 +377,11 @@ void NCCLManager::reduce(int root,
 						 ncclRedOp_t op,
 						 int stream_id) {
 	if (!is_initialized()) {
-		ARBD_Exception(ExceptionType::ValueError, "NCCL not initialized");
+		MARS_Exception(ExceptionType::ValueError, "NCCL not initialized");
 	}
 
 	if (send_ptrs.size() != comms_.size() || recv_ptrs.size() != comms_.size()) {
-		ARBD_Exception(ExceptionType::ValueError, "Pointer count doesn't match GPU count");
+		MARS_Exception(ExceptionType::ValueError, "Pointer count doesn't match GPU count");
 	}
 
 	NCCL_CHECK(ncclGroupStart());
@@ -406,11 +406,11 @@ void NCCLManager::allgather(const T** send_ptrs,
 							size_t count,
 							int stream_id) {
 	if (!is_initialized()) {
-		ARBD_Exception(ExceptionType::ValueError, "NCCL not initialized");
+		MARS_Exception(ExceptionType::ValueError, "NCCL not initialized");
 	}
 
 	if (send_ptrs.size() != comms_.size() || recv_ptrs.size() != comms_.size()) {
-		ARBD_Exception(ExceptionType::ValueError, "Pointer count doesn't match GPU count");
+		MARS_Exception(ExceptionType::ValueError, "Pointer count doesn't match GPU count");
 	}
 
 	NCCL_CHECK(ncclGroupStart());
@@ -434,11 +434,11 @@ void NCCLManager::scatter(int root,
 						  size_t count,
 						  int stream_id) {
 	if (!is_initialized()) {
-		ARBD_Exception(ExceptionType::ValueError, "NCCL not initialized");
+		MARS_Exception(ExceptionType::ValueError, "NCCL not initialized");
 	}
 
 	if (recv_ptrs.size() != comms_.size()) {
-		ARBD_Exception(ExceptionType::ValueError, "Receive pointer count doesn't match GPU count");
+		MARS_Exception(ExceptionType::ValueError, "Receive pointer count doesn't match GPU count");
 	}
 
 	// NCCL doesn't have a direct scatter operation, implement using broadcasts
@@ -497,6 +497,6 @@ constexpr ncclDataType_t NCCLManager::get_nccl_type() {
 }
 
 } // namespace CUDA
-} // namespace ARBD
+} // namespace MARS
 
 #endif // USE_CUDA && USE_NCCL

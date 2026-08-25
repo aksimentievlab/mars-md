@@ -2,7 +2,7 @@
 #include "Backend/Resource.h"
 #include "Objects/DeviceRigidBodyManager.h"
 #include "Objects/RigidBodyProperties.h"
-using namespace ARBD;
+using namespace MARS;
 
 namespace {
 

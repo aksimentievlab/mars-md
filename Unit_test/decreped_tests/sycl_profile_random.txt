@@ -245,7 +245,7 @@ Randomness seeded to: 3566764901
 [INFO] RandomProfile.cpp:1210 Cleaning up device data...
 
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-arbd_test_sycl_math is a Catch2 v3.8.1 host application.
+mars_test_sycl_math is a Catch2 v3.8.1 host application.
 Run with -? for options
 
 -------------------------------------------------------------------------------

@@ -5,7 +5,7 @@
 #include "Types/Types.h"
 #include "Types/Vector3.h"
 
-namespace ARBD {
+namespace MARS {
 
 /**
  * @brief WorkGroup-based reduction kernel for computing Brownian particles kinetic energy
@@ -93,4 +93,4 @@ struct BrownEnergyKernel {
 	}
 };
 
-} // namespace ARBD
+} // namespace MARS

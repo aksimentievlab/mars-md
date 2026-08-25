@@ -12,8 +12,8 @@
 #include <numeric>
 #include <cmath>
 
-using namespace ARBD;
-using namespace ARBD::CUDA;
+using namespace MARS;
+using namespace MARS::CUDA;
 
 // Test fixture for CUDA Manager tests
 class CUDAManagerTestFixture {

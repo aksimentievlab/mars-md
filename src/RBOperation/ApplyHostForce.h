@@ -7,7 +7,7 @@
 #include "Objects/DeviceRigidBody.h"
 #include "Types/Types.h"
 
-namespace ARBD {
+namespace MARS {
 /**
  * @brief
  * @todo Needs to accumulate ALL froces on HOST first
@@ -41,17 +41,17 @@ struct ApplyExternalForcesKernel {
 	}
 };
 
-} // namespace ARBD
+} // namespace MARS
 #ifdef USE_CUDA
-namespace ARBD {
+namespace MARS {
 extern template Event launch_cuda_kernel(const Resource& resource,
 										 const KernelConfig& config,
 										 ApplyExternalForcesKernel kernel_func);
-} // namespace ARBD
+} // namespace MARS
 #endif
 
 #ifdef USE_SYCL
 #include <sycl/sycl.hpp>
 template<>
-struct sycl::is_device_copyable<ARBD::ApplyExternalForcesKernel> : std::true_type {};
+struct sycl::is_device_copyable<MARS::ApplyExternalForcesKernel> : std::true_type {};
 #endif

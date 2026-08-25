@@ -1,11 +1,11 @@
 
 #ifdef USE_SYCL
-#include "ARBDLogger.h"
+#include "MARSLogger.h"
 #include "Backend/Resource.h"
 #include "DeviceRadix.h"
 #include <sycl/sycl.hpp>
 
-namespace ARBD {
+namespace MARS {
 
 void device_radix_sort_pairs_usm(const Resource& device,
 								 uint32_t* keys,
@@ -445,5 +445,5 @@ void device_radix_sort_pairs_usm(const Resource& device,
 	end_event.wait();
 }
 
-} // namespace ARBD
+} // namespace MARS
 #endif // USE_SYCL

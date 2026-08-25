@@ -11,12 +11,12 @@
 #include "Types/Vector3.h"
 #include "Types/Matrix3.h"
 
-using namespace ARBD;
+using namespace MARS;
 
 // Helper: Check if Metal is available, else skip
 #define REQUIRE_METAL_OR_SKIP() \
-    ARBD::METAL::Manager::load_info(); \
-    if (!ARBD::METAL::Manager::get_library()) { \
+    MARS::METAL::Manager::load_info(); \
+    if (!MARS::METAL::Manager::get_library()) { \
         SKIP("Metal library not loaded - skipping Metal kernel test"); \
     }
 
@@ -27,7 +27,7 @@ using namespace ARBD;
 TEST_CASE("Metal Vector3 Basic Arithmetic Kernels", "[metal][vector3][kernels]") {
     REQUIRE_METAL_OR_SKIP();
 
-    ARBD::Resource metal_res(ARBD::ResourceType::METAL, 0);
+    MARS::Resource metal_res(MARS::ResourceType::METAL, 0);
     constexpr size_t n = 16;
 
     std::vector<Vector3_t<float>> host_a(n), host_b(n), host_out(n);
@@ -46,12 +46,12 @@ TEST_CASE("Metal Vector3 Basic Arithmetic Kernels", "[metal][vector3][kernels]")
     buf_b.copy_from_host(host_b.data(), n);
     buf_scalar.copy_from_host(&host_c, 1);
 
-    ARBD::KernelConfig config;
+    MARS::KernelConfig config;
     config.async = false;
     config.grid_size = {n, 1, 1};  // Use grid_size instead of global_size
 
     // Launch vector_operations_kernel using the correct API
-    ARBD::Event event = ARBD::launch_metal_kernel(
+    MARS::Event event = MARS::launch_metal_kernel(
         metal_res,
         n,
         config,
@@ -78,7 +78,7 @@ TEST_CASE("Metal Vector3 Basic Arithmetic Kernels", "[metal][vector3][kernels]")
 TEST_CASE("Metal Vector3 Cross Product Kernel", "[metal][vector3][cross][kernels]") {
     REQUIRE_METAL_OR_SKIP();
 
-    ARBD::Resource metal_res(ARBD::ResourceType::METAL, 0);
+    MARS::Resource metal_res(MARS::ResourceType::METAL, 0);
     constexpr size_t n = 8;
 
     std::vector<Vector3_t<float>> host_a(n), host_b(n), host_out(n);
@@ -94,11 +94,11 @@ TEST_CASE("Metal Vector3 Cross Product Kernel", "[metal][vector3][cross][kernels
     buf_a.copy_from_host(host_a.data(), n);
     buf_b.copy_from_host(host_b.data(), n);
 
-    ARBD::KernelConfig config;
+    MARS::KernelConfig config;
     config.async = false;
     config.grid_size = {n, 1, 1};
 
-    ARBD::Event event = ARBD::launch_metal_kernel(
+    MARS::Event event = MARS::launch_metal_kernel(
         metal_res,
         n,
         config,
@@ -122,7 +122,7 @@ TEST_CASE("Metal Vector3 Cross Product Kernel", "[metal][vector3][cross][kernels
 TEST_CASE("Metal Vector3 Length and Normalization Kernel", "[metal][vector3][length][kernels]") {
     REQUIRE_METAL_OR_SKIP();
 
-    ARBD::Resource metal_res(ARBD::ResourceType::METAL, 0);
+    MARS::Resource metal_res(MARS::ResourceType::METAL, 0);
     constexpr size_t n = 10;
 
     std::vector<Vector3_t<float>> host_in(n), host_out(n);
@@ -137,7 +137,7 @@ TEST_CASE("Metal Vector3 Length and Normalization Kernel", "[metal][vector3][len
 
     buf_in.copy_from_host(host_in.data(), n);
 
-    ARBD::KernelConfig config;
+    MARS::KernelConfig config;
     config.async = false;
     config.auto_configure(n, metal_res);  // Use the improved auto_configure
     
@@ -146,7 +146,7 @@ TEST_CASE("Metal Vector3 Length and Normalization Kernel", "[metal][vector3][len
             config.grid_size.x, config.grid_size.y, config.grid_size.z,
             config.block_size.x, config.block_size.y, config.block_size.z, n);
 
-    ARBD::Event event = ARBD::launch_metal_kernel(
+    MARS::Event event = MARS::launch_metal_kernel(
         metal_res,
         n,
         config,
@@ -183,7 +183,7 @@ TEST_CASE("Metal Vector3 Length and Normalization Kernel", "[metal][vector3][len
 TEST_CASE("Metal Matrix3 Elementwise Multiplication Kernel", "[metal][matrix3][kernels]") {
     REQUIRE_METAL_OR_SKIP();
 
-    ARBD::Resource metal_res(ARBD::ResourceType::METAL, 0);
+    MARS::Resource metal_res(MARS::ResourceType::METAL, 0);
     constexpr size_t n = 4;
 
     std::vector<Matrix3_t<float>> host_a(n), host_b(n), host_out(n);
@@ -209,12 +209,12 @@ TEST_CASE("Metal Matrix3 Elementwise Multiplication Kernel", "[metal][matrix3][k
     buf_a.copy_from_host(host_a.data(), n);
     buf_b.copy_from_host(host_b.data(), n);
 
-    ARBD::KernelConfig config;
+    MARS::KernelConfig config;
     config.async = false;
     config.grid_size = {n, 1, 1};
 
     // Launch matrix3_mult_kernel (must be implemented in matrix3.metal)
-    ARBD::Event event = ARBD::launch_metal_kernel(
+    MARS::Event event = MARS::launch_metal_kernel(
         metal_res,
         n,
         config,

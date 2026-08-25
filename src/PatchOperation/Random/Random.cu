@@ -7,7 +7,7 @@
 // Explicit template instantiations for Random functors
 // These are needed so templates can be instantiated in CUDA compilation units
 // instead of C++ files where they would get stub implementations
-namespace ARBD {
+namespace MARS {
 
 // Note: get_buffer_pointer extracts the raw pointer from DeviceBuffer, so we use T*
 template Event launch_cuda_kernel(const Resource& resource,
@@ -35,4 +35,4 @@ template Event launch_cuda_kernel(const Resource& resource,
 								  GaussianFunctor<Vector3> kernel_func,
 								  Vector3* output);
 
-} // namespace ARBD
+} // namespace MARS

@@ -18,7 +18,7 @@
 #include <utility>
 
 using Catch::Approx;
-using namespace ARBD;
+using namespace MARS;
 
 #if defined(USE_CUDA) || defined(USE_SYCL)
 

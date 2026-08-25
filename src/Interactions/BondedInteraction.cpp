@@ -2,7 +2,7 @@
 #include <queue>
 #include <vector>
 
-namespace ARBD {
+namespace MARS {
 
 // run this first, then read in extra exclusions from a file
 void BondedInteractions::make_exclusions(int num_particles, int exclusion_depth) {
@@ -48,4 +48,4 @@ void BondedInteractions::make_exclusions(int num_particles, int exclusion_depth)
 	std::sort(exclusions_.begin(), exclusions_.end());
 	exclusions_.erase(std::unique(exclusions_.begin(), exclusions_.end()), exclusions_.end());
 }
-} // namespace ARBD
+} // namespace MARS

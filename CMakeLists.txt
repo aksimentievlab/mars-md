@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25.5 FATAL_ERROR)
-set(PROJECT_NAME_BASE "arbd")
+set(PROJECT_NAME_BASE "mars")
 if(DEFINED PROJECT_NAME_SUFFIX)
     set(PROJECT_NAME "${PROJECT_NAME_BASE}${PROJECT_NAME_SUFFIX}")
 else()
@@ -22,7 +22,7 @@ option(USE_SYCL_ICPX "Use SYCL with Intel DPC++ (icpx)" OFF)
 option(DEBUG_BUILD "Build with debug flags (overrides CMAKE_BUILD_TYPE)" OFF)
 option(USE_NCCL "Use NCCL for single node GPU peer communication" OFF)
 option(USE_NVTX "Build with NVTX profiling ranges" OFF)
-option(USE_PYBIND "Build Python bindings" OFF)
+option(USE_PYTHON "Build Python bindings" OFF)
 option(USE_METAL "Use Apple Silicon Metal" OFF)
 option(USE_MPI "Use MPI for distributed computing" OFF)
 
@@ -284,7 +284,7 @@ Ensure CMAKE_CXX_COMPILER is set to your AdaptiveCpp executable path (e.g., /opt
                     message(STATUS "icpx: Configuring SYCL for Intel GPU (SYCL_DEVICE_TYPE=2), device=${SYCL_INTEL_GPU_DEVICE}")
                     if(SYCL_INTEL_GPU_DEVICE STREQUAL "pvc")
                         # PVC does not support SYCL/OpenCL image operations.
-                        add_definitions(-DARBD_SYCL_DISABLE_TEXTURES)
+                        add_definitions(-DMARS_SYCL_DISABLE_TEXTURES)
                         set(SYCL_DEVICE_EXTRA_FLAGS "-fsycl-targets=intel_gpu_pvc")
                         set(SYCL_LINK_FLAGS "-fsycl -fsycl-targets=intel_gpu_pvc")
                     else()
@@ -353,31 +353,31 @@ if(USE_METAL)
     else()
         message(FATAL_ERROR "Required frameworks not found")
     endif()
-    set(ARBD_METAL_FRAMEWORK_PATH "" CACHE PATH "Path to the macOS SDK Frameworks directory (e.g., /Applications/Xcode.app/...)")
+    set(MARS_METAL_FRAMEWORK_PATH "" CACHE PATH "Path to the macOS SDK Frameworks directory (e.g., /Applications/Xcode.app/...)")
 
     # If the user hasn't provided a path, set a default to the standard location.
-    if(NOT ARBD_METAL_FRAMEWORK_PATH)
-        set(ARBD_METAL_FRAMEWORK_PATH "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks")
+    if(NOT MARS_METAL_FRAMEWORK_PATH)
+        set(MARS_METAL_FRAMEWORK_PATH "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks")
     endif()
 
     # Verify that the specified path is valid. If not, stop the build with a helpful error.
-    if(NOT EXISTS "${ARBD_METAL_FRAMEWORK_PATH}")
+    if(NOT EXISTS "${MARS_METAL_FRAMEWORK_PATH}")
         message(FATAL_ERROR "========================================================================\n"
                             "macOS SDK Frameworks not found at the specified path:\n"
-                            "  ${ARBD_METAL_FRAMEWORK_PATH}\n\n"
+                            "  ${MARS_METAL_FRAMEWORK_PATH}\n\n"
                             "If you are using a non-standard Xcode installation (e.g., Xcode-beta.app), "
-                            "please specify the correct path by setting the ARBD_METAL_FRAMEWORK_PATH CMake variable.\n\n"
+                            "please specify the correct path by setting the MARS_METAL_FRAMEWORK_PATH CMake variable.\n\n"
                             "Example:\n"
-                            "  cmake -DARBD_METAL_FRAMEWORK_PATH=/Applications/Xcode-beta.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks ...\n"
+                            "  cmake -DMARS_METAL_FRAMEWORK_PATH=/Applications/Xcode-beta.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks ...\n"
                             "========================================================================")
     endif()
 
     # Add the framework path to the compiler flags for all targets.
-    add_compile_options("-F${ARBD_METAL_FRAMEWORK_PATH}")
+    add_compile_options("-F${MARS_METAL_FRAMEWORK_PATH}")
 
     # Add framework path for Metal.framework
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -F${ARBD_METAL_FRAMEWORK_PATH}")
-    #set(CMAKE_OBJCXX_FLAGS "${CMAKE_OBJCXX_FLAGS} -F${ARBD_METAL_FRAMEWORK_PATH}")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -F${MARS_METAL_FRAMEWORK_PATH}")
+    #set(CMAKE_OBJCXX_FLAGS "${CMAKE_OBJCXX_FLAGS} -F${MARS_METAL_FRAMEWORK_PATH}")
 endif()
 # --- End Metal Configuration ---
 
@@ -554,7 +554,7 @@ endif()
 add_subdirectory(src)
 add_subdirectory(Unit_test)
 
-add_executable("${PROJECT_NAME}" src/arbd.cpp)
+add_executable("${PROJECT_NAME}" src/mars.cpp)
 
 if(USE_CUDA)
     target_sources("${PROJECT_NAME}" PRIVATE
@@ -568,12 +568,12 @@ if(USE_METAL AND TARGET metal_shaders_main)
     add_dependencies("${PROJECT_NAME}" metal_shaders_main)
 endif()
 
-if(USE_PYBIND)
+if(USE_PYTHON)
   if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/extern/pybind11/CMakeLists.txt")
     add_subdirectory(extern/pybind11)
     add_subdirectory(src/Python)
   else()
-    message(WARNING "pybind11 directory or CMakeLists.txt not found at extern/pybind11.")
+    message(WARNING "nanobind directory or CMakeLists.txt not found at extern/pybind11.")
   endif()
 endif()
 

@@ -7,7 +7,7 @@
 #include "Backend/METAL/METALManager.h"
 #include "Backend/Resource.h"
 
-using namespace ARBD;
+using namespace MARS;
 
 // This test case is a placeholder for when Metal is not supported.
 // We need at least one test case in the file.

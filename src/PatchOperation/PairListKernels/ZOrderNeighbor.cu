@@ -5,7 +5,7 @@
 #include "ZOrderPairlist.h"
 #include <cuda_runtime.h>
 
-namespace ARBD {
+namespace MARS {
 
 // Exact 27-cell neighbor search, its cell-range builder, and the cell-neighbor table.
 template Event launch_cuda_kernel(const Resource& resource,
@@ -20,4 +20,4 @@ template Event launch_cuda_kernel(const Resource& resource,
 								  const KernelConfig& config,
 								  ZOrderCellNeighborKernel kernel_func);
 
-} // namespace ARBD
+} // namespace MARS

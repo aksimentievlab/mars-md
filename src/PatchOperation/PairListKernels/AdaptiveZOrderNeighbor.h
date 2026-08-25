@@ -5,7 +5,7 @@
 #include "Types/Types.h"
 #include "Types/Vector3.h"
 
-namespace ARBD {
+namespace MARS {
 
 /**
  * @brief Kernel for computing optimal search range per particle based on local density
@@ -284,4 +284,4 @@ struct HierarchicalMortonNeighborKernel {
 	}
 };
 
-} // namespace ARBD
+} // namespace MARS

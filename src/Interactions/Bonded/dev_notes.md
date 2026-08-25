@@ -89,7 +89,7 @@ bc = r_k - r_j
 cd = r_l - r_k
 ```
 
-Legacy ARBD (`arbd.dev/src/TabulatedMethods.cuh`) builds them *backwards*:
+Legacy MARS (`mars.dev/src/TabulatedMethods.cuh`) builds them *backwards*:
 
 ```
 ab_legacy = r_i - r_j = -ab

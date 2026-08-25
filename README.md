@@ -1,47 +1,31 @@
-# Atomic Resolution Brownian Dynamics (ARBD 2.0-alpha)
+# Mesoscale to Atomistic Resolution Software for Molecular Dynamics (MARS-MD / arbd2 alpha, a successor of arbd)
 
-Brownian dynamics (BD) simulation is method for studying biomolecules,
-ions, and nanomaterials that balances detail with computational
-efficiency.
+This development branch of MARS focuses on scaling simulations to larger systems and accelerating performance to hardware limits, while keeping the codebase maintainable and its features diverse. In particular we are targeting speed and good scaling on multi-GPU clusters. Our primary objectives are:
 
-This development branch of ARBD has the aim of scaling ARBD up to
-larger systems and accelerating to the hardware limits, while making
-it easier to maintain diverse features. In particular we are seeking
-speed and good scaling on multi-GPU clusters.
-
-
-This development branch of ARBD focuses on scaling simulations to larger systems and accelerating performance to hardware limits, while maintaining code maintainability and diverse feature support. Our primary objectives include:
-
-- **Performance**: Achieve optimal speed and scaling on multi-GPU clusters
+- **Portability**: Cross-vendor support.
 - **Scalability**: Handle larger molecular systems efficiently
+- **Performance**: Achieve optimal speed and scaling on multi-GPU clusters
 - **Maintainability**: Clean, modular codebase for easier development
 
->**Development Status**: This is an alpha version under active development. Many features are not yet functional.
+> **Development Status**: This is an alpha version under active development. Expect breaking changes, incomplete features, and rough edges — use at your own risk.
 
-## Requirements
+## Tested Systems
 
 ### Linux (CUDA)
-- **Operating System**: Linux workstation with CUDA-compatible GPU
+- **Operating System**: Linux workstation with a CUDA-compatible GPU (also builds against the SYCL backend on the same hardware)
+- **GPU**: NVIDIA A100 (`sm_80`), A40 (`sm_86`), RTX PRO 6000 Blackwell (`sm_120`)
 - **Build Tools**:
-  - CMake ≥ 3.25
-  - GCC ≥ 14.9
-- **CUDA Toolkit**: CUDA ≥ 12.0
-- **Compute Capability**: NVIDIA GPU with compute capability ≥ 2.0 (developed and tested on 6.0+)
+  - CMake 4.0
+  - GCC 14 or Intel oneAPI 25.1
+  - CUDA 12.8 for A100 / A40; CUDA 13 required for Blackwell
 
 ### Linux (SYCL-intel)
-- **Operating System**: Linux workstation with Intel pvc
+- **Operating System**: TACC Stampede3 Supercomputer
+- **GPU**:  Intel Data Center GPU Max 1550s
 - **Build Tools**:
-  - CMake ≥ 3.25
-  - GCC ≥ 14.9
-  - Intel oneAPI ≥ 25.1
-- **CUDA Toolkit**: CUDA ≥ 12.0
-- **Compute Capability**:
-
-### Other Systems
-- **Operating System**: macOS with Apple Silicon (M1/M2/M3)
-- **Build Tools**: CMake, Homebrew
-- **Parallel Computing**: OpenMP and OpenCL support
-- **SYCL**: AdaptiveCpp (ACPP) (recommanded for Mac) or Intel DPC++
+  - CMake 4.0
+  - GCC 14
+  - Intel oneAPI 26.1
 
 ## Building
 
@@ -61,17 +45,16 @@ Omit `-DUNIT_TEST_DEVICE_ID` to use the first id in `UNIT_TEST_DEVICE_ARRAY`.
 
 ### Linux with CUDA
 
-1. **Set CUDA Architecture**:
-   ```bash
-   export CMAKE_CUDA_ARCHITECTURES="80;90"
-   ```
+Configure and build with a CUDA preset:
+```bash
+cmake --preset tbgl-cuda-release   # or tbgl-cuda-debug
+cmake --build build/tbgl-cuda-release -j$(nproc)
+```
 
-2. **Configure and Build**:
-   ```bash
-   mkdir build && cd build
-   cmake ..
-   make -j$(nproc)
-   ```
+Override the target GPU architectures if needed:
+```bash
+export CMAKE_CUDA_ARCHITECTURES="80;90"
+```
 
 #### Troubleshooting CUDA Build
 
@@ -108,11 +91,12 @@ We welcome contributions! Please feel free to submit issues, feature requests, o
 
 ## Authors
 
-ARBD2 is developed by the [Aksimentiev Group](http://bionano.physics.illinois.edu) at the University of Illinois at Urbana-Champaign.
+MARS is developed by the [Aksimentiev Group](http://bionano.physics.illinois.edu) at the University of Illinois at Urbana-Champaign.
 
 **Core Development Team:**
-- **Pin-Yi Li** -Lead Developer ([pinyili2@illinois.edu](mailto:pinyili2@illinois.edu))
+- **Pin-Yi Li** - Lead Developer ([pinyili2@illinois.edu](mailto:pinyili2@illinois.edu))
 - **Christopher Maffeo** - Developer ([cmaffeo2@illinois.edu](mailto:cmaffeo2@illinois.edu))
+
 **Past Contributors:**
 - **Jeffrey Comer**
 - **Max Belkin**

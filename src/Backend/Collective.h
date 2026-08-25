@@ -10,7 +10,7 @@
 #endif
 #include "MPIManager.h"
 
-namespace ARBD {
+namespace MARS {
 /**
  * @brief Collective operations manager.
  *
@@ -71,7 +71,7 @@ class Collectives {
 	}
 	// Performance comparison helper
 	void benchmark_backends() {
-		DeviceBuffer<arbd_real> test_buffer(1024 * 1024); // 1M floats
+		DeviceBuffer<mars_real> test_buffer(1024 * 1024); // 1M floats
 
 		// Test MPI
 		auto start = std::chrono::high_resolution_clock::now();
@@ -255,5 +255,5 @@ class DeviceMesh {
 		return peer_access_enabled_;
 	}
 };
-} // namespace ARBD
+} // namespace MARS
 #endif

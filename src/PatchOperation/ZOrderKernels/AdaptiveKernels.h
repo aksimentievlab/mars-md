@@ -13,7 +13,7 @@
 #include <sycl/sycl.hpp>
 #endif
 
-namespace ARBD {
+namespace MARS {
 
 #ifdef __CUDA_ARCH__
 // Helper function for atomic max with float
@@ -41,18 +41,6 @@ __device__ inline void atomicMinFloat(float* address, float val) {
 
 /**
  * @brief Kernel for computing maximum particle displacement on device
- *
- * This kernel computes the maximum displacement of particles between two
- * position sets, enabling intelligent decision making for pairlist updates
- * without requiring host-device synchronization.
- *
- * Displacements are measured under the minimum image convention. Integrators
- * wrap positions back into the box every step, so a particle crossing a
- * periodic face differs from its reference by nearly a full box length while
- * having physically moved almost nothing. Taking that raw difference makes
- * every boundary crossing look like a box-sized jump, which trips any skin
- * threshold and forces a spurious pairlist rebuild.
- *
  * `box_len` is per axis: a positive component marks that axis periodic and its
  * displacements are wrapped; a zero or negative component marks it open and the
  * raw difference is used.
@@ -105,7 +93,6 @@ struct DisplacementKernel {
 			}
 		}
 #else
-		// CPU: Simple comparison
 		if (displacement_sq > *max_displacement) {
 			*max_displacement = displacement_sq;
 		}
@@ -339,4 +326,4 @@ struct AdaptiveZOrderNeighborKernel {
 	}
 };
 
-} // namespace ARBD
+} // namespace MARS

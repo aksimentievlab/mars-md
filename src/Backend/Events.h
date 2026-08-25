@@ -18,7 +18,7 @@
 #include "Backend/METAL/METALManager.h"
 #endif
 
-namespace ARBD {
+namespace MARS {
 
 class Event {
   private:
@@ -42,7 +42,7 @@ class Event {
 		  }) {
 		// Validate resource type matches
 		if (res.type() != ResourceType::CUDA) {
-			ARBD_Exception(ExceptionType::ValueError,
+			MARS_Exception(ExceptionType::ValueError,
 						   "CUDA event requires CUDA resource, got {}",
 						   res.getTypeString());
 		}
@@ -54,7 +54,7 @@ class Event {
 		: resource_(res), event_impl_(std::make_shared<sycl::event>(std::move(sycl_event))) {
 		// Validate resource type matches
 		if (res.type() != ResourceType::SYCL) {
-			ARBD_Exception(ExceptionType::ValueError,
+			MARS_Exception(ExceptionType::ValueError,
 						   "SYCL event requires SYCL resource, got {}",
 						   res.getTypeString());
 		}
@@ -62,12 +62,12 @@ class Event {
 #endif
 
 #ifdef USE_METAL
-	Event(ARBD::METAL::Event metal_event, const Resource& res)
+	Event(MARS::METAL::Event metal_event, const Resource& res)
 		: resource_(res),
-		  event_impl_(std::make_shared<ARBD::METAL::Event>(std::move(metal_event))) {
+		  event_impl_(std::make_shared<MARS::METAL::Event>(std::move(metal_event))) {
 		// Validate resource type matches
 		if (res.type() != ResourceType::METAL) {
-			ARBD_Exception(ExceptionType::ValueError,
+			MARS_Exception(ExceptionType::ValueError,
 						   "Metal event requires Metal resource, got {}",
 						   res.getTypeString());
 		}
@@ -98,7 +98,7 @@ class Event {
 #endif
 #ifdef USE_METAL
 		case ResourceType::METAL: {
-			if (auto* metal_event = static_cast<ARBD::METAL::Event*>(event_impl_.get())) {
+			if (auto* metal_event = static_cast<MARS::METAL::Event*>(event_impl_.get())) {
 				metal_event->wait();
 			}
 			return;
@@ -136,7 +136,7 @@ class Event {
 #endif
 #ifdef USE_METAL
 		case ResourceType::METAL: {
-			if (auto* metal_event = static_cast<ARBD::METAL::Event*>(event_impl_.get())) {
+			if (auto* metal_event = static_cast<MARS::METAL::Event*>(event_impl_.get())) {
 				return metal_event->is_complete();
 			}
 			return true;
@@ -231,12 +231,12 @@ class EventList {
 #endif
 
 #ifdef USE_METAL
-	std::vector<ARBD::METAL::Event*> get_metal_events() const {
-		std::vector<ARBD::METAL::Event*> metal_events;
+	std::vector<MARS::METAL::Event*> get_metal_events() const {
+		std::vector<MARS::METAL::Event*> metal_events;
 		metal_events.reserve(events_.size());
 		for (const auto& event : events_) {
 			if (event.is_valid() && event.get_resource().type() == ResourceType::METAL) {
-				if (auto* impl = static_cast<ARBD::METAL::Event*>(event.get_event_impl())) {
+				if (auto* impl = static_cast<MARS::METAL::Event*>(event.get_event_impl())) {
 					metal_events.push_back(impl);
 				}
 			}
@@ -246,5 +246,5 @@ class EventList {
 #endif
 };
 
-} // namespace ARBD
+} // namespace MARS
 #endif // __METAL_VERSION__

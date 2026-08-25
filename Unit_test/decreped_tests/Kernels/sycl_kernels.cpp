@@ -7,7 +7,7 @@
 #include <cmath>
 #include <numeric>
 #include <vector>
-using namespace ARBD;
+using namespace MARS;
 
 #ifdef USE_SYCL
 

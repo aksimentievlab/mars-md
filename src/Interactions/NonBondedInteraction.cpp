@@ -1,6 +1,6 @@
 #include "Interactions/NonBondedInteraction.h"
 
-namespace ARBD {
+namespace MARS {
 
 void NonBondedInteractions::prepare_device_data() {
 	// Pairwise device buffers are built per-patch in DevicePairNonBondedInteractions.
@@ -9,4 +9,4 @@ void NonBondedInteractions::prepare_device_data() {
 
 void NonBondedInteractions::cleanup_device_data() {}
 
-} // namespace ARBD
+} // namespace MARS

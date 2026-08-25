@@ -1,4 +1,4 @@
-#include "ARBDException.h"
+#include "MARSException.h"
 #include "DeviceRadix.h"
 #include <cuda_runtime.h>
 #ifdef Debug
@@ -9,7 +9,7 @@
 #include <cub/cub.cuh>
 #endif
 
-namespace ARBD {
+namespace MARS {
 void device_radix_sort_pairs_cub(int device_id,
 								 uint32_t* d_keys,
 								 uint32_t* d_payloads,
@@ -38,13 +38,13 @@ void device_radix_sort_pairs_cub(int device_id,
 													  sizeof(uint32_t) * 8,
 													  stream);
 	if (err != cudaSuccess)
-		ARBD_Exception(ExceptionType::CUDARuntimeError,
+		MARS_Exception(ExceptionType::CUDARuntimeError,
 					   "CUB SortPairs size query failed: %s",
 					   cudaGetErrorString(err));
 
 	err = cudaMalloc(&d_temp_storage, temp_storage_bytes);
 	if (err != cudaSuccess)
-		ARBD_Exception(ExceptionType::CUDARuntimeError,
+		MARS_Exception(ExceptionType::CUDARuntimeError,
 					   "cudaMalloc of %zu B radix-sort scratch failed: %s",
 					   temp_storage_bytes,
 					   cudaGetErrorString(err));
@@ -64,7 +64,7 @@ void device_radix_sort_pairs_cub(int device_id,
 		err = cudaGetLastError();
 	if (err != cudaSuccess) {
 		cudaFree(d_temp_storage);
-		ARBD_Exception(ExceptionType::CUDARuntimeError,
+		MARS_Exception(ExceptionType::CUDARuntimeError,
 					   "CUB SortPairs failed for %u elements: %s",
 					   size,
 					   cudaGetErrorString(err));
@@ -84,7 +84,7 @@ void device_radix_sort_pairs_cub(int device_id,
 									size * sizeof(uint32_t),
 									cudaMemcpyDeviceToDevice);
 		if (e1 != cudaSuccess || e2 != cudaSuccess)
-			ARBD_Exception(ExceptionType::CUDARuntimeError,
+			MARS_Exception(ExceptionType::CUDARuntimeError,
 						   "radix-sort result copyback failed: keys=%s payloads=%s",
 						   cudaGetErrorString(e1),
 						   cudaGetErrorString(e2));
@@ -92,8 +92,8 @@ void device_radix_sort_pairs_cub(int device_id,
 
 	err = cudaDeviceSynchronize();
 	if (err != cudaSuccess)
-		ARBD_Exception(ExceptionType::CUDARuntimeError,
+		MARS_Exception(ExceptionType::CUDARuntimeError,
 					   "cudaDeviceSynchronize after radix sort failed: %s",
 					   cudaGetErrorString(err));
 }
-} // namespace ARBD
+} // namespace MARS

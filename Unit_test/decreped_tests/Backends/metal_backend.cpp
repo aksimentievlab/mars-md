@@ -3,7 +3,7 @@
 #include "Metal/MTLLibrary.hpp"
 #ifdef USE_METAL
 
-#include "ARBDException.h"
+#include "MARSException.h"
 #include "Backend/METAL/METALManager.h"
 #include "Backend/Resource.h"
 #include <numeric>
@@ -13,24 +13,24 @@ using Catch::Approx;
 
 TEST_CASE("Manager Basic Initialization", "[Manager][Backend]") {
 	SECTION("Initialize and discover devices") {
-		REQUIRE_NOTHROW(ARBD::METAL::Manager::init());
+		REQUIRE_NOTHROW(MARS::METAL::Manager::init());
 
 		// Check that we found some devices
-		const auto& all_devices = ARBD::METAL::Manager::all_devices();
+		const auto& all_devices = MARS::METAL::Manager::all_devices();
 		REQUIRE(!all_devices.empty());
 		LOGDEBUG("Found {} Metal devices", all_devices.size());
 
 		// Check that at least one device is usable
-		REQUIRE_NOTHROW(ARBD::METAL::Manager::load_info());
-		const auto& devices = ARBD::METAL::Manager::devices();
+		REQUIRE_NOTHROW(MARS::METAL::Manager::load_info());
+		const auto& devices = MARS::METAL::Manager::devices();
 		REQUIRE(!devices.empty());
 	}
 
 	SECTION("Device properties validation") {
-		ARBD::METAL::Manager::init();
-		ARBD::METAL::Manager::load_info();
+		MARS::METAL::Manager::init();
+		MARS::METAL::Manager::load_info();
 
-		const auto& devices = ARBD::METAL::Manager::devices();
+		const auto& devices = MARS::METAL::Manager::devices();
 		for (size_t i = 0; i < devices.size(); ++i) {
 			const auto& device = devices[i];
 
@@ -57,31 +57,31 @@ TEST_CASE("Manager Basic Initialization", "[Manager][Backend]") {
 }
 
 TEST_CASE("Manager Device Selection and Usage", "[Manager][Backend]") {
-	ARBD::METAL::Manager::init();
-	ARBD::METAL::Manager::load_info();
+	MARS::METAL::Manager::init();
+	MARS::METAL::Manager::load_info();
 
-	const auto& devices = ARBD::METAL::Manager::devices();
+	const auto& devices = MARS::METAL::Manager::devices();
 	REQUIRE(!devices.empty());
 
 	SECTION("Device selection") {
 		// Test using device 0
-		REQUIRE_NOTHROW(ARBD::METAL::Manager::use(0));
-		REQUIRE(ARBD::METAL::Manager::current() == 0);
+		REQUIRE_NOTHROW(MARS::METAL::Manager::use(0));
+		REQUIRE(MARS::METAL::Manager::current() == 0);
 
 		// Test current device access
-		REQUIRE_NOTHROW(ARBD::METAL::Manager::get_current_device());
-		const auto& current_device = ARBD::METAL::Manager::get_current_device();
+		REQUIRE_NOTHROW(MARS::METAL::Manager::get_current_device());
+		const auto& current_device = MARS::METAL::Manager::get_current_device();
 		REQUIRE(current_device.id() == devices[0].id());
 
 		// Test cycling through devices if multiple available
 		if (devices.size() > 1) {
-			REQUIRE_NOTHROW(ARBD::METAL::Manager::use(1));
-			REQUIRE(ARBD::METAL::Manager::current() == 1);
+			REQUIRE_NOTHROW(MARS::METAL::Manager::use(1));
+			REQUIRE(MARS::METAL::Manager::current() == 1);
 
 			// Test wraparound
 			int wrapped_id = static_cast<int>(devices.size());
-			REQUIRE_NOTHROW(ARBD::METAL::Manager::use(wrapped_id));
-			REQUIRE(ARBD::METAL::Manager::current() == 0); // Should wrap to 0
+			REQUIRE_NOTHROW(MARS::METAL::Manager::use(wrapped_id));
+			REQUIRE(MARS::METAL::Manager::current() == 0); // Should wrap to 0
 		}
 	}
 
@@ -92,23 +92,23 @@ TEST_CASE("Manager Device Selection and Usage", "[Manager][Backend]") {
 			device_ids.push_back(device.id());
 		}
 
-		REQUIRE_NOTHROW(ARBD::METAL::Manager::select_devices(device_ids));
+		REQUIRE_NOTHROW(MARS::METAL::Manager::select_devices(device_ids));
 
 		// Verify devices are still accessible
-		REQUIRE_NOTHROW(ARBD::METAL::Manager::load_info());
-		const auto& selected_devices = ARBD::METAL::Manager::devices();
+		REQUIRE_NOTHROW(MARS::METAL::Manager::load_info());
+		const auto& selected_devices = MARS::METAL::Manager::devices();
 		REQUIRE(selected_devices.size() == device_ids.size());
 	}
 
 	SECTION("Power preference settings") {
-		const auto& all_devices = ARBD::METAL::Manager::all_devices();
+		const auto& all_devices = MARS::METAL::Manager::all_devices();
 
 		// Test low power preference
-		ARBD::METAL::Manager::prefer_low_power(true);
-		REQUIRE_NOTHROW(ARBD::METAL::Manager::load_info());
+		MARS::METAL::Manager::prefer_low_power(true);
+		REQUIRE_NOTHROW(MARS::METAL::Manager::load_info());
 
 		// Check if filtering worked (might not have low power devices)
-		const auto& low_power_devices = ARBD::METAL::Manager::devices();
+		const auto& low_power_devices = MARS::METAL::Manager::devices();
 		for (const auto& device : low_power_devices) {
 			// If we have devices, they should be low power when preference is set
 			if (!low_power_devices.empty()) {
@@ -125,19 +125,19 @@ TEST_CASE("Manager Device Selection and Usage", "[Manager][Backend]") {
 		}
 
 		// Reset to high performance
-		ARBD::METAL::Manager::prefer_low_power(false);
-		REQUIRE_NOTHROW(ARBD::METAL::Manager::load_info());
-		const auto& high_perf_devices = ARBD::METAL::Manager::devices();
+		MARS::METAL::Manager::prefer_low_power(false);
+		REQUIRE_NOTHROW(MARS::METAL::Manager::load_info());
+		const auto& high_perf_devices = MARS::METAL::Manager::devices();
 		REQUIRE(!high_perf_devices.empty());
 	}
 }
 
 TEST_CASE("Manager Command Queue Management", "[Manager][Backend]") {
-	ARBD::METAL::Manager::init();
-	ARBD::METAL::Manager::load_info();
-	ARBD::METAL::Manager::use(0);
+	MARS::METAL::Manager::init();
+	MARS::METAL::Manager::load_info();
+	MARS::METAL::Manager::use(0);
 
-	auto& device = ARBD::METAL::Manager::get_current_device();
+	auto& device = MARS::METAL::Manager::get_current_device();
 
 	SECTION("Command queue creation") {
 		// Test creating command queues
@@ -174,15 +174,15 @@ TEST_CASE("Manager Command Queue Management", "[Manager][Backend]") {
 }
 
 TEST_CASE("Manager Memory Management", "[Manager][Backend]") {
-	ARBD::METAL::Manager::init();
-	ARBD::METAL::Manager::load_info();
-	ARBD::METAL::Manager::use(0);
+	MARS::METAL::Manager::init();
+	MARS::METAL::Manager::load_info();
+	MARS::METAL::Manager::use(0);
 
 	SECTION("Raw memory allocation") {
 		constexpr size_t test_size = 1024 * sizeof(float);
 
 		void* ptr = nullptr;
-		REQUIRE_NOTHROW(ptr = ARBD::METAL::Manager::allocate_raw(test_size));
+		REQUIRE_NOTHROW(ptr = MARS::METAL::Manager::allocate_raw(test_size));
 		REQUIRE(ptr != nullptr);
 
 		// Memory should be accessible (Metal uses unified memory)
@@ -201,10 +201,10 @@ TEST_CASE("Manager Memory Management", "[Manager][Backend]") {
 		}
 
 		// Test getting Metal buffer from pointer
-		void* metal_buffer = ARBD::METAL::Manager::get_metal_buffer_from_ptr(ptr);
+		void* metal_buffer = MARS::METAL::Manager::get_metal_buffer_from_ptr(ptr);
 		REQUIRE(metal_buffer != nullptr);
 
-		REQUIRE_NOTHROW(ARBD::METAL::Manager::deallocate_raw(ptr));
+		REQUIRE_NOTHROW(MARS::METAL::Manager::deallocate_raw(ptr));
 	}
 
 	SECTION("Multiple allocations") {
@@ -216,7 +216,7 @@ TEST_CASE("Manager Memory Management", "[Manager][Backend]") {
 		// Allocate multiple buffers
 		for (size_t i = 0; i < num_allocs; ++i) {
 			void* ptr = nullptr;
-			REQUIRE_NOTHROW(ptr = ARBD::METAL::Manager::allocate_raw(alloc_size));
+			REQUIRE_NOTHROW(ptr = MARS::METAL::Manager::allocate_raw(alloc_size));
 			REQUIRE(ptr != nullptr);
 			pointers.push_back(ptr);
 		}
@@ -230,7 +230,7 @@ TEST_CASE("Manager Memory Management", "[Manager][Backend]") {
 
 		// Deallocate all
 		for (void* ptr : pointers) {
-			REQUIRE_NOTHROW(ARBD::METAL::Manager::deallocate_raw(ptr));
+			REQUIRE_NOTHROW(MARS::METAL::Manager::deallocate_raw(ptr));
 		}
 	}
 
@@ -239,10 +239,10 @@ TEST_CASE("Manager Memory Management", "[Manager][Backend]") {
 		size_t large_size = 1024 * 1024; // 1MB
 
 		void* ptr = nullptr;
-		REQUIRE_NOTHROW(ptr = ARBD::METAL::Manager::allocate_raw(large_size));
+		REQUIRE_NOTHROW(ptr = MARS::METAL::Manager::allocate_raw(large_size));
 		REQUIRE(ptr != nullptr);
 
-		REQUIRE_NOTHROW(ARBD::METAL::Manager::deallocate_raw(ptr));
+		REQUIRE_NOTHROW(MARS::METAL::Manager::deallocate_raw(ptr));
 
 		LOGDEBUG("Successfully allocated and freed {:.1f} MB buffer",
 				static_cast<float>(large_size) / (1024.0f * 1024.0f));
@@ -250,17 +250,17 @@ TEST_CASE("Manager Memory Management", "[Manager][Backend]") {
 }
 
 TEST_CASE("Manager Library and Function Management", "[Manager][Backend]") {
-	ARBD::METAL::Manager::init();
-	ARBD::METAL::Manager::load_info();
+	MARS::METAL::Manager::init();
+	MARS::METAL::Manager::load_info();
 
 	SECTION("Library access") {
-		auto* library = ARBD::METAL::Manager::get_library();
+		auto* library = MARS::METAL::Manager::get_library();
 
 		if (library != nullptr) {
 			LOGDEBUG("Metal library loaded successfully");
 
 			// Test function preloading
-			REQUIRE_NOTHROW(ARBD::METAL::Manager::preload_all_functions());
+			REQUIRE_NOTHROW(MARS::METAL::Manager::preload_all_functions());
 
 			// Try to get function names (this might fail if no functions are available)
 			auto* function_names = library->functionNames();
@@ -276,7 +276,7 @@ TEST_CASE("Manager Library and Function Management", "[Manager][Backend]") {
 						LOGDEBUG("Function {}: {}", i, func_name);
 
 						// Test getting function
-						auto* function = ARBD::METAL::Manager::get_function(func_name);
+						auto* function = MARS::METAL::Manager::get_function(func_name);
 						if (function) {
 							LOGDEBUG("  Successfully retrieved function: {}", func_name);
 						}
@@ -291,7 +291,7 @@ TEST_CASE("Manager Library and Function Management", "[Manager][Backend]") {
 	}
 
 	SECTION("Pipeline state management") {
-		auto* library = ARBD::METAL::Manager::get_library();
+		auto* library = MARS::METAL::Manager::get_library();
 
 		if (library != nullptr) {
 			auto* function_names = library->functionNames();
@@ -304,7 +304,7 @@ TEST_CASE("Manager Library and Function Management", "[Manager][Backend]") {
 					// This might fail if the function isn't a compute kernel
 					try {
 						auto* pipeline_state =
-							ARBD::METAL::Manager::get_compute_pipeline_state(func_name);
+							MARS::METAL::Manager::get_compute_pipeline_state(func_name);
 						if (pipeline_state) {
 							LOGDEBUG("Successfully created pipeline state for: {}", func_name);
 
@@ -313,7 +313,7 @@ TEST_CASE("Manager Library and Function Management", "[Manager][Backend]") {
 							LOGDEBUG("  Max threads per threadgroup: {}",
 									pipeline_state->maxTotalThreadsPerThreadgroup());
 						}
-					} catch (const ARBD::Exception& e) {
+					} catch (const MARS::Exception& e) {
 						LOGDEBUG("Expected failure creating pipeline for {}: {}",
 								func_name,
 								e.what());
@@ -325,9 +325,9 @@ TEST_CASE("Manager Library and Function Management", "[Manager][Backend]") {
 }
 
 TEST_CASE("Manager Device Properties", "[Manager][Backend]") {
-	ARBD::METAL::Manager::init();
+	MARS::METAL::Manager::init();
 
-	const auto& all_devices = ARBD::METAL::Manager::all_devices();
+	const auto& all_devices = MARS::METAL::Manager::all_devices();
 
 	SECTION("Device property access") {
 		for (size_t i = 0; i < all_devices.size(); ++i) {
@@ -353,11 +353,11 @@ TEST_CASE("Manager Device Properties", "[Manager][Backend]") {
 }
 
 TEST_CASE("Manager Event System", "[Manager][Backend]") {
-	ARBD::METAL::Manager::init();
-	ARBD::METAL::Manager::load_info();
-	ARBD::METAL::Manager::use(0);
+	MARS::METAL::Manager::init();
+	MARS::METAL::Manager::load_info();
+	MARS::METAL::Manager::use(0);
 
-	auto& device = ARBD::METAL::Manager::get_current_device();
+	auto& device = MARS::METAL::Manager::get_current_device();
 
 	SECTION("Basic event operations") {
 		auto& queue = device.get_next_queue();
@@ -367,7 +367,7 @@ TEST_CASE("Manager Event System", "[Manager][Backend]") {
 		REQUIRE(cmd_buffer != nullptr);
 
 		// Create Metal event wrapper
-		ARBD::METAL::Event event(cmd_buffer);
+		MARS::METAL::Event event(cmd_buffer);
 
 		// Event should be valid but not complete initially
 		REQUIRE_FALSE(event.is_complete());
@@ -389,7 +389,7 @@ TEST_CASE("Manager Event System", "[Manager][Backend]") {
 		auto* cmd_buffer = queue.create_command_buffer();
 		REQUIRE(cmd_buffer != nullptr);
 
-		ARBD::METAL::Event event(cmd_buffer);
+		MARS::METAL::Event event(cmd_buffer);
 
 		event.commit();
 		event.wait();
@@ -401,51 +401,51 @@ TEST_CASE("Manager Event System", "[Manager][Backend]") {
 }
 
 TEST_CASE("Manager Error Handling", "[Manager][Backend]") {
-	ARBD::METAL::Manager::init();
-	ARBD::METAL::Manager::load_info();
+	MARS::METAL::Manager::init();
+	MARS::METAL::Manager::load_info();
 
 	SECTION("Invalid device access") {
-		const auto& devices = ARBD::METAL::Manager::devices();
+		const auto& devices = MARS::METAL::Manager::devices();
 		int invalid_id = static_cast<int>(devices.size());
 
-		REQUIRE_THROWS_AS(ARBD::METAL::Manager::use(invalid_id), ARBD::Exception);
+		REQUIRE_THROWS_AS(MARS::METAL::Manager::use(invalid_id), MARS::Exception);
 	}
 
 	SECTION("Invalid function access") {
-		auto* library = ARBD::METAL::Manager::get_library();
+		auto* library = MARS::METAL::Manager::get_library();
 
 		if (library != nullptr) {
-			REQUIRE_THROWS_AS(ARBD::METAL::Manager::get_function("nonexistent_function"),
-							  ARBD::Exception);
+			REQUIRE_THROWS_AS(MARS::METAL::Manager::get_function("nonexistent_function"),
+							  MARS::Exception);
 		}
 	}
 
 	SECTION("Null pointer deallocation") {
 		// Should handle null pointer gracefully
-		REQUIRE_NOTHROW(ARBD::METAL::Manager::deallocate_raw(nullptr));
+		REQUIRE_NOTHROW(MARS::METAL::Manager::deallocate_raw(nullptr));
 	}
 
 	SECTION("Double deallocation") {
-		void* ptr = ARBD::METAL::Manager::allocate_raw(1024);
+		void* ptr = MARS::METAL::Manager::allocate_raw(1024);
 		REQUIRE(ptr != nullptr);
 
-		REQUIRE_NOTHROW(ARBD::METAL::Manager::deallocate_raw(ptr));
+		REQUIRE_NOTHROW(MARS::METAL::Manager::deallocate_raw(ptr));
 
 		// Second deallocation should be logged as warning but not crash
-		REQUIRE_NOTHROW(ARBD::METAL::Manager::deallocate_raw(ptr));
+		REQUIRE_NOTHROW(MARS::METAL::Manager::deallocate_raw(ptr));
 	}
 }
 
 TEST_CASE("Manager Finalization", "[Manager][Backend]") {
 	// Initialize first
-	ARBD::METAL::Manager::init();
-	ARBD::METAL::Manager::load_info();
+	MARS::METAL::Manager::init();
+	MARS::METAL::Manager::load_info();
 
 	SECTION("Clean finalization") {
-		REQUIRE_NOTHROW(ARBD::METAL::Manager::finalize());
+		REQUIRE_NOTHROW(MARS::METAL::Manager::finalize());
 
 		// After finalization, devices should be empty
-		const auto& devices = ARBD::METAL::Manager::devices();
+		const auto& devices = MARS::METAL::Manager::devices();
 		REQUIRE(devices.empty());
 	}
 }

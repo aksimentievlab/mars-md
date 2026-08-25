@@ -1,14 +1,14 @@
 #pragma once
 #ifdef USE_METAL
 
-#include "ARBDException.h"
-#include "ARBDLogger.h"
 #include "Backend/Resource.h"
+#include "MARSException.h"
+#include "MARSLogger.h"
 #include "METALManager.h"
 
 #include <Metal/Metal.hpp>
 
-namespace ARBD {
+namespace MARS {
 namespace METAL {
 // Base policy that interfaces with your existing METAL::Manager
 struct Policy {
@@ -214,6 +214,6 @@ struct TexturePolicy {
 	}
 };
 } // namespace METAL
-} // namespace ARBD
+} // namespace MARS
 
 #endif

@@ -15,7 +15,7 @@
 #include <string>
 
 namespace nb = nanobind;
-using namespace ARBD;
+using namespace MARS;
 
 /**
  * @brief Python bindings for SimSystem (time-invariant configuration) and ConfigParser
@@ -24,10 +24,7 @@ using namespace ARBD;
  * - **SimSystem**: Time-invariant configuration (temperature, box, cutoff, particle types, etc.)
  * - **ConfigParser**: Loads config files, temporarily holds initial topology
  * - **SystemState**: Internal runtime state (NOT exposed to Python - managed by SimManager)
- *
- * ## Python Usage:
- *
- * ### Option 1: Load from existing config file (use ConfigParser)
+ * @usage: Option 1: Load from existing config file (use ConfigParser)
  * ```python
  * from arbd2v import ConfigParser, SimSystem, Resource, ResourceType
  *
@@ -48,7 +45,7 @@ using namespace ARBD;
  * # Results are written to output files (DCD, etc.)
  * ```
  *
- * ### Option 2: Pure Python configuration (no ConfigParser needed)
+ * @usage: Option 2: Pure Python configuration (no ConfigParser needed)
  * ```python
  * from arbd2v import SimSystem, ParticleType, Resource, ResourceType
  *
@@ -201,10 +198,6 @@ void init_pysystem(nb::module_& m) {
 		.def("__eq__", &Resource::operator==)
 		.def("__ne__", &Resource::operator!=)
 		.def("__lt__", &Resource::operator<);
-
-	// Note: std::vector<Resource> is automatically bound by nanobind/stl/vector.h
-	// No manual binding needed - Python can use list[Resource] directly
-
 	//================================================================================
 	// SimSystem Binding - Time-immutable system configuration
 	//================================================================================
@@ -219,7 +212,7 @@ void init_pysystem(nb::module_& m) {
 			"Set system temperature (constant value)")
 		.def(
 			"set_temperature_grid",
-			[](SimSystem& sys, const BaseGrid<arbd_real>& grid) { sys.set_temperature(grid); },
+			[](SimSystem& sys, const BaseGrid<mars_real>& grid) { sys.set_temperature(grid); },
 			nb::arg("grid"),
 			"Set system temperature (spatial grid)")
 		.def(

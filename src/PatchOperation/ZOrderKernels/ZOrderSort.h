@@ -19,7 +19,7 @@
 
 // DeviceRadix.h provides both CUDA and SYCL radix sort implementations
 
-namespace ARBD {
+namespace MARS {
 
 /**
  * @brief Optimization modes for different Z-order sorting use cases
@@ -222,7 +222,7 @@ class ZOrderSort {
 
 	// Displacement tracking buffers (Pairlist mode only)
 	DeviceBuffer<Vector3> old_positions_;		   ///< Previous positions for displacement tracking
-	mutable DeviceBuffer<arbd_real> max_displacement_; ///< Device-side maximum displacement
+	mutable DeviceBuffer<mars_real> max_displacement_; ///< Device-side maximum displacement
 	mutable DeviceBuffer<uint32_t> invalid_count_; ///< Count of invalid Morton codes
 
 	/**
@@ -288,7 +288,7 @@ class ZOrderSort {
 		resource_.synchronize_streams();
 
 #else
-		ARBD_Exception(ExceptionType::NotImplementedError,
+		MARS_Exception(ExceptionType::NotImplementedError,
 					   "Z-order sorting requires USE_CUDA or USE_SYCL");
 #endif
 	};
@@ -318,7 +318,7 @@ void ZOrderSort::reorder_data(const DeviceBuffer<T>& input_data,
 							  DeviceBuffer<T>& output_data,
 							  size_t num_elements) {
 	if (num_elements > max_particles_) {
-		ARBD_Exception(ExceptionType::ValueError,
+		MARS_Exception(ExceptionType::ValueError,
 					   "Cannot reorder {} elements, maximum is {}",
 					   num_elements,
 					   max_particles_);
@@ -338,4 +338,4 @@ void ZOrderSort::reorder_data(const DeviceBuffer<T>& input_data,
 	resource_.synchronize_streams();
 }
 
-} // namespace ARBD
+} // namespace MARS

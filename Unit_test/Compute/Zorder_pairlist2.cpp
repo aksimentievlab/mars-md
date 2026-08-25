@@ -22,7 +22,7 @@
 #include <chrono>
 #include <numeric>
 
-using namespace ARBD;
+using namespace MARS;
 
 namespace {
 
@@ -64,7 +64,7 @@ void print_pairlist(const Pairlist& pairlist,
 	size_t num_particles = host_data.size();
 
 	// Copy pairs to host
-	std::vector<ARBD::int2> pairs(num_pairs);
+	std::vector<MARS::int2> pairs(num_pairs);
 	pairlist.get_neighbor_pairs().copy_to_host_sync(pairs.data(), num_pairs);
 
 	LOGINFO("=== ZOrder Pairlist ===");
@@ -130,7 +130,7 @@ void print_pairlist(const Pairlist& pairlist,
  */
 void print_neighbor_histogram(const Pairlist& pairlist, size_t num_particles) {
 	size_t num_pairs = pairlist.get_num_pairs();
-	std::vector<ARBD::int2> pairs(num_pairs);
+	std::vector<MARS::int2> pairs(num_pairs);
 	pairlist.get_neighbor_pairs().copy_to_host_sync(pairs.data(), num_pairs);
 
 	// Count neighbors per particle
@@ -455,7 +455,7 @@ TEST_CASE("ZOrder Pairlist - Verify Pair Distances", "[pairlist][zorder][verify]
 
 	// Copy pairs and verify all are within cutoff
 	size_t num_pairs = pairlist->get_num_pairs();
-	std::vector<ARBD::int2> pairs(num_pairs);
+	std::vector<MARS::int2> pairs(num_pairs);
 	pairlist->get_neighbor_pairs().copy_to_host_sync(pairs.data(), num_pairs);
 
 	size_t violations = 0;

@@ -4,7 +4,7 @@
 #include "System/SystemState.h"
 #include <chrono>
 
-namespace ARBD {
+namespace MARS {
 DecompositionPlan RecursiveBisectionPatchDecomposer::decompose(SimSystem& system,
 															   SystemState& state) {
 	auto start_time = std::chrono::high_resolution_clock::now();
@@ -194,4 +194,4 @@ int RecursiveBisectionPatchDecomposer::find_optimal_split_dimension(
 		return 2; // z
 	}
 }
-} // namespace ARBD
+} // namespace MARS

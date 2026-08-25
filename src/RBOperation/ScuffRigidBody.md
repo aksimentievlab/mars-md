@@ -1,7 +1,7 @@
 # ScuffRigidBody.h — implementation notes
 
-Host-side coupling between ARBD rigid bodies and a scuff-em BEM solve. One SCUFF
-surface per plasmonic rigid body; ARBD supplies the pose, and the force/torque
+Host-side coupling between MARS rigid bodies and a scuff-em BEM solve. One SCUFF
+surface per plasmonic rigid body; MARS supplies the pose, and the force/torque
 comes back and lands in `DeviceRigidBody::external_force/_torque` via
 `ApplyExternalForcesKernel` (ApplyHostForce.h).
 
@@ -64,7 +64,7 @@ starts from the pose the geometry had when read.
 A `DISPLACED`/`ROTATED` line inside `OBJECT...ENDOBJECT` is parsed into
 `RWGSurface::OTGT` (RWGSurface.cc:166-186), applied to the vertices at birth
 (RWGSurface.cc:427) and never un-applied — `UnTransform()` rewinds only
-`RWGSurface::GT`. The ARBD pose would then compose on top of that placement
+`RWGSurface::GT`. The MARS pose would then compose on top of that placement
 rather than replace it, offsetting every body by the `.scuffgeo` displacement
 with nothing to signal it.
 
@@ -80,13 +80,13 @@ Meshes still come from `MESHFILE` as usual; the constraint is only that the
 
 ## Units
 
-| quantity | SCUFF | ARBD | factor |
+| quantity | SCUFF | MARS | factor |
 | --- | --- | --- | --- |
 | length | micron | Angstrom | `ANGSTROM_TO_MICRON = 1e-4` |
 | force | nanonewton | kcal/mol/Angstrom | `1000 / PNPERKCALMOL` = 14.393 |
 | torque | nanonewton·micron | kcal/mol | above × `1e4` = 1.4393e5 |
 
-`constants::PNPERKCALMOL = 69.479` (pN per kcal/mol/Å) is the existing ARBD
+`constants::PNPERKCALMOL = 69.479` (pN per kcal/mol/Å) is the existing MARS
 constant; the SCUFF units are documented in
 `applications/scuff-scatter/OutputModules.cc` (`WritePFTFilePreamble`) and
 `PFTOptions.h` (`TENTHIRDS`).

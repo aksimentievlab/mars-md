@@ -9,7 +9,7 @@
 // Explicit template instantiations for Integrator kernels
 // These are needed so templates can be instantiated in CUDA compilation units
 // instead of C++ files where they would get stub implementations
-namespace ARBD {
+namespace MARS {
 
 // BDIntegrate instantiation
 template struct BDIntegrate<float>;
@@ -41,4 +41,4 @@ template Event launch_cuda_kernel(const Resource& resource,
 								  const KernelConfig& config,
 								  RBIntegrateBDKernel<float> kernel_func);
 
-} // namespace ARBD
+} // namespace MARS

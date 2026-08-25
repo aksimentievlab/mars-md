@@ -1,6 +1,6 @@
 #include "ZOrder.h"
-#include "ARBDException.h"
-#include "ARBDLogger.h"
+#include "MARSException.h"
+#include "MARSLogger.h"
 #include "System/PeriodicBox.h"
 #include "System/SimSystem.h"
 #include "System/SystemState.h"
@@ -8,7 +8,7 @@
 #include <chrono>
 #include <limits>
 
-namespace ARBD {
+namespace MARS {
 
 ZOrderDecomposer::ZOrderDecomposer() : PatchDecomposer() {
 	type_ = DecomposerType::ZOrder;
@@ -293,4 +293,4 @@ void ZOrderDecomposer::validate_and_compute_stats(const SimSystem& sys, size_t n
 	LOGTRACE("Z-order decomposition stats: {} patches", num_patches);
 }
 
-} // namespace ARBD
+} // namespace MARS

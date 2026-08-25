@@ -21,7 +21,7 @@
 #include "System/PatchDecomposer/Spatial.h"
 #include "System/PatchDecomposer/ZOrder.h"
 
-namespace ARBD {
+namespace MARS {
 
 //================================================================================
 // Factory Functions
@@ -62,4 +62,4 @@ bool is_decomposer_available(DecomposerType type);
  */
 const char* get_decomposer_name(DecomposerType type);
 
-} // namespace ARBD
+} // namespace MARS

@@ -1,6 +1,6 @@
 #include "../catch_boiler.h"
 
-using namespace ARBD;
+using namespace MARS;
 
 TEST_CASE("DeviceBuffer copy round-trip", "[device]") {
 	initialize_backend_once();

@@ -7,28 +7,28 @@
 #include "Types/BaseGrid.h"
 #include <cmath>
 
-using namespace ARBD;
+using namespace MARS;
 using Catch::Approx;
 
 namespace {
 
 /// BaseGrid::index() is private, so mirror its layout here.
-idx_t lin(const BaseGrid<arbd_real>& g, idx_t ix, idx_t iy, idx_t iz) {
+idx_t lin(const BaseGrid<mars_real>& g, idx_t ix, idx_t iy, idx_t iz) {
 	return iz + iy * g.nz() + ix * g.ny() * g.nz();
 }
 
 /// nx*ny*nz grid with spacing dx, value = its x index.
-BaseGrid<arbd_real> ramp(idx_t nx, idx_t ny, idx_t nz, arbd_real dx = arbd_real(1)) {
-	BaseGrid<arbd_real> g(Matrix3(dx), Vector3(0, 0, 0), nx, ny, nz);
+BaseGrid<mars_real> ramp(idx_t nx, idx_t ny, idx_t nz, mars_real dx = mars_real(1)) {
+	BaseGrid<mars_real> g(Matrix3(dx), Vector3(0, 0, 0), nx, ny, nz);
 	for (idx_t ix = 0; ix < nx; ++ix)
 		for (idx_t iy = 0; iy < ny; ++iy)
 			for (idx_t iz = 0; iz < nz; ++iz)
-				g[lin(g, ix, iy, iz)] = arbd_real(ix);
+				g[lin(g, ix, iy, iz)] = mars_real(ix);
 	return g;
 }
 
-BaseGrid<arbd_real> constant(idx_t n, arbd_real v) {
-	BaseGrid<arbd_real> g(Matrix3(arbd_real(1)), Vector3(0, 0, 0), n, n, n);
+BaseGrid<mars_real> constant(idx_t n, mars_real v) {
+	BaseGrid<mars_real> g(Matrix3(mars_real(1)), Vector3(0, 0, 0), n, n, n);
 	for (idx_t i = 0; i < g.size(); ++i)
 		g[i] = v;
 	return g;
@@ -59,7 +59,7 @@ TEST_CASE("Grid arithmetic rejects size mismatch", "[grid][arithmetic]") {
 
 TEST_CASE("integrate is sum times cell volume", "[grid][arithmetic]") {
 	// 2 A spacing -> cell volume 8; 4^3 cells of value 0.5 -> 64*0.5*8 = 256
-	BaseGrid<arbd_real> g(Matrix3(arbd_real(2)), Vector3(0, 0, 0), 4, 4, 4);
+	BaseGrid<mars_real> g(Matrix3(mars_real(2)), Vector3(0, 0, 0), 4, 4, 4);
 	for (idx_t i = 0; i < g.size(); ++i)
 		g[i] = 0.5f;
 
@@ -84,16 +84,16 @@ TEST_CASE("has_non_finite detects NaN and infinity", "[grid][arithmetic]") {
 	auto g = constant(3, 1.0f);
 	REQUIRE_FALSE(g.has_non_finite());
 
-	g[5] = std::numeric_limits<arbd_real>::quiet_NaN();
+	g[5] = std::numeric_limits<mars_real>::quiet_NaN();
 	REQUIRE(g.has_non_finite());
 
 	auto h = constant(3, 1.0f);
-	h[2] = std::numeric_limits<arbd_real>::infinity();
+	h[2] = std::numeric_limits<mars_real>::infinity();
 	REQUIRE(h.has_non_finite());
 }
 
 TEST_CASE("resample preserves world extent", "[grid][arithmetic][resample]") {
-	const auto g = ramp(4, 4, 4, arbd_real(2)); // extent 8 A per axis
+	const auto g = ramp(4, 4, 4, mars_real(2)); // extent 8 A per axis
 	const auto r = g.resample(Vector3_t<idx_t>(8, 8, 8));
 
 	REQUIRE(r.nx() == 8);

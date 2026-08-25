@@ -17,8 +17,8 @@
 // Testing framework
 #include "../extern/Catch2/extras/catch_amalgamated.hpp"
 
-// Common ARBD includes
-#include "ARBDLogger.h"
+// Common MARS includes
+#include "MARSLogger.h"
 #include "Backend/Buffer.h"
 #include "Backend/Events.h"
 #include "Backend/Resource.h"
@@ -108,15 +108,15 @@ static void initialize_backend_once() {
 
 	try {
 #ifdef USE_CUDA
-		ARBD::CUDA::Manager::init();
+		MARS::CUDA::Manager::init();
 		Global::backend_available = true;
 		Global::backend_name = "CUDA";
 #elif defined(USE_SYCL)
-		ARBD::SYCL::Manager::init();
+		MARS::SYCL::Manager::init();
 		Global::backend_available = true;
 		Global::backend_name = "SYCL";
 #elif defined(USE_METAL)
-		ARBD::METAL::Manager::init();
+		MARS::METAL::Manager::init();
 		Global::backend_available = true;
 		Global::backend_name = "METAL";
 #else
@@ -199,9 +199,9 @@ class MPITestManager {
 			return;
 
 		try {
-			ARBD::MPI::Manager::instance().init();
-			rank_ = ARBD::MPI::Manager::instance().get_rank();
-			size_ = ARBD::MPI::Manager::instance().get_size();
+			MARS::MPI::Manager::instance().init();
+			rank_ = MARS::MPI::Manager::instance().get_rank();
+			size_ = MARS::MPI::Manager::instance().get_size();
 			initialized_ = true;
 
 			if (rank_ == 0) {
@@ -221,7 +221,7 @@ class MPITestManager {
 			return;
 
 		try {
-			ARBD::MPI::Manager::instance().finalize();
+			MARS::MPI::Manager::instance().finalize();
 		} catch (const std::exception& e) {
 			std::cerr << "MPI Test Manager finalization failed: " << e.what() << std::endl;
 		}
@@ -411,24 +411,24 @@ class TestBackendManager {
 
 		try {
 #ifdef USE_CUDA
-			ARBD::SignalManager::manage_segfault();
-			ARBD::CUDA::Manager::init();
+			MARS::SignalManager::manage_segfault();
+			MARS::CUDA::Manager::init();
 #elif defined(USE_SYCL)
 			// Add error handling around SYCL initialization to prevent memory
 			// corruption
 			try {
-				ARBD::SYCL::Manager::init();
-				ARBD::SYCL::Manager::load_info();
-			} catch (const ARBD::Exception& e) {
+				MARS::SYCL::Manager::init();
+				MARS::SYCL::Manager::load_info();
+			} catch (const MARS::Exception& e) {
 				std::cerr << "Warning: SYCL initialization failed: " << e.what() << std::endl;
 				return; // Don't mark as initialized if SYCL fails
 			}
 #elif defined(USE_METAL)
-			ARBD::METAL::Manager::init();
-			ARBD::METAL::Manager::load_info();
+			MARS::METAL::Manager::init();
+			MARS::METAL::Manager::load_info();
 #endif
 			initialized_ = true;
-		} catch (const ARBD::Exception& e) {
+		} catch (const MARS::Exception& e) {
 			std::cerr << "Warning: Backend initialization failed: " << e.what() << std::endl;
 			return; // Don't mark as initialized if any backend fails
 		}
@@ -442,11 +442,11 @@ class TestBackendManager {
 			return;
 
 #ifdef USE_CUDA
-		ARBD::CUDA::Manager::finalize();
+		MARS::CUDA::Manager::finalize();
 #elif defined(USE_SYCL)
-		ARBD::SYCL::Manager::finalize();
+		MARS::SYCL::Manager::finalize();
 #elif defined(USE_METAL)
-		ARBD::METAL::Manager::finalize();
+		MARS::METAL::Manager::finalize();
 #endif
 		initialized_ = false;
 	}
@@ -474,7 +474,7 @@ class TestBackendManager {
 #elif defined(USE_SYCL)
 		// SYCL synchronization is handled by queue operations
 #elif defined(USE_METAL)
-		ARBD::METAL::Manager::sync();
+		MARS::METAL::Manager::sync();
 #endif
 	}
 
@@ -494,13 +494,13 @@ class TestBackendManager {
 
 #ifdef USE_CUDA
 		R* ptr;
-		ARBD::check_cuda_error(cudaMalloc((void**)&ptr, count * sizeof(R)), __FILE__, __LINE__);
+		MARS::check_cuda_error(cudaMalloc((void**)&ptr, count * sizeof(R)), __FILE__, __LINE__);
 		// Initialize device memory to zero
-		ARBD::check_cuda_error(cudaMemset(ptr, 0, count * sizeof(R)), __FILE__, __LINE__);
+		MARS::check_cuda_error(cudaMemset(ptr, 0, count * sizeof(R)), __FILE__, __LINE__);
 		return ptr;
 #elif defined(USE_SYCL)
 		// Create a resource and get its queue
-		ARBD::Resource resource;
+		MARS::Resource resource;
 		void* stream_ptr = resource.get_stream();
 		if (!stream_ptr) {
 			std::cerr << "Warning: Failed to get SYCL queue from Resource" << std::endl;
@@ -538,7 +538,7 @@ class TestBackendManager {
 		cudaFree(ptr);
 #elif defined(USE_SYCL)
 		// Create a resource and get its queue
-		ARBD::Resource resource;
+		MARS::Resource resource;
 		void* stream_ptr = resource.get_stream();
 		if (stream_ptr) {
 			auto& queue = *static_cast<sycl::queue*>(stream_ptr);
@@ -567,13 +567,13 @@ class TestBackendManager {
 		}
 
 #ifdef USE_CUDA
-		ARBD::check_cuda_error(
+		MARS::check_cuda_error(
 			cudaMemcpy(device_ptr, host_ptr, count * sizeof(R), cudaMemcpyHostToDevice),
 			__FILE__,
 			__LINE__);
 #elif defined(USE_SYCL)
 		// Create a resource and get its queue
-		ARBD::Resource resource;
+		MARS::Resource resource;
 		void* stream_ptr = resource.get_stream();
 		if (stream_ptr) {
 			auto& queue = *static_cast<sycl::queue*>(stream_ptr);
@@ -602,13 +602,13 @@ class TestBackendManager {
 		}
 
 #ifdef USE_CUDA
-		ARBD::check_cuda_error(
+		MARS::check_cuda_error(
 			cudaMemcpy(host_ptr, device_ptr, count * sizeof(R), cudaMemcpyDeviceToHost),
 			__FILE__,
 			__LINE__);
 #elif defined(USE_SYCL)
 		// Create a resource and get its queue
-		ARBD::Resource resource;
+		MARS::Resource resource;
 		void* stream_ptr = resource.get_stream();
 		if (stream_ptr) {
 			auto& queue = *static_cast<sycl::queue*>(stream_ptr);
@@ -641,15 +641,15 @@ class TestBackendManager {
 #ifdef USE_CUDA
 #if defined(__CUDACC__)
 		// Launch the kernel using the defined cuda_op_kernel
-		ARBD::check_cuda_error(cudaGetLastError(), __FILE__, __LINE__);
-		ARBD::check_cuda_error(cudaDeviceSynchronize(), __FILE__, __LINE__);
+		MARS::check_cuda_error(cudaGetLastError(), __FILE__, __LINE__);
+		MARS::check_cuda_error(cudaDeviceSynchronize(), __FILE__, __LINE__);
 #else
 		// Fallback: execute on host when not compiled with nvcc
 		*result_device = Op_t::op(args...);
 #endif
 #elif defined(USE_SYCL)
 		// Create a resource and get its queue
-		ARBD::Resource resource;
+		MARS::Resource resource;
 		void* stream_ptr = resource.get_stream();
 		if (stream_ptr) {
 			auto& queue = *static_cast<sycl::queue*>(stream_ptr);
@@ -697,7 +697,7 @@ namespace Tests {
  */
 template<typename Op_t, typename R, typename... T>
 void run_trial(std::string name, R expected_result, T... args) {
-	using namespace ARBD;
+	using namespace MARS;
 
 	INFO(name);
 

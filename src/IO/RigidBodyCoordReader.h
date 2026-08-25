@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../ARBDException.h"
+#include "../MARSException.h"
 #include "../Objects/RigidBodyProperties.h"
 #include "../Types/Types.h"
 #include <fstream>
@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 
-namespace ARBD {
+namespace MARS {
 
 /**
  * @brief Reader for legacy `inputRBCoordinates` files.
@@ -106,4 +106,4 @@ class RigidBodyCoordReader {
 	}
 };
 
-} // namespace ARBD
+} // namespace MARS

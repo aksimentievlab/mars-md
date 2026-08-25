@@ -15,7 +15,7 @@
 #include "Types/BaseGrid.h"
 #include "Types/Types.h"
 
-namespace ARBD {
+namespace MARS {
 
 /**
  * @brief Kernel to decompose particles into cells
@@ -336,29 +336,29 @@ struct CellNeighborKernel {
 	}
 };
 
-} // namespace ARBD
+} // namespace MARS
 
 #ifdef USE_SYCL
 #include <sycl/sycl.hpp>
 // SYCL device copyable specializations for kernel functors
 template<>
-struct sycl::is_device_copyable<ARBD::DecomposeKernel> : std::true_type {};
+struct sycl::is_device_copyable<MARS::DecomposeKernel> : std::true_type {};
 
 template<>
-struct sycl::is_device_copyable<ARBD::MakeRangesKernel> : std::true_type {};
+struct sycl::is_device_copyable<MARS::MakeRangesKernel> : std::true_type {};
 
 template<>
-struct sycl::is_device_copyable<ARBD::BindRangesKernel> : std::true_type {};
+struct sycl::is_device_copyable<MARS::BindRangesKernel> : std::true_type {};
 
 template<>
-struct sycl::is_device_copyable<ARBD::ValidateDecompositionKernel> : std::true_type {};
+struct sycl::is_device_copyable<MARS::ValidateDecompositionKernel> : std::true_type {};
 
 template<>
-struct sycl::is_device_copyable<ARBD::CountParticlesKernel> : std::true_type {};
+struct sycl::is_device_copyable<MARS::CountParticlesKernel> : std::true_type {};
 
 template<>
-struct sycl::is_device_copyable<ARBD::ParticleAssignmentFunctor> : std::true_type {};
+struct sycl::is_device_copyable<MARS::ParticleAssignmentFunctor> : std::true_type {};
 
 template<>
-struct sycl::is_device_copyable<ARBD::CellNeighborKernel> : std::true_type {};
+struct sycl::is_device_copyable<MARS::CellNeighborKernel> : std::true_type {};
 #endif

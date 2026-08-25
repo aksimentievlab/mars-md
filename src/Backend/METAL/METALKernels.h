@@ -8,7 +8,7 @@
 #include "METALManager.h"
 #include "Metal/Metal.hpp"
 
-namespace ARBD {
+namespace MARS {
 
 struct MetalGridConfig {
 	MTL::Size grid_size;
@@ -26,9 +26,11 @@ inline MetalGridConfig calculate_metal_grid_config(idx_t thread_count,
 		// Convert from number of threadgroups to total threads
 		// config.grid_size.x is number of threadgroups, config.block_size.x is threads per group
 		NS::UInteger total_threads_x = config.grid_size.x * config.block_size.x;
-		NS::UInteger total_threads_y = (config.grid_size.y > 0) ? config.grid_size.y * config.block_size.y : 1;
-		NS::UInteger total_threads_z = (config.grid_size.z > 0) ? config.grid_size.z * config.block_size.z : 1;
-		
+		NS::UInteger total_threads_y =
+			(config.grid_size.y > 0) ? config.grid_size.y * config.block_size.y : 1;
+		NS::UInteger total_threads_z =
+			(config.grid_size.z > 0) ? config.grid_size.z * config.block_size.z : 1;
+
 		result.grid_size = MTL::Size::Make(total_threads_x, total_threads_y, total_threads_z);
 	} else {
 		// Fall back to 1D grid with total thread count
@@ -38,22 +40,22 @@ inline MetalGridConfig calculate_metal_grid_config(idx_t thread_count,
 	// Use config.block_size if specified, otherwise calculate optimal size
 	if (config.block_size.x > 0 || config.block_size.y > 0 || config.block_size.z > 0) {
 		// Use the explicit block dimensions from config
-		result.threadgroup_size = MTL::Size::Make(
-			std::max((NS::UInteger)1, (NS::UInteger)config.block_size.x),
-			std::max((NS::UInteger)1, (NS::UInteger)config.block_size.y),
-			std::max((NS::UInteger)1, (NS::UInteger)config.block_size.z)
-		);
+		result.threadgroup_size =
+			MTL::Size::Make(std::max((NS::UInteger)1, (NS::UInteger)config.block_size.x),
+							std::max((NS::UInteger)1, (NS::UInteger)config.block_size.y),
+							std::max((NS::UInteger)1, (NS::UInteger)config.block_size.z));
 	} else {
 		// Calculate optimal 1D threadgroup size
 		NS::UInteger max_threads = pipeline->maxTotalThreadsPerThreadgroup();
 		NS::UInteger execution_width = pipeline->threadExecutionWidth();
-		
+
 		NS::UInteger desired_threads = 256; // Default reasonable size
-		NS::UInteger final_threads = std::max(execution_width, std::min(desired_threads, max_threads));
-		
+		NS::UInteger final_threads =
+			std::max(execution_width, std::min(desired_threads, max_threads));
+
 		// The threadgroup size cannot be larger than the total number of threads in the grid
 		final_threads = std::min((NS::UInteger)thread_count, final_threads);
-		
+
 		result.threadgroup_size = MTL::Size::Make(final_threads, 1, 1);
 	}
 
@@ -66,17 +68,17 @@ inline MetalGridConfig calculate_metal_grid_config(idx_t thread_count,
  * @code
  * #include "Backend/Kernels.h"
  * #include "Math/Vector3.h"
- * using namespace ARBD;
+ * using namespace MARS;
  *
  * // Prepare Metal resource and buffers
  * Resource metal_res(ResourceType::METAL, 0);
  * constexpr idx_t n = 16;
- * std::vector<Vector3_t<arbd_real>> host_a(n), host_b(n), host_out(n);
+ * std::vector<Vector3_t<mars_real>> host_a(n), host_b(n), host_out(n);
  * for (idx_t i = 0; i < n; ++i) {
- *     host_a[i] = Vector3_t<arbd_real>(float(i), float(i+1), float(i+2));
- *     host_b[i] = Vector3_t<arbd_real>(float(2*i), float(2*i+1), float(2*i+2));
+ *     host_a[i] = Vector3_t<mars_real>(float(i), float(i+1), float(i+2));
+ *     host_b[i] = Vector3_t<mars_real>(float(2*i), float(2*i+1), float(2*i+2));
  * }
- * DeviceBuffer<Vector3_t<arbd_real>> buf_a(n), buf_b(n), buf_out(n);
+ * DeviceBuffer<Vector3_t<mars_real>> buf_a(n), buf_b(n), buf_out(n);
  * buf_a.copy_from_host(host_a.data(), n);
  * buf_b.copy_from_host(host_b.data(), n);
  *
@@ -102,13 +104,13 @@ inline MetalGridConfig calculate_metal_grid_config(idx_t thread_count,
  * @code
  * #include "Backend/Kernels.h"
  * #include "Math/Matrix3.h"
- * using namespace ARBD;
+ * using namespace MARS;
  *
  * Resource metal_res(ResourceType::METAL, 0);
  * constexpr idx_t n = 4;
- * std::vector<Matrix3_t<arbd_real>> host_a(n), host_b(n), host_out(n);
+ * std::vector<Matrix3_t<mars_real>> host_a(n), host_b(n), host_out(n);
  * for (idx_t i = 0; i < n; ++i) {
- *     Matrix3_t<arbd_real> m1, m2;
+ *     Matrix3_t<mars_real> m1, m2;
  *     m1.ex().x = float(i + 1); m1.ex().y = float(i + 2); m1.ex().z = float(i + 3);
  *     m1.ey().x = float(i + 4); m1.ey().y = float(i + 5); m1.ey().z = float(i + 6);
  *     m1.ez().x = float(i + 7); m1.ez().y = float(i + 8); m1.ez().z = float(i + 9);
@@ -117,7 +119,7 @@ inline MetalGridConfig calculate_metal_grid_config(idx_t thread_count,
  * 6)); m2.ez().x = float(2 * (i + 7)); m2.ez().y = float(2 * (i + 8)); m2.ez().z = float(2 * (i +
  * 9)); host_a[i] = m1; host_b[i] = m2;
  * }
- * DeviceBuffer<Matrix3_t<arbd_real>> buf_a(n), buf_b(n), buf_out(n);
+ * DeviceBuffer<Matrix3_t<mars_real>> buf_a(n), buf_b(n), buf_out(n);
  * buf_a.copy_from_host(host_a.data(), n);
  * buf_b.copy_from_host(host_b.data(), n);
  *
@@ -140,10 +142,10 @@ inline MetalGridConfig calculate_metal_grid_config(idx_t thread_count,
 
 template<typename... Args>
 Event launch_metal_kernel_impl(const Resource& resource,
-							 idx_t thread_count,
-							 const KernelConfig& config,
-							 const std::string& kernel_name,
-							 Args&&... args) {
+							   idx_t thread_count,
+							   const KernelConfig& config,
+							   const std::string& kernel_name,
+							   Args&&... args) {
 	// Get Metal components
 	auto* pipeline = METAL::Manager::get_compute_pipeline_state(kernel_name);
 	if (!pipeline) {
@@ -182,11 +184,14 @@ Event launch_metal_kernel_impl(const Resource& resource,
 	uint32_t grid_width = static_cast<uint32_t>(grid_config.grid_size.width);
 	uint32_t grid_height = static_cast<uint32_t>(grid_config.grid_size.height);
 	uint32_t grid_depth = static_cast<uint32_t>(grid_config.grid_size.depth);
-	
+
 	encoder->setBytes(&grid_width, sizeof(uint32_t), buffer_index++);
 	encoder->setBytes(&grid_height, sizeof(uint32_t), buffer_index++);
 	encoder->setBytes(&grid_depth, sizeof(uint32_t), buffer_index++);
-	LOGINFO("Auto-bound grid dimensions: width={}, height={}, depth={}", grid_width, grid_height, grid_depth);
+	LOGINFO("Auto-bound grid dimensions: width={}, height={}, depth={}",
+			grid_width,
+			grid_height,
+			grid_depth);
 
 	// Bind each user argument individually
 	auto bind_arg = [&](auto&& arg) {
@@ -219,8 +224,7 @@ Event launch_metal_kernel_impl(const Resource& resource,
 	LOGINFO("Pipeline {} maxTotalThreadsPerThreadgroup: {}",
 			kernel_name,
 			pipeline->maxTotalThreadsPerThreadgroup());
-	LOGINFO(
-		"Pipeline {} threadExecutionWidth: {}", kernel_name, pipeline->threadExecutionWidth());
+	LOGINFO("Pipeline {} threadExecutionWidth: {}", kernel_name, pipeline->threadExecutionWidth());
 
 	LOGINFO("Dispatching Metal kernel: {} with grid size ({}, {}, {}) and threadgroup size ({}, "
 			"{}, {})",
@@ -244,7 +248,7 @@ Event launch_metal_kernel_impl(const Resource& resource,
 	LOGINFO("Config async setting: {}", config.async);
 
 	// Create and return event
-	ARBD::METAL::Event metal_event(cmd_buffer_ptr);
+	MARS::METAL::Event metal_event(cmd_buffer_ptr);
 	if (!config.async) {
 		LOGINFO("Committing Metal command buffer for kernel: {}", kernel_name);
 		metal_event.commit();
@@ -285,8 +289,11 @@ Event launch_metal_kernel(const Resource& resource,
 	// Wait for dependencies
 	config.dependencies.wait_all();
 
-	auto event = launch_metal_kernel_impl(
-		resource, thread_count, config, kernel_name, std::forward<Args>(args)...);
+	auto event = launch_metal_kernel_impl(resource,
+										  thread_count,
+										  config,
+										  kernel_name,
+										  std::forward<Args>(args)...);
 
 	if (!config.async) {
 		event.wait(); // Ensure the main kernel command buffer is finished
@@ -332,5 +339,5 @@ launch_metal_kernel(const Resource& resource,
 							   std::forward<Args>(args)...);
 }
 
-} // namespace ARBD
+} // namespace MARS
 #endif

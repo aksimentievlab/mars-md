@@ -8,7 +8,7 @@
 #include "System/PeriodicBox.h"
 #include "Types/Types.h"
 
-namespace ARBD {
+namespace MARS {
 
 /**
  * @brief Which analytical pair terms a single AnalyticalPairKernel applies
@@ -52,7 +52,7 @@ struct AnalyticalPairKernel {
 
 	bool get_energy;
 	idx_t num_pairs;
-	arbd_real cutoff_squared;
+	mars_real cutoff_squared;
 
 	KERNEL_FUNC void operator()(idx_t i) const {
 		if (i >= num_pairs)
@@ -61,18 +61,18 @@ struct AnalyticalPairKernel {
 		const int2& indices = neighbor_pairs[i];
 
 		CalcDistance geom = CalcDistance::compute(positions, indices, pbox);
-		if (geom.distance < arbd_real(1e-6))
+		if (geom.distance < mars_real(1e-6))
 			return;
-		if (cutoff_squared > arbd_real(0) && geom.distance * geom.distance > cutoff_squared)
+		if (cutoff_squared > mars_real(0) && geom.distance * geom.distance > cutoff_squared)
 			return;
 
 		const int type_i = type_ids[indices.x];
 		const int type_j = type_ids[indices.y];
-		const arbd_real qi = types.charge[type_i];
-		const arbd_real qj = types.charge[type_j];
+		const mars_real qi = types.charge[type_i];
+		const mars_real qj = types.charge[type_j];
 
-		arbd_real force_magnitude = arbd_real(0);
-		arbd_real energy = arbd_real(0);
+		mars_real force_magnitude = mars_real(0);
+		mars_real energy = mars_real(0);
 
 		if (enabled_terms & PAIR_TERM_COULOMB) {
 			const ScalarForceEnergy fe =
@@ -98,10 +98,10 @@ struct AnalyticalPairKernel {
 		if (enabled_terms & PAIR_TERM_SOFTCORE) {
 			// softcoreForce returns dU/dr divided by r, so it needs converting
 			// to this kernel's -dU/dr. eps and radius are per particle type.
-			const arbd_real rad = arbd_real(0.5) * (types.radius[type_i] + types.radius[type_j]);
-			const arbd_real rad2 = rad * rad;
-			const arbd_real rad6 = rad2 * rad2 * rad2;
-			const arbd_real pair_eps = math::sqrt(types.eps[type_i] * types.eps[type_j]);
+			const mars_real rad = mars_real(0.5) * (types.radius[type_i] + types.radius[type_j]);
+			const mars_real rad2 = rad * rad;
+			const mars_real rad6 = rad2 * rad2 * rad2;
+			const mars_real pair_eps = math::sqrt(types.eps[type_i] * types.eps[type_j]);
 			const ScalarForceEnergy fe =
 				SoftcoreForceKernel::softcoreForce(geom.r_ij, pair_eps, rad6);
 			force_magnitude += -fe.force_magnitude * geom.distance;
@@ -113,7 +113,7 @@ struct AnalyticalPairKernel {
 		atomic_add(&force_energy[indices.y], force);
 
 		if (get_energy) {
-			const arbd_real half = energy * arbd_real(0.5);
+			const mars_real half = energy * mars_real(0.5);
 			atomic_add(&force_energy[indices.x].t, half);
 			atomic_add(&force_energy[indices.y].t, half);
 		}
@@ -132,22 +132,22 @@ inline Event launch_analytical_pair_nonbonded(const Resource& resource,
 	return launch_kernel(resource, KernelConfig::for_1d(num_pairs, resource), kernel);
 }
 
-} // namespace ARBD
+} // namespace MARS
 
 #ifdef USE_CUDA
 #include "Backend/CUDA/KernelHelper.cuh"
-namespace ARBD {
+namespace MARS {
 // Forces the instantiation into NonbondedInstantiations.cu; without this a
 // host-only .cpp launching the kernel instantiates the stub in
 // KernelHelper.cuh and throws NotImplementedError.
 extern template Event launch_cuda_kernel(const Resource& resource,
 										 const KernelConfig& config,
 										 AnalyticalPairKernel kernel_func);
-} // namespace ARBD
+} // namespace MARS
 #endif
 
 #ifdef USE_SYCL
 #include <sycl/sycl.hpp>
 template<>
-struct sycl::is_device_copyable<ARBD::AnalyticalPairKernel> : std::true_type {};
+struct sycl::is_device_copyable<MARS::AnalyticalPairKernel> : std::true_type {};
 #endif

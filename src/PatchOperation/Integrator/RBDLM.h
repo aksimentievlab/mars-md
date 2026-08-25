@@ -8,7 +8,7 @@
 #include "Types/Matrix3.h"
 #include "Types/Types.h"
 
-namespace ARBD {
+namespace MARS {
 
 // Legacy RigidBody unit conversions (v1 RigidBody.cu).
 /**
@@ -157,10 +157,10 @@ struct RBIntegrateDLMKernel {
 	}
 };
 
-} // namespace ARBD
+} // namespace MARS
 
 #ifdef USE_CUDA
-namespace ARBD {
+namespace MARS {
 extern template struct RBLangevinForceKernel<float>;
 extern template Event launch_cuda_kernel(const Resource& resource,
 										 const KernelConfig& config,
@@ -168,13 +168,13 @@ extern template Event launch_cuda_kernel(const Resource& resource,
 extern template Event launch_cuda_kernel(const Resource& resource,
 										 const KernelConfig& config,
 										 RBIntegrateDLMKernel kernel_func);
-} // namespace ARBD
+} // namespace MARS
 #endif
 
 #ifdef USE_SYCL
 #include <sycl/sycl.hpp>
 template<>
-struct sycl::is_device_copyable<ARBD::RBLangevinForceKernel<float>> : std::true_type {};
+struct sycl::is_device_copyable<MARS::RBLangevinForceKernel<float>> : std::true_type {};
 template<>
-struct sycl::is_device_copyable<ARBD::RBIntegrateDLMKernel> : std::true_type {};
+struct sycl::is_device_copyable<MARS::RBIntegrateDLMKernel> : std::true_type {};
 #endif

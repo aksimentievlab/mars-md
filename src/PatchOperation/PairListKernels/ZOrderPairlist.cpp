@@ -1,13 +1,13 @@
 #include "ZOrderPairlist.h"
-#include "ARBDException.h"
-#include "ARBDLogger.h"
+#include "MARSException.h"
+#include "MARSLogger.h"
 
 #include "ZOrderNeighbor.h"
 #include <algorithm>
 #include <chrono>
 #include <cmath>
 
-namespace ARBD {
+namespace MARS {
 
 ZOrderPairlist::ZOrderPairlist(const Resource& resource, size_t max_particles, size_t max_pairs)
 	: Pairlist(resource, max_particles, max_pairs),
@@ -35,7 +35,7 @@ void ZOrderPairlist::build_pairlist(const DeviceBuffer<Vector3>& positions,
 	auto start_time = std::chrono::high_resolution_clock::now();
 
 	if (num_particles > max_particles_) {
-		ARBD_Exception(ExceptionType::ValueError,
+		MARS_Exception(ExceptionType::ValueError,
 					   "Cannot build pairlist for {} particles, maximum is {}",
 					   num_particles,
 					   max_particles_);
@@ -206,7 +206,7 @@ void ZOrderPairlist::find_neighbors_zorder(size_t num_particles) {
 	uint32_t num_pairs;
 	pair_count_.copy_to_host(&num_pairs, 1, true);
 	if (num_pairs > max_pairs_) {
-		ARBD_Exception(ExceptionType::ValueError,
+		MARS_Exception(ExceptionType::ValueError,
 					   "Pairlist capacity exceeded: %u pairs found for %zu particles (%.1f per "
 					   "particle) but the device-memory budget holds only %u. Raise GPU_MEM in "
 					   "CMake or shorten the pairlist cutoff; continuing would silently simulate "
@@ -247,21 +247,21 @@ void ZOrderPairlist::get_bounding_box(const DeviceBuffer<Vector3>& positions,
 		Vector3 margin = (box_max - box_min) * 0.01f;
 		box_min -= margin;
 		box_max += margin;
-		constexpr arbd_real MIN_EXTENT = 1e-4;
+		constexpr mars_real MIN_EXTENT = 1e-4;
 		Vector3 range = box_max - box_min;
 
 		if (range.x < MIN_EXTENT) {
-			arbd_real center = box_min.x + range.x * 0.5;
+			mars_real center = box_min.x + range.x * 0.5;
 			box_min.x = center - MIN_EXTENT * 0.5;
 			box_max.x = center + MIN_EXTENT * 0.5;
 		}
 		if (range.y < MIN_EXTENT) {
-			arbd_real center = box_min.y + range.y * 0.5;
+			mars_real center = box_min.y + range.y * 0.5;
 			box_min.y = center - MIN_EXTENT * 0.5;
 			box_max.y = center + MIN_EXTENT * 0.5;
 		}
 		if (range.z < MIN_EXTENT) {
-			arbd_real center = box_min.z + range.z * 0.5;
+			mars_real center = box_min.z + range.z * 0.5;
 			box_min.z = center - MIN_EXTENT * 0.5;
 			box_max.z = center + MIN_EXTENT * 0.5;
 		}
@@ -272,4 +272,4 @@ void ZOrderPairlist::get_bounding_box(const DeviceBuffer<Vector3>& positions,
 	}
 }
 
-} // namespace ARBD
+} // namespace MARS

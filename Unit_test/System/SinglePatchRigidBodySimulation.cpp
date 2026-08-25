@@ -8,7 +8,7 @@
 #include <filesystem>
 #include <vector>
 
-using namespace ARBD;
+using namespace MARS;
 using namespace Tests;
 
 namespace {
@@ -96,7 +96,7 @@ TEST_CASE("Single patch simulation with a rigid body runs end-to-end",
 	// ConfigParser - mirrors how SinglePatchSimulation.cpp builds SimSystem
 	// via API calls, see IO/RigidBodyConfigParsing.cpp for the parser path).
 	const auto tmp_dir = std::filesystem::temp_directory_path();
-	const std::string grid_path = (tmp_dir / "arbd_test_rb_sim_bowl.dx").string();
+	const std::string grid_path = (tmp_dir / "mars_test_rb_sim_bowl.dx").string();
 	DXReader::write_grid(make_bowl_grid(), grid_path);
 	GridKey grid_key = sys.get_grid_manager().add_dense_grid(grid_path);
 	REQUIRE(grid_key.is_valid());

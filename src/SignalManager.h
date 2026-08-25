@@ -5,7 +5,7 @@
 #include <csignal>
 #endif
 
-namespace ARBD {
+namespace MARS {
 /**
  * @namespace SignalManager
  * @brief Namespace containing signal handling and management functionality.
@@ -84,4 +84,4 @@ inline bool is_shutdown_requested() {
 
 } // namespace SignalManager
 
-} // namespace ARBD
+} // namespace MARS

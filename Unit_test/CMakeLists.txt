@@ -7,7 +7,7 @@ include(CTest)
 enable_testing()
 
 # Single unified test binary using Catch2 amalgamated
-add_executable(arbd_unit_tests
+add_executable(mars_unit_tests
     ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Backend/backend_buffer_tests.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Types/vector3_tests.cpp
@@ -39,24 +39,24 @@ add_executable(arbd_unit_tests
     ${CMAKE_CURRENT_LIST_DIR}/System/SinglePatchRigidBodySimulation.cpp
 )
 # Includes
-target_include_directories(arbd_unit_tests PRIVATE
+target_include_directories(mars_unit_tests PRIVATE
     ${CMAKE_SOURCE_DIR}
     ${CMAKE_SOURCE_DIR}/src
     ${CMAKE_CURRENT_LIST_DIR}
 )
 
 # Link against project library and optional backends
-target_link_libraries(arbd_unit_tests PRIVATE lib${PROJECT_NAME})
+target_link_libraries(mars_unit_tests PRIVATE lib${PROJECT_NAME})
 
 if(USE_CUDA)
     find_package(CUDAToolkit REQUIRED)
-    target_link_libraries(arbd_unit_tests PRIVATE CUDA::cudart)
+    target_link_libraries(mars_unit_tests PRIVATE CUDA::cudart)
 
     # basegrid_device_tests.cpp launches a named GridQueryKernel functor (see
     # Types/basegrid_device.h) rather than an ad hoc lambda, so its
     # launch_cuda_kernel instantiation can be forced into a real CUDA
     # compilation unit here instead of getting the host stub.
-    target_sources(arbd_unit_tests PRIVATE
+    target_sources(mars_unit_tests PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/Types/basegrid_device_instantiations.cu
     )
     set_source_files_properties(
@@ -69,11 +69,11 @@ endif()
 
 if(USE_MPI)
     find_package(MPI REQUIRED)
-    target_link_libraries(arbd_unit_tests PRIVATE MPI::MPI_CXX)
+    target_link_libraries(mars_unit_tests PRIVATE MPI::MPI_CXX)
 endif()
 
 # ZOrder tests executable
-add_executable(arbd_zorder_tests
+add_executable(mars_zorder_tests
     ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp
     ${CMAKE_CURRENT_LIST_DIR}/System/zorder_tests.cpp
     ${CMAKE_CURRENT_LIST_DIR}/System/reorder_tests.cpp
@@ -82,35 +82,35 @@ add_executable(arbd_zorder_tests
 )
 
 # Includes for ZOrder tests
-target_include_directories(arbd_zorder_tests PRIVATE
+target_include_directories(mars_zorder_tests PRIVATE
     ${CMAKE_SOURCE_DIR}
     ${CMAKE_SOURCE_DIR}/src
     ${CMAKE_CURRENT_LIST_DIR}
 )
 
 # Link against project library and optional backends for ZOrder tests
-target_link_libraries(arbd_zorder_tests PRIVATE lib${PROJECT_NAME})
+target_link_libraries(mars_zorder_tests PRIVATE lib${PROJECT_NAME})
 
 if(USE_CUDA)
-	target_link_libraries(arbd_zorder_tests PRIVATE CUDA::cudart)
+	target_link_libraries(mars_zorder_tests PRIVATE CUDA::cudart)
 endif()
 
 if(USE_MPI)
-	target_link_libraries(arbd_zorder_tests PRIVATE MPI::MPI_CXX)
+	target_link_libraries(mars_zorder_tests PRIVATE MPI::MPI_CXX)
 endif()
 
 # Ensure SYCL tests are compiled with device targets so kernels are available
 if(USE_SYCL_ACPP OR USE_SYCL_ICPX)
     separate_arguments(SYCL_DEVICE_EXTRA_FLAGS_LIST UNIX_COMMAND "${SYCL_DEVICE_EXTRA_FLAGS}")
-    target_compile_options(arbd_unit_tests PRIVATE ${SYCL_DEVICE_EXTRA_FLAGS_LIST} -DSYCL_DEVICE_SOURCE)
-    target_compile_options(arbd_zorder_tests PRIVATE ${SYCL_DEVICE_EXTRA_FLAGS_LIST} -DSYCL_DEVICE_SOURCE)
+    target_compile_options(mars_unit_tests PRIVATE ${SYCL_DEVICE_EXTRA_FLAGS_LIST} -DSYCL_DEVICE_SOURCE)
+    target_compile_options(mars_zorder_tests PRIVATE ${SYCL_DEVICE_EXTRA_FLAGS_LIST} -DSYCL_DEVICE_SOURCE)
 endif()
 
 
 if(USE_MPI)
     add_test(NAME unit_mpi_2ranks
         COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 2 ${MPIEXEC_PREFLAGS}
-                $<TARGET_FILE:arbd_unit_tests> [mpi] ${MPIEXEC_POSTFLAGS})
+                $<TARGET_FILE:mars_unit_tests> [mpi] ${MPIEXEC_POSTFLAGS})
     set_tests_properties(unit_mpi_2ranks PROPERTIES LABELS "mpi")
 endif()
 
@@ -138,6 +138,6 @@ target_include_directories(unit_test_config INTERFACE
 )
 
 # The rest of your target links remain the same
-target_link_libraries(arbd_unit_tests PRIVATE unit_test_config)
-target_link_libraries(arbd_zorder_tests PRIVATE unit_test_config)
+target_link_libraries(mars_unit_tests PRIVATE unit_test_config)
+target_link_libraries(mars_zorder_tests PRIVATE unit_test_config)
 message(STATUS "Unit tests: available resources={${UNIT_TEST_DEVICE_ARRAY_PP}}")

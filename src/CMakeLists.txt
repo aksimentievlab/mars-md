@@ -6,8 +6,8 @@
 set(HOST_ONLY_HEADERS
     SignalManager.h
     SimManager.h
-    ARBDException.h
-    ARBDLogger.h
+    MARSException.h
+    MARSLogger.h
 )
 set(HOST_DEVICE_HEADERS
     "SimParam.h"
@@ -50,9 +50,9 @@ add_subdirectory(RBOperation)
 # Define the library with all collected sources
 add_library("lib${PROJECT_NAME}" ${LIB_SOURCES})
 
-# ARBD::scuff is defined by RBOperation only when USE_SCUFF is ON.
-if(TARGET ARBD::scuff)
-    target_link_libraries("lib${PROJECT_NAME}" PUBLIC ARBD::scuff)
+# MARS::scuff is defined by RBOperation only when USE_SCUFF is ON.
+if(TARGET MARS::scuff)
+    target_link_libraries("lib${PROJECT_NAME}" PUBLIC MARS::scuff)
     message(STATUS "Linking lib${PROJECT_NAME} against scuff-em")
 endif()
 
@@ -116,7 +116,7 @@ if(USE_SYCL_ICPX OR USE_SYCL_ACPP)
     separate_arguments(SYCL_LINK_FLAGS_LIST UNIX_COMMAND "${SYCL_LINK_FLAGS}")
     target_link_options("lib${PROJECT_NAME}" PUBLIC ${SYCL_LINK_FLAGS_LIST})
 endif()
-# used by SimManager 
+# used by SimManager
 target_link_libraries("lib${PROJECT_NAME}" PUBLIC Threads::Threads)
 
 # Only link the NanoVDB target when it was actually created (see BUILD_NANOVDB
@@ -137,7 +137,7 @@ endif()
 # CMAKE_CURRENT_SOURCE_DIR in this file refers to the "src" directory.
 # This allows includes like #include "Backend/xx.h" from within any source
 # file of this library, and also allows targets linking to this library to
-# include public headers from "src/" (e.g., #include "ARBDException.h").
+# include public headers from "src/" (e.g., #include "MARSException.h").
 target_include_directories("lib${PROJECT_NAME}" PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
 )

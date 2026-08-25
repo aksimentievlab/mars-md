@@ -11,8 +11,8 @@
 #include <numeric>
 #include <vector>
 
-using namespace ARBD;
-using namespace ARBD::Profiling;
+using namespace MARS;
+using namespace MARS::Profiling;
 // using Catch::Approx;
 using Catch::Matchers::WithinAbs;
 
@@ -246,9 +246,9 @@ TEST_CASE_METHOD(ProfiledRandomTestFixture,
 			Random<Resource> rng(resource, 128);
 			rng.init(9876, 0);
 
-			DeviceBuffer<ARBD::Vector3_t<float>> device_buffer(25000, resource);
-			ARBD::Vector3_t<float> mean(0.0f, 0.0f, 0.0f);
-			ARBD::Vector3_t<float> dev(1.0f, 1.0f, 1.0f);
+			DeviceBuffer<MARS::Vector3_t<float>> device_buffer(25000, resource);
+			MARS::Vector3_t<float> mean(0.0f, 0.0f, 0.0f);
+			MARS::Vector3_t<float> dev(1.0f, 1.0f, 1.0f);
 
 			{
 				PROFILE_RANGE("Random::GenerateVector3", backend_type);
@@ -258,13 +258,13 @@ TEST_CASE_METHOD(ProfiledRandomTestFixture,
 
 			{
 				PROFILE_RANGE("Vector3::Validation", backend_type);
-				std::vector<ARBD::Vector3_t<float>> host_results(25000);
+				std::vector<MARS::Vector3_t<float>> host_results(25000);
 				device_buffer.copy_to_host(host_results);
 
 				// Validate that we have proper Vector3 data
 				bool all_finite = std::all_of(host_results.begin(),
 											  host_results.end(),
-											  [](const ARBD::Vector3_t<float>& v) {
+											  [](const MARS::Vector3_t<float>& v) {
 												  return std::isfinite(v.x) && std::isfinite(v.y) &&
 														 std::isfinite(v.z);
 											  });

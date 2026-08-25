@@ -10,7 +10,7 @@
 #include "Types/Types.h"
 #include <cuda_runtime.h>
 
-namespace ARBD {
+namespace MARS {
 template Event launch_cuda_kernel(const Resource& resource,
 								  const KernelConfig& config,
 								  RBGridCullKernel kernel_func);
@@ -40,4 +40,4 @@ template Event launch_cuda_kernel_with_workitem(const Resource& resource,
 												const KernelConfig& config,
 												RBReduceAttachedForcesKernel kernel_func);
 
-} // namespace ARBD
+} // namespace MARS

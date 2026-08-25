@@ -7,7 +7,7 @@
 #include <oneapi/dpl/execution>
 #include <oneapi/dpl/experimental/kernel_templates>
 #include <sycl/sycl.hpp>
-namespace ARBD {
+namespace MARS {
 
 void sort_morton_codes_oneapi(const DeviceBuffer<morton_t>& morton_codes,
 							  const DeviceBuffer<uint32_t>& sorted_indices,
@@ -24,5 +24,5 @@ void sort_morton_codes_oneapi(const DeviceBuffer<morton_t>& morton_codes,
 	});
 }
 
-} // namespace ARBD
+} // namespace MARS
 #endif

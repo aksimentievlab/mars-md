@@ -1,7 +1,7 @@
 #pragma once
 #include "Header.h"
 
-namespace ARBD {
+namespace MARS {
 
 template<typename T>
 class alignas(2 * sizeof(T)) Vec2 {
@@ -42,11 +42,11 @@ class alignas(2 * sizeof(T)) Vec2 {
 	}
 };
 
-} // namespace ARBD
+} // namespace MARS
 
 // SYCL specialization
 #ifdef USE_SYCL
 #include <sycl/sycl.hpp>
 template<typename T>
-struct sycl::is_device_copyable<ARBD::Vec2<T> > : std::true_type {};
+struct sycl::is_device_copyable<MARS::Vec2<T> > : std::true_type {};
 #endif

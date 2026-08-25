@@ -14,7 +14,7 @@
 // Explicit template instantiations for Nonbonded interaction kernels.
 // These are needed so templates can be instantiated in CUDA compilation units
 // instead of C++ files where they would get stub implementations.
-namespace ARBD {
+namespace MARS {
 
 template Event launch_cuda_kernel(const Resource& resource,
 								  const KernelConfig& config,
@@ -39,7 +39,7 @@ template Event launch_cuda_kernel(const Resource& resource,
 								  ComputePMFKernel kernel_func,
 								  ParticleView particles,
 								  ParticleTypeView types,
-								  const BaseGridView<arbd_real>* grid_configs,
+								  const BaseGridView<mars_real>* grid_configs,
 								  idx_t num_particles);
 
 // Grid-grid RB force kernel is a block-reduction kernel (see GridGridKernels.h),
@@ -47,30 +47,30 @@ template Event launch_cuda_kernel(const Resource& resource,
 template Event launch_cuda_kernel_with_workitem(const Resource& resource,
 												const KernelConfig& config,
 												ComputeGridGridForceKernel kernel_func,
-												const BaseGridView<arbd_real> rho,
-												const BaseGridView<arbd_real> u,
+												const BaseGridView<mars_real> rho,
+												const BaseGridView<mars_real> u,
 												Vector3* ret_force_energy,
 												Vector3* ret_torque);
 
 // Elementwise grid mutation (GridGridKernels.h).
 template Event launch_cuda_kernel(const Resource& resource,
 								  const KernelConfig& config,
-								  ZeroGridKernel<arbd_real> kernel_func);
+								  ZeroGridKernel<mars_real> kernel_func);
 
 template Event launch_cuda_kernel(const Resource& resource,
 								  const KernelConfig& config,
-								  ScaleGridKernel<arbd_real> kernel_func);
+								  ScaleGridKernel<mars_real> kernel_func);
 
 template Event launch_cuda_kernel(const Resource& resource,
 								  const KernelConfig& config,
-								  ShiftGridKernel<arbd_real> kernel_func);
+								  ShiftGridKernel<mars_real> kernel_func);
 
 template Event launch_cuda_kernel(const Resource& resource,
 								  const KernelConfig& config,
-								  MultiplyGridKernel<arbd_real> kernel_func);
+								  MultiplyGridKernel<mars_real> kernel_func);
 
 template Event launch_cuda_kernel(const Resource& resource,
 								  const KernelConfig& config,
-								  ConvolveGridKernel<arbd_real> kernel_func);
+								  ConvolveGridKernel<mars_real> kernel_func);
 
-} // namespace ARBD
+} // namespace MARS

@@ -1,8 +1,8 @@
 #include "ZOrderSort.h"
-#include "ARBDException.h"
-#include "ARBDLogger.h"
+#include "MARSException.h"
+#include "MARSLogger.h"
 
-namespace ARBD {
+namespace MARS {
 
 ZOrderSort::ZOrderSort(const Resource& resource, size_t max_particles, ZOrderOptimizationMode mode)
 	: resource_(resource), max_particles_(max_particles), num_particles_(0),
@@ -42,7 +42,7 @@ void ZOrderSort::sort_particles(const DeviceBuffer<Vector3>& positions,
 								const Vector3& box_min,
 								const Vector3& box_max) {
 	if (num_particles > max_particles_) {
-		ARBD_Exception(ExceptionType::ValueError,
+		MARS_Exception(ExceptionType::ValueError,
 					   "Cannot sort {} particles, maximum is {}",
 					   num_particles,
 					   max_particles_);
@@ -174,7 +174,7 @@ float ZOrderSort::compute_max_displacement(const DeviceBuffer<Vector3>& current_
 										   size_t num_particles,
 										   const Vector3& box_len) const {
 	if (optimization_mode_ != ZOrderOptimizationMode::Pairlist) {
-		ARBD_Exception(ExceptionType::RuntimeError,
+		MARS_Exception(ExceptionType::RuntimeError,
 					   "compute_max_displacement only available in Pairlist mode");
 	}
 
@@ -202,7 +202,7 @@ bool ZOrderSort::validate_morton_codes(const DeviceBuffer<Vector3>& current_posi
 									   const Vector3& box_min,
 									   const Vector3& box_max) {
 	if (optimization_mode_ != ZOrderOptimizationMode::Pairlist) {
-		ARBD_Exception(ExceptionType::RuntimeError,
+		MARS_Exception(ExceptionType::RuntimeError,
 					   "validate_morton_codes only available in Pairlist mode");
 	}
 
@@ -232,7 +232,7 @@ bool ZOrderSort::validate_morton_codes(const DeviceBuffer<Vector3>& current_posi
 void ZOrderSort::update_positions_incremental(const DeviceBuffer<Vector3>& positions,
 											  size_t num_particles) {
 	if (optimization_mode_ != ZOrderOptimizationMode::Pairlist) {
-		ARBD_Exception(ExceptionType::RuntimeError,
+		MARS_Exception(ExceptionType::RuntimeError,
 					   "update_positions_incremental only available in Pairlist mode");
 	}
 
@@ -250,4 +250,4 @@ void ZOrderSort::remap_indices(int* indices, size_t num_ints) {
 	resource_.synchronize_streams();
 }
 
-} // namespace ARBD
+} // namespace MARS

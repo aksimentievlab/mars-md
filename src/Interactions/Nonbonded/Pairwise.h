@@ -6,7 +6,7 @@
 #include "SimParam.h"
 #include "Types/Types.h"
 
-namespace ARBD {
+namespace MARS {
 
 /**
  * @brief Gaussian: U = amp exp(-r^2/sigma^2), zero beyond cutoff
@@ -15,19 +15,19 @@ namespace ARBD {
  * @param cutoff_squared Squared truncation radius; <= 0 disables the cutoff
  */
 struct GaussianPotential {
-	arbd_real amp = arbd_real(1);
-	arbd_real sigma = arbd_real(1);
-	arbd_real cutoff_squared = arbd_real(0);
+	mars_real amp = mars_real(1);
+	mars_real sigma = mars_real(1);
+	mars_real cutoff_squared = mars_real(0);
 
-	DEVICE ScalarForceEnergy compute(arbd_real distance) const {
-		const arbd_real d2 = distance * distance;
-		if (cutoff_squared > arbd_real(0) && d2 > cutoff_squared) {
-			return ScalarForceEnergy{float2{arbd_real(0), arbd_real(0)}};
+	DEVICE ScalarForceEnergy compute(mars_real distance) const {
+		const mars_real d2 = distance * distance;
+		if (cutoff_squared > mars_real(0) && d2 > cutoff_squared) {
+			return ScalarForceEnergy{float2{mars_real(0), mars_real(0)}};
 		}
-		const arbd_real inv_s2 = arbd_real(1) / (sigma * sigma);
-		const arbd_real energy = amp * math::exp(-d2 * inv_s2);
+		const mars_real inv_s2 = mars_real(1) / (sigma * sigma);
+		const mars_real energy = amp * math::exp(-d2 * inv_s2);
 		// F = -dU/dr = 2 r U / sigma^2
-		const arbd_real force = arbd_real(2) * distance * energy * inv_s2;
+		const mars_real force = mars_real(2) * distance * energy * inv_s2;
 		return ScalarForceEnergy{float2{force, energy}};
 	}
 };
@@ -228,26 +228,26 @@ inline Event launch_pairwise_nonbonded(const Resource& resource,
 
 	return launch_kernel(resource, config, computer);
 }
-} // namespace ARBD
+} // namespace MARS
 
 #ifdef USE_CUDA
 #include "Backend/CUDA/KernelHelper.cuh"
-namespace ARBD {
+namespace MARS {
 extern template Event launch_cuda_kernel(const Resource& resource,
 										 const KernelConfig& config,
 										 TabulatedNonBondedComputer kernel_func);
 extern template Event launch_cuda_kernel(const Resource& resource,
 										 const KernelConfig& config,
 										 ResolvePairTableKernel kernel_func);
-} // namespace ARBD
+} // namespace MARS
 #endif
 
 #ifdef USE_SYCL
 #include <sycl/sycl.hpp>
 template<>
-struct sycl::is_device_copyable<ARBD::TabulatedNonBondedComputer> : std::true_type {};
+struct sycl::is_device_copyable<MARS::TabulatedNonBondedComputer> : std::true_type {};
 template<>
-struct sycl::is_device_copyable<ARBD::ResolvePairTableKernel> : std::true_type {};
+struct sycl::is_device_copyable<MARS::ResolvePairTableKernel> : std::true_type {};
 template<>
-struct sycl::is_device_copyable<ARBD::GaussianPotential> : std::true_type {};
+struct sycl::is_device_copyable<MARS::GaussianPotential> : std::true_type {};
 #endif

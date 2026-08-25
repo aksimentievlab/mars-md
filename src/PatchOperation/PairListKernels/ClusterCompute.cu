@@ -167,9 +167,9 @@ void NonbondedClusterCompute::decompose(const ComputeForce &compute) {
 =========     Host Frame:/lib64/libcuda.so.1 (cuLaunchKernel + 0x2b8) [0x2235d8]
 =========     Host Frame:/data/server1/cmaffeo2/cuda-11.0/lib64/libcudart.so.11.0 [0xf62b]
 =========     Host Frame:/data/server1/cmaffeo2/cuda-11.0/lib64/libcudart.so.11.0 (cudaLaunchKernel + 0x1c1) [0x4f5b1]
-=========     Host Frame:../../src/arbd_dbg [0x735c4]
-=========     Host Frame:../../src/arbd_dbg [0x72948]
-=========     Host Frame:../../src/arbd_dbg [0x7297f]
+=========     Host Frame:../../src/mars_dbg [0x735c4]
+=========     Host Frame:../../src/mars_dbg [0x72948]
+=========     Host Frame:../../src/mars_dbg [0x7297f]
     */
 
     {

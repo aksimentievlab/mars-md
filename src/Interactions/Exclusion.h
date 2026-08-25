@@ -6,7 +6,7 @@
 #include "Header.h"
 #include "Types/Types.h"
 
-namespace ARBD {
+namespace MARS {
 struct GenerateExclusionsFunctor {
 	// A constant defining the max exclusion depth (e.g., 1-4 bonds)
 	// This allows us to use a static array for the frontier, avoiding dynamic allocation.
@@ -93,7 +93,7 @@ inline Event launch_exclusion_generation(
 						 exclusion_depth,
 						 num_particles);
 }
-} // namespace ARBD
+} // namespace MARS
 
 // Explicit template instantiation declaration to prevent host instantiation.
 // Launched with a trailing argument pack, so it is spelled out here exactly as
@@ -102,7 +102,7 @@ inline Event launch_exclusion_generation(
 // topology adjacency).
 #ifdef USE_CUDA
 #include "Backend/CUDA/KernelHelper.cuh"
-namespace ARBD {
+namespace MARS {
 extern template Event launch_cuda_kernel(const Resource& resource,
 										 const KernelConfig& config,
 										 GenerateExclusionsFunctor kernel_func,
@@ -112,11 +112,11 @@ extern template Event launch_cuda_kernel(const Resource& resource,
 										 int* exclusion_count,
 										 int max_exclusion_depth,
 										 int num_particles);
-} // namespace ARBD
+} // namespace MARS
 #endif
 
 #ifdef USE_SYCL
 #include <sycl/sycl.hpp>
 template<>
-struct sycl::is_device_copyable<ARBD::GenerateExclusionsFunctor> : std::true_type {};
+struct sycl::is_device_copyable<MARS::GenerateExclusionsFunctor> : std::true_type {};
 #endif

@@ -9,8 +9,8 @@
  *********************************************************************/
 #pragma once
 
-#include "ARBDException.h"
-#include "ARBDLogger.h"
+#include "MARSException.h"
+#include "MARSLogger.h"
 #include "IO/FileHandle.h"
 #include "Types/BaseGrid.h"
 #include <array>
@@ -20,7 +20,7 @@
 #include <string>
 #include <string_view>
 
-namespace ARBD {
+namespace MARS {
 
 // Forward declaration
 template<typename T>
@@ -92,4 +92,4 @@ void write_average_profile(const BaseGrid<T>& grid, std::string_view filename, i
 
 } // namespace DXReader
 
-} // namespace ARBD
+} // namespace MARS

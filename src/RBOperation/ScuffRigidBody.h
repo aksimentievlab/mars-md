@@ -2,7 +2,7 @@
 
 #include "libscuff.h"
 
-#include "ARBDException.h"
+#include "MARSException.h"
 #include "Backend/Buffer.h"
 #include "Backend/Events.h"
 #include "Backend/KernelConfig.h"
@@ -20,7 +20,7 @@
 #include <string>
 #include <vector>
 
-namespace ARBD {
+namespace MARS {
 
 /**
  * @todo Change the wrong column major matrix to row major.
@@ -105,7 +105,7 @@ struct ScuffRigidBody {
 		for (idx_t i = 0; i < n; ++i) {
 			const idx_t src = static_cast<idx_t>(plasmonic_particle_id[i]);
 			if (src >= global_rigidBody_data.size()) {
-				ARBD_Exception(ExceptionType::ValueError,
+				MARS_Exception(ExceptionType::ValueError,
 							   "ScuffRigidBody entry %zu references rigid body %zu of %zu",
 							   i,
 							   src,
@@ -118,7 +118,7 @@ struct ScuffRigidBody {
 };
 
 /**
- * @brief Wraps one SCUFF-EM BEM solve per call into ARBD force/torque units.
+ * @brief Wraps one SCUFF-EM BEM solve per call into MARS force/torque units.
  *
  * The geometry file supplies the mesh and materials; each surface must be
  * meshed about its own origin and left unplaced, because the transform written
@@ -168,7 +168,7 @@ class ScuffForceCalculator {
 			placed += surface->Label ? surface->Label : "<unlabeled>";
 		}
 		if (!placed.empty()) {
-			ARBD_Exception(ExceptionType::ValueError,
+			MARS_Exception(ExceptionType::ValueError,
 						   "scuff geometry '%s' places surfaces itself: %s. Remove the "
 						   "DISPLACED/ROTATED lines from those OBJECT/SURFACE blocks - the "
 						   "rigid body pose supplies the absolute placement.",
@@ -255,7 +255,7 @@ class ScuffForceCalculator {
   private:
 	scuff::RWGSurface* get_surface(int surface_index) {
 		if (surface_index < 0 || surface_index >= geometry_.NumSurfaces) {
-			ARBD_Exception(ExceptionType::ValueError,
+			MARS_Exception(ExceptionType::ValueError,
 						   "SCUFF surface index %d out of range [0,%d)",
 						   surface_index,
 						   geometry_.NumSurfaces);
@@ -266,14 +266,14 @@ class ScuffForceCalculator {
 	void solve() {
 		geometry_.AssembleBEMMatrix(omega_, bem_matrix_.get());
 		if (bem_matrix_->LUFactorize() != 0) {
-			ARBD_Exception(ExceptionType::RuntimeError, "SCUFF BEM matrix is singular");
+			MARS_Exception(ExceptionType::RuntimeError, "SCUFF BEM matrix is singular");
 		}
 		geometry_.AssembleRHSVector(omega_, incident_field_.get(), kn_vector_.get());
 		// GetPFTMatrix's EMT method needs the un-solved RHS alongside the
 		// solved surface currents, so keep a copy before LUSolve overwrites it.
 		rhs_vector_->Copy(kn_vector_.get());
 		if (bem_matrix_->LUSolve(kn_vector_.get()) != 0) {
-			ARBD_Exception(ExceptionType::RuntimeError, "SCUFF BEM solve failed");
+			MARS_Exception(ExceptionType::RuntimeError, "SCUFF BEM solve failed");
 		}
 	}
 
@@ -297,13 +297,13 @@ class ScuffForceCalculator {
 			pft_matrix_->GetEntriesD(scuff_rb.surface_tag[i], ":", pft);
 
 			scuff_rb.plasmonic_force[i] = Vector3(
-				static_cast<arbd_real>(pft[PFT_XFORCE] * scuff_units::NN_TO_KCAL_PER_MOL_ANGSTROM),
-				static_cast<arbd_real>(pft[PFT_YFORCE] * scuff_units::NN_TO_KCAL_PER_MOL_ANGSTROM),
-				static_cast<arbd_real>(pft[PFT_ZFORCE] * scuff_units::NN_TO_KCAL_PER_MOL_ANGSTROM));
+				static_cast<mars_real>(pft[PFT_XFORCE] * scuff_units::NN_TO_KCAL_PER_MOL_ANGSTROM),
+				static_cast<mars_real>(pft[PFT_YFORCE] * scuff_units::NN_TO_KCAL_PER_MOL_ANGSTROM),
+				static_cast<mars_real>(pft[PFT_ZFORCE] * scuff_units::NN_TO_KCAL_PER_MOL_ANGSTROM));
 			scuff_rb.plasmonic_torque[i] = Vector3(
-				static_cast<arbd_real>(pft[PFT_XTORQUE] * scuff_units::NN_MICRON_TO_KCAL_PER_MOL),
-				static_cast<arbd_real>(pft[PFT_YTORQUE] * scuff_units::NN_MICRON_TO_KCAL_PER_MOL),
-				static_cast<arbd_real>(pft[PFT_ZTORQUE] * scuff_units::NN_MICRON_TO_KCAL_PER_MOL));
+				static_cast<mars_real>(pft[PFT_XTORQUE] * scuff_units::NN_MICRON_TO_KCAL_PER_MOL),
+				static_cast<mars_real>(pft[PFT_YTORQUE] * scuff_units::NN_MICRON_TO_KCAL_PER_MOL),
+				static_cast<mars_real>(pft[PFT_ZTORQUE] * scuff_units::NN_MICRON_TO_KCAL_PER_MOL));
 		}
 	}
 
@@ -317,4 +317,4 @@ class ScuffForceCalculator {
 	std::unique_ptr<HMatrix> pft_matrix_;
 };
 
-} // namespace ARBD
+} // namespace MARS

@@ -29,7 +29,7 @@
 #include <memory>
 #include <utility>
 
-namespace ARBD {
+namespace MARS {
 
 // Forward declarations
 class SimSystem;
@@ -224,7 +224,7 @@ class Patch {
 	Event calculate_nonbonded_forces(const NonBondedInteractions& interactions,
 									 const BondedInteractions& bonded_interactions,
 									 const DeviceParticleTypes& particle_types,
-									 const DeviceBuffer<BaseGridView<arbd_real>>& grid_views,
+									 const DeviceBuffer<BaseGridView<mars_real>>& grid_views,
 									 const TablesRegistry& tables_registry,
 									 size_t resource_idx,
 									 float pairlist_cutoff,
@@ -468,7 +468,7 @@ class Patch {
 	 * @return Event for async packing and number of particles packed
 	 */
 	std::pair<Event, idx_t>
-	pack_halo_particles(DeviceBuffer<arbd_real>& send_buffer, int direction, float halo_width);
+	pack_halo_particles(DeviceBuffer<mars_real>& send_buffer, int direction, float halo_width);
 
 	/**
 	 * @brief Unpack received halo particles from neighbor
@@ -476,7 +476,7 @@ class Patch {
 	 * @param particle_count Number of particles to unpack
 	 * @return Event for async unpacking
 	 */
-	Event unpack_halo_particles(const DeviceBuffer<arbd_real>& recv_buffer, idx_t particle_count);
+	Event unpack_halo_particles(const DeviceBuffer<mars_real>& recv_buffer, idx_t particle_count);
 
 	/**
 	 * @brief Sort particles using pairlist's spatial sorting (e.g., Z-order curve)
@@ -604,7 +604,7 @@ class Patch {
 #endif
 	std::unique_ptr<DeviceParticleTypes> particle_types_; ///< Device buffers for all particle types
 
-	float halo_thickness_{arbd_real(0.0)}; ///< Halo region thickness for ghost particles
+	float halo_thickness_{mars_real(0.0)}; ///< Halo region thickness for ghost particles
 
 	//================================================================================
 	// Spatial Bounds and Geometry
@@ -624,7 +624,7 @@ class Patch {
 	// integrate_motion, which fuses the PMF/force-grid + uniform E term into the
 	// integrator kernels - see Pmf.h / v1's compute_position_dependent_force).
 	//================================================================================
-	const BaseGridView<arbd_real>* pmf_grid_configs_{nullptr}; ///< PMF/force grids, nullptr = none
+	const BaseGridView<mars_real>* pmf_grid_configs_{nullptr}; ///< PMF/force grids, nullptr = none
 	Vector3 electric_field_{0.0f, 0.0f, 0.0f};				   ///< Uniform global E field
 	int interpolation_scheme_{0};							   ///< 0=linear, 1=cubic
 
@@ -643,4 +643,4 @@ class Patch {
  */
 std::unique_ptr<PatchDecomposer> create_patch_decomposer(DecomposerType type);
 
-} // namespace ARBD
+} // namespace MARS

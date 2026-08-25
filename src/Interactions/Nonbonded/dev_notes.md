@@ -72,9 +72,9 @@ Rigid-body grid–grid force/torque: one thread per `rho` voxel, block-wide
 shared-memory reduction, `atomicAdd` into one (force+energy, torque) accumulator
 per grid pair. Ported from legacy `ComputeGridGrid.cu`.
 
-## Per-voxel energy: legacy is wrong, arbd2 diverges deliberately
+## Per-voxel energy: legacy is wrong, mars2 diverges deliberately
 
-Resolved 2026-08-14. **arbd2 is correct; legacy's grid–grid energy is a bug.**
+Resolved 2026-08-14. **mars2 is correct; legacy's grid–grid energy is a bug.**
 
 Legacy computes:
 
@@ -90,7 +90,7 @@ so its reduced energy is `Σ r_val` — the total density of `rho`. That is
 **constant regardless of the two grids' relative pose**, so it cannot be an
 interaction energy.
 
-arbd2 uses `r_val * sample.value`, the correct discretization of
+mars2 uses `r_val * sample.value`, the correct discretization of
 
 ```
 E = ∫ ρ(x) u(x) dx  ≈  Σ_voxels ρ_i · u(x_i)
@@ -109,7 +109,7 @@ inside the reduction loop is commented out too
 the value, so the bug was never visible.
 
 **Consequence for validation:** grid–grid energies will not match a v1 reference,
-by design. Forces and torques should. Do not "fix" arbd2 to reproduce v1's number
+by design. Forces and torques should. Do not "fix" mars2 to reproduce v1's number
 here.
 
 ## Force transform

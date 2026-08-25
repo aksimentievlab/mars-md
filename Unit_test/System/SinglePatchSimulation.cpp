@@ -7,7 +7,7 @@
 #include <cmath>
 #include <vector>
 
-using namespace ARBD;
+using namespace MARS;
 using namespace Tests;
 using Catch::Approx;
 

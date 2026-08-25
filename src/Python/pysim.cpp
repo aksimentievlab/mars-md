@@ -37,7 +37,7 @@
 #include <nanobind/stl/vector.h>
 
 namespace nb = nanobind;
-using namespace ARBD;
+using namespace MARS;
 
 void init_pysim(nb::module_& m) {
 	nb::class_<SimManager>(m, "SimManager")

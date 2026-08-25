@@ -5,7 +5,7 @@
 
 namespace Test {
 
-using namespace ARBD;
+using namespace MARS;
 
 template<typename T>
 struct Params {
@@ -43,18 +43,18 @@ struct GridQueryKernel {
 // Launch wrapper - call this from tests instead of invoking launch_kernel
 // directly with an ad hoc lambda (see GridQueryKernel comment above).
 template<typename T>
-inline ARBD::Event launch_grid_query(const ARBD::Resource& resource,
-									 const ARBD::DeviceBuffer<Vector3_t<T>>& pos,
-									 const ARBD::DeviceBuffer<T>& values,
-									 ARBD::DeviceBuffer<T>& out_interp,
-									 ARBD::DeviceBuffer<T>& out_nearest,
-									 const ARBD::DeviceBuffer<Params<T>>& params,
+inline MARS::Event launch_grid_query(const MARS::Resource& resource,
+									 const MARS::DeviceBuffer<Vector3_t<T>>& pos,
+									 const MARS::DeviceBuffer<T>& values,
+									 MARS::DeviceBuffer<T>& out_interp,
+									 MARS::DeviceBuffer<T>& out_nearest,
+									 const MARS::DeviceBuffer<Params<T>>& params,
 									 idx_t count) {
 	GridQueryKernel<T> kernel{
 		pos.data(), values.data(), out_interp.data(), out_nearest.data(), params.data()};
-	ARBD::KernelConfig config = ARBD::KernelConfig::for_1d(count, resource);
+	MARS::KernelConfig config = MARS::KernelConfig::for_1d(count, resource);
 	config.sync = true;
-	return ARBD::launch_kernel(resource, config, kernel);
+	return MARS::launch_kernel(resource, config, kernel);
 }
 
 } // namespace Test
@@ -63,9 +63,9 @@ inline ARBD::Event launch_grid_query(const ARBD::Resource& resource,
 // See basegrid_device_instantiations.cu for the real definition.
 #ifdef USE_CUDA
 #include "Backend/CUDA/KernelHelper.cuh"
-namespace ARBD {
+namespace MARS {
 extern template Event launch_cuda_kernel(const Resource& resource,
 										 const KernelConfig& config,
 										 Test::GridQueryKernel<float> kernel_func);
-} // namespace ARBD
+} // namespace MARS
 #endif

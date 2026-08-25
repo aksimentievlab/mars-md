@@ -7,11 +7,11 @@ Validates `convolve_grids` against the original `gen_pot` tool on a real product
 Tagged `[.golden]`, so it is hidden from the default run and needs the reference data:
 
 ```
-ARBD_GENPOT_REF=/data/server5/hchou10/2019NIH_proposal/cytoplasm/steric/1A/output \
-  ./Unit_test/arbd_unit_tests "[.golden]"
+MARS_GENPOT_REF=/data/server5/hchou10/2019NIH_proposal/cytoplasm/steric/1A/output \
+  ./Unit_test/mars_unit_tests "[.golden]"
 ```
 
-Optional: `ARBD_GENPOT_STEM` (default `1ema.protein`), `ARBD_GENPOT_C6`, `ARBD_GENPOT_C12`.
+Optional: `MARS_GENPOT_STEM` (default `1ema.protein`), `MARS_GENPOT_C6`, `MARS_GENPOT_C12`.
 
 The reference pair came from `make_rigid_potential.sh`:
 

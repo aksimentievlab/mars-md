@@ -13,7 +13,7 @@
  *          pointer), BaseGridMutableView<T> (+ writable pointer).
  *          See BaseGridDevice.md.
  */
-namespace ARBD {
+namespace MARS {
 /**
  * @brief Where a grid sits in space, plus the index math implied by that.
  * @details POD, no data pointer. Shared base of both views.
@@ -392,7 +392,7 @@ HOST DEVICE inline T catmull_rom_deriv(T v0, T v1, T v2, T v3, T t) {
 /**
  * @brief Joint value+gradient sample via cubic (Catmull-Rom) interpolation.
  * @details Separable cubic spline over a 4x4x4 neighborhood: ported from legacy
- *          ARBD's RigidBodyGrid::interpolateForceD, restructured into two
+ *          MARS's RigidBodyGrid::interpolateForceD, restructured into two
  *          reusable 1D helpers (catmull_rom_value/catmull_rom_deriv) applied
  *          successively along x, then y, then z - mathematically identical to
  *          the original inline a1/a2/a3 form. Returns the raw (non-negated)
@@ -600,14 +600,14 @@ HOST DEVICE GridSample<T> sample_grid(CONSTANT_PTR(T) __restrict__ grid_values,
 	}
 }
 
-} // namespace ARBD
+} // namespace MARS
 
 #ifdef USE_SYCL
 #include <sycl/sycl.hpp>
 template<typename T>
-struct sycl::is_device_copyable<ARBD::GridGeometry<T>> : std::true_type {};
+struct sycl::is_device_copyable<MARS::GridGeometry<T>> : std::true_type {};
 template<typename T>
-struct sycl::is_device_copyable<ARBD::BaseGridView<T>> : std::true_type {};
+struct sycl::is_device_copyable<MARS::BaseGridView<T>> : std::true_type {};
 template<typename T>
-struct sycl::is_device_copyable<ARBD::BaseGridMutableView<T>> : std::true_type {};
+struct sycl::is_device_copyable<MARS::BaseGridMutableView<T>> : std::true_type {};
 #endif

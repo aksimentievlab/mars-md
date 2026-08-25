@@ -8,7 +8,7 @@
 #include <vector>
 #include <memory>
 
-using namespace ARBD;
+using namespace MARS;
 
 // Test fixture for SYCL Bitmask tests
 struct SYCLBitmaskTestFixture {

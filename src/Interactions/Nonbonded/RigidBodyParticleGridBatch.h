@@ -10,7 +10,7 @@
 #include "Objects/DeviceRigidBody.h"
 #include "Types/BaseGridDevice.h"
 
-namespace ARBD {
+namespace MARS {
 
 /**
  * @brief One (RB instance, potential-grid) task for the batched
@@ -48,7 +48,7 @@ struct RBParticleGridBuildKernel {
 	const int* __restrict__ candidate_grid_id;
 	const float* __restrict__ candidate_scale;
 	idx_t num_candidates;
-	const BaseGridView<arbd_real>* __restrict__ grid_views;
+	const BaseGridView<mars_real>* __restrict__ grid_views;
 	int scheme;
 
 	RBParticleGridWork* __restrict__ work_out;
@@ -60,7 +60,7 @@ struct RBParticleGridBuildKernel {
 		const int rb_id = candidate_rb_id[idx];
 		const int grid_id = candidate_grid_id[idx];
 		const Matrix3 R = rb.orientation[rb_id];
-		const BaseGridView<arbd_real> grid = grid_views[grid_id];
+		const BaseGridView<mars_real> grid = grid_views[grid_id];
 
 		RBParticleGridWork w;
 		w.basis_inv = (R * grid.basis).inverse();
@@ -98,7 +98,7 @@ struct RBParticleGridForceKernel {
 	RigidBodyView rb;
 	ParticleView particles;
 	const RBParticleGridWork* __restrict__ work;
-	const BaseGridView<arbd_real>* __restrict__ grid_views;
+	const BaseGridView<mars_real>* __restrict__ grid_views;
 	idx_t num_particles;
 	idx_t blocks_per_candidate;
 	idx_t block_size;
@@ -113,7 +113,7 @@ struct RBParticleGridForceKernel {
 		const idx_t item_idx = block_id / blocks_per_candidate;
 		const idx_t slice = block_id % blocks_per_candidate;
 		const RBParticleGridWork w = work[item_idx];
-		const BaseGridView<arbd_real> grid = grid_views[w.grid_id];
+		const BaseGridView<mars_real> grid = grid_views[w.grid_id];
 
 		Vector3 f_acc(0.0f);
 		Vector3 t_acc(0.0f);
@@ -122,7 +122,7 @@ struct RBParticleGridForceKernel {
 			const Vector3 pos = particles.pos[p];
 			const Vector3 local = w.basis_inv.transform(pos - w.origin_lab);
 			const Matrix3 identity(1.0f);
-			const GridSample<arbd_real> sample = (w.scheme == 0)
+			const GridSample<mars_real> sample = (w.scheme == 0)
 													 ? sample_grid_linear(grid.data,
 																		  local,
 																		  Vector3(0.0f),
@@ -168,24 +168,24 @@ struct RBParticleGridForceKernel {
 	}
 };
 
-} // namespace ARBD
+} // namespace MARS
 
 #ifdef USE_CUDA
 #include "Backend/CUDA/KernelHelper.cuh"
-namespace ARBD {
+namespace MARS {
 extern template Event launch_cuda_kernel(const Resource& resource,
 										 const KernelConfig& config,
 										 RBParticleGridBuildKernel kernel_func);
 extern template Event launch_cuda_kernel_with_workitem(const Resource& resource,
 													   const KernelConfig& config,
 													   RBParticleGridForceKernel kernel_func);
-} // namespace ARBD
+} // namespace MARS
 #endif
 
 #ifdef USE_SYCL
 #include <sycl/sycl.hpp>
 template<>
-struct sycl::is_device_copyable<ARBD::RBParticleGridBuildKernel> : std::true_type {};
+struct sycl::is_device_copyable<MARS::RBParticleGridBuildKernel> : std::true_type {};
 template<>
-struct sycl::is_device_copyable<ARBD::RBParticleGridForceKernel> : std::true_type {};
+struct sycl::is_device_copyable<MARS::RBParticleGridForceKernel> : std::true_type {};
 #endif

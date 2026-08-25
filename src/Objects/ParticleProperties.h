@@ -6,7 +6,7 @@
 #include <string>
 
 // Host side
-namespace ARBD {
+namespace MARS {
 /**
  * @brief Atom group definition for collective variables
  */
@@ -326,4 +326,4 @@ struct HostParticleData {
 	}
 };
 
-} // namespace ARBD
+} // namespace MARS

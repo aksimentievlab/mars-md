@@ -3,7 +3,7 @@
  * @brief Nonbonded pair potentials: Debye-Huckel, ONC, Gaussian, bare
  *        Coulomb and softcore.
  *
- * @details References are closed-form in double; never difference arbd_real.
+ * @details References are closed-form in double; never difference mars_real.
  * @see Nonbonded.md
  */
 
@@ -17,7 +17,7 @@
 #include <cmath>
 #include <utility>
 #include <vector>
-using namespace ARBD;
+using namespace MARS;
 using Catch::Approx;
 
 namespace {
@@ -54,7 +54,7 @@ double fd_force(F u, double r) {
 /**
  * @brief Helper to create simple 2-particle system
  */
-std::pair<HostParticleData, std::vector<ParticleType>> create_two_particles(arbd_real separation) {
+std::pair<HostParticleData, std::vector<ParticleType>> create_two_particles(mars_real separation) {
 	HostParticleData host_data(std::vector<int>{0, 1});
 	host_data.global_id = {0, 1};
 	host_data.type_id = {0, 0};
@@ -81,110 +81,110 @@ std::pair<HostParticleData, std::vector<ParticleType>> create_two_particles(arbd
 } // anonymous namespace
 
 TEST_CASE("Debye-Huckel energy matches closed form", "[nonbonded][electrostatics][debye]") {
-	DebyeHuckelPotential dh{arbd_real(kLambda), arbd_real(kEpsilon)};
+	DebyeHuckelPotential dh{mars_real(kLambda), mars_real(kEpsilon)};
 	for (double r : {2.0, 5.0, 12.0, 25.0}) {
-		REQUIRE(dh.compute(arbd_real(r), 1.0f, -1.0f).energy ==
+		REQUIRE(dh.compute(mars_real(r), 1.0f, -1.0f).energy ==
 				Approx(dh_energy(r, 1.0, -1.0)).epsilon(1e-5));
 	}
 }
 
 TEST_CASE("Debye-Huckel force is -dU/dr", "[nonbonded][electrostatics][debye]") {
-	DebyeHuckelPotential dh{arbd_real(kLambda), arbd_real(kEpsilon)};
+	DebyeHuckelPotential dh{mars_real(kLambda), mars_real(kEpsilon)};
 	for (double r : {2.0, 5.0, 12.0, 25.0}) {
 		const double ref = fd_force([](double x) { return dh_energy(x, 1.0, -1.0); }, r);
-		REQUIRE(dh.compute(arbd_real(r), 1.0f, -1.0f).force_magnitude == Approx(ref).epsilon(1e-4));
+		REQUIRE(dh.compute(mars_real(r), 1.0f, -1.0f).force_magnitude == Approx(ref).epsilon(1e-4));
 	}
 }
 
 TEST_CASE("Debye-Huckel decays faster than bare Coulomb", "[nonbonded][electrostatics][debye]") {
-	DebyeHuckelPotential dh{arbd_real(kLambda), arbd_real(kEpsilon)};
+	DebyeHuckelPotential dh{mars_real(kLambda), mars_real(kEpsilon)};
 	for (double r : {1.0, 10.0, 30.0}) {
-		REQUIRE(dh.compute(arbd_real(r), 1.0f, 1.0f).energy < constants::COULOMB / kEpsilon / r);
+		REQUIRE(dh.compute(mars_real(r), 1.0f, 1.0f).energy < constants::COULOMB / kEpsilon / r);
 	}
 }
 
 TEST_CASE("ONC dielectric rises toward its plateau", "[nonbonded][electrostatics][onc]") {
-	OnckElecPotential onc{arbd_real(kKappa), arbd_real(kSz), arbd_real(kZ)};
+	OnckElecPotential onc{mars_real(kKappa), mars_real(kSz), mars_real(kZ)};
 
-	double prev = onc.dielectric(arbd_real(0.5));
+	double prev = onc.dielectric(mars_real(0.5));
 	for (double r = 1.0; r <= 40.0; r += 1.0) {
-		const double eps = onc.dielectric(arbd_real(r));
+		const double eps = onc.dielectric(mars_real(r));
 		REQUIRE(eps > prev);
 		REQUIRE(eps <= kSz);
 		prev = eps;
 	}
 	// Approach is asymptotic and slow: still ~1.2% short at r=60, so check far out.
-	REQUIRE(onc.dielectric(arbd_real(120)) == Approx(kSz).epsilon(1e-3));
+	REQUIRE(onc.dielectric(mars_real(120)) == Approx(kSz).epsilon(1e-3));
 }
 
 TEST_CASE("ONC dielectric matches closed form", "[nonbonded][electrostatics][onc]") {
-	OnckElecPotential onc{arbd_real(kKappa), arbd_real(kSz), arbd_real(kZ)};
+	OnckElecPotential onc{mars_real(kKappa), mars_real(kSz), mars_real(kZ)};
 	for (double r : {1.0, 3.0, 7.0, 15.0, 30.0}) {
-		REQUIRE(onc.dielectric(arbd_real(r)) == Approx(onc_dielectric(r)).epsilon(1e-4));
+		REQUIRE(onc.dielectric(mars_real(r)) == Approx(onc_dielectric(r)).epsilon(1e-4));
 	}
 }
 
 TEST_CASE("ONC dielectric_deriv matches finite difference", "[nonbonded][electrostatics][onc]") {
-	OnckElecPotential onc{arbd_real(kKappa), arbd_real(kSz), arbd_real(kZ)};
+	OnckElecPotential onc{mars_real(kKappa), mars_real(kSz), mars_real(kZ)};
 	for (double r : {1.0, 3.0, 7.0, 15.0}) {
 		const double h = 1e-5 * std::max(1.0, r);
 		const double fd = (onc_dielectric(r + h) - onc_dielectric(r - h)) / (2.0 * h);
 		REQUIRE(fd > 0.0); // eps(r) is increasing
-		REQUIRE(onc.dielectric_deriv(arbd_real(r)) == Approx(fd).epsilon(1e-3));
+		REQUIRE(onc.dielectric_deriv(mars_real(r)) == Approx(fd).epsilon(1e-3));
 	}
 }
 
 TEST_CASE("ONC energy matches closed form", "[nonbonded][electrostatics][onc]") {
-	OnckElecPotential onc{arbd_real(kKappa), arbd_real(kSz), arbd_real(kZ)};
+	OnckElecPotential onc{mars_real(kKappa), mars_real(kSz), mars_real(kZ)};
 	for (double r : {2.0, 5.0, 12.0}) {
-		REQUIRE(onc.compute(arbd_real(r), 1.0f, -1.0f).energy ==
+		REQUIRE(onc.compute(mars_real(r), 1.0f, -1.0f).energy ==
 				Approx(onc_energy(r, 1.0, -1.0)).epsilon(1e-4));
 	}
 }
 
 TEST_CASE("ONC force is -dU/dr", "[nonbonded][electrostatics][onc]") {
-	OnckElecPotential onc{arbd_real(kKappa), arbd_real(kSz), arbd_real(kZ)};
+	OnckElecPotential onc{mars_real(kKappa), mars_real(kSz), mars_real(kZ)};
 	for (double r : {2.0, 5.0, 12.0}) {
 		const double ref = fd_force([](double x) { return onc_energy(x, 1.0, -1.0); }, r);
-		REQUIRE(onc.compute(arbd_real(r), 1.0f, -1.0f).force_magnitude ==
+		REQUIRE(onc.compute(mars_real(r), 1.0f, -1.0f).force_magnitude ==
 				Approx(ref).epsilon(1e-3));
 	}
 }
 
 TEST_CASE("ONC floors the singularity at r=0", "[nonbonded][electrostatics][onc]") {
-	OnckElecPotential onc{arbd_real(kKappa), arbd_real(kSz), arbd_real(kZ)};
-	const auto fe = onc.compute(arbd_real(0), 1.0f, 1.0f);
+	OnckElecPotential onc{mars_real(kKappa), mars_real(kSz), mars_real(kZ)};
+	const auto fe = onc.compute(mars_real(0), 1.0f, 1.0f);
 	REQUIRE(std::isfinite(fe.energy));
 	REQUIRE(std::isfinite(fe.force_magnitude));
 	REQUIRE(fe.energy == Approx(onc.compute(OnckElecPotential::MIN_DISTANCE, 1.0f, 1.0f).energy));
 }
 
 TEST_CASE("Gaussian energy matches closed form", "[nonbonded][gaussian]") {
-	GaussianPotential g{arbd_real(kAmp), arbd_real(kSigma), arbd_real(100)};
+	GaussianPotential g{mars_real(kAmp), mars_real(kSigma), mars_real(100)};
 	for (double r : {0.0, 1.0, 3.0, 6.0}) {
-		REQUIRE(g.compute(arbd_real(r)).energy == Approx(gauss_energy(r)).epsilon(1e-5));
+		REQUIRE(g.compute(mars_real(r)).energy == Approx(gauss_energy(r)).epsilon(1e-5));
 	}
 }
 
 TEST_CASE("Gaussian force is -dU/dr", "[nonbonded][gaussian]") {
-	GaussianPotential g{arbd_real(kAmp), arbd_real(kSigma), arbd_real(100)};
+	GaussianPotential g{mars_real(kAmp), mars_real(kSigma), mars_real(100)};
 	for (double r : {0.5, 1.0, 3.0, 6.0}) {
-		REQUIRE(g.compute(arbd_real(r)).force_magnitude ==
+		REQUIRE(g.compute(mars_real(r)).force_magnitude ==
 				Approx(fd_force(gauss_energy, r)).epsilon(1e-4));
 	}
 }
 
 TEST_CASE("Gaussian truncates at cutoff", "[nonbonded][gaussian]") {
-	GaussianPotential g{arbd_real(kAmp), arbd_real(kSigma), arbd_real(25)}; // cutoff 5
+	GaussianPotential g{mars_real(kAmp), mars_real(kSigma), mars_real(25)}; // cutoff 5
 
-	REQUIRE(g.compute(arbd_real(4.9)).energy > 0.0f);
-	REQUIRE(g.compute(arbd_real(5.1)).energy == 0.0f);
-	REQUIRE(g.compute(arbd_real(5.1)).force_magnitude == 0.0f);
+	REQUIRE(g.compute(mars_real(4.9)).energy > 0.0f);
+	REQUIRE(g.compute(mars_real(5.1)).energy == 0.0f);
+	REQUIRE(g.compute(mars_real(5.1)).force_magnitude == 0.0f);
 
 	// r=12 not 50: by 50 the Gaussian underflows float to a true zero.
-	GaussianPotential uncapped{arbd_real(kAmp), arbd_real(kSigma), arbd_real(0)};
-	REQUIRE(uncapped.compute(arbd_real(12)).energy > 0.0f);
-	REQUIRE(g.compute(arbd_real(12)).energy == 0.0f);
+	GaussianPotential uncapped{mars_real(kAmp), mars_real(kSigma), mars_real(0)};
+	REQUIRE(uncapped.compute(mars_real(12)).energy > 0.0f);
+	REQUIRE(g.compute(mars_real(12)).energy == 0.0f);
 }
 
 // ============================================================================
@@ -239,8 +239,8 @@ TEST_CASE("Coulomb kernel repels like charges and attracts opposite",
 		DeviceBuffer<PeriodicBox> pbox_buffer(1, res);
 		pbox_buffer.copy_from_host(&pbox_host, 1);
 
-		const ARBD::int2 pair_host{0, 1};
-		DeviceBuffer<ARBD::int2> pairs(1, res);
+		const MARS::int2 pair_host{0, 1};
+		DeviceBuffer<MARS::int2> pairs(1, res);
 		pairs.copy_from_host(&pair_host, 1);
 
 		ColumbForceKernel kernel{particles.view(),

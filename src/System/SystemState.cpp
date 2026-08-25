@@ -2,7 +2,7 @@
 #include <algorithm>
 #include <numeric>
 
-namespace ARBD {
+namespace MARS {
 
 void SystemState::initialize_system_objects() {
 	LOGINFO("SystemState: Initializing system objects");
@@ -91,4 +91,4 @@ void SystemState::cleanup_gpu_resources() {
 	LOGINFO("SystemState: GPU resources cleaned up");
 }
 
-} // namespace ARBD
+} // namespace MARS

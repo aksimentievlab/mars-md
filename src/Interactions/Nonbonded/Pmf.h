@@ -3,12 +3,12 @@
 #include "Types/BaseGridDevice.h"
 #include "Types/Types.h"
 
-namespace ARBD {
+namespace MARS {
 
 namespace pmf_detail {
 
-HOST DEVICE inline GridSample<arbd_real>
-sample_pmf_grid(const BaseGridView<arbd_real>& grid, const Vector3& pos, int scheme) {
+HOST DEVICE inline GridSample<mars_real>
+sample_pmf_grid(const BaseGridView<mars_real>& grid, const Vector3& pos, int scheme) {
 	if (scheme == 0) {
 		return sample_grid_linear(grid.data,
 								  pos,
@@ -28,7 +28,7 @@ sample_pmf_grid(const BaseGridView<arbd_real>& grid, const Vector3& pos, int sch
 }
 
 HOST DEVICE inline float
-sample_force_grid_value(const BaseGridView<arbd_real>& grid, const Vector3& pos, int scheme) {
+sample_force_grid_value(const BaseGridView<mars_real>& grid, const Vector3& pos, int scheme) {
 	if (scheme == 0) {
 		return interpolate_grid_point(grid.data,
 									  pos,
@@ -67,7 +67,7 @@ HOST DEVICE inline Vector3
 compute_position_dependent_force(const Vector3& pos,
 								 int type_id,
 								 const ParticleTypeView types,
-								 const BaseGridView<arbd_real>* grid_configs,
+								 const BaseGridView<mars_real>* grid_configs,
 								 const Vector3& electric_field,
 								 int scheme,
 								 bool get_energy = false) {
@@ -81,12 +81,12 @@ compute_position_dependent_force(const Vector3& pos,
 			const GridTerm term = types.pmf_grid_terms[k];
 			if (!term.is_valid())
 				continue;
-			BaseGridView<arbd_real> pmf_grid = grid_configs[term.grid_id];
+			BaseGridView<mars_real> pmf_grid = grid_configs[term.grid_id];
 			if (pmf_grid.data == nullptr)
 				continue;
 			if (term.boundary_condition >= 0)
 				pmf_grid.boundary_condition = term.boundary_condition;
-			const GridSample<arbd_real> sample = pmf_detail::sample_pmf_grid(pmf_grid, pos, scheme);
+			const GridSample<mars_real> sample = pmf_detail::sample_pmf_grid(pmf_grid, pos, scheme);
 			force += sample.gradient * (-term.scale);
 			if (get_energy) {
 				force.t += term.scale * sample.value;
@@ -98,21 +98,21 @@ compute_position_dependent_force(const Vector3& pos,
 	if (grid_configs != nullptr) {
 		const Vector3 force_grid_scale = types.force_grid_scale[type_id];
 		if (force_grid_id.x >= 0) {
-			const BaseGridView<arbd_real>& grid = grid_configs[force_grid_id.x];
+			const BaseGridView<mars_real>& grid = grid_configs[force_grid_id.x];
 			if (grid.data != nullptr) {
 				force.x +=
 					force_grid_scale.x * pmf_detail::sample_force_grid_value(grid, pos, scheme);
 			}
 		}
 		if (force_grid_id.y >= 0) {
-			const BaseGridView<arbd_real>& grid = grid_configs[force_grid_id.y];
+			const BaseGridView<mars_real>& grid = grid_configs[force_grid_id.y];
 			if (grid.data != nullptr) {
 				force.y +=
 					force_grid_scale.y * pmf_detail::sample_force_grid_value(grid, pos, scheme);
 			}
 		}
 		if (force_grid_id.z >= 0) {
-			const BaseGridView<arbd_real>& grid = grid_configs[force_grid_id.z];
+			const BaseGridView<mars_real>& grid = grid_configs[force_grid_id.z];
 			if (grid.data != nullptr) {
 				force.z +=
 					force_grid_scale.z * pmf_detail::sample_force_grid_value(grid, pos, scheme);
@@ -131,7 +131,7 @@ struct ComputePMFKernel {
 	KERNEL_FUNC void operator()(size_t i,
 								const ParticleView particles,
 								const ParticleTypeView types,
-								const BaseGridView<arbd_real>* __restrict__ grid_configs,
+								const BaseGridView<mars_real>* __restrict__ grid_configs,
 								idx_t num_particles) const {
 
 		const idx_t idx = static_cast<idx_t>(i);
@@ -151,22 +151,22 @@ struct ComputePMFKernel {
 	}
 };
 
-} // namespace ARBD
+} // namespace MARS
 #ifdef USE_CUDA
 #include "Backend/CUDA/KernelHelper.cuh"
-namespace ARBD {
+namespace MARS {
 extern template Event launch_cuda_kernel(const Resource& resource,
 										 const KernelConfig& config,
 										 ComputePMFKernel kernel_func,
 										 ParticleView particles,
 										 ParticleTypeView types,
-										 const BaseGridView<arbd_real>* grid_configs,
+										 const BaseGridView<mars_real>* grid_configs,
 										 idx_t num_particles);
-} // namespace ARBD
+} // namespace MARS
 #endif
 
 #ifdef USE_SYCL
 #include <sycl/sycl.hpp>
 template<>
-struct sycl::is_device_copyable<ARBD::ComputePMFKernel> : std::true_type {};
+struct sycl::is_device_copyable<MARS::ComputePMFKernel> : std::true_type {};
 #endif

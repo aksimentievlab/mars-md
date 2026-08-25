@@ -1,13 +1,13 @@
 #pragma once
 
-#include "ARBDException.h"
-#include "ARBDLogger.h"
+#include "MARSException.h"
+#include "MARSLogger.h"
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
 #include <string>
 
-namespace ARBD {
+namespace MARS {
 /**
  * @brief RAII wrapper for FILE* handles
  *
@@ -72,11 +72,11 @@ class FileHandle {
 			}
 
 			if (!m_file) {
-				throw ARBD::Exception(
-					ARBD::ExceptionType::FileOpenError,
+				throw MARS::Exception(
+					MARS::ExceptionType::FileOpenError,
 					std::string("FileHandle: Failed to open file '") + filename + "' with mode '" +
 						mode + "'.",
-					ARBD::SourceLocation(__builtin_FILE(), __builtin_LINE(), __builtin_FUNCTION()));
+					MARS::SourceLocation(__builtin_FILE(), __builtin_LINE(), __builtin_FUNCTION()));
 			}
 		}
 	}
@@ -110,4 +110,4 @@ class FileHandle {
 	// desired
 };
 // Usage: FileHandle my_file("data.txt", "r"); // Automatically closes
-} // namespace ARBD
+} // namespace MARS

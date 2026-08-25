@@ -1,6 +1,6 @@
 #include "CellListPairlist.h"
-#include "ARBDException.h"
-#include "ARBDLogger.h"
+#include "MARSException.h"
+#include "MARSLogger.h"
 #include "Backend/Kernels.h"
 #include <chrono>
 
@@ -11,7 +11,7 @@
 #include <thrust/system/cuda/execution_policy.h>
 #endif
 
-namespace ARBD {
+namespace MARS {
 
 CellListPairlist::CellListPairlist(const Resource& resource,
 								   size_t max_particles,
@@ -36,7 +36,7 @@ void CellListPairlist::build_pairlist(const DeviceBuffer<Vector3>& positions,
 	auto start_time = std::chrono::high_resolution_clock::now();
 
 	if (num_particles > max_particles_) {
-		ARBD_Exception(ExceptionType::ValueError,
+		MARS_Exception(ExceptionType::ValueError,
 					   "Cannot build pairlist for {} particles, maximum is {}",
 					   num_particles,
 					   max_particles_);
@@ -151,7 +151,7 @@ void CellListPairlist::sort_particles_by_cell() {
 			return a.repID < b.repID;
 		});
 #else
-	ARBD_Exception(ExceptionType::NotImplementedError,
+	MARS_Exception(ExceptionType::NotImplementedError,
 				   "Cell sorting not implemented for non-CUDA backends");
 #endif
 }
@@ -201,4 +201,4 @@ void CellListPairlist::find_neighbors_celllist(const DeviceBuffer<Vector3>& posi
 	launch_kernel(resource_, config, kernel);
 }
 
-} // namespace ARBD
+} // namespace MARS

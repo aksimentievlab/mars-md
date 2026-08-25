@@ -9,13 +9,13 @@
  * @copyright Copyright (c) 2025
  *
  */
-#include "ARBDException.h"
 #include "Constants.h"
+#include "MARSException.h"
 #include "Types/BaseGrid.h"
 #include "Types/Types.h"
 #include <memory>
 
-namespace ARBD {
+namespace MARS {
 typedef float Length;
 /**
  * @brief Temperature configuration - supports both constant values and spatial grids
@@ -27,13 +27,13 @@ struct Temperature {
 	Format format;
 	float value; // Kelvin
 	float kT;
-	BaseGrid<arbd_real> temperature_grid;
+	BaseGrid<mars_real> temperature_grid;
 
 	Temperature(float value = 298.15f) : value(value) {
 		format = Format::Value;
 		kT = value * constants::BOLTZMANN;
 	}
-	Temperature(BaseGrid<arbd_real> grid) : temperature_grid(grid) {
+	Temperature(BaseGrid<mars_real> grid) : temperature_grid(grid) {
 		format = Format::Grid;
 		value = 0.0f; // No scalar value defined for grid.
 		kT = 0.0f;	  // No global kT, but for compatibility we set it to zero.
@@ -173,4 +173,4 @@ enum class BarostatType {
 };
 enum class InteractionForm { Grid, Tabulated, Analytical };
 
-} // namespace ARBD
+} // namespace MARS

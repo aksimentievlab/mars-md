@@ -9,7 +9,7 @@
 #include <memory>
 #include <sycl/sycl.hpp>
 
-namespace ARBD {
+namespace MARS {
 
 namespace SYCL {
 template<typename ItemType, typename LocalAccessorType>
@@ -319,5 +319,5 @@ Event launch_sycl_kernel_3d(const Resource& resource,
 
 	return Event(sycl_event, resource);
 }
-} // namespace ARBD
+} // namespace MARS
 #endif

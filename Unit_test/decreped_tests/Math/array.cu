@@ -38,11 +38,11 @@ __host__ __device__ void print_it(const double x) {
 	printf("double %lf\n", x);
 }
 template<>
-__host__ __device__ void print_it(const ARBD::Vector3_t<float>&& x) {
+__host__ __device__ void print_it(const MARS::Vector3_t<float>&& x) {
 	x.print();
 }
 template<>
-__host__ __device__ void print_it(const ARBD::Vector3_t<float>& x) {
+__host__ __device__ void print_it(const MARS::Vector3_t<float>& x) {
 	x.print();
 }
 
@@ -63,8 +63,8 @@ void print_enable_if_value() {
 }
 
 template<typename T>
-ARBD::Array<T> allocate_array_host(size_t num) {
-	ARBD::Array<T> arr(num);
+MARS::Array<T> allocate_array_host(size_t num) {
+	MARS::Array<T> arr(num);
 	return arr;
 }
 
@@ -79,8 +79,8 @@ T* allocate_plain_array_device(size_t num) {
 	T* arr = allocate_plain_array_host<T>(num);
 	T* arr_d;
 	size_t sz = sizeof(T) * num;
-	ARBD::check_cuda_error(cudaMalloc(&arr_d, sz), __FILE__, __LINE__);
-	ARBD::check_cuda_error(cudaMemcpy(arr_d, arr, sz, cudaMemcpyHostToDevice), __FILE__, __LINE__);
+	MARS::check_cuda_error(cudaMalloc(&arr_d, sz), __FILE__, __LINE__);
+	MARS::check_cuda_error(cudaMemcpy(arr_d, arr, sz, cudaMemcpyHostToDevice), __FILE__, __LINE__);
 	delete[] arr;
 	return arr_d;
 }
@@ -95,8 +95,8 @@ HOST DEVICE void inline _copy_helper(size_t& idx, T* __restrict__ out, const T* 
 // }
 template<typename T>
 HOST DEVICE void inline _copy_helper(size_t& idx,
-									 ARBD::Array<T>* __restrict__ out,
-									 const ARBD::Array<T>* __restrict__ inp) {
+									 MARS::Array<T>* __restrict__ out,
+									 const MARS::Array<T>* __restrict__ inp) {
 	(*out)[idx] = (*inp)[idx];
 }
 
@@ -113,7 +113,7 @@ void call_copy_kernel(size_t num,
 					  const T* __restrict__ inp,
 					  size_t block_size = 256) {
 	copy_kernel<<<block_size, 1, 0>>>(num, out, inp);
-	ARBD::check_cuda_error(cudaDeviceSynchronize(), __FILE__, __LINE__);
+	MARS::check_cuda_error(cudaDeviceSynchronize(), __FILE__, __LINE__);
 }
 
 // Array<T> _copy_array_cuda(size_t num) {
@@ -126,37 +126,37 @@ void call_copy_kernel(size_t num,
 TEST_CASE("Test Array assignment and basic operations", "[Array]") {
 	{
 		// Creation and copy assignment
-		ARBD::Array<ARBD::Vector3_t<float>> a =
-			Tests::TestArray::allocate_array_host<ARBD::Vector3_t<float>>(10);
+		MARS::Array<MARS::Vector3_t<float>> a =
+			Tests::TestArray::allocate_array_host<MARS::Vector3_t<float>>(10);
 	}
 
 	{
 		// Allocation and deallocation
-		ARBD::Array<ARBD::Vector3_t<float>> a(10);
-		a[0] = ARBD::Vector3_t<float>(1.0);
-		a[3] = ARBD::Vector3_t<float>(3.0);
+		MARS::Array<MARS::Vector3_t<float>> a(10);
+		a[0] = MARS::Vector3_t<float>(1.0);
+		a[3] = MARS::Vector3_t<float>(3.0);
 
 		// Just test basic array operations without CUDA for now
 		REQUIRE(a[0].x == 1.0f);
 		REQUIRE(a[3].x == 3.0f);
 
 		Tests::TestArray::print_enable_if_value<int>();
-		Tests::TestArray::print_enable_if_value<ARBD::Vector3_t<float>>();
-		Tests::TestArray::print_enable_if_value<ARBD::Array<ARBD::Vector3_t<float>>>();
-		Tests::TestArray::print_enable_if_value<ARBD::Array<ARBD::Array<ARBD::Vector3_t<float>>>>();
+		Tests::TestArray::print_enable_if_value<MARS::Vector3_t<float>>();
+		Tests::TestArray::print_enable_if_value<MARS::Array<MARS::Vector3_t<float>>>();
+		Tests::TestArray::print_enable_if_value<MARS::Array<MARS::Array<MARS::Vector3_t<float>>>>();
 	}
 }
 
 TEST_CASE("Test Array nesting operations", "[Array]") {
 	{
 		// Allocation and deallocation - Create arrays first
-		ARBD::VecArray v1(10);
+		MARS::VecArray v1(10);
 		for (int i = 0; i < v1.size(); ++i) {
-			v1[i] = ARBD::Vector3(i + 1);
+			v1[i] = MARS::Vector3(i + 1);
 		}
-		ARBD::VecArray v2(20);
+		MARS::VecArray v2(20);
 		for (int i = 0; i < v2.size(); ++i) {
-			v2[i] = ARBD::Vector3(10 * i + 1);
+			v2[i] = MARS::Vector3(10 * i + 1);
 		}
 
 		// Test simple VecArray access first to ensure they work
@@ -165,7 +165,7 @@ TEST_CASE("Test Array nesting operations", "[Array]") {
 
 		// Test nested array creation and assignment - now should work with fixed
 		// copy assignment
-		ARBD::Array<ARBD::VecArray> a(3);
+		MARS::Array<MARS::VecArray> a(3);
 
 		// Test that the nested array is functional
 		REQUIRE(a.size() == 3);
@@ -191,8 +191,8 @@ TEST_CASE("Test basic CUDA kernels", "[Array]") {
 
 		Tests::TestArray::call_copy_kernel(num, out, inp);
 
-		ARBD::check_cuda_error(cudaFree(inp), __FILE__, __LINE__);
-		ARBD::check_cuda_error(cudaFree(out), __FILE__, __LINE__);
+		MARS::check_cuda_error(cudaFree(inp), __FILE__, __LINE__);
+		MARS::check_cuda_error(cudaFree(out), __FILE__, __LINE__);
 
 		REQUIRE(true); // Basic test that CUDA operations work
 	}

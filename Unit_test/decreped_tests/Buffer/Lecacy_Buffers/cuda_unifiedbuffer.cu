@@ -9,8 +9,8 @@
 #include <vector>
 #include <numeric>
 
-using namespace ARBD;
-using namespace ARBD::CUDA;
+using namespace MARS;
+using namespace MARS::CUDA;
 
 // Simple CUDA kernels for UnifiedBuffer testing
 __global__ void buffer_fill_kernel(float* data, float value, size_t n) {
@@ -109,7 +109,7 @@ TEST_CASE("UnifiedBuffer CUDA Basic Allocation", "[UnifiedBuffer][CUDA]") {
         
         CUDAManager::finalize();
     } catch (const Exception& e) {
-        FAIL("CUDA test failed with ARBD exception: " << e.what());
+        FAIL("CUDA test failed with MARS exception: " << e.what());
     }
 }
 
@@ -178,7 +178,7 @@ TEST_CASE("UnifiedBuffer CUDA Data Transfer", "[UnifiedBuffer][CUDA]") {
         
         CUDAManager::finalize();
     } catch (const Exception& e) {
-        FAIL("CUDA data transfer test failed with ARBD exception: " << e.what());
+        FAIL("CUDA data transfer test failed with MARS exception: " << e.what());
     }
 }
 
@@ -221,7 +221,7 @@ TEST_CASE("UnifiedBuffer CUDA Move Semantics", "[UnifiedBuffer][CUDA]") {
         
         CUDAManager::finalize();
     } catch (const Exception& e) {
-        FAIL("CUDA move semantics test failed with ARBD exception: " << e.what());
+        FAIL("CUDA move semantics test failed with MARS exception: " << e.what());
     }
 }
 
@@ -266,7 +266,7 @@ TEST_CASE("UnifiedBuffer CUDA Existing Data Constructor", "[UnifiedBuffer][CUDA]
         
         CUDAManager::finalize();
     } catch (const Exception& e) {
-        FAIL("CUDA existing data constructor test failed with ARBD exception: " << e.what());
+        FAIL("CUDA existing data constructor test failed with MARS exception: " << e.what());
     }
 }
 
@@ -345,7 +345,7 @@ TEST_CASE("UnifiedBuffer CUDA Multi-location Operations", "[UnifiedBuffer][CUDA]
         
         CUDAManager::finalize();
     } catch (const Exception& e) {
-        FAIL("CUDA multi-location test failed with ARBD exception: " << e.what());
+        FAIL("CUDA multi-location test failed with MARS exception: " << e.what());
     }
 }
 
@@ -426,7 +426,7 @@ TEST_CASE("UnifiedBuffer CUDA Performance Operations", "[UnifiedBuffer][CUDA][pe
         
         CUDAManager::finalize();
     } catch (const Exception& e) {
-        FAIL("CUDA performance test failed with ARBD exception: " << e.what());
+        FAIL("CUDA performance test failed with MARS exception: " << e.what());
     }
 }
 

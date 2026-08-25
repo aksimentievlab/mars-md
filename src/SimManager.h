@@ -12,8 +12,6 @@
 #include <future>
 #include <iostream>
 
-#include "ARBDException.h"
-#include "ARBDLogger.h"
 #include "Backend/Buffer.h"
 #include "Backend/Events.h"
 #include "Backend/Kernels.h"
@@ -24,13 +22,15 @@
 #include "IO/PsfPdbIO.h"
 #include "IO/TrajectoryWriter.h"
 #include "IO/WKFUtils.h"
+#include "MARSException.h"
+#include "MARSLogger.h"
 #include "Objects/DeviceParticleManager.h"
 #include "PatchOperation/ReorderManager.h"
 #include "System/RigidBodyManager.h"
 #include "System/SimSystem.h"
 #include "System/SystemState.h"
 
-namespace ARBD {
+namespace MARS {
 
 /**
  * @brief Coordinates simulation, device execution, synchronization, and output.
@@ -275,4 +275,4 @@ class SimManager {
 	void perform_reactions();
 };
 
-} // namespace ARBD
+} // namespace MARS

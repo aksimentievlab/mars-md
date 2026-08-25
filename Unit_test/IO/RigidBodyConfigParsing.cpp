@@ -15,7 +15,7 @@
 #include <filesystem>
 #include <fstream>
 
-using namespace ARBD;
+using namespace MARS;
 
 TEST_CASE("ConfigParser parses rigidBody blocks into RigidBodyType + RigidBodyIO",
 		  "[configparser][rigidbody]") {
@@ -25,12 +25,12 @@ TEST_CASE("ConfigParser parses rigidBody blocks into RigidBodyType + RigidBodyIO
 	// A trivial grid - only used to exercise add_dense_grid()/grid_id
 	// resolution here, not sampled.
 	const auto tmp_dir = std::filesystem::temp_directory_path();
-	const std::string grid_path = (tmp_dir / "arbd_test_rb_config_grid.dx").string();
+	const std::string grid_path = (tmp_dir / "mars_test_rb_config_grid.dx").string();
 	BaseGrid<float> grid(Matrix3(1.0f), Vector3(0.0f), 4, 4, 4);
 	grid.zero();
 	DXReader::write_grid(grid, grid_path);
 
-	const std::string config_path = (tmp_dir / "arbd_test_rb_config.bd").string();
+	const std::string config_path = (tmp_dir / "mars_test_rb_config.bd").string();
 	{
 		std::ofstream out(config_path);
 		out << "rigidBody ProteinA\n";

@@ -3,7 +3,7 @@
 // device storage (DeviceRigidBody/DeviceRigidBodyTypes) and Phase 3's
 // type-level force-pair list (RigidBodyForcePairList).
 #pragma once
-#include "ARBDException.h"
+#include "MARSException.h"
 #include "Backend/Events.h"
 #include "Backend/KernelConfig.h"
 #include "Backend/Kernels.h"
@@ -27,7 +27,7 @@
 #include <utility>
 #include <vector>
 
-namespace ARBD {
+namespace MARS {
 
 /**
  * @brief Owns all rigid-body device state and drives its per-step physics.
@@ -287,7 +287,7 @@ class RigidBodyManager {
 		grid_grid_work_count_.copy_from_host(&zero, 1, true);
 		grid_grid_overflow_.copy_from_host(&zero, 1, true);
 
-		const BaseGridView<arbd_real>* grid_views =
+		const BaseGridView<mars_real>* grid_views =
 			grid_manager.get_device_grid_views(grid_resource_idx).data();
 
 		// All three kernels share the GridCompute stream (architecture
@@ -401,7 +401,7 @@ class RigidBodyManager {
 			particle_grid_num_candidates_ > 0 ? particle_grid_num_candidates_ : 1;
 		particle_grid_candidate_rb_id_ = DeviceBuffer<int>(capacity, compute_resource());
 		particle_grid_candidate_grid_id_ = DeviceBuffer<int>(capacity, compute_resource());
-		particle_grid_candidate_scale_ = DeviceBuffer<arbd_real>(capacity, compute_resource());
+		particle_grid_candidate_scale_ = DeviceBuffer<mars_real>(capacity, compute_resource());
 		particle_grid_work_ = DeviceBuffer<RBParticleGridWork>(capacity, compute_resource());
 		if (!cand_rb_id.empty()) {
 			particle_grid_candidate_rb_id_.copy_from_host(cand_rb_id.data(),
@@ -447,7 +447,7 @@ class RigidBodyManager {
 			return Event(nullptr, compute_resource());
 		}
 
-		const BaseGridView<arbd_real>* grid_views =
+		const BaseGridView<mars_real>* grid_views =
 			grid_manager.get_device_grid_views(grid_resource_idx).data();
 		void* grid_stream = compute_resource().get_stream(StreamType::GridCompute);
 
@@ -830,8 +830,8 @@ class RigidBodyManager {
 	idx_t particle_grid_num_candidates_{0};
 	DeviceBuffer<int> particle_grid_candidate_rb_id_;
 	DeviceBuffer<int> particle_grid_candidate_grid_id_;
-	DeviceBuffer<arbd_real> particle_grid_candidate_scale_;
+	DeviceBuffer<mars_real> particle_grid_candidate_scale_;
 	DeviceBuffer<RBParticleGridWork> particle_grid_work_;
 };
 
-} // namespace ARBD
+} // namespace MARS

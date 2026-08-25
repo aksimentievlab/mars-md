@@ -30,8 +30,8 @@ inline void gpuAssert(cudaError_t code, const char* file, int line, bool abort =
 #endif
 #pragma once
 
-#include "ARBDException.h"
-#include "ARBDLogger.h"
+#include "MARSException.h"
+#include "MARSLogger.h"
 #include "IO/FileHandle.h"
 #include "IO/Reader.h"
 #include "System/SimSystem.h"
@@ -66,7 +66,7 @@ inline void gpuAssert(cudaError_t code, const char* file, int line, bool abort =
 
 // Forward declerations
 using String = std::string;
-namespace ARBD {
+namespace MARS {
 class Bond;
 class Exclude;
 class Angle;
@@ -146,7 +146,7 @@ class Configuration {
 
 	// Output variables
 	Vector3 sysDim;
-	BaseGrid<arbd_real>* sys;
+	BaseGrid<mars_real>* sys;
 	Vector3 origin, size, basis1, basis2, basis3;
 
 	bool loadedCoordinates;
@@ -223,9 +223,9 @@ class Configuration {
 	int numberFluctPeriod;
 	int decompPeriod;
 	int numCapFactor;
-	BaseGrid<arbd_real>* kTGrid;
-	BaseGrid<arbd_real>* tGrid;
-	BaseGrid<arbd_real>* sigmaT;
+	BaseGrid<mars_real>* kTGrid;
+	BaseGrid<mars_real>* tGrid;
+	BaseGrid<mars_real>* sigmaT;
 	unsigned long randomSeed;
 
 	// Other parameters.
@@ -264,8 +264,8 @@ class Configuration {
 	bool readRestraintsFromFile;
 	String** partGridFile;
 	float** partGridFileScale;
-	std::map<std::string, BaseGrid<arbd_real>> part_grid_dictionary;
-	std::map<std::string, BaseGrid<arbd_real>*> part_grid_dictionary_d;
+	std::map<std::string, BaseGrid<mars_real>> part_grid_dictionary;
+	std::map<std::string, BaseGrid<mars_real>*> part_grid_dictionary_d;
 	std::vector<std::vector<String>> partRigidBodyGrid;
 	String* partDiffusionGridFile;
 	String* partForceXGridFile;
@@ -324,7 +324,7 @@ class Configuration {
 	int ParticleInterpolationType;
 	int RigidBodyInterpolationType;
 };
-} // namespace ARBD
+} // namespace MARS
 
 namespace {
 template<class T>

@@ -1,8 +1,8 @@
 #pragma once
 
 /**
- * @file ARBDException.h
- * @brief Advanced exception handling system for the ARBD library with source
+ * @file MARSException.h
+ * @brief Advanced exception handling system for the MARS library with source
  * location tracking and formatted messages.
  *
  * This header provides a robust exception handling system that includes:
@@ -15,11 +15,11 @@
  * ```cpp
  * void your_function() {
  *    // Simplest way - just throw with a message
- *    throw ARBD::Exception(ARBD::ExceptionType::ValueError, "Something went
+ *    throw MARS::Exception(MARS::ExceptionType::ValueError, "Something went
  * wrong");
  *
  *    // Or use the convenient macro (recommended)
- *    ARBD_Exception(ARBD::ExceptionType::ValueError, "Invalid value: %d", 42);
+ *    MARS_Exception(MARS::ExceptionType::ValueError, "Invalid value: %d", 42);
  * }
  * ```
  * @example Using Convenience Functions:
@@ -27,11 +27,11 @@
  * void your_function() {
  *    // Using convenience functions
  *    if (value < 0) {
- *        ARBD::throw_value_error("Expected positive value, got %d",
+ *        MARS::throw_value_error("Expected positive value, got %d",
  * negative_value);
  *    }
  *    if (!feature_implemented) {
- *        ARBD::throw_not_implemented("Feature %s is not yet implemented",
+ *        MARS::throw_not_implemented("Feature %s is not yet implemented",
  * feature_name.c_str());
  *    }
  * }
@@ -40,7 +40,7 @@
  * ```cpp
  * void your_function() {
  *    // Using the macro with formatted message
- *    ARBD_Exception(ARBD::ExceptionType::ValueError, "Invalid value: %d", 42);
+ *    MARS_Exception(MARS::ExceptionType::ValueError, "Invalid value: %d", 42);
  * }
  * ```
  *
@@ -66,14 +66,14 @@
  * void process_data(int value, const std::string& name) {
  *     if (value < 0) {
  *         // Using printf-style formatting with multiple arguments
- *         ARBD_Exception(ARBD::ExceptionType::ValueError,
+ *         MARS_Exception(MARS::ExceptionType::ValueError,
  *             "Invalid value %d for parameter '%s'. Must be non-negative.",
  *             value, name.c_str());
  *     }
  *
  *     if (!feature_implemented) {
  *         // Using convenience function with formatting
- *         ARBD::throw_not_implemented("Feature '%s' planned for version %d.%d",
+ *         MARS::throw_not_implemented("Feature '%s' planned for version %d.%d",
  *             feature_name.c_str(), major_version, minor_version);
  *     }
  * }
@@ -86,7 +86,7 @@
 #include <sstream>
 #include <string>
 
-namespace ARBD {
+namespace MARS {
 
 // Simple source location for universal compatibility
 struct SourceLocation {
@@ -265,6 +265,6 @@ template<typename... Args>
 	throw Exception(ExceptionType::MetalRuntimeError, message, SourceLocation());
 }
 
-} // namespace ARBD
-#define ARBD_Exception(type, ...) throw ARBD::Exception(type, ARBD::SourceLocation(), __VA_ARGS__)
+} // namespace MARS
+#define MARS_Exception(type, ...) throw MARS::Exception(type, MARS::SourceLocation(), __VA_ARGS__)
 #endif // __METAL_VERSION__

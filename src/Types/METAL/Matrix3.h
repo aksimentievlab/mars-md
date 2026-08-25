@@ -12,7 +12,7 @@
 #include <metal_stdlib>
 using namespace metal;
 
-namespace ARBD {
+namespace MARS {
 
 /**
  * @brief A 3x3 matrix class optimized for Metal GPU kernels.
@@ -148,7 +148,7 @@ Matrix3_t<T> operator*(T s, Matrix3_t<T> m) {
 }
 
 // Common type aliases for Metal
-using MetalMatrix3 = Matrix3_t<arbd_real>;
+using MetalMatrix3 = Matrix3_t<mars_real>;
 
-} // namespace ARBD
+} // namespace MARS
 #endif

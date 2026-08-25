@@ -4,17 +4,17 @@
 
 #ifdef USE_CUDA
 #include "Backend/CUDA/CUDAManager.h"
-using namespace ARBD::CUDA;
+using namespace MARS::CUDA;
 #endif
 
 #ifdef USE_SYCL
 #include "Backend/SYCL/SYCLManager.h"
-using namespace ARBD::SYCL;
+using namespace MARS::SYCL;
 #endif
 
 #ifdef USE_METAL
 #include "Backend/METAL/METALManager.h"
-using namespace ARBD::METAL;
+using namespace MARS::METAL;
 #endif
 
 #include <chrono>
@@ -23,7 +23,7 @@ using namespace ARBD::METAL;
 #include <random>
 #include <vector>
 
-using namespace ARBD;
+using namespace MARS;
 
 // Include the Catch2 test runner
 DEF_RUN_TRIAL

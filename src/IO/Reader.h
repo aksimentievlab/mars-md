@@ -1,11 +1,11 @@
 ///////////////////////////////////////////////////////////////////////
 // Configuration file reader
 // Author: Jeff Comer <jcomer2@illinois.edu>
-// Refactored for the arbd2/cpp20 branch with on 2025
+// Refactored for the mars2/cpp20 branch with on 2025
 // Author: Pin-Yi Li <pinyili2@illinois.edu>
 #pragma once
-#include "ARBDException.h"
-#include "ARBDLogger.h"
+#include "MARSException.h"
+#include "MARSLogger.h"
 #include "FileHandle.h"
 #include "Types/TypeName.h"
 #include "Types/Types.h"
@@ -20,10 +20,10 @@
 #include <unordered_map>
 #include <vector>
 
-namespace ARBD {
+namespace MARS {
 
 /**
- * @brief Modern C++20 configuration file reader for ARBD2
+ * @brief Modern C++20 configuration file reader for MARS2
  *
  * Features:
  * - Exception-safe file handling
@@ -31,13 +31,13 @@ namespace ARBD {
  * - Efficient parameter lookup with hash maps
  * - std::string_view for zero-copy string operations
  * - Proper RAII resource management
- * - Integration with ARBD2 logging and exception systems
+ * - Integration with MARS2 logging and exception systems
  * @example Basic Usage:
  * ```cpp
  * #include "IO/Reader.h"
  *
  * // Create a Reader for a configuration file
- * ARBD::Reader reader("config.txt");
+ * MARS::Reader reader("config.txt");
  *
  * // Access the number of parameter lines
  * size_t num_params = reader.length();
@@ -56,7 +56,7 @@ namespace ARBD {
  * }
  *
  * // Parse a boolean parameter
- * bool enabled = ARBD::Reader::parseBool(reader.get("enabled"));
+ * bool enabled = MARS::Reader::parseBool(reader.get("enabled"));
  * ```
  */
 
@@ -68,7 +68,7 @@ class Reader {
 	/**
 	 * @brief Constructor - reads and parses configuration file
 	 * @param fileName Path to configuration file
-	 * @throws ARBD::Exception on file access or parsing errors
+	 * @throws MARS::Exception on file access or parsing errors
 	 */
 	explicit Reader(std::string_view fileName) : fileName_(fileName) {
 		try {
@@ -261,7 +261,7 @@ class Reader {
 	 * @brief Static method to count valid parameter lines in a file
 	 * @param fileName Path to file
 	 * @return Number of valid (non-comment, non-blank) lines
-	 * @throws ARBD::Exception on file access error
+	 * @throws MARS::Exception on file access error
 	 */
 	static size_t countParameterLines(std::string_view fileName) {
 		FileHandle file(fileName.data(), "r");
@@ -491,4 +491,4 @@ class Reader {
 		}
 	}
 };
-} // namespace ARBD
+} // namespace MARS

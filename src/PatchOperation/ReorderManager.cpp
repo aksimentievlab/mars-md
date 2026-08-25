@@ -3,7 +3,7 @@
 #ifdef ENABLE_ZORDER_REORDER
 #include "PatchOperation/Patch.h"
 
-namespace ARBD {
+namespace MARS {
 
 bool ParticleReorderManager::maybe_reorder(size_t step, Patch& patch) {
 	if (reorder_period_ <= 0) {
@@ -24,5 +24,5 @@ bool ParticleReorderManager::maybe_reorder(size_t step, Patch& patch) {
 	return true;
 }
 
-} // namespace ARBD
+} // namespace MARS
 #endif

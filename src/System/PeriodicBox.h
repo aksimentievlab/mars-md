@@ -9,14 +9,14 @@
 #include "Types/Math.h"
 #include "Types/Types.h"
 
-namespace ARBD {
+namespace MARS {
 
 enum class Periodicity { AllPeriodic = 3, TwoDimensional = 2, OneDimensional = 1, Open = 0 };
 
 class PeriodicBox {
   public:
 	HOST DEVICE PeriodicBox()
-		: box_size_(Vector3(arbd_real(0.0), arbd_real(0.0), arbd_real(0.0))),
+		: box_size_(Vector3(mars_real(0.0), mars_real(0.0), mars_real(0.0))),
 		  periodic_{false, false, false}, triclinic_(false) {}
 
 	HOST DEVICE PeriodicBox(const Vector3& box_size,
@@ -26,13 +26,13 @@ class PeriodicBox {
 		: box_size_(box_size), periodic_{periodic_x, periodic_y, periodic_z}, triclinic_(false) {
 
 		// Orthogonal basis
-		v1_ = Vector3(box_size.x, arbd_real(0.0), arbd_real(0.0));
-		v2_ = Vector3(arbd_real(0.0), box_size.y, arbd_real(0.0));
-		v3_ = Vector3(arbd_real(0.0), arbd_real(0.0), box_size.z);
+		v1_ = Vector3(box_size.x, mars_real(0.0), mars_real(0.0));
+		v2_ = Vector3(mars_real(0.0), box_size.y, mars_real(0.0));
+		v3_ = Vector3(mars_real(0.0), mars_real(0.0), box_size.z);
 		basis_ = Matrix3(v1_, v2_, v3_);
-		inv_v1x_ = (v1_.x > arbd_real(0.0)) ? arbd_real(1.0) / v1_.x : arbd_real(0.0);
-		inv_v2y_ = (v2_.y > arbd_real(0.0)) ? arbd_real(1.0) / v2_.y : arbd_real(0.0);
-		inv_v3z_ = (v3_.z > arbd_real(0.0)) ? arbd_real(1.0) / v3_.z : arbd_real(0.0);
+		inv_v1x_ = (v1_.x > mars_real(0.0)) ? mars_real(1.0) / v1_.x : mars_real(0.0);
+		inv_v2y_ = (v2_.y > mars_real(0.0)) ? mars_real(1.0) / v2_.y : mars_real(0.0);
+		inv_v3z_ = (v3_.z > mars_real(0.0)) ? mars_real(1.0) / v3_.z : mars_real(0.0);
 	}
 
 	HOST DEVICE PeriodicBox(const Vector3& box_size, Periodicity periodicity)
@@ -61,37 +61,35 @@ class PeriodicBox {
 			break;
 		}
 		// Orthogonal basis
-		v1_ = Vector3(box_size.x, arbd_real(0.0), arbd_real(0.0));
-		v2_ = Vector3(arbd_real(0.0), box_size.y, arbd_real(0.0));
-		v3_ = Vector3(arbd_real(0.0), arbd_real(0.0), box_size.z);
+		v1_ = Vector3(box_size.x, mars_real(0.0), mars_real(0.0));
+		v2_ = Vector3(mars_real(0.0), box_size.y, mars_real(0.0));
+		v3_ = Vector3(mars_real(0.0), mars_real(0.0), box_size.z);
 		basis_ = Matrix3(v1_, v2_, v3_);
 
-		inv_v1x_ = (v1_.x > arbd_real(0.0)) ? arbd_real(1.0) / v1_.x : arbd_real(0.0);
-		inv_v2y_ = (v2_.y > arbd_real(0.0)) ? arbd_real(1.0) / v2_.y : arbd_real(0.0);
-		inv_v3z_ = (v3_.z > arbd_real(0.0)) ? arbd_real(1.0) / v3_.z : arbd_real(0.0);
+		inv_v1x_ = (v1_.x > mars_real(0.0)) ? mars_real(1.0) / v1_.x : mars_real(0.0);
+		inv_v2y_ = (v2_.y > mars_real(0.0)) ? mars_real(1.0) / v2_.y : mars_real(0.0);
+		inv_v3z_ = (v3_.z > mars_real(0.0)) ? mars_real(1.0) / v3_.z : mars_real(0.0);
 	}
-
-#ifdef HOST_GUARD
 
 	HOST void set_basis(const Vector3& basis1, const Vector3& basis2, const Vector3& basis3) {
 		// 1. Force arbitrary basis vectors into a standard lower-triangular matrix.
 		// This rotates the system so basis1 aligns with X, and basis2 lies in the XY plane.
-		arbd_real v1x = basis1.length();
-		arbd_real v1y = arbd_real(0.0);
-		arbd_real v1z = arbd_real(0.0);
+		mars_real v1x = basis1.length();
+		mars_real v1y = mars_real(0.0);
+		mars_real v1z = mars_real(0.0);
 
-		arbd_real v2x = (v1x > arbd_real(0.0)) ? basis1.dot(basis2) / v1x : arbd_real(0.0);
-		arbd_real v2y_sq = basis2.dot(basis2) - v2x * v2x;
+		mars_real v2x = (v1x > mars_real(0.0)) ? basis1.dot(basis2) / v1x : mars_real(0.0);
+		mars_real v2y_sq = basis2.dot(basis2) - v2x * v2x;
 
 		// Max(0) guards against floating point errors giving tiny negative numbers
-		arbd_real v2y = (v2y_sq > arbd_real(0.0)) ? ARBD::math::sqrt(v2y_sq) : arbd_real(0.0);
-		arbd_real v2z = arbd_real(0.0);
+		mars_real v2y = (v2y_sq > mars_real(0.0)) ? MARS::math::sqrt(v2y_sq) : mars_real(0.0);
+		mars_real v2z = mars_real(0.0);
 
-		arbd_real v3x = (v1x > arbd_real(0.0)) ? basis1.dot(basis3) / v1x : arbd_real(0.0);
-		arbd_real v3y =
-			(v2y > arbd_real(0.0)) ? (basis2.dot(basis3) - v2x * v3x) / v2y : arbd_real(0.0);
-		arbd_real v3z_sq = basis3.dot(basis3) - v3x * v3x - v3y * v3y;
-		arbd_real v3z = (v3z_sq > arbd_real(0.0)) ? ARBD::math::sqrt(v3z_sq) : arbd_real(0.0);
+		mars_real v3x = (v1x > mars_real(0.0)) ? basis1.dot(basis3) / v1x : mars_real(0.0);
+		mars_real v3y =
+			(v2y > mars_real(0.0)) ? (basis2.dot(basis3) - v2x * v3x) / v2y : mars_real(0.0);
+		mars_real v3z_sq = basis3.dot(basis3) - v3x * v3x - v3y * v3y;
+		mars_real v3z = (v3z_sq > mars_real(0.0)) ? MARS::math::sqrt(v3z_sq) : mars_real(0.0);
 
 		v1_ = Vector3(v1x, v1y, v1z);
 		v2_ = Vector3(v2x, v2y, v2z);
@@ -101,18 +99,18 @@ class PeriodicBox {
 		// 2. The box size for grids/spatial hashing must be the perpendicular extents
 		// (the diagonal of the lower triangular matrix), NOT the vector lengths.
 		box_size_ = Vector3(v1x, v2y, v3z);
-		inv_v1x_ = (v1_.x > arbd_real(0.0)) ? arbd_real(1.0) / v1_.x : arbd_real(0.0);
-		inv_v2y_ = (v2_.y > arbd_real(0.0)) ? arbd_real(1.0) / v2_.y : arbd_real(0.0);
-		inv_v3z_ = (v3_.z > arbd_real(0.0)) ? arbd_real(1.0) / v3_.z : arbd_real(0.0);
+		inv_v1x_ = (v1_.x > mars_real(0.0)) ? mars_real(1.0) / v1_.x : mars_real(0.0);
+		inv_v2y_ = (v2_.y > mars_real(0.0)) ? mars_real(1.0) / v2_.y : mars_real(0.0);
+		inv_v3z_ = (v3_.z > mars_real(0.0)) ? mars_real(1.0) / v3_.z : mars_real(0.0);
 
 		// 3. Robustly check for orthogonality using a small tolerance
-		constexpr arbd_real TOL = arbd_real(1e-5);
+		constexpr mars_real TOL = mars_real(1e-5);
 		if (std::abs(v2x) < TOL && std::abs(v3x) < TOL && std::abs(v3y) < TOL) {
 			triclinic_ = false;
 			// Snap to zero to prevent floating point drift in the fast-path
-			v1_ = Vector3(v1x, arbd_real(0.0), arbd_real(0.0));
-			v2_ = Vector3(arbd_real(0.0), v2y, arbd_real(0.0));
-			v3_ = Vector3(arbd_real(0.0), arbd_real(0.0), v3z);
+			v1_ = Vector3(v1x, mars_real(0.0), mars_real(0.0));
+			v2_ = Vector3(mars_real(0.0), v2y, mars_real(0.0));
+			v3_ = Vector3(mars_real(0.0), mars_real(0.0), v3z);
 			basis_ = Matrix3(v1_, v2_, v3_);
 		} else {
 			triclinic_ = true;
@@ -129,7 +127,6 @@ class PeriodicBox {
 		: origin_(origin), periodic_{periodic1, periodic2, periodic3} {
 		set_basis(basis1, basis2, basis3);
 	}
-#endif
 
 	/**
 	 * @brief Apply minimum image convention to vector difference
@@ -150,19 +147,19 @@ class PeriodicBox {
 		// Cascading shifts for lower-triangular triclinic boxes
 		Vector3 w = dr;
 
-		if (periodic_[2] && v3_.z > arbd_real(0.0)) {
-			arbd_real sz = math::round(w.z * inv_v3z_);
+		if (periodic_[2] && v3_.z > mars_real(0.0)) {
+			mars_real sz = math::round(w.z * inv_v3z_);
 			w.x -= sz * v3_.x;
 			w.y -= sz * v3_.y;
 			w.z -= sz * v3_.z;
 		}
-		if (periodic_[1] && v2_.y > arbd_real(0.0)) {
-			arbd_real sy = math::round(w.y * inv_v2y_);
+		if (periodic_[1] && v2_.y > mars_real(0.0)) {
+			mars_real sy = math::round(w.y * inv_v2y_);
 			w.x -= sy * v2_.x;
 			w.y -= sy * v2_.y;
 		}
-		if (periodic_[0] && v1_.x > arbd_real(0.0)) {
-			arbd_real sx = math::round(w.x * inv_v1x_);
+		if (periodic_[0] && v1_.x > mars_real(0.0)) {
+			mars_real sx = math::round(w.x * inv_v1x_);
 			w.x -= sx * v1_.x;
 		}
 
@@ -189,10 +186,10 @@ class PeriodicBox {
 		Vector3 p(r.x - origin_.x, r.y - origin_.y, r.z - origin_.z);
 
 		// 2. Transform to fractional (scaled) coordinates (h^-1 * p)
-		arbd_real sz = (v3_.z > arbd_real(0.0)) ? p.z * inv_v3z_ : arbd_real(0.0);
-		arbd_real sy = (v2_.y > arbd_real(0.0)) ? (p.y - sz * v3_.y) * inv_v2y_ : arbd_real(0.0);
-		arbd_real sx =
-			(v1_.x > arbd_real(0.0)) ? (p.x - sy * v2_.x - sz * v3_.x) * inv_v1x_ : arbd_real(0.0);
+		mars_real sz = (v3_.z > mars_real(0.0)) ? p.z * inv_v3z_ : mars_real(0.0);
+		mars_real sy = (v2_.y > mars_real(0.0)) ? (p.y - sz * v3_.y) * inv_v2y_ : mars_real(0.0);
+		mars_real sx =
+			(v1_.x > mars_real(0.0)) ? (p.x - sy * v2_.x - sz * v3_.x) * inv_v1x_ : mars_real(0.0);
 
 		// 3. Apply periodicity in scaled space [0, 1)
 		if (periodic_[2])
@@ -229,35 +226,27 @@ class PeriodicBox {
 	HOST DEVICE bool is_triclinic() const {
 		return triclinic_;
 	}
-	HOST DEVICE arbd_real get_volume() const {
+	HOST DEVICE mars_real get_volume() const {
 		return box_size_.x * box_size_.y * box_size_.z;
 	}
 
 	HOST void set_box_size(const Vector3& box_size) {
 		box_size_ = box_size;
-		v1_ = Vector3(box_size.x, arbd_real(0.0), arbd_real(0.0));
-		v2_ = Vector3(arbd_real(0.0), box_size.y, arbd_real(0.0));
-		v3_ = Vector3(arbd_real(0.0), arbd_real(0.0), box_size.z);
+		v1_ = Vector3(box_size.x, mars_real(0.0), mars_real(0.0));
+		v2_ = Vector3(mars_real(0.0), box_size.y, mars_real(0.0));
+		v3_ = Vector3(mars_real(0.0), mars_real(0.0), box_size.z);
 		basis_ = Matrix3(v1_, v2_, v3_);
 		triclinic_ = false;
 
-		inv_v1x_ = (v1_.x > arbd_real(0.0)) ? arbd_real(1.0) / v1_.x : arbd_real(0.0);
-		inv_v2y_ = (v2_.y > arbd_real(0.0)) ? arbd_real(1.0) / v2_.y : arbd_real(0.0);
-		inv_v3z_ = (v3_.z > arbd_real(0.0)) ? arbd_real(1.0) / v3_.z : arbd_real(0.0);
+		inv_v1x_ = (v1_.x > mars_real(0.0)) ? mars_real(1.0) / v1_.x : mars_real(0.0);
+		inv_v2y_ = (v2_.y > mars_real(0.0)) ? mars_real(1.0) / v2_.y : mars_real(0.0);
+		inv_v3z_ = (v3_.z > mars_real(0.0)) ? mars_real(1.0) / v3_.z : mars_real(0.0);
 	}
 
 	HOST void set_periodicity(bool px, bool py, bool pz) {
 		periodic_[0] = px;
 		periodic_[1] = py;
 		periodic_[2] = pz;
-		if (px && py && pz)
-			periodicity_ = Periodicity::AllPeriodic;
-		else if (px + py + pz == 2)
-			periodicity_ = Periodicity::TwoDimensional;
-		else if (px || py || pz)
-			periodicity_ = Periodicity::OneDimensional;
-		else
-			periodicity_ = Periodicity::Open;
 	}
 	/**
 	 * @brief Check if a point lies within the primary simulation box [origin, origin + box)
@@ -268,24 +257,24 @@ class PeriodicBox {
 		Vector3 p = r - origin_;
 
 		if (!triclinic_) {
-			if (p.x < arbd_real(0.0) || p.y < arbd_real(0.0) || p.z < arbd_real(0.0))
+			if (p.x < mars_real(0.0) || p.y < mars_real(0.0) || p.z < mars_real(0.0))
 				return false;
 			if (p.x >= box_size_.x || p.y >= box_size_.y || p.z >= box_size_.z)
 				return false;
 			return true;
 		}
 
-		arbd_real sz = (v3_.z > arbd_real(0.0)) ? p.z * inv_v3z_ : arbd_real(0.0);
-		if (sz < arbd_real(0.0) || sz >= arbd_real(1.0))
+		mars_real sz = (v3_.z > mars_real(0.0)) ? p.z * inv_v3z_ : mars_real(0.0);
+		if (sz < mars_real(0.0) || sz >= mars_real(1.0))
 			return false;
 
-		arbd_real sy = (v2_.y > arbd_real(0.0)) ? (p.y - sz * v3_.y) * inv_v2y_ : arbd_real(0.0);
-		if (sy < arbd_real(0.0) || sy >= arbd_real(1.0))
+		mars_real sy = (v2_.y > mars_real(0.0)) ? (p.y - sz * v3_.y) * inv_v2y_ : mars_real(0.0);
+		if (sy < mars_real(0.0) || sy >= mars_real(1.0))
 			return false;
 
-		arbd_real sx =
-			(v1_.x > arbd_real(0.0)) ? (p.x - sy * v2_.x - sz * v3_.x) * inv_v1x_ : arbd_real(0.0);
-		if (sx < arbd_real(0.0) || sx >= arbd_real(1.0))
+		mars_real sx =
+			(v1_.x > mars_real(0.0)) ? (p.x - sy * v2_.x - sz * v3_.x) * inv_v1x_ : mars_real(0.0);
+		if (sx < mars_real(0.0) || sx >= mars_real(1.0))
 			return false;
 
 		return true;
@@ -295,8 +284,8 @@ class PeriodicBox {
 		Vector3 p = get_fractional_coordinates(r);
 		if (p.x < halo_margins_.x || p.y < halo_margins_.y || p.z < halo_margins_.z)
 			return false;
-		if (p.x >= arbd_real(1.0) - halo_margins_.x || p.y >= arbd_real(1.0) - halo_margins_.y ||
-			p.z >= arbd_real(1.0) - halo_margins_.z)
+		if (p.x >= mars_real(1.0) - halo_margins_.x || p.y >= mars_real(1.0) - halo_margins_.y ||
+			p.z >= mars_real(1.0) - halo_margins_.z)
 			return false;
 		return true;
 	}
@@ -323,14 +312,14 @@ class PeriodicBox {
 	HOST DEVICE Vector3 get_fractional_coordinates(const Vector3& r) const {
 		Vector3 p = r - origin_;
 		if (!triclinic_) {
-			return Vector3((box_size_.x > arbd_real(0.0)) ? p.x / box_size_.x : arbd_real(0.0),
-						   (box_size_.y > arbd_real(0.0)) ? p.y / box_size_.y : arbd_real(0.0),
-						   (box_size_.z > arbd_real(0.0)) ? p.z / box_size_.z : arbd_real(0.0));
+			return Vector3((box_size_.x > mars_real(0.0)) ? p.x / box_size_.x : mars_real(0.0),
+						   (box_size_.y > mars_real(0.0)) ? p.y / box_size_.y : mars_real(0.0),
+						   (box_size_.z > mars_real(0.0)) ? p.z / box_size_.z : mars_real(0.0));
 		}
-		arbd_real sz = (v3_.z > arbd_real(0.0)) ? p.z * inv_v3z_ : arbd_real(0.0);
-		arbd_real sy = (v2_.y > arbd_real(0.0)) ? (p.y - sz * v3_.y) * inv_v2y_ : arbd_real(0.0);
-		arbd_real sx =
-			(v1_.x > arbd_real(0.0)) ? (p.x - sy * v2_.x - sz * v3_.x) * inv_v1x_ : arbd_real(0.0);
+		mars_real sz = (v3_.z > mars_real(0.0)) ? p.z * inv_v3z_ : mars_real(0.0);
+		mars_real sy = (v2_.y > mars_real(0.0)) ? (p.y - sz * v3_.y) * inv_v2y_ : mars_real(0.0);
+		mars_real sx =
+			(v1_.x > mars_real(0.0)) ? (p.x - sy * v2_.x - sz * v3_.x) * inv_v1x_ : mars_real(0.0);
 		return Vector3(sx, sy, sz);
 	}
 
@@ -352,7 +341,7 @@ class PeriodicBox {
 	 * @brief Precompute and cache the fractional halo margins based on the interaction cutoff.
 	 * @param rc The maximum Cartesian cutoff radius for pair interactions
 	 */
-	HOST void set_halo_margin(arbd_real rc) {
+	HOST void set_halo_margin(mars_real rc) {
 		halo_margins_ = Vector3();
 		if (!triclinic_) {
 			// Orthogonal fast-path: rc / L
@@ -369,14 +358,14 @@ class PeriodicBox {
 		}
 
 		// Triclinic path: Calculate the row norms of the inverse basis matrix
-		arbd_real Gxx = inv_v1x_;
+		mars_real Gxx = inv_v1x_;
 
-		arbd_real Gyx = -v2_.x * inv_v1x_ * inv_v2y_;
-		arbd_real Gyy = inv_v2y_;
+		mars_real Gyx = -v2_.x * inv_v1x_ * inv_v2y_;
+		mars_real Gyy = inv_v2y_;
 
-		arbd_real Gzx = (v2_.x * v3_.y - v2_.y * v3_.x) * inv_v1x_ * inv_v2y_ * inv_v3z_;
-		arbd_real Gzy = -v3_.y * inv_v2y_ * inv_v3z_;
-		arbd_real Gzz = inv_v3z_;
+		mars_real Gzx = (v2_.x * v3_.y - v2_.y * v3_.x) * inv_v1x_ * inv_v2y_ * inv_v3z_;
+		mars_real Gzy = -v3_.y * inv_v2y_ * inv_v3z_;
+		mars_real Gzz = inv_v3z_;
 
 		// Max fractional extents of a sphere of radius rc
 		if (!periodic_[0]) {
@@ -400,19 +389,19 @@ class PeriodicBox {
 	HOST DEVICE short check_migration_direction(const Vector3& r) const {
 		Vector3 frac = get_fractional_coordinates(r);
 
-		if (frac.x < arbd_real(0.0))
+		if (frac.x < mars_real(0.0))
 			return 0;
-		if (frac.x >= arbd_real(1.0))
+		if (frac.x >= mars_real(1.0))
 			return 1;
 
-		if (frac.y < arbd_real(0.0))
+		if (frac.y < mars_real(0.0))
 			return 2;
-		if (frac.y >= arbd_real(1.0))
+		if (frac.y >= mars_real(1.0))
 			return 3;
 
-		if (frac.z < arbd_real(0.0))
+		if (frac.z < mars_real(0.0))
 			return 4;
-		if (frac.z >= arbd_real(1.0))
+		if (frac.z >= mars_real(1.0))
 			return 5;
 
 		return -1; // Safely inside
@@ -433,19 +422,19 @@ class PeriodicBox {
 		// both the left and right walls (assuming rc < 0.5 * box_length)
 		if (frac.x < halo_margins_.x) {
 			flags |= (1 << 0);
-		} else if (frac.x >= arbd_real(1.0) - halo_margins_.x) {
+		} else if (frac.x >= mars_real(1.0) - halo_margins_.x) {
 			flags |= (1 << 1);
 		}
 
 		if (frac.y < halo_margins_.y) {
 			flags |= (1 << 2);
-		} else if (frac.y >= arbd_real(1.0) - halo_margins_.y) {
+		} else if (frac.y >= mars_real(1.0) - halo_margins_.y) {
 			flags |= (1 << 3);
 		}
 
 		if (frac.z < halo_margins_.z) {
 			flags |= (1 << 4);
-		} else if (frac.z >= arbd_real(1.0) - halo_margins_.z) {
+		} else if (frac.z >= mars_real(1.0) - halo_margins_.z) {
 			flags |= (1 << 5);
 		}
 
@@ -453,20 +442,20 @@ class PeriodicBox {
 	}
 
   private:
-	HOST DEVICE static inline arbd_real wrap_scalar(arbd_real x, arbd_real o, arbd_real l) {
-		if (l <= arbd_real(0.0))
+	HOST DEVICE static inline mars_real wrap_scalar(mars_real x, mars_real o, mars_real l) {
+		if (l <= mars_real(0.0))
 			return x;
-		const arbd_real rel = x - o;
-		int image = int(math::floor(rel * (arbd_real(1.0) / l)));
+		const mars_real rel = x - o;
+		int image = int(math::floor(rel * (mars_real(1.0) / l)));
 		return x - image * l;
 	}
 
-	HOST DEVICE static inline arbd_real wrap_diff_scalar(arbd_real x, arbd_real l) {
-		if (l <= arbd_real(0.0))
+	HOST DEVICE static inline mars_real wrap_diff_scalar(mars_real x, mars_real l) {
+		if (l <= mars_real(0.0))
 			return x;
-		int image = int(math::floor(x * (arbd_real(1.0) / l)));
+		int image = int(math::floor(x * (mars_real(1.0) / l)));
 		x -= image * l;
-		if (x >= arbd_real(0.5) * l)
+		if (x >= mars_real(0.5) * l)
 			x -= l;
 		return x;
 	}
@@ -486,15 +475,15 @@ class PeriodicBox {
 
 	Vector3 halo_margins_{0, 0, 0};
 
-	arbd_real inv_v1x_{0.0002};
-	arbd_real inv_v2y_{0.0002};
-	arbd_real inv_v3z_{0.0002};
+	mars_real inv_v1x_{0.0002};
+	mars_real inv_v2y_{0.0002};
+	mars_real inv_v3z_{0.0002};
 
 	Matrix3 basis_;
 };
-} // namespace ARBD
+} // namespace MARS
 #ifdef USE_SYCL
 #include <sycl/sycl.hpp>
 template<>
-struct sycl::is_device_copyable<ARBD::PeriodicBox> : std::true_type {};
+struct sycl::is_device_copyable<MARS::PeriodicBox> : std::true_type {};
 #endif

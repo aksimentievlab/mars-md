@@ -1,6 +1,6 @@
 #pragma once
-#include "ARBDException.h"
-#include "ARBDLogger.h"
+#include "MARSException.h"
+#include "MARSLogger.h"
 #include "Buffer.h"
 #include "Events.h"
 #include "Header.h"
@@ -31,7 +31,7 @@
 #include "METAL/METALKernels.h"
 #endif
 
-namespace ARBD {
+namespace MARS {
 template<typename Functor, typename... Args>
 Event launch_kernel(const Resource& resource,
 					const KernelConfig& config,
@@ -495,4 +495,4 @@ class KernelPipeline {
 	}
 };
 
-} // namespace ARBD
+} // namespace MARS

@@ -1,6 +1,6 @@
 // Modified dcd reader from NAMD.
 // Author: Jeff Comer <jcomer2@illinois.edu>
-// Refactored for the arbd2/cpp20 branch with on 2025
+// Refactored for the mars2/cpp20 branch with on 2025
 // Author: Pin-Yi Li <pinyili2@illinois.edu> with Claude 4.0 sonnet
 
 /**
@@ -10,8 +10,8 @@
 **/
 #pragma once
 
-#include "ARBDException.h"
-#include "ARBDLogger.h"
+#include "MARSException.h"
+#include "MARSLogger.h"
 #include "Backend/Buffer.h"
 #include "Backend/Resource.h"
 #include "Types/Types.h"
@@ -37,7 +37,7 @@ constexpr off_t NSTEP_POS = 20;
 #define O_LARGEFILE 0x0
 #endif
 
-namespace ARBD {
+namespace MARS {
 
 enum class DcdError : int {
 	Success = 0,
@@ -53,9 +53,9 @@ enum class DcdError : int {
 /**
  * @brief Modern C++20 DCD file writer
  *
- * Refactored for the arbd2/cpp20 branch with:
+ * Refactored for the mars2/cpp20 branch with:
  * - Modern C++20 features
- * - ARBD2 exception handling
+ * - MARS2 exception handling
  * - Math/Types integration
  * - Resource management
  * - Backend compatibility
@@ -68,7 +68,7 @@ enum class DcdError : int {
  * #include "Math/Vector3.h"
  * #include <vector>
  *
- * using namespace ARBD;
+ * using namespace MARS;
  *
  * int main() {
  *     // Number of atoms and frames
@@ -100,7 +100,7 @@ class DcdWriter {
 	 * @brief Constructor - opens DCD file for writing
 	 * @param fileName Path to DCD file to create
 	 * @param resource Backend resource for memory operations (optional)
-	 * @throws ARBD::Exception on file open failure
+	 * @throws MARS::Exception on file open failure
 	 */
 	explicit DcdWriter(std::string_view fileName) : fileName_(fileName), fd_(-1) {
 
@@ -155,7 +155,7 @@ class DcdWriter {
 	 * @param DELTA Timestep length in time units
 	 * @param with_unitcell Whether unit cell information is included
 	 * @return 0 on success
-	 * @throws ARBD::Exception on write failure
+	 * @throws MARS::Exception on write failure
 	 */
 	int writeHeader(int N,
 					int NFILE = 1,
@@ -177,7 +177,7 @@ class DcdWriter {
 
 	/**
 	 * @brief Write a timestep of coordinates
-	 * @param positions Vector of atom positions (ARBD::Vector3)
+	 * @param positions Vector of atom positions (MARS::Vector3)
 	 * @param unitcell Unit cell in CHARMM on-disk order (optional):
 	 *        [A, cos(gamma), B, cos(beta), cos(alpha), C].
 	 *        This array is written to the file verbatim, so it must use the
@@ -186,7 +186,7 @@ class DcdWriter {
 	 *        with_unitcell=true, otherwise every frame is missing its extra
 	 *        block and the file misparses.
 	 * @return 0 on success
-	 * @throws ARBD::Exception on write failure
+	 * @throws MARS::Exception on write failure
 	 */
 	int writeStep(const std::vector<Vector3>& positions, const std::vector<double>& unitcell = {}) {
 
@@ -431,7 +431,7 @@ class DcdWriter {
 		// First title line
 		snprintf(title_string,
 				 sizeof(title_string),
-				 "REMARKS FILENAME=%s CREATED BY ARBD2",
+				 "REMARKS FILENAME=%s CREATED BY MARS2",
 				 fileName_.c_str());
 		padString(title_string, TITLE_LINE_SIZE);
 		safeWrite(title_string, TITLE_LINE_SIZE);
@@ -444,7 +444,7 @@ class DcdWriter {
 
 		snprintf(title_string,
 				 sizeof(title_string),
-				 "REMARKS DATE: %s CREATED BY USER: ARBD2",
+				 "REMARKS DATE: %s CREATED BY USER: MARS2",
 				 time_str);
 		padString(title_string, TITLE_LINE_SIZE);
 		safeWrite(title_string, TITLE_LINE_SIZE);
@@ -566,4 +566,4 @@ class DcdWriter {
 	}
 };
 
-} // namespace ARBD
+} // namespace MARS

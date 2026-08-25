@@ -1,6 +1,6 @@
 #pragma once
 #ifndef __METAL_VERSION__
-#include "ARBDLogger.h"
+#include "MARSLogger.h"
 #include "Backend/Events.h"
 #include "Backend/Resource.h"
 #include <chrono>
@@ -28,7 +28,7 @@
 #include <QuartzCore/QuartzCore.h>
 #endif
 
-namespace ARBD {
+namespace MARS {
 namespace Profiling {
 
 // ============================================================================
@@ -40,7 +40,7 @@ struct ProfilingConfig {
   bool enable_memory_tracking = true;
   bool enable_kernel_profiling = true;
   bool enable_backend_markers = true;
-  std::string output_file = "arbd_profile.json";
+  std::string output_file = "mars_profile.json";
   size_t max_events = 10000;
 };
 
@@ -278,10 +278,10 @@ private:
 
 // Convenience macros for CUDA profiling
 #define CUDA_PROFILE_RANGE(name)                                               \
-  ARBD::Profiling::CUDAProfiler::ScopedRange _prof_range(name)
+  MARS::Profiling::CUDAProfiler::ScopedRange _prof_range(name)
 #define CUDA_PROFILE_RANGE_COLOR(name, color)                                  \
-  ARBD::Profiling::CUDAProfiler::ScopedRange _prof_range(name, color)
-#define CUDA_PROFILE_MARK(msg) ARBD::Profiling::CUDAProfiler::mark(msg)
+  MARS::Profiling::CUDAProfiler::ScopedRange _prof_range(name, color)
+#define CUDA_PROFILE_MARK(msg) MARS::Profiling::CUDAProfiler::mark(msg)
 
 #else
 // Dummy implementations when CUDA is not available
@@ -437,8 +437,8 @@ private:
 
 // Convenience macros for SYCL profiling
 #define SYCL_PROFILE_RANGE(name)                                               \
-  ARBD::Profiling::SYCLProfiler::ScopedRange _prof_range(name)
-#define SYCL_PROFILE_MARK(msg) ARBD::Profiling::SYCLProfiler::mark(msg)
+  MARS::Profiling::SYCLProfiler::ScopedRange _prof_range(name)
+#define SYCL_PROFILE_MARK(msg) MARS::Profiling::SYCLProfiler::mark(msg)
 
 #else
 // Dummy implementations when SYCL is not available
@@ -598,8 +598,8 @@ private:
 
 // Convenience macros for Metal profiling
 #define METAL_PROFILE_RANGE(name)                                              \
-  ARBD::Profiling::METALProfiler::ScopedRange _prof_range(name)
-#define METAL_PROFILE_MARK(msg) ARBD::Profiling::METALProfiler::mark(msg)
+  MARS::Profiling::METALProfiler::ScopedRange _prof_range(name)
+#define METAL_PROFILE_MARK(msg) MARS::Profiling::METALProfiler::mark(msg)
 
 #else
 // Dummy implementations when Metal is not available
@@ -907,21 +907,21 @@ private:
 // ============================================================================
 
 #define PROFILE_RANGE(name, backend)                                           \
-  ARBD::Profiling::ProfileManager::ScopedRange _prof_range(name, backend)
+  MARS::Profiling::ProfileManager::ScopedRange _prof_range(name, backend)
 #define PROFILE_MARK(msg, backend)                                             \
-  ARBD::Profiling::ProfileManager::mark(msg, backend)
+  MARS::Profiling::ProfileManager::mark(msg, backend)
 #define PROFILE_MEMORY(backend, ptr)                                           \
-  ARBD::Profiling::ProfileManager::profile_memory_usage(backend, ptr)
+  MARS::Profiling::ProfileManager::profile_memory_usage(backend, ptr)
 
 // Backend-specific convenience macros
-#define PROFILE_CUDA_RANGE(name) PROFILE_RANGE(name, ARBD::ResourceType::CUDA)
-#define PROFILE_SYCL_RANGE(name) PROFILE_RANGE(name, ARBD::ResourceType::SYCL)
-#define PROFILE_METAL_RANGE(name) PROFILE_RANGE(name, ARBD::ResourceType::METAL)
+#define PROFILE_CUDA_RANGE(name) PROFILE_RANGE(name, MARS::ResourceType::CUDA)
+#define PROFILE_SYCL_RANGE(name) PROFILE_RANGE(name, MARS::ResourceType::SYCL)
+#define PROFILE_METAL_RANGE(name) PROFILE_RANGE(name, MARS::ResourceType::METAL)
 #define PROFILE_TIMER(name)                                                    \
-  ARBD::Profiling::ProfileManager::ScopedTimer _timer(name)
+  MARS::Profiling::ProfileManager::ScopedTimer _timer(name)
 #define PROFILE_TIMER_QUEUE(name, queue)                                       \
-  ARBD::Profiling::ProfileManager::ScopedTimer _timer(name, queue)
+  MARS::Profiling::ProfileManager::ScopedTimer _timer(name, queue)
 
 } // namespace Profiling
-} // namespace ARBD
+} // namespace MARS
 #endif

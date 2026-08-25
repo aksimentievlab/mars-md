@@ -9,7 +9,7 @@
 #include <cmath>
 #include <vector>
 
-using namespace ARBD;
+using namespace MARS;
 using Catch::Approx;
 
 namespace {

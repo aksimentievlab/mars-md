@@ -10,7 +10,7 @@ extern void init_pybonded(nb::module_& m);
 extern void init_pyloadfile(nb::module_& m);
 extern void init_pysim(nb::module_& m);
 
-NB_MODULE(arbd, m) {
+NB_MODULE(marsmd, m) {
 	init_pysystem(m);
 	init_pyobjects(m);
 	init_pybonded(m);

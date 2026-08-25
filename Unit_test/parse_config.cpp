@@ -4,11 +4,11 @@
 #include <iostream>
 #include <string>
 #include <vector>
-// Include ARBD headers
+// Include MARS headers
 #include "IO/ConfigParser.h"
 #include "Objects/ParticleProperties.h"
 short single_resource_id = Global::single_resource_id;
-using namespace ARBD;
+using namespace MARS;
 
 /**
  * @brief Test configuration parsing with the circovirus example

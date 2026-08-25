@@ -15,7 +15,7 @@ class object;
 }
 #endif
 
-namespace ARBD {
+namespace MARS {
 /**
  * @brief Configuration manager with file I/O and validation
  *
@@ -37,7 +37,7 @@ class ConfigParser {
 	 * @brief Construct from configuration file
 	 * @param sim_system Simulation system to configure
 	 * @param file_name Path to configuration file
-	 * @throws ARBD::Exception on I/O or validation error
+	 * @throws MARS::Exception on I/O or validation error
 	 */
 	ConfigParser(SimSystem& sim_system, std::string_view file_name);
 
@@ -52,13 +52,13 @@ class ConfigParser {
 	/**
 	 * @brief Parse configuration from file
 	 * @param file_name Path to configuration file
-	 * @throws ARBD::Exception on I/O or validation error
+	 * @throws MARS::Exception on I/O or validation error
 	 */
 	void parse_file(std::string_view file_name);
 
 	/**
 	 * @brief Validate the current configuration
-	 * @throws ARBD::Exception if validation fails
+	 * @throws MARS::Exception if validation fails
 	 */
 	void validate() const;
 
@@ -125,7 +125,7 @@ class ConfigParser {
 	 * Runs once, after every particle and rigidBody block is parsed and after
 	 * inputRBCoordinates has placed each instance, so that regular particles
 	 * occupy [0, num_regular) and all attached particles follow contiguously -
-	 * the layout legacy ARBD uses, and the one that keeps BondConfigReader's
+	 * the layout legacy MARS uses, and the one that keeps BondConfigReader's
 	 * raw integer indices predictable.
 	 */
 	void fold_in_attached_particles();
@@ -133,4 +133,4 @@ class ConfigParser {
 	void parse_dictionary(const std::map<std::string, nanobind::object>& config_dict);
 #endif
 };
-} // namespace ARBD
+} // namespace MARS

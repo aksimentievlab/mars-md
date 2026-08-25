@@ -17,10 +17,8 @@
 #include <thread>
 #endif
 
-// Unconditional: LOGDEBUG/LOGWARN below are parsed in nvcc's device pass too,
-// where Header.h leaves HOST_GUARD undefined.
-#include "ARBDLogger.h"
-namespace ARBD {
+#include "MARSLogger.h"
+namespace MARS {
 struct kerneldim3 {
 	idx_t x = 1, y = 1, z = 1;
 };
@@ -389,4 +387,4 @@ struct KernelConfig {
 		}
 	}
 };
-} // namespace ARBD
+} // namespace MARS

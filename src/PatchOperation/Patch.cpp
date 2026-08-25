@@ -7,15 +7,15 @@
  */
 
 #include "PatchOperation/Patch.h"
-#include "ARBDException.h"
-#include "ARBDLogger.h"
+#include "MARSException.h"
+#include "MARSLogger.h"
 #include "Backend/Events.h"
 #include "Interactions/DeviceBondedInteraction.h"
 #include "Interactions/Nonbonded/Pairwise.h"
 #include "PatchOperation/Integrator.h"
 #include "PatchOperation/PairListKernels/ZOrderPairlist.h"
 #include "PatchOperation/Pairlist.h"
-namespace ARBD {
+namespace MARS {
 
 //================================================================================
 // Force Calculation Methods
@@ -43,7 +43,7 @@ void Patch::ensure_bonded_topology_ready(const BondedInteractions& interactions,
 Event Patch::calculate_nonbonded_forces(const NonBondedInteractions& interactions,
 										const BondedInteractions& bonded_interactions,
 										const DeviceParticleTypes& particle_types,
-										const DeviceBuffer<BaseGridView<arbd_real>>& grid_views,
+										const DeviceBuffer<BaseGridView<mars_real>>& grid_views,
 										const TablesRegistry& tables_registry,
 										size_t resource_idx,
 										float pairlist_cutoff,
@@ -268,7 +268,7 @@ Event Patch::integrate_motion(float dt,
 				 particle_count_,
 				 dt,
 				 kT);
-
+		// pmf already baked in launch_BD kernel.
 		evt = launch_BD<float>(resource_,
 							   particle_view,
 							   particle_type_view,
@@ -374,7 +374,7 @@ Event Patch::finish_deferred_kick(float dt) {
 //================================================================================
 
 std::pair<Event, idx_t>
-Patch::pack_halo_particles(DeviceBuffer<arbd_real>& send_buffer, int direction, float halo_width) {
+Patch::pack_halo_particles(DeviceBuffer<mars_real>& send_buffer, int direction, float halo_width) {
 	// Ensure halo buffers are allocated
 	if (!halo_buffers_) {
 		halo_buffers_ = std::make_unique<HaloBuffers>(resource_, capacity_);
@@ -412,7 +412,7 @@ Patch::pack_halo_particles(DeviceBuffer<arbd_real>& send_buffer, int direction, 
  * @param particle_count
  * @return Event
  */
-Event Patch::unpack_halo_particles(const DeviceBuffer<arbd_real>& recv_buffer,
+Event Patch::unpack_halo_particles(const DeviceBuffer<mars_real>& recv_buffer,
 								   idx_t particle_count) {
 	// Ensure halo buffers are allocated
 	if (!halo_buffers_) {
@@ -426,7 +426,7 @@ Event Patch::unpack_halo_particles(const DeviceBuffer<arbd_real>& recv_buffer,
 Event Patch::sort_particles() {
 	// Build pairlist which internally sorts particles (e.g., Z-order)
 	// Use a small cutoff just for sorting purposes
-	constexpr arbd_real sorting_cutoff = arbd_real(0.1); // Small value just to trigger sorting
+	constexpr mars_real sorting_cutoff = mars_real(0.1); // Small value just to trigger sorting
 	build_pairlist(sorting_cutoff);
 	LOGTRACE("Patch {}: Sorted {} particles using pairlist ({})",
 			 patch_id_,
@@ -595,4 +595,4 @@ void Patch::initialize_spatial_structures() {
 	LOGTRACE("Patch {}: Initialized spatial structures with capacity {}", patch_id_, capacity_);
 }
 
-} // namespace ARBD
+} // namespace MARS

@@ -95,7 +95,7 @@ kernel is still reading them.
 
 ## Torque is not hypothetical
 
-Host-set per-body **torque** has real uses beyond scuff-em, all in ARBD's domain:
+Host-set per-body **torque** has real uses beyond scuff-em, all in MARS's domain:
 
 - **Magnetic tweezers** — twisting DNA with a rotating field is a standard
   single-molecule assay; the bead takes a host-computed torque.

@@ -14,7 +14,7 @@
 #include <vector>
 
 using Catch::Approx;
-using namespace ARBD;
+using namespace MARS;
 
 namespace {
 
@@ -24,24 +24,24 @@ constexpr double FD_STEP = 1e-4;
 
 /// @brief Tabulated potential U(x) = slope * x over [lo, hi).
 struct RampTable {
-	std::vector<arbd_real> pot;
-	arbd_real start;
-	arbd_real step;
+	std::vector<mars_real> pot;
+	mars_real start;
+	mars_real step;
 	bool periodic;
 
 	RampTable(double lo, double hi, size_t n, double slope, bool is_periodic)
-		: pot(n), start(static_cast<arbd_real>(lo)),
-		  step(static_cast<arbd_real>((hi - lo) / static_cast<double>(n))), periodic(is_periodic) {
+		: pot(n), start(static_cast<mars_real>(lo)),
+		  step(static_cast<mars_real>((hi - lo) / static_cast<double>(n))), periodic(is_periodic) {
 		for (size_t i = 0; i < n; ++i) {
-			pot[i] = static_cast<arbd_real>(
+			pot[i] = static_cast<mars_real>(
 				slope * (lo + static_cast<double>(i) * (hi - lo) / static_cast<double>(n)));
 		}
 	}
 
 	TabulatedPotential descriptor() const {
 		TabulatedPotential t{};
-		t.pot = const_cast<arbd_real*>(pot.data());
-		t.step_inv = arbd_real(1) / step;
+		t.pot = const_cast<mars_real*>(pot.data());
+		t.step_inv = mars_real(1) / step;
 		t.size = static_cast<unsigned int>(pot.size());
 		t.start = start;
 		t.is_periodic = periodic;
@@ -143,7 +143,7 @@ std::array<Vector3, 3> run_angle(const std::array<Vector3, 3>& p,
 	const int table_index = 0;
 	const int form_value = static_cast<int>(form);
 	const PeriodicBox box;
-	const ARBD::int3 indices{0, 1, 2};
+	const MARS::int3 indices{0, 1, 2};
 
 	TabulatedAngleComputer computer(&indices,
 									positions.data(),
@@ -169,7 +169,7 @@ std::array<Vector3, 4> run_dihedral(const std::array<Vector3, 4>& p,
 	const int table_index = 0;
 	const int form_value = static_cast<int>(form);
 	const PeriodicBox box;
-	const ARBD::int4 indices{0, 1, 2, 3};
+	const MARS::int4 indices{0, 1, 2, 3};
 
 	TabulatedDihedralComputer computer(&indices,
 									   positions.data(),
@@ -275,7 +275,7 @@ TEST_CASE("Tabulated angle skips non-tabulated forms", "[force][bonded][angle]")
 
 TEST_CASE("Dihedral angle follows the IUPAC sign convention", "[force][bonded][dihedral]") {
 	const PeriodicBox box;
-	const ARBD::int4 idx{0, 1, 2, 3};
+	const MARS::int4 idx{0, 1, 2, 3};
 
 	std::array<Vector3, 4> p{Vector3(1.0f, 1.0f, 0.0f),
 							 Vector3(1.0f, 0.0f, 0.0f),
@@ -295,7 +295,7 @@ TEST_CASE("Dihedral angle follows the IUPAC sign convention", "[force][bonded][d
 TEST_CASE("Dihedral geometry agrees with an independent formula over a sweep",
 		  "[force][bonded][dihedral]") {
 	const PeriodicBox box;
-	const ARBD::int4 idx{0, 1, 2, 3};
+	const MARS::int4 idx{0, 1, 2, 3};
 
 	for (int deg = -170; deg <= 170; deg += 10) {
 		const double phi = deg * constants::PI / 180.0;
@@ -408,7 +408,7 @@ TEST_CASE("Device angle kernel reproduces the host result",
 	DeviceBuffer<PeriodicBox> box(1, res);
 	box.copy_from_host(&box_host, 1);
 
-	DeviceBuffer<arbd_real> pot(table.pot.size(), res);
+	DeviceBuffer<mars_real> pot(table.pot.size(), res);
 	pot.copy_from_host(table.pot.data(), table.pot.size());
 
 	TabulatedPotential desc = table.descriptor();
@@ -422,8 +422,8 @@ TEST_CASE("Device angle kernel reproduces the host result",
 	DeviceBuffer<Vector3> forces(3, res);
 	forces.copy_from_host(zeroed.data(), 3);
 
-	const ARBD::int3 idx_host{0, 1, 2};
-	DeviceBuffer<ARBD::int3> indices(1, res);
+	const MARS::int3 idx_host{0, 1, 2};
+	DeviceBuffer<MARS::int3> indices(1, res);
 	indices.copy_from_host(&idx_host, 1);
 
 	const int zero = 0;
@@ -469,7 +469,7 @@ TEST_CASE("Device dihedral kernel reproduces the host result",
 	DeviceBuffer<PeriodicBox> box(1, res);
 	box.copy_from_host(&box_host, 1);
 
-	DeviceBuffer<arbd_real> pot(table.pot.size(), res);
+	DeviceBuffer<mars_real> pot(table.pot.size(), res);
 	pot.copy_from_host(table.pot.data(), table.pot.size());
 
 	TabulatedPotential desc = table.descriptor();
@@ -483,8 +483,8 @@ TEST_CASE("Device dihedral kernel reproduces the host result",
 	DeviceBuffer<Vector3> forces(4, res);
 	forces.copy_from_host(zeroed.data(), 4);
 
-	const ARBD::int4 idx_host{0, 1, 2, 3};
-	DeviceBuffer<ARBD::int4> indices(1, res);
+	const MARS::int4 idx_host{0, 1, 2, 3};
+	DeviceBuffer<MARS::int4> indices(1, res);
 	indices.copy_from_host(&idx_host, 1);
 
 	const int zero = 0;

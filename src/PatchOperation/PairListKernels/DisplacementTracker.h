@@ -6,7 +6,7 @@
 #include "Types/Types.h"
 #include "Types/Vector3.h"
 
-namespace ARBD {
+namespace MARS {
 
 // Use DisplacementKernel and MortonValidationKernel from AdaptiveKernels.h
 
@@ -56,4 +56,4 @@ struct PerParticleDisplacementKernel {
 	}
 };
 
-} // namespace ARBD
+} // namespace MARS

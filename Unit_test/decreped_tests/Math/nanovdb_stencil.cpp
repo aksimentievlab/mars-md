@@ -1,6 +1,6 @@
 /**
  * @file test_nanovdb_stencil.cpp
- * @brief Unit tests for NanoVDB integration with ARBD's buffer and kernel system
+ * @brief Unit tests for NanoVDB integration with MARS's buffer and kernel system
  *
  * This test suite covers:
  * 1. Loading NanoVDB grids from files
@@ -17,7 +17,7 @@
 #include <iostream>
 #include <vector>
 
-using namespace ARBD;
+using namespace MARS;
 
 TEST_CASE("NanoVDB Grid Loading and Query", "[nanovdb][io]") {
 	SECTION("Query available grids from file") {
@@ -32,7 +32,7 @@ TEST_CASE("NanoVDB Grid Loading and Query", "[nanovdb][io]") {
 		REQUIRE(IO::has_nanovdb_grid(filename, grid_name));
 	}
 
-	SECTION("Load NanoVDB grid using ARBD resource system") {
+	SECTION("Load NanoVDB grid using MARS resource system") {
 		std::string filename = "density_field.nvdb";
 		std::string grid_name = "density";
 

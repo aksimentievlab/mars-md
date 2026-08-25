@@ -7,12 +7,12 @@
  */
 
 #include "System/Decomposers.h"
-#include "ARBDException.h"
-#include "ARBDLogger.h"
+#include "MARSException.h"
+#include "MARSLogger.h"
 #include "System/SimSystem.h"
 #include "System/SystemState.h"
 
-namespace ARBD {
+namespace MARS {
 
 //================================================================================
 // Helper Functions (moved from old Decomposer.cpp)
@@ -20,8 +20,8 @@ namespace ARBD {
 
 std::vector<std::vector<idx_t>>
 PatchDecomposer::assign_particles_to_patches(const HostParticleData& particles,
-											  const std::vector<Vector3>& patch_min_bounds,
-											  const std::vector<Vector3>& patch_max_bounds) const {
+											 const std::vector<Vector3>& patch_min_bounds,
+											 const std::vector<Vector3>& patch_max_bounds) const {
 
 	std::vector<std::vector<idx_t>> patch_assignments(patch_min_bounds.size());
 
@@ -34,9 +34,8 @@ PatchDecomposer::assign_particles_to_patches(const HostParticleData& particles,
 			const Vector3& min_bound = patch_min_bounds[patch_idx];
 			const Vector3& max_bound = patch_max_bounds[patch_idx];
 
-			if (pos.x >= min_bound.x && pos.x < max_bound.x &&
-				pos.y >= min_bound.y && pos.y < max_bound.y &&
-				pos.z >= min_bound.z && pos.z < max_bound.z) {
+			if (pos.x >= min_bound.x && pos.x < max_bound.x && pos.y >= min_bound.y &&
+				pos.y < max_bound.y && pos.z >= min_bound.z && pos.z < max_bound.z) {
 				patch_assignments[patch_idx].push_back(i);
 				assigned = true;
 				break;
@@ -46,7 +45,10 @@ PatchDecomposer::assign_particles_to_patches(const HostParticleData& particles,
 		// If particle not assigned to any patch, assign to first patch (error handling)
 		if (!assigned) {
 			LOGWARN("Particle {} at position ({}, {}, {}) not assigned to any patch, using patch 0",
-					i, pos.x, pos.y, pos.z);
+					i,
+					pos.x,
+					pos.y,
+					pos.z);
 			if (!patch_assignments.empty()) {
 				patch_assignments[0].push_back(i);
 			}
@@ -79,12 +81,10 @@ std::unique_ptr<PatchDecomposer> create_decomposer(DecomposerType type) {
 }
 
 std::vector<DecomposerType> get_available_decomposer_types() {
-	return {
-		DecomposerType::Spatial,
-		DecomposerType::RecursiveBisection,
-		DecomposerType::Geometric,
-		DecomposerType::ZOrder
-	};
+	return {DecomposerType::Spatial,
+			DecomposerType::RecursiveBisection,
+			DecomposerType::Geometric,
+			DecomposerType::ZOrder};
 }
 
 DecomposerType recommend_decomposer_type(const SimSystem& system, const SystemState& state) {
@@ -129,4 +129,4 @@ const char* get_decomposer_name(DecomposerType type) {
 	}
 }
 
-} // namespace ARBD
+} // namespace MARS

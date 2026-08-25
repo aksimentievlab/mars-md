@@ -1,7 +1,7 @@
 # RBBD.h — implementation notes
 
 `RBIntegrateBDKernel` — overdamped Brownian rigid-body dynamics, ported from
-legacy `RigidBody::integrate` (`arbd_chris/src/RigidBody.cu`). One kernel, one
+legacy `RigidBody::integrate` (`mars_chris/src/RigidBody.cu`). One kernel, one
 full step, no momentum.
 
 ## Why it exists
@@ -13,7 +13,7 @@ Legacy has two RB integrators and Brownian is the **default**:
   then `integrateDLM(sys,0)` / `integrateDLM(sys,1)`
 - `GrandBrownTown.cu:936` — **else** (i.e. `Brown`) → `RigidBody::integrate(sys, s)`
 
-arbd2 had only the DLM path, so every `rigidBodyDynamicType` other than
+mars2 had only the DLM path, so every `rigidBodyDynamicType` other than
 `Langevin` logged a warning and silently ran DLM instead.
 
 ## Where the external load is applied
@@ -23,7 +23,7 @@ Legacy adds `constantForce`/`constantTorque` in
 the grid–particle force loop that runs for **both** integrators — not inside
 `addLangevin`.
 
-arbd2 had folded it into `RBLangevinForceKernel` instead, which would have
+mars2 had folded it into `RBLangevinForceKernel` instead, which would have
 dropped it entirely on this path: `RigidBody::integrate` consumes `force`
 directly and never calls `addLangevin`. So the `+= external_force/_torque` moved
 out of the thermostat kernel and into each integrator:
@@ -41,7 +41,7 @@ load persists until its owner overwrites it.
 
 Legacy scales the damping coefficients once at setup
 (`RigidBodyType::setDampingCoeffs`: `transDamping = 2.3900574e-9 * transDamping`),
-so every later use in legacy is already scaled. arbd2 stores them unscaled, so
+so every later use in legacy is already scaled. mars2 stores them unscaled, so
 `constants::langevin_damping_unit` is applied at use.
 
 `constants::langevin_damp_scale` (the literal `10000`) is **not** applied here —

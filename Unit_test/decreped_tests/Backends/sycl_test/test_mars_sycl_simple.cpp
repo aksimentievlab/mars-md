@@ -3,7 +3,7 @@
 #include <array>
 #include <optional>
 
-// Simplified versions of ARBD classes for testing
+// Simplified versions of MARS classes for testing
 class TestDeviceMemory {
 private:
     std::optional<sycl::queue> queue_;
@@ -125,7 +125,7 @@ public:
 };
 
 int main() {
-    std::cout << "=== ARBD-style SYCL Test ===" << std::endl;
+    std::cout << "=== MARS-style SYCL Test ===" << std::endl;
     
     try {
         // Get the first available device

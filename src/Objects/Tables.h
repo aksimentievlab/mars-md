@@ -7,7 +7,7 @@
 #include <string>
 #include <unordered_map>
 
-namespace ARBD {
+namespace MARS {
 /**
  * @brief Registry to load and cache tabulated potentials by name
  *
@@ -24,11 +24,11 @@ enum class TabulatedType { NonBondedPair, Bond, Angle, Dihedral, Default };
 struct Table {
 	std::string name;
 	TabulatedType type;
-	arbd_real step_size{0.0};
-	arbd_real start{0.0};
+	mars_real step_size{0.0};
+	mars_real start{0.0};
 
-	std::vector<arbd_real> X;
-	std::vector<arbd_real> Y;
+	std::vector<mars_real> X;
+	std::vector<mars_real> Y;
 	Table(TabulatedType type) : type(type) {
 		if (type == TabulatedType::Dihedral) {
 			start = -constants::PI;
@@ -77,7 +77,7 @@ struct Table {
 			}
 
 			std::istringstream iss(lineStr);
-			arbd_real x, y;
+			mars_real x, y;
 
 			if (iss >> x >> y) {
 				X.push_back(x);
@@ -110,7 +110,7 @@ struct Table {
 		if (type != TabulatedType::Angle && type != TabulatedType::Dihedral) {
 			return;
 		}
-		constexpr arbd_real deg_to_rad = static_cast<arbd_real>(constants::PI / 180.0);
+		constexpr mars_real deg_to_rad = static_cast<mars_real>(constants::PI / 180.0);
 		for (auto& x : X) {
 			x *= deg_to_rad;
 		}
@@ -127,10 +127,10 @@ struct Table {
 	 *        numpy's linspace(start, stop, num) vs. arange(start, step=...)
 	 *        conventions.
 	 */
-	void set_values(std::vector<arbd_real> y_values,
-					arbd_real start_,
-					std::optional<arbd_real> stop = std::nullopt,
-					std::optional<arbd_real> step_size_ = std::nullopt) {
+	void set_values(std::vector<mars_real> y_values,
+					mars_real start_,
+					std::optional<mars_real> stop = std::nullopt,
+					std::optional<mars_real> step_size_ = std::nullopt) {
 		if (y_values.size() < 2) {
 			throw_value_error("Table::set_values: need at least 2 Y values, got %zu",
 							  y_values.size());
@@ -143,11 +143,11 @@ struct Table {
 		Y = std::move(y_values);
 		start = start_;
 		step_size =
-			stop.has_value() ? (*stop - start) / static_cast<arbd_real>(Y.size() - 1) : *step_size_;
+			stop.has_value() ? (*stop - start) / static_cast<mars_real>(Y.size() - 1) : *step_size_;
 
 		X.resize(Y.size());
 		for (size_t i = 0; i < X.size(); ++i) {
-			X[i] = start + step_size * static_cast<arbd_real>(i);
+			X[i] = start + step_size * static_cast<mars_real>(i);
 		}
 	}
 };
@@ -293,21 +293,21 @@ class TablesRegistry {
 		}
 		build_device_arrays_impl(*resources_);
 	}
-	const DeviceBuffer<arbd_real>& get_device_bond_buffer(size_t resource_idx,
+	const DeviceBuffer<mars_real>& get_device_bond_buffer(size_t resource_idx,
 														  size_t table_idx) const {
 		return device_tabulated_bond_y_buffers_[resource_idx][table_idx];
 	}
 
-	const DeviceBuffer<arbd_real>& get_device_angle_buffer(size_t resource_idx,
+	const DeviceBuffer<mars_real>& get_device_angle_buffer(size_t resource_idx,
 														   size_t table_idx) const {
 		return device_tabulated_angle_y_buffers_[resource_idx][table_idx];
 	}
 
-	const DeviceBuffer<arbd_real>& get_device_dihedral_buffer(size_t resource_idx,
+	const DeviceBuffer<mars_real>& get_device_dihedral_buffer(size_t resource_idx,
 															  size_t table_idx) const {
 		return device_tabulated_dihedral_y_buffers_[resource_idx][table_idx];
 	}
-	const DeviceBuffer<arbd_real>& get_device_nonbonded_buffer(size_t resource_idx,
+	const DeviceBuffer<mars_real>& get_device_nonbonded_buffer(size_t resource_idx,
 															   size_t table_idx) const {
 		return device_tabulated_nonbonded_y_buffers_[resource_idx][table_idx];
 	}
@@ -419,9 +419,9 @@ class TablesRegistry {
 
 	// Device buffers per resource: [resource_idx][table_idx] = buffer
 	// Only Y values stored on device - X values calculated from step_inv and start
-	std::vector<std::vector<DeviceBuffer<arbd_real>>> device_tabulated_bond_y_buffers_;
-	std::vector<std::vector<DeviceBuffer<arbd_real>>> device_tabulated_angle_y_buffers_;
-	std::vector<std::vector<DeviceBuffer<arbd_real>>> device_tabulated_dihedral_y_buffers_;
-	std::vector<std::vector<DeviceBuffer<arbd_real>>> device_tabulated_nonbonded_y_buffers_;
+	std::vector<std::vector<DeviceBuffer<mars_real>>> device_tabulated_bond_y_buffers_;
+	std::vector<std::vector<DeviceBuffer<mars_real>>> device_tabulated_angle_y_buffers_;
+	std::vector<std::vector<DeviceBuffer<mars_real>>> device_tabulated_dihedral_y_buffers_;
+	std::vector<std::vector<DeviceBuffer<mars_real>>> device_tabulated_nonbonded_y_buffers_;
 };
-} // namespace ARBD
+} // namespace MARS

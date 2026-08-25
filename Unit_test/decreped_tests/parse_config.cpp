@@ -4,12 +4,12 @@
 #include <string>
 #include <vector>
 
-// Include ARBD headers
+// Include MARS headers
 #include "Configuration.h"
 #include "Objects/ParticleProperties.h"
 #include "SimSystem.h"
 
-using namespace ARBD;
+using namespace MARS;
 
 /**
  * @brief Test configuration parsing with the circovirus example

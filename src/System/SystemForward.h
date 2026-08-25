@@ -8,7 +8,7 @@
  */
 
 #include <memory>
-namespace ARBD {
+namespace MARS {
 
 // Forward declarations
 class SimSystem;
@@ -21,4 +21,4 @@ enum class DecomposerType;
 // Factory function declaration (implemented in SimSystem.cpp)
 std::unique_ptr<PatchDecomposer> create_patch_decomposer(DecomposerType type);
 
-} // namespace ARBD
+} // namespace MARS

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "ARBDException.h"
+#include "MARSException.h"
 #include <chrono>
 #include <cstdio>
 #include <iomanip>
@@ -22,7 +22,7 @@
 #define STDERR_LEVEL 5
 #endif
 
-namespace ARBD {
+namespace MARS {
 
 enum class LogLevel { TRACE = 0, DEBUG = 1, INFO = 2, WARN = 3, ERROR = 4, CRITICAL = 5, TEST = 6 };
 
@@ -87,19 +87,19 @@ class Logger {
 
 inline LogLevel Logger::current_level = LogLevel::INFO;
 
-} // namespace ARBD
+} // namespace MARS
 
 // ============================================================================
 // HOST-ONLY LOGGING MACROS (for .cpp files and host-side code)
 // ============================================================================
-#define LOGTRACE(...) ARBD::Logger::log(ARBD::LogLevel::TRACE, ARBD::SourceLocation(), __VA_ARGS__)
-#define LOGDEBUG(...) ARBD::Logger::log(ARBD::LogLevel::DEBUG, ARBD::SourceLocation(), __VA_ARGS__)
-#define LOGINFO(...) ARBD::Logger::log(ARBD::LogLevel::INFO, ARBD::SourceLocation(), __VA_ARGS__)
-#define LOGWARN(...) ARBD::Logger::log(ARBD::LogLevel::WARN, ARBD::SourceLocation(), __VA_ARGS__)
-#define LOGERROR(...) ARBD::Logger::log(ARBD::LogLevel::ERROR, ARBD::SourceLocation(), __VA_ARGS__)
+#define LOGTRACE(...) MARS::Logger::log(MARS::LogLevel::TRACE, MARS::SourceLocation(), __VA_ARGS__)
+#define LOGDEBUG(...) MARS::Logger::log(MARS::LogLevel::DEBUG, MARS::SourceLocation(), __VA_ARGS__)
+#define LOGINFO(...) MARS::Logger::log(MARS::LogLevel::INFO, MARS::SourceLocation(), __VA_ARGS__)
+#define LOGWARN(...) MARS::Logger::log(MARS::LogLevel::WARN, MARS::SourceLocation(), __VA_ARGS__)
+#define LOGERROR(...) MARS::Logger::log(MARS::LogLevel::ERROR, MARS::SourceLocation(), __VA_ARGS__)
 #define LOGCRITICAL(...) \
-	ARBD::Logger::log(ARBD::LogLevel::CRITICAL, ARBD::SourceLocation(), __VA_ARGS__)
-#define LOGTEST(...) ARBD::Logger::log(ARBD::LogLevel::TEST, ARBD::SourceLocation(), __VA_ARGS__)
+	MARS::Logger::log(MARS::LogLevel::CRITICAL, MARS::SourceLocation(), __VA_ARGS__)
+#define LOGTEST(...) MARS::Logger::log(MARS::LogLevel::TEST, MARS::SourceLocation(), __VA_ARGS__)
 // ============================================================================
 // DEVICE-ONLY LOGGING MACROS (for .cu files and device kernels)
 // ============================================================================

@@ -1,13 +1,13 @@
 #pragma once
 
-#include "ARBDException.h"
-#include "ARBDLogger.h"
+#include "MARSException.h"
+#include "MARSLogger.h"
 #include "Types/BaseGrid.h"
 #include "Types/Types.h"
 #include <memory>
 #include <vector>
 
-namespace ARBD {
+namespace MARS {
 
 /**
  * @brief SMD Grid functionality for dynamic grid scaling
@@ -25,7 +25,7 @@ class SMDGrid {
 	 * @param scale_slope Rate of change of grid scale
 	 * @param smd_freq Frequency of SMD operations
 	 */
-	SMDGrid(std::shared_ptr<BaseGrid<arbd_real>> base_grid,
+	SMDGrid(std::shared_ptr<BaseGrid<mars_real>> base_grid,
 			float scale_slope = 0.0f,
 			float smd_freq = 0.0f)
 		: base_grid_(base_grid), scale_slope_(scale_slope), smd_freq_(smd_freq),
@@ -135,7 +135,7 @@ class SMDGrid {
 	 * @brief Get the base grid
 	 * @return Shared pointer to base grid
 	 */
-	std::shared_ptr<BaseGrid<arbd_real>> getBaseGrid() const {
+	std::shared_ptr<BaseGrid<mars_real>> getBaseGrid() const {
 		return base_grid_;
 	}
 
@@ -146,7 +146,7 @@ class SMDGrid {
 	 * @param smd_freq Frequency of SMD operations
 	 * @return Shared pointer to new SMDGrid
 	 */
-	static std::shared_ptr<SMDGrid> createFromBaseGrid(std::shared_ptr<BaseGrid<arbd_real>> base_grid,
+	static std::shared_ptr<SMDGrid> createFromBaseGrid(std::shared_ptr<BaseGrid<mars_real>> base_grid,
 													   float scale_slope = 0.0f,
 													   float smd_freq = 0.0f) {
 		return std::make_shared<SMDGrid>(base_grid, scale_slope, smd_freq);
@@ -211,7 +211,7 @@ class SMDGrid {
 	}
 
   private:
-	std::shared_ptr<BaseGrid<arbd_real>> base_grid_;
+	std::shared_ptr<BaseGrid<mars_real>> base_grid_;
 	float scale_slope_;
 	float smd_freq_;
 	float current_scale_;
@@ -334,4 +334,4 @@ class SMDGridManager {
 	bool enabled_;
 };
 
-} // namespace ARBD
+} // namespace MARS

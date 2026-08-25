@@ -1,9 +1,9 @@
 // src/Backend/CUDA/CUDAManager.cpp
 #ifdef USE_CUDA
 #include "CUDAManager.h"
-#include "ARBDLogger.h"
+#include "MARSLogger.h"
 #include <omp.h>
-namespace ARBD {
+namespace MARS {
 namespace CUDA {
 
 // Static member initialization
@@ -38,7 +38,7 @@ void Manager::discover_devices() {
 	CUDA_CHECK(cudaGetDeviceCount(&num_devices));
 
 	if (num_devices == 0) {
-		ARBD_Exception(ExceptionType::ValueError, "No CUDA devices found");
+		MARS_Exception(ExceptionType::ValueError, "No CUDA devices found");
 	}
 
 	device_properties_.clear();
@@ -86,7 +86,7 @@ void Manager::query_peer_access() {
 
 void Manager::enable_peer_access() {
 	if (!initialized_) {
-		ARBD_Exception(ExceptionType::ValueError, "CUDA Manager not initialized");
+		MARS_Exception(ExceptionType::ValueError, "CUDA Manager not initialized");
 	}
 
 	size_t num_devices = device_properties_.size();
@@ -133,11 +133,11 @@ int Manager::device_count() {
 
 cudaDeviceProp Manager::get_device_properties(int device_id) {
 	if (!initialized_) {
-		ARBD_Exception(ExceptionType::ValueError, "CUDA Manager not initialized");
+		MARS_Exception(ExceptionType::ValueError, "CUDA Manager not initialized");
 	}
 
 	if (device_id < 0 || device_id >= static_cast<int>(device_properties_.size())) {
-		ARBD_Exception(ExceptionType::ValueError, "Invalid device ID: {}", device_id);
+		MARS_Exception(ExceptionType::ValueError, "Invalid device ID: {}", device_id);
 	}
 
 	return device_properties_[device_id];
@@ -179,7 +179,7 @@ void Manager::init_for_rank(int local_rank,
 	// Get total number of GPUs
 	int num_gpus = static_cast<int>(device_properties_.size());
 	if (num_gpus == 0) {
-		ARBD_Exception(ExceptionType::ValueError,
+		MARS_Exception(ExceptionType::ValueError,
 					   "No CUDA devices available for rank {}",
 					   local_rank);
 	}
@@ -465,5 +465,5 @@ void Manager::load_info() {
 }
 
 } // namespace CUDA
-} // namespace ARBD
+} // namespace MARS
 #endif

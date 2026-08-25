@@ -1,10 +1,10 @@
 #include "Gemoetric.h"
-#include "ARBDException.h"
-#include "ARBDLogger.h"
+#include "MARSException.h"
+#include "MARSLogger.h"
 #include "System/SimSystem.h"
 #include "System/SystemState.h"
 
-namespace ARBD {
+namespace MARS {
 
 DecompositionPlan GeometricPatchDecomposer::decompose(SimSystem& system, SystemState& state) {
 	LOGINFO("Starting geometric decomposition");
@@ -42,4 +42,4 @@ std::vector<Vector3> GeometricPatchDecomposer::create_geometry_aware_boundaries(
 // Factory Functions
 //================================================================================
 
-} // namespace ARBD
+} // namespace MARS

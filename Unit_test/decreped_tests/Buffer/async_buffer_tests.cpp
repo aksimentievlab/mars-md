@@ -22,7 +22,7 @@
 #include <numeric>
 #include <vector>
 
-using namespace ARBD;
+using namespace MARS;
 
 // ============================================================================
 // Test Fixture for Asynchronous Buffer Tests

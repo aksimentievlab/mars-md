@@ -21,12 +21,12 @@
 #include "METAL/METALManager.h"
 #endif
 
-#include "ARBDLogger.h"
+#include "MARSLogger.h"
 #include "Events.h"
 #include "Header.h"
 #include "Resource.h"
 
-namespace ARBD {
+namespace MARS {
 
 namespace CPU {
 struct Policy {
@@ -419,10 +419,10 @@ class Buffer {
 	 */
 	void copy_to_host(T* host_dst, size_t num_elements, bool sync = true) const {
 		if (num_elements > count_) {
-			ARBD_Exception(ExceptionType::ValueError, "Copy size exceeds buffer size");
+			MARS_Exception(ExceptionType::ValueError, "Copy size exceeds buffer size");
 		}
 		if (!device_ptr_) {
-			ARBD_Exception(ExceptionType::ValueError, "Cannot copy from null buffer");
+			MARS_Exception(ExceptionType::ValueError, "Cannot copy from null buffer");
 		}
 		// Ensure we have a valid stream for the operation
 		void* active_stream = stream_;
@@ -486,7 +486,7 @@ class Buffer {
 	void copy_from_host(const T* host_src, size_t num_elements, bool sync = true) {
 		if (num_elements > count_) {
 #if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__) && !defined(__METAL_VERSION__)
-			ARBD_Exception(ExceptionType::ValueError, "Copy size exceeds buffer size");
+			MARS_Exception(ExceptionType::ValueError, "Copy size exceeds buffer size");
 #else
 			// Device code: clamp to safe size
 			num_elements = (count_ < num_elements) ? count_ : num_elements;
@@ -495,10 +495,10 @@ class Buffer {
 #endif
 		}
 		if (!device_ptr_) {
-			ARBD_Exception(ExceptionType::ValueError, "Cannot copy to null buffer");
+			MARS_Exception(ExceptionType::ValueError, "Cannot copy to null buffer");
 		}
 		if (!host_src) {
-			ARBD_Exception(ExceptionType::ValueError, "Cannot copy from null host pointer");
+			MARS_Exception(ExceptionType::ValueError, "Cannot copy from null host pointer");
 		}
 		// Ensure we have a valid stream for the operation
 		void* active_stream = stream_;
@@ -556,7 +556,7 @@ class Buffer {
 	void copy_device_to_device(const Buffer& src, size_t num_elements, bool sync = true) {
 		if (num_elements > count_ || num_elements > src.count_) {
 #if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__) && !defined(__METAL_VERSION__)
-			ARBD_Exception(ExceptionType::ValueError, "Copy size exceeds buffer size");
+			MARS_Exception(ExceptionType::ValueError, "Copy size exceeds buffer size");
 #else
 			// Device code: clamp to safe size
 			num_elements = (count_ < num_elements) ? count_ : num_elements;
@@ -566,7 +566,7 @@ class Buffer {
 #endif
 		}
 		if (!device_ptr_ || !src.device_ptr_) {
-			ARBD_Exception(ExceptionType::ValueError, "Cannot copy with null buffer(s)");
+			MARS_Exception(ExceptionType::ValueError, "Cannot copy with null buffer(s)");
 		}
 		// Ensure we have a valid stream for the operation
 		void* active_stream = stream_;
@@ -701,7 +701,7 @@ class Buffer {
 	void bind_to_encoder(MTL::ComputeCommandEncoder* encoder, uint32_t index) const {
 		auto* metal_buffer = METAL::Manager::get_metal_buffer_from_ptr(device_ptr_);
 		if (!metal_buffer) {
-			ARBD_Exception(ExceptionType::MetalRuntimeError,
+			MARS_Exception(ExceptionType::MetalRuntimeError,
 						   "Failed to get Metal buffer for binding at index {}",
 						   index);
 		}
@@ -747,7 +747,7 @@ class Buffer {
 				static_cast<T*>(Policy::allocate(resource, count_ * sizeof(T), queue, sync));
 #ifdef HOST_GUARD
 			if (!device_ptr_) {
-				ARBD_Exception(ExceptionType::RuntimeError,
+				MARS_Exception(ExceptionType::RuntimeError,
 							   "Failed to allocate {} bytes on {}",
 							   count_ * sizeof(T),
 							   resource.toString());
@@ -1184,6 +1184,6 @@ template<typename T>
 constexpr auto get_buffer_value(T&& arg) {
 	return get_buffer_pointer(std::forward<T>(arg));
 }
-} // namespace ARBD
+} // namespace MARS
 
 #endif // __METAL_VERSION__

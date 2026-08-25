@@ -1,7 +1,7 @@
 #include <metal_stdlib>
 #include "philox_metal.h" // For openrand::PhiloxRNG
 #include "Types/METAL/Vector3.h" // For Vector3_t
-using namespace ARBD;
+using namespace MARS;
 using namespace metal;
 
 // Helper function for converting uint32 to float (0.0 to 1.0)
@@ -64,7 +64,7 @@ kernel void gaussian_vector3_functor_kernel(constant float& mean_x [[buffer(3)]]
                                            constant uint64_t& base_seed [[buffer(9)]],
                                            constant uint32_t& base_ctr [[buffer(10)]],
                                            constant uint32_t& global_seed [[buffer(11)]],
-                                           device ARBD::Vector3_t<float>* output [[buffer(12)]],
+                                           device MARS::Vector3_t<float>* output [[buffer(12)]],
                                            uint index [[thread_position_in_grid]]) {
     // Create a fresh PhiloxRNG instance with deterministic parameters
     openrand::PhiloxRNG rng(base_seed, base_ctr + index, global_seed);
@@ -93,7 +93,7 @@ kernel void gaussian_vector3_functor_kernel(constant float& mean_x [[buffer(3)]]
     // float gauss2_y = r2 * sin(theta2); // Not used for z-component
     
     // Use three independent values for x, y, z components
-    output[index] = ARBD::Vector3_t<float>(mean_x + stddev_x * gauss1_x,
+    output[index] = MARS::Vector3_t<float>(mean_x + stddev_x * gauss1_x,
                                            mean_y + stddev_y * gauss1_y,
                                            mean_z + stddev_z * gauss2_x);
 }

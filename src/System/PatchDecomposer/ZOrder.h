@@ -16,7 +16,7 @@
 #include "System/PatchDecomposer.h"
 #include "Types/Types.h"
 
-namespace ARBD {
+namespace MARS {
 /**
  * @brief Z-order based patch decomposition
  *
@@ -148,4 +148,4 @@ class ZOrderDecomposer : public PatchDecomposer {
 	// Patches are created by PatchManager from DecompositionPlan, not by decomposer
 };
 
-} // namespace ARBD
+} // namespace MARS

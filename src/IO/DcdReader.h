@@ -1,16 +1,16 @@
 #pragma once
 
-#include "ARBDException.h"
-#include "ARBDLogger.h"
+#include "MARSException.h"
+#include "MARSLogger.h"
 #include "Types/Types.h"
 #include <cstdio>
 #include <string>
 #include <vector>
 
-namespace ARBD {
+namespace MARS {
 
 /**
- * @brief DCD file reader with stride support for ARBD2
+ * @brief DCD file reader with stride support for MARS2
  *
  * This class provides functionality to read DCD trajectory files
  * with configurable stride (frame skipping) for post-processing
@@ -285,4 +285,4 @@ class DcdReader {
 	}
 };
 
-} // namespace ARBD
+} // namespace MARS

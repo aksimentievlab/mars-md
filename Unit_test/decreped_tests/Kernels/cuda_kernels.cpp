@@ -11,7 +11,7 @@
 #include <random>
 #include <vector>
 
-using namespace ARBD;
+using namespace MARS;
 using namespace Catch;
 using Catch::Approx;
 

@@ -14,8 +14,8 @@
 
 // Standard implementation for CUDA, SYCL, and HOST
 #ifdef HOST_GUARD
-#include "ARBDException.h"
-#include "ARBDLogger.h"
+#include "MARSException.h"
+#include "MARSLogger.h"
 #include <limits>
 #include <sstream>
 #include <type_traits>
@@ -26,7 +26,7 @@
 #include <cuda/std/type_traits>
 #endif
 
-namespace ARBD {
+namespace MARS {
 
 /**
  * 3D vector utility class with common operations implemented on CPU and GPU.
@@ -342,21 +342,21 @@ HOST DEVICE inline Vector3_t<idx_t> index_to_ijk(idx_t idx, const Vector3_t<idx_
 	return index_to_ijk(idx, n.x, n.y, n.z);
 }
 
-} // namespace ARBD
+} // namespace MARS
 
 // Backend-specific specializations
 #ifdef USE_SYCL
 #include <sycl/sycl.hpp>
 template<typename T>
-struct sycl::is_device_copyable<ARBD::Vector3_t<T> > : std::true_type {};
+struct sycl::is_device_copyable<MARS::Vector3_t<T> > : std::true_type {};
 #endif
 
 // Provide common type for vectors (only when std:: is available)
 #if !defined(__SYCL_DEVICE_ONLY__) && !defined(__CUDA_ARCH__)
 namespace std {
 template<typename T, typename U>
-struct common_type<ARBD::Vector3_t<T>, ARBD::Vector3_t<U> > {
-	using type = ARBD::Vector3_t<typename common_type<T, U>::type>;
+struct common_type<MARS::Vector3_t<T>, MARS::Vector3_t<U> > {
+	using type = MARS::Vector3_t<typename common_type<T, U>::type>;
 };
 } // namespace std
 #endif
@@ -369,14 +369,14 @@ struct common_type<ARBD::Vector3_t<T>, ARBD::Vector3_t<U> > {
 #include "../extern/fmt/include/fmt/format.h"
 namespace fmt {
 template<typename T>
-struct formatter<ARBD::Vector3_t<T> > {
+struct formatter<MARS::Vector3_t<T> > {
 	template<typename ParseContext>
 	constexpr auto parse(ParseContext& ctx) {
 		return ctx.begin();
 	}
 
 	template<typename FormatContext>
-	auto format(const ARBD::Vector3_t<T>& v, FormatContext& ctx) const {
+	auto format(const MARS::Vector3_t<T>& v, FormatContext& ctx) const {
 		return format_to(ctx.out(),
 						 "({:.3f}, {:.3f}, {:.3f})",
 						 static_cast<float>(v.x),

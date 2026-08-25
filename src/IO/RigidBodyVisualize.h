@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../ARBDException.h"
+#include "../MARSException.h"
 #include "../Objects/ParticleProperties.h"
 #include "../Objects/RigidBodyProperties.h"
 #include "../Types/Types.h"
@@ -8,7 +8,7 @@
 #include "PsfPdbIO.h"
 #include <algorithm>
 
-namespace ARBD {
+namespace MARS {
 
 class RigidBodyPdbPsfReader {
   public:
@@ -67,4 +67,4 @@ class RigidBodyPdbPsfReader {
 		rt.template_bonds = structure.bonds;
 	};
 };
-} // namespace ARBD
+} // namespace MARS

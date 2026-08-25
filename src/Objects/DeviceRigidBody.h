@@ -3,7 +3,7 @@
 #include "Types/GridTerm.h"
 #include "Types/Types.h"
 #include "Types/Vector3.h"
-namespace ARBD {
+namespace MARS {
 struct RigidBodyView {
 	DEVICE_PTR(int) __restrict__ id;
 	DEVICE_PTR(int) __restrict__ type_id;
@@ -60,15 +60,15 @@ struct alignas(16) RigidBodyTypeView {
 	// combining parallel id/scale arrays.
 	CONSTANT_PTR(GridTerm) __restrict__ grid_terms;
 };
-} // namespace ARBD
+} // namespace MARS
 
 // SYCL device copyable trait
 #ifdef USE_SYCL
 #include <sycl/sycl.hpp>
 template<>
-struct sycl::is_device_copyable<ARBD::RigidBodyTypeView> : std::true_type {};
+struct sycl::is_device_copyable<MARS::RigidBodyTypeView> : std::true_type {};
 template<>
-struct sycl::is_device_copyable<ARBD::RigidBodyView> : std::true_type {};
+struct sycl::is_device_copyable<MARS::RigidBodyView> : std::true_type {};
 template<>
-struct sycl::is_device_copyable<ARBD::ConstRigidBodyView> : std::true_type {};
+struct sycl::is_device_copyable<MARS::ConstRigidBodyView> : std::true_type {};
 #endif

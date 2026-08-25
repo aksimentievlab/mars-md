@@ -5,7 +5,7 @@
 #
 # NOT wired into src/CMakeLists.txt yet. To enable, add to src/CMakeLists.txt:
 #   add_subdirectory(RBOperation)                          # before add_library
-#   target_link_libraries("lib${PROJECT_NAME}" PUBLIC ARBD::scuff)   # after it
+#   target_link_libraries("lib${PROJECT_NAME}" PUBLIC MARS::scuff)   # after it
 # and configure with -DUSE_SCUFF=ON.
 #
 # scuff-em is built by ./linkscuff.sh, which installs into
@@ -23,6 +23,7 @@ list(APPEND HOST_DEVICE_HEADERS
 )
 list(APPEND HOST_ONLY_HEADERS
     RBOperation/RBHostFTManager.h
+    RBOperation/ScuffRigidBody.h
 )
 
 # ApplyExternalForcesKernel is declared with an extern template in
@@ -79,9 +80,9 @@ if(NOT SCUFF_INCLUDE_DIR OR NOT SCUFF_LIBRARY)
 endif()
 
 # GLOBAL so the parent scope can link it after add_subdirectory() returns.
-if(NOT TARGET ARBD::scuff)
-    add_library(ARBD::scuff UNKNOWN IMPORTED GLOBAL)
-    set_target_properties(ARBD::scuff PROPERTIES
+if(NOT TARGET MARS::scuff)
+    add_library(MARS::scuff UNKNOWN IMPORTED GLOBAL)
+    set_target_properties(MARS::scuff PROPERTIES
         IMPORTED_LOCATION "${SCUFF_LIBRARY}"
         INTERFACE_INCLUDE_DIRECTORIES "${SCUFF_INCLUDE_DIR}"
         INTERFACE_COMPILE_DEFINITIONS "USE_SCUFF"
@@ -91,14 +92,14 @@ if(NOT TARGET ARBD::scuff)
     # libscuff.so together with an rpath, so only its own direct needs are
     # restated here. Do NOT define HAVE_CONFIG_H: it makes EquivalentEdgePairs.h
     # include scuff-em's private <config.h>, which is not installed.
-    set_property(TARGET ARBD::scuff APPEND PROPERTY
+    set_property(TARGET MARS::scuff APPEND PROPERTY
         INTERFACE_LINK_LIBRARIES Threads::Threads ${CMAKE_DL_LIBS} m)
 
     # scuff-em is compiled with OpenMP; carrying the runtime explicitly keeps
     # the link line correct when the consumer is icpx rather than g++.
     find_package(OpenMP QUIET)
     if(OpenMP_CXX_FOUND)
-        set_property(TARGET ARBD::scuff APPEND PROPERTY
+        set_property(TARGET MARS::scuff APPEND PROPERTY
             INTERFACE_LINK_LIBRARIES OpenMP::OpenMP_CXX)
     endif()
 

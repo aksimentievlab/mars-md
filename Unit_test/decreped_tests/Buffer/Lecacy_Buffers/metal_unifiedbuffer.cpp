@@ -5,10 +5,10 @@
 #include "Backend/METAL/METALManager.h"
 #include <vector>
 #include <numeric>
-using namespace ARBD;
+using namespace MARS;
 
 TEST_CASE("Metal Utility Functions", "[utilities]") {
-    ARBD::METAL::METALManager::load_info();
+    MARS::METAL::METALManager::load_info();
     Resource metal_resource(ResourceType::METAL, 0);
     const size_t count = 80;
     
@@ -47,12 +47,12 @@ TEST_CASE("Metal Utility Functions", "[utilities]") {
     }
     
     // Cleanup
-    ARBD::METAL::METALManager::finalize();
+    MARS::METAL::METALManager::finalize();
 }
 
 TEST_CASE("Metal Memory Operations", "[memory]") {
     // Initialize Metal manager and select devices
-    ARBD::METAL::METALManager::load_info();
+    MARS::METAL::METALManager::load_info();
     Resource metal_resource(ResourceType::METAL, 0);
     
     SECTION("Memory allocation and deallocation") {
@@ -100,12 +100,12 @@ TEST_CASE("Metal Memory Operations", "[memory]") {
     }
     
     // Cleanup
-    ARBD::METAL::METALManager::finalize();
+    MARS::METAL::METALManager::finalize();
 }
 
 TEST_CASE("Metal GenericAllocator", "[allocator]") {
     // Initialize Metal manager and select devices
-    ARBD::METAL::METALManager::load_info();
+    MARS::METAL::METALManager::load_info();
     Resource metal_resource(ResourceType::METAL, 0);
     
     SECTION("Basic allocation") {
@@ -156,7 +156,7 @@ TEST_CASE("Metal GenericAllocator", "[allocator]") {
 }
 
 TEST_CASE("Metal MultiRef Operations", "[multiref]") {
-    ARBD::METAL::METALManager::load_info();
+    MARS::METAL::METALManager::load_info();
     Resource metal_resource(ResourceType::METAL, 0);
     const size_t count = 75;
     SECTION("MultiRef with multiple buffers") {
@@ -190,7 +190,7 @@ TEST_CASE("Metal MultiRef Operations", "[multiref]") {
 
 TEST_CASE("Metal DeviceBuffer Basic Operations", "[buffer]") {
     // Initialize Metal manager and select devices
-    ARBD::METAL::METALManager::load_info();
+    MARS::METAL::METALManager::load_info();
     Resource metal_resource(ResourceType::METAL, 0);
     
     SECTION("Empty buffer creation") {
@@ -239,12 +239,12 @@ TEST_CASE("Metal DeviceBuffer Basic Operations", "[buffer]") {
     }
     
     // Cleanup
-    ARBD::METAL::METALManager::finalize();
+    MARS::METAL::METALManager::finalize();
 }
 
 TEST_CASE("Metal DeviceBuffer Data Transfer", "[buffer][transfer]") {
     // Initialize Metal manager and select devices
-    ARBD::METAL::METALManager::load_info();
+    MARS::METAL::METALManager::load_info();
     Resource metal_resource(ResourceType::METAL, 0);
     const size_t count = 100;
     
@@ -304,12 +304,12 @@ TEST_CASE("Metal DeviceBuffer Data Transfer", "[buffer][transfer]") {
     }
     
     // Cleanup
-    ARBD::METAL::METALManager::finalize();
+    MARS::METAL::METALManager::finalize();
 }
 
 TEST_CASE("Metal UnifiedBuffer Operations", "[unified_buffer]") {
     // Initialize Metal manager and select devices
-    ARBD::METAL::METALManager::load_info();
+    MARS::METAL::METALManager::load_info();
     Resource metal_resource(ResourceType::METAL, 0);
     const size_t count = 200;
     
@@ -369,27 +369,27 @@ TEST_CASE("Metal UnifiedBuffer Operations", "[unified_buffer]") {
     }
     
     // Cleanup
-    ARBD::METAL::METALManager::finalize();
+    MARS::METAL::METALManager::finalize();
 }
 
 TEST_CASE("UnifiedBuffer Metal Basic Allocation", "[UnifiedBuffer][Metal]") {
     try {
         // Initialize Metal backend
-        ARBD::METAL::METALManager::init();
-        ARBD::METAL::METALManager::load_info();
+        MARS::METAL::METALManager::init();
+        MARS::METAL::METALManager::load_info();
         
-        if (ARBD::METAL::METALManager::devices().empty()) {
+        if (MARS::METAL::METALManager::devices().empty()) {
             SKIP("No Metal devices available");
         }
         
-        ARBD::Resource metal_resource{ARBD::ResourceType::METAL, 0};
+        MARS::Resource metal_resource{MARS::ResourceType::METAL, 0};
         
         SECTION("Basic allocation and deallocation") {
-            ARBD::UnifiedBuffer<float> buffer(1000, metal_resource);
+            MARS::UnifiedBuffer<float> buffer(1000, metal_resource);
             
             REQUIRE(buffer.size() == 1000);
             REQUIRE(!buffer.empty());
-            REQUIRE(buffer.primary_location().type == ARBD::ResourceType::METAL);
+            REQUIRE(buffer.primary_location().type == MARS::ResourceType::METAL);
             
             // Check that pointer is valid
             float* ptr = buffer.get_ptr(metal_resource);
@@ -397,16 +397,16 @@ TEST_CASE("UnifiedBuffer Metal Basic Allocation", "[UnifiedBuffer][Metal]") {
         }
         
         SECTION("Zero-sized buffer") {
-            ARBD::UnifiedBuffer<int> buffer(0, metal_resource);
+            MARS::UnifiedBuffer<int> buffer(0, metal_resource);
             
             REQUIRE(buffer.size() == 0);
             REQUIRE(buffer.empty());
         }
         
         SECTION("Different data types") {
-            ARBD::UnifiedBuffer<double> double_buffer(500, metal_resource);
-            ARBD::UnifiedBuffer<int> int_buffer(1000, metal_resource);
-            ARBD::UnifiedBuffer<char> char_buffer(2000, metal_resource);
+            MARS::UnifiedBuffer<double> double_buffer(500, metal_resource);
+            MARS::UnifiedBuffer<int> int_buffer(1000, metal_resource);
+            MARS::UnifiedBuffer<char> char_buffer(2000, metal_resource);
             
             REQUIRE(double_buffer.size() == 500);
             REQUIRE(int_buffer.size() == 1000);
@@ -417,67 +417,67 @@ TEST_CASE("UnifiedBuffer Metal Basic Allocation", "[UnifiedBuffer][Metal]") {
             REQUIRE(char_buffer.get_ptr(metal_resource) != nullptr);
         }
         
-        ARBD::METAL::METALManager::finalize();
-    } catch (const ARBD::Exception& e) {
-        FAIL("Metal test failed with ARBD exception: " << e.what());
+        MARS::METAL::METALManager::finalize();
+    } catch (const MARS::Exception& e) {
+        FAIL("Metal test failed with MARS exception: " << e.what());
     }
 }
 
 TEST_CASE("UnifiedBuffer Metal Data Migration", "[UnifiedBuffer][Metal]") {
     try {
         // Initialize Metal backend
-        ARBD::METAL::METALManager::init();
-        ARBD::METAL::METALManager::load_info();
+        MARS::METAL::METALManager::init();
+        MARS::METAL::METALManager::load_info();
         
-        if (ARBD::METAL::METALManager::devices().empty()) {
+        if (MARS::METAL::METALManager::devices().empty()) {
             SKIP("No Metal devices available");
         }
         
-        ARBD::Resource metal_resource{ARBD::ResourceType::METAL, 0};
-        ARBD::Resource host_resource{}; // Default host resource
+        MARS::Resource metal_resource{MARS::ResourceType::METAL, 0};
+        MARS::Resource host_resource{}; // Default host resource
         
         SECTION("Ensure availability at different resources") {
-            ARBD::UnifiedBuffer<float> buffer(100, metal_resource);
+            MARS::UnifiedBuffer<float> buffer(100, metal_resource);
             
             // Should be available at primary location
             auto locations = buffer.available_locations();
             REQUIRE(locations.size() == 1);
-            REQUIRE(locations[0].type == ARBD::ResourceType::METAL);
+            REQUIRE(locations[0].type == MARS::ResourceType::METAL);
             
             // Metal buffers should only have 1 location
             REQUIRE(buffer.get_ptr(metal_resource) != nullptr);
         }
         
         SECTION("Metal buffer location management") {
-            ARBD::UnifiedBuffer<int> buffer(50, metal_resource);
+            MARS::UnifiedBuffer<int> buffer(50, metal_resource);
             
             // Metal buffer should only have 1 location
             auto locations = buffer.available_locations();
             REQUIRE(locations.size() == 1);
-            REQUIRE(locations[0].type == ARBD::ResourceType::METAL);
+            REQUIRE(locations[0].type == MARS::ResourceType::METAL);
         }
         
-        ARBD::METAL::METALManager::finalize();
-    } catch (const ARBD::Exception& e) {
-        FAIL("Metal data migration test failed with ARBD exception: " << e.what());
+        MARS::METAL::METALManager::finalize();
+    } catch (const MARS::Exception& e) {
+        FAIL("Metal data migration test failed with MARS exception: " << e.what());
     }
 }
 
 TEST_CASE("UnifiedBuffer Metal Unified Memory", "[UnifiedBuffer][Metal]") {
     try {
         // Initialize Metal backend
-        ARBD::METAL::METALManager::init();
-        ARBD::METAL::METALManager::load_info();
+        MARS::METAL::METALManager::init();
+        MARS::METAL::METALManager::load_info();
         
-        if (ARBD::METAL::METALManager::devices().empty()) {
+        if (MARS::METAL::METALManager::devices().empty()) {
             SKIP("No Metal devices available");
         }
         
-        ARBD::Resource metal_resource{ARBD::ResourceType::METAL, 0};
-        auto& device = ARBD::METAL::METALManager::get_current_device();
+        MARS::Resource metal_resource{MARS::ResourceType::METAL, 0};
+        auto& device = MARS::METAL::METALManager::get_current_device();
         
         SECTION("Test unified memory access") {
-            ARBD::UnifiedBuffer<float> buffer(1000, metal_resource);
+            MARS::UnifiedBuffer<float> buffer(1000, metal_resource);
             float* ptr = buffer.get_ptr(metal_resource);
             REQUIRE(ptr != nullptr);
             
@@ -506,29 +506,29 @@ TEST_CASE("UnifiedBuffer Metal Unified Memory", "[UnifiedBuffer][Metal]") {
             REQUIRE(device.max_threads_per_group() > 0);
         }
         
-        ARBD::METAL::METALManager::finalize();
-    } catch (const ARBD::Exception& e) {
-        FAIL("Metal unified memory test failed with ARBD exception: " << e.what());
+        MARS::METAL::METALManager::finalize();
+    } catch (const MARS::Exception& e) {
+        FAIL("Metal unified memory test failed with MARS exception: " << e.what());
     }
 }
 
 TEST_CASE("UnifiedBuffer Metal Move Semantics", "[UnifiedBuffer][Metal]") {
     try {
         // Initialize Metal backend
-        ARBD::METAL::METALManager::init();
-        ARBD::METAL::METALManager::load_info();
+        MARS::METAL::METALManager::init();
+        MARS::METAL::METALManager::load_info();
         
-        if (ARBD::METAL::METALManager::devices().empty()) {
+        if (MARS::METAL::METALManager::devices().empty()) {
             SKIP("No Metal devices available");
         }
         
-        ARBD::Resource metal_resource{ARBD::ResourceType::METAL, 0};
+        MARS::Resource metal_resource{MARS::ResourceType::METAL, 0};
         
         SECTION("Move constructor") {
-            ARBD::UnifiedBuffer<float> buffer1(1000, metal_resource);
+            MARS::UnifiedBuffer<float> buffer1(1000, metal_resource);
             float* original_ptr = buffer1.get_ptr(metal_resource);
             
-            ARBD::UnifiedBuffer<float> buffer2(std::move(buffer1));
+            MARS::UnifiedBuffer<float> buffer2(std::move(buffer1));
             
             REQUIRE(buffer2.size() == 1000);
             REQUIRE(buffer2.get_ptr(metal_resource) == original_ptr);
@@ -537,8 +537,8 @@ TEST_CASE("UnifiedBuffer Metal Move Semantics", "[UnifiedBuffer][Metal]") {
         }
         
         SECTION("Move assignment") {
-            ARBD::UnifiedBuffer<float> buffer1(1000, metal_resource);
-            ARBD::UnifiedBuffer<float> buffer2(500, metal_resource);
+            MARS::UnifiedBuffer<float> buffer1(1000, metal_resource);
+            MARS::UnifiedBuffer<float> buffer2(500, metal_resource);
             
             float* original_ptr = buffer1.get_ptr(metal_resource);
             
@@ -549,31 +549,31 @@ TEST_CASE("UnifiedBuffer Metal Move Semantics", "[UnifiedBuffer][Metal]") {
             REQUIRE(buffer1.size() == 0); // Moved from
         }
         
-        ARBD::METAL::METALManager::finalize();
-    } catch (const ARBD::Exception& e) {
-        FAIL("Metal move semantics test failed with ARBD exception: " << e.what());
+        MARS::METAL::METALManager::finalize();
+    } catch (const MARS::Exception& e) {
+        FAIL("Metal move semantics test failed with MARS exception: " << e.what());
     }
 }
 
 TEST_CASE("UnifiedBuffer Metal Raw Allocation Functions", "[UnifiedBuffer][Metal]") {
     try {
         // Initialize Metal backend
-        ARBD::METAL::METALManager::init();
-        ARBD::METAL::METALManager::load_info();
+        MARS::METAL::METALManager::init();
+        MARS::METAL::METALManager::load_info();
         
-        if (ARBD::METAL::METALManager::devices().empty()) {
+        if (MARS::METAL::METALManager::devices().empty()) {
             SKIP("No Metal devices available");
         }
         
         SECTION("Test raw allocation/deallocation functions") {
             // Test the raw allocation functions we added
             size_t test_size = 1024; // 1KB
-            void* ptr = ARBD::METAL::METALManager::allocate_raw(test_size);
+            void* ptr = MARS::METAL::METALManager::allocate_raw(test_size);
             
             REQUIRE(ptr != nullptr);
             
             // Try to write to the memory (should work with unified memory)
-            auto& device = ARBD::METAL::METALManager::get_current_device();
+            auto& device = MARS::METAL::METALManager::get_current_device();
             if (device.has_unified_memory()) {
                 char* char_ptr = static_cast<char*>(ptr);
                 char_ptr[0] = 'A';
@@ -584,7 +584,7 @@ TEST_CASE("UnifiedBuffer Metal Raw Allocation Functions", "[UnifiedBuffer][Metal
             }
             
             // Clean up
-            ARBD::METAL::METALManager::deallocate_raw(ptr);
+            MARS::METAL::METALManager::deallocate_raw(ptr);
         }
         
         SECTION("Test multiple allocations") {
@@ -592,7 +592,7 @@ TEST_CASE("UnifiedBuffer Metal Raw Allocation Functions", "[UnifiedBuffer][Metal
             
             // Allocate multiple buffers
             for (int i = 0; i < 10; ++i) {
-                void* ptr = ARBD::METAL::METALManager::allocate_raw(100 * (i + 1));
+                void* ptr = MARS::METAL::METALManager::allocate_raw(100 * (i + 1));
                 REQUIRE(ptr != nullptr);
                 ptrs.push_back(ptr);
             }
@@ -606,13 +606,13 @@ TEST_CASE("UnifiedBuffer Metal Raw Allocation Functions", "[UnifiedBuffer][Metal
             
             // Clean up all allocations
             for (void* ptr : ptrs) {
-                ARBD::METAL::METALManager::deallocate_raw(ptr);
+                MARS::METAL::METALManager::deallocate_raw(ptr);
             }
         }
         
-        ARBD::METAL::METALManager::finalize();
-    } catch (const ARBD::Exception& e) {
-        FAIL("Metal raw allocation test failed with ARBD exception: " << e.what());
+        MARS::METAL::METALManager::finalize();
+    } catch (const MARS::Exception& e) {
+        FAIL("Metal raw allocation test failed with MARS exception: " << e.what());
     }
 }
 

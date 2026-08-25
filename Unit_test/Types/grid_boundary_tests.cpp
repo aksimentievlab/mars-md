@@ -7,7 +7,7 @@
 #include "Types/BaseGridDevice.h"
 #include <vector>
 
-using namespace ARBD;
+using namespace MARS;
 using Catch::Approx;
 
 namespace {
@@ -19,15 +19,15 @@ constexpr int kPeriodic = static_cast<int>(GridBoundaryCondition::Periodic);
 /// 4x4x4 grid whose value is its x index, so edge effects are easy to read off.
 struct Ramp {
 	Vector3_t<idx_t> dims{4, 4, 4};
-	std::vector<arbd_real> v;
+	std::vector<mars_real> v;
 
 	Ramp() : v(64) {
 		for (idx_t ix = 0; ix < 4; ++ix)
 			for (idx_t iy = 0; iy < 4; ++iy)
 				for (idx_t iz = 0; iz < 4; ++iz)
-					v[iz + iy * 4 + ix * 16] = arbd_real(ix);
+					v[iz + iy * 4 + ix * 16] = mars_real(ix);
 	}
-	const arbd_real* data() const {
+	const mars_real* data() const {
 		return v.data();
 	}
 };

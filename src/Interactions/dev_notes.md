@@ -19,12 +19,12 @@ harmonic restraints live at the bottom of this header (moved out of
 `DeviceBondedInteractions` buffers it reads, which is why they sit next to those
 buffers rather than next to the functors.
 
-`restraint_spring_constants()` returns `const arbd_real*`, matching
-`DeviceBuffer<arbd_real> restraint_spring_constants_`. It was declared
-`const float*` and only compiled because `arbd_real` is `float` (`Header.h`).
+`restraint_spring_constants()` returns `const mars_real*`, matching
+`DeviceBuffer<mars_real> restraint_spring_constants_`. It was declared
+`const float*` and only compiled because `mars_real` is `float` (`Header.h`).
 
 # TabulatedPotential.h
-If table is not periodic->  Past the end of the table the potential is held at its final value, so the force there is zero. Matches legacy ARBD's TabulatedPotential::compute, which returns `EnergyForce(v0[n-1], Vector3(0.0f))` for `home >= n` and yields `du = 0` in the final bin. Clamping `home` alone (the previous behaviour here) is not enough: `w` keeps growing with `dx`, so `dU*w + U0` below linearly extrapolates the last bin's slope instead of holding the endpoint value, and the returned force stays at that slope rather than falling to zero. For a nonbonded table that ends at the interaction cutoff, every out-of-range pair then acquires a spurious constant force and an unbounded energy - a non-decaying long-range interaction applied to whatever fraction of the pair list lies beyond the cutoff.
+If table is not periodic->  Past the end of the table the potential is held at its final value, so the force there is zero. Matches legacy MARS's TabulatedPotential::compute, which returns `EnergyForce(v0[n-1], Vector3(0.0f))` for `home >= n` and yields `du = 0` in the final bin. Clamping `home` alone (the previous behaviour here) is not enough: `w` keeps growing with `dx`, so `dU*w + U0` below linearly extrapolates the last bin's slope instead of holding the endpoint value, and the returned force stays at that slope rather than falling to zero. For a nonbonded table that ends at the interaction cutoff, every out-of-range pair then acquires a spurious constant force and an unbounded energy - a non-decaying long-range interaction applied to whatever fraction of the pair list lies beyond the cutoff.
 Below the table, clamp the index but keep the fractional weight,  so the first bin's slope still applies. Legacy does the same (`home = home < 0 ? 0 : home`). Returning zero force here instead would delete the repulsive core that keeps particles apart.
 `force_magnitude` must be -dU/dr (not the raw energy slope): the bond/angle/dihedral/nonbonded computers all apply it via the same "-force to particle x, +force to particle y" convention that AnalyticalForceComputer uses with an already-negated force (e.g. harmonic bond's force = -k*(distance-r0)). Returning +dU/dr here inverted every tabulated potential well into a force hilltop.
 

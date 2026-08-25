@@ -3,11 +3,11 @@
 #include "System/PatchManager.h"
 #include "System/SystemState.h"
 
-namespace ARBD {
+namespace MARS {
 
 void SimSystem::validate_physical_parameters() const {
 
-	if (temperature_.value <= arbd_real(0.0)) {
+	if (temperature_.value <= mars_real(0.0)) {
 		throw Exception(ExceptionType::ValueError,
 						SourceLocation(),
 						"Temperature must be greater than 0");
@@ -40,7 +40,7 @@ void SimSystem::validate_physical_parameters() const {
 
 void SimSystem::validate_method_parameters() const {
 
-	if (steps_.timestep <= arbd_real(0.0)) {
+	if (steps_.timestep <= mars_real(0.0)) {
 		throw Exception(ExceptionType::ValueError,
 						SourceLocation(),
 						"Timestep must be positive (got {})",
@@ -62,13 +62,13 @@ void SimSystem::validate_method_parameters() const {
 
 void SimSystem::validate_output_parameters() const {
 
-	if (output_period_ <= arbd_real(0.0)) {
+	if (output_period_ <= mars_real(0.0)) {
 		throw Exception(ExceptionType::ValueError,
 						SourceLocation(),
 						"Output period must be positive (got {})",
 						output_period_);
 	}
-	if (energy_output_period_ <= arbd_real(0.0)) {
+	if (energy_output_period_ <= mars_real(0.0)) {
 		throw Exception(ExceptionType::ValueError,
 						SourceLocation(),
 						"Energy output period must be positive (got {})",
@@ -153,4 +153,4 @@ void SimSystem::create_single_patch_manager(SystemState& state) {
 			state.get_num_particles());
 }
 
-} // namespace ARBD
+} // namespace MARS

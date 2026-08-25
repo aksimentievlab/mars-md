@@ -1,17 +1,17 @@
 #pragma once
 
-#include "ARBDException.h"
-#include "ARBDLogger.h"
+#include "MARSException.h"
+#include "MARSLogger.h"
 #include "Backend/Buffer.h"
 #include "System/PeriodicBox.h"
 #include "Types/Types.h"
 #include <memory>
 #include <vector>
 
-namespace ARBD {
+namespace MARS {
 
 /**
- * @brief Pressure calculation functionality for ARBD2
+ * @brief Pressure calculation functionality for MARS2
  *
  * This class provides pressure calculation capabilities including:
  * - Block-based pressure calculation for GPU efficiency
@@ -132,7 +132,7 @@ class PressureCalculator {
 	float pressure_output_period_;
 
 	// GPU memory for pressure calculation
-	std::unique_ptr<DeviceBuffer<arbd_real>> block_pressure_d_;
+	std::unique_ptr<DeviceBuffer<mars_real>> block_pressure_d_;
 	std::vector<float> block_pressure_;
 
 	/**
@@ -140,7 +140,7 @@ class PressureCalculator {
 	 */
 	void allocateGPUMemory(short resource_id) {
 		// Allocate GPU memory for block pressure results
-		block_pressure_d_ = std::make_unique<DeviceBuffer<arbd_real>>(num_blocks_, resource_id);
+		block_pressure_d_ = std::make_unique<DeviceBuffer<mars_real>>(num_blocks_, resource_id);
 	};
 	/**
 	 * @brief Launch pressure calculation kernel
@@ -169,11 +169,11 @@ class PressureCalculator {
 			// Copy results from GPU to host
 			block_pressure_d_->copy_to_host(block_pressure_.data(), num_blocks_);
 		} catch (const std::exception& e) {
-			ARBD_Exception(ExceptionType::RuntimeError,
+			MARS_Exception(ExceptionType::RuntimeError,
 						   "Failed to copy pressure results from GPU: {}",
 						   e.what());
 		}
 	};
 
-}; // namespace ARBD
-} // namespace ARBD
+}; // namespace MARS
+} // namespace MARS

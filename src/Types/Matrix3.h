@@ -11,15 +11,14 @@
 #include "METAL/Matrix3.h"
 #else
 #ifdef HOST_GUARD
-#include "ARBDException.h"
-#include "ARBDLogger.h"
-#include "Backend/Resource.h"
+#include "MARSException.h"
+#include "MARSLogger.h"
 #include <type_traits>
 #endif
 
 #include "Vector3.h"
 
-namespace ARBD {
+namespace MARS {
 /**
  * @brief A 3x3 matrix class optimized for Metal GPU kernels and cross-backend use.
  *
@@ -221,12 +220,12 @@ HOST DEVICE Matrix3_t<T> normalize_orientation(Matrix3_t<T> orientation) {
 	return Matrix3(x, y, z);
 }
 
-} // namespace ARBD
+} // namespace MARS
 
 // SYCL specialization
 #ifdef USE_SYCL
 #include <sycl/sycl.hpp>
 template<typename T>
-struct sycl::is_device_copyable<ARBD::Matrix3_t<T> > : std::true_type {};
+struct sycl::is_device_copyable<MARS::Matrix3_t<T> > : std::true_type {};
 #endif
 #endif

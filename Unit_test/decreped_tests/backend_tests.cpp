@@ -21,7 +21,7 @@
 #include "Backend/METAL/METALManager.h"
 #endif
 
-using namespace ARBD;
+using namespace MARS;
 
 // ============================================================================
 // Backend Test Fixture - Properly initializes the compile-time selected backend

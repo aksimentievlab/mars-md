@@ -14,7 +14,7 @@
 #include "Objects/DeviceParticleManager.h"
 #include "Objects/ParticleProperties.h"
 #include "System/PeriodicBox.h"
-using namespace ARBD;
+using namespace MARS;
 using Catch::Approx;
 
 // ============================================================================
@@ -42,12 +42,12 @@ TEST_CASE("Harmonic Bond Force - Two Particles", "[force][bonded][bond]") {
 	// Force magnitude on particle 0: +50.0 in x-direction
 	// Force magnitude on particle 1: -50.0 in x-direction
 
-	DeviceBuffer<ARBD::int2> bond_indices(1, res);
-	std::vector<ARBD::int2> bond = {{0, 1}};
+	DeviceBuffer<MARS::int2> bond_indices(1, res);
+	std::vector<MARS::int2> bond = {{0, 1}};
 	bond_indices.copy_from_host(bond.data(), 1);
 
-	DeviceBuffer<arbd_real> params(2, res);
-	arbd_real params_array[2] = {100.0f, 1.0f}; // k=100, r0=1.0
+	DeviceBuffer<mars_real> params(2, res);
+	mars_real params_array[2] = {100.0f, 1.0f}; // k=100, r0=1.0
 	params.copy_from_host(params_array, 2);
 
 	PeriodicBox pbox_host(Vector3(100.0f, 100.0f, 100.0f));
@@ -87,12 +87,12 @@ TEST_CASE("Harmonic Bond Force - Equilibrium Distance", "[force][bonded][bond]")
 
 	// Bond parameters: k=100, r0=1.0
 	// Expected force = 0 (at equilibrium)
-	DeviceBuffer<ARBD::int2> bond_indices(1, res);
-	ARBD::int2 bond{0, 1};
+	DeviceBuffer<MARS::int2> bond_indices(1, res);
+	MARS::int2 bond{0, 1};
 	bond_indices.copy_from_host(&bond, 1);
 
-	DeviceBuffer<arbd_real> params(2, res);
-	arbd_real params_array[2] = {100.0f, 1.0f};
+	DeviceBuffer<mars_real> params(2, res);
+	mars_real params_array[2] = {100.0f, 1.0f};
 	params.copy_from_host(params_array, 2);
 
 	PeriodicBox pbox_host(Vector3(100.0f, 100.0f, 100.0f));
@@ -134,12 +134,12 @@ TEST_CASE("Morse Bond Force - Two Particles", "[force][bonded][bond][morse]") {
 
 	// Morse bond parameters: D0=10, a=2.0, r0=1.0
 	// Force = 2*D0*a*exp(-a(r-r0))*[1-exp(-a(r-r0))]
-	DeviceBuffer<ARBD::int2> bond_indices(1, res);
-	ARBD::int2 bond{0, 1};
+	DeviceBuffer<MARS::int2> bond_indices(1, res);
+	MARS::int2 bond{0, 1};
 	bond_indices.copy_from_host(&bond, 1);
 
-	DeviceBuffer<arbd_real> params(3, res);
-	arbd_real params_array[3] = {10.0f, 2.0f, 1.0f}; // D0, a, r0
+	DeviceBuffer<mars_real> params(3, res);
+	mars_real params_array[3] = {10.0f, 2.0f, 1.0f}; // D0, a, r0
 	params.copy_from_host(params_array, 3);
 
 	PeriodicBox pbox_host(Vector3(100.0f, 100.0f, 100.0f));
@@ -214,12 +214,12 @@ TEST_CASE("Bond Force - Periodic Boundary Conditions", "[force][bonded][bond][pb
 
 	// Bond: k=100, r0=1.0
 	// With PBC, distance = 1.0, so force should be 0
-	DeviceBuffer<ARBD::int2> bond_indices(1, res);
-	ARBD::int2 bond{0, 1};
+	DeviceBuffer<MARS::int2> bond_indices(1, res);
+	MARS::int2 bond{0, 1};
 	bond_indices.copy_from_host(&bond, 1);
 
-	DeviceBuffer<arbd_real> params(2, res);
-	arbd_real p[2] = {100.0f, 1.0f};
+	DeviceBuffer<mars_real> params(2, res);
+	mars_real p[2] = {100.0f, 1.0f};
 	params.copy_from_host(p, 2);
 
 	PeriodicBox pbox_host(Vector3(10.0f, 10.0f, 10.0f));

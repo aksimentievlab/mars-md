@@ -10,7 +10,7 @@
 #include <numeric>
 #include <vector>
 
-using namespace ARBD;
+using namespace MARS;
 using Catch::Approx;
 
 // Fix Vector3 type usage - Vector3 is defined as Vector3_t<float> in Types.h

@@ -4,7 +4,7 @@
 #include "Backend/Buffer.h"
 #include "Types/Types.h"
 
-namespace ARBD {
+namespace MARS {
 
 /**
  * @brief Geometric patch decomposition for systems with specific shapes
@@ -56,4 +56,4 @@ class GeometricPatchDecomposer : public PatchDecomposer {
 									 const Vector3& system_min,
 									 const Vector3& system_max) const;
 };
-} // namespace ARBD
+} // namespace MARS

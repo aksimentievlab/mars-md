@@ -15,7 +15,7 @@
 #include "Objects/RigidBodyProperties.h"
 #include <filesystem>
 
-using namespace ARBD;
+using namespace MARS;
 
 namespace {
 
@@ -189,8 +189,8 @@ TEST_CASE("RigidBodyManager: prepare_grid_grid_dispatch + compute_grid_grid_forc
 	std::vector<Resource> resources{res};
 
 	const auto tmp_dir = std::filesystem::temp_directory_path();
-	const std::string rho_path = (tmp_dir / "arbd_test_rbmanager_rho.dx").string();
-	const std::string u_path = (tmp_dir / "arbd_test_rbmanager_u.dx").string();
+	const std::string rho_path = (tmp_dir / "mars_test_rbmanager_rho.dx").string();
+	const std::string u_path = (tmp_dir / "mars_test_rbmanager_u.dx").string();
 	DXReader::write_grid(make_rho_grid(), rho_path);
 	DXReader::write_grid(make_u_grid(), u_path);
 
@@ -285,7 +285,7 @@ TEST_CASE("RigidBodyManager: prepare_particle_grid_dispatch + compute_particle_r
 	// Same bowl construction as RigidBodyGridBatch.cpp/make_u_grid above,
 	// round-tripped through a temp .dx file (GridManager only loads from file).
 	const auto tmp_dir = std::filesystem::temp_directory_path();
-	const std::string u_path = (tmp_dir / "arbd_test_rbmanager_particle_u.dx").string();
+	const std::string u_path = (tmp_dir / "mars_test_rbmanager_particle_u.dx").string();
 	DXReader::write_grid(make_u_grid(), u_path);
 
 	GridManager grid_manager;

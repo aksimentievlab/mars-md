@@ -1,14 +1,14 @@
 // src/System/PatchManager.cpp
 
 #include "System/PatchManager.h"
-#include "ARBDLogger.h"
+#include "MARSLogger.h"
 #include "Objects/DeviceParticleManager.h"
 #include "System/SimSystem.h"
 #include "System/SystemState.h"
 #include <algorithm>
 #include <cmath>
 
-namespace ARBD {
+namespace MARS {
 
 //================================================================================
 // Constructor
@@ -738,8 +738,8 @@ void PatchManager::initialize_communication_buffers() {
 			if (!comm.active)
 				continue;
 			const Resource& res = patch_metadata_[pid].resource;
-			comm.send_buffer = DeviceBuffer<arbd_real>(max_halo * 8, res);
-			comm.recv_buffer = DeviceBuffer<arbd_real>(max_halo * 8, res);
+			comm.send_buffer = DeviceBuffer<mars_real>(max_halo * 8, res);
+			comm.recv_buffer = DeviceBuffer<mars_real>(max_halo * 8, res);
 			comm.max_halo_particles = max_halo;
 		}
 	}
@@ -811,4 +811,4 @@ bool PatchManager::are_spatial_neighbors(patch_t patch_id1, patch_t patch_id2) c
 	return (di + dj + dk == 1);
 }
 
-} // namespace ARBD
+} // namespace MARS

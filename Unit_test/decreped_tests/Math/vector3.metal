@@ -8,7 +8,7 @@ using namespace metal;
 
 #include "Types/Vector3.h"
 
-using namespace ARBD;
+using namespace MARS;
 
 // Simple debug kernel to test basic execution
 kernel void debug_kernel(

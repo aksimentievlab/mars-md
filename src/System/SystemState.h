@@ -9,8 +9,8 @@
  * @copyright Copyright (c) 2025
  */
 
-#include "ARBDException.h"
-#include "ARBDLogger.h"
+#include "MARSException.h"
+#include "MARSLogger.h"
 #include "Backend/Buffer.h"
 #include "Objects/RigidBodyProperties.h"
 #include "System/SimSystem.h"
@@ -21,7 +21,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace ARBD {
+namespace MARS {
 
 /**
  * @brief Manages runtime, mutable system state during simulation
@@ -330,4 +330,4 @@ class SystemState {
 	void cleanup_gpu_resources();
 };
 
-} // namespace ARBD
+} // namespace MARS

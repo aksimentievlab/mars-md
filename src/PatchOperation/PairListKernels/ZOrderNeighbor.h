@@ -14,7 +14,7 @@
 #include "Types/Types.h"
 #include "Types/Vector3.h"
 
-namespace ARBD {
+namespace MARS {
 
 /**
  * @brief Build per-cell [begin,end) ranges over the Morton-sorted particle array.
@@ -212,14 +212,14 @@ extern template Event launch_cuda_kernel(const Resource& resource,
 										 ZOrderCellNeighborKernel kernel_func);
 #endif
 
-} // namespace ARBD
+} // namespace MARS
 
 #ifdef USE_SYCL
 #include <sycl/sycl.hpp>
 template<>
-struct sycl::is_device_copyable<ARBD::ZOrderCellNeighborKernel> : std::true_type {};
+struct sycl::is_device_copyable<MARS::ZOrderCellNeighborKernel> : std::true_type {};
 template<>
-struct sycl::is_device_copyable<ARBD::BuildCellRangesKernel> : std::true_type {};
+struct sycl::is_device_copyable<MARS::BuildCellRangesKernel> : std::true_type {};
 template<>
-struct sycl::is_device_copyable<ARBD::BuildCellNeighborsKernel> : std::true_type {};
+struct sycl::is_device_copyable<MARS::BuildCellNeighborsKernel> : std::true_type {};
 #endif

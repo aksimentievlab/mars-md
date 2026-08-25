@@ -9,13 +9,13 @@
 #include "Header.h"
 
 #ifdef HOST_GUARD
-#include "ARBDException.h"
-#include "ARBDLogger.h"
+#include "MARSException.h"
+#include "MARSLogger.h"
 #include <initializer_list>
 #include <string>
 #endif
 
-namespace ARBD {
+namespace MARS {
 
 /**
  * @brief Device-safe IndexList with fixed maximum capacity
@@ -431,10 +431,10 @@ HOST DEVICE constexpr IndexList<T, 3> index_to_ijk(T linear_index, const T dims[
 	return index_to_ijk(linear_index, dims[0], dims[1], dims[2]);
 }
 
-} // namespace ARBD
+} // namespace MARS
 // SYCL specialization
 #ifdef USE_SYCL
 #include <sycl/sycl.hpp>
 template<typename T>
-struct sycl::is_device_copyable<ARBD::IndexList<T> > : std::true_type {};
+struct sycl::is_device_copyable<MARS::IndexList<T> > : std::true_type {};
 #endif

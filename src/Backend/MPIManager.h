@@ -2,8 +2,8 @@
 // src/Backend/MPI/MPIManager.h
 #pragma once
 #ifndef __METAL_VERSION__
-#include "ARBDException.h"
-#include "ARBDLogger.h"
+#include "MARSException.h"
+#include "MARSLogger.h"
 #include "Backend/Buffer.h"
 #include "Backend/Events.h"
 #include "Backend/Resource.h"
@@ -17,7 +17,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace ARBD::MPI {
+namespace MARS::MPI {
 
 /**
  * @brief MPI GPU-aware capability states
@@ -58,7 +58,7 @@ concept MPISupported =
  * - Single node multi-GPU setups (for initial testing)
  * - Spatial decomposition with one patch per GPU
  * - Assumes GPU-aware MPI when using GPU resources
- * - Compatible with ARBD Resource system
+ * - Compatible with MARS Resource system
  */
 class Manager {
 private:
@@ -475,11 +475,11 @@ private:
       char error_string[MPI_MAX_ERROR_STRING];
       int length;
       MPI_Error_string(result, error_string, &length);
-      ARBD_Exception(ExceptionType::RuntimeError, "MPI error: {}",
+      MARS_Exception(ExceptionType::RuntimeError, "MPI error: {}",
                      std::string(error_string, length));
     }
   }
 };
 
-} // namespace ARBD::MPI
+} // namespace MARS::MPI
 #endif

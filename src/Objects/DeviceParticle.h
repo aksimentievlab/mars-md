@@ -3,7 +3,7 @@
 #include "Types/GridTerm.h"
 #include "Types/Types.h"
 #include "Types/Vector3.h"
-namespace ARBD {
+namespace MARS {
 
 /**
  * @brief Bit flags stored in ParticleView::flags.
@@ -61,14 +61,14 @@ struct alignas(16) ParticleTypeView {
 	// Per-type x/y/z scale for force_grid_id's grids
 	CONSTANT_PTR(Vector3) __restrict__ force_grid_scale;
 };
-} // namespace ARBD
+} // namespace MARS
 
 #ifdef USE_SYCL
 #include <sycl/sycl.hpp>
 template<>
-struct sycl::is_device_copyable<ARBD::ParticleTypeView> : std::true_type {};
+struct sycl::is_device_copyable<MARS::ParticleTypeView> : std::true_type {};
 template<>
-struct sycl::is_device_copyable<ARBD::ParticleView> : std::true_type {};
+struct sycl::is_device_copyable<MARS::ParticleView> : std::true_type {};
 template<>
-struct sycl::is_device_copyable<ARBD::ConstParticleView> : std::true_type {};
+struct sycl::is_device_copyable<MARS::ConstParticleView> : std::true_type {};
 #endif

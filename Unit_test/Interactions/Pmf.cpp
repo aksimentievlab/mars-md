@@ -3,7 +3,7 @@
  * @brief Tests for the flattened per-type PMF grid table consumed by
  * compute_position_dependent_force (Interactions/Nonbonded/Pmf.h).
  *
- * A particle type may reference any number of PMF grids - legacy ARBD's
+ * A particle type may reference any number of PMF grids - legacy MARS's
  * `gridFile` takes a whitespace-separated list, each entry with its own scale -
  * so ParticleTypeView carries an offset+count range per type into one flat
  * GridTerm table. These tests pin down that wiring: that a type sums every one
@@ -23,7 +23,7 @@
 #include "Types/BaseGrid.h"
 
 using Catch::Approx;
-using namespace ARBD;
+using namespace MARS;
 
 namespace {
 
@@ -77,7 +77,7 @@ struct HostTypes {
 	std::vector<int> pmf_count;
 	std::vector<GridTerm> pmf_terms;
 	std::vector<int> diffusion_grid_id;
-	std::vector<ARBD::int3> force_grid_id;
+	std::vector<MARS::int3> force_grid_id;
 	std::vector<Vector3> force_grid_scale;
 
 	/// Append a type with the given charge and PMF terms; returns its type_id.
@@ -88,7 +88,7 @@ struct HostTypes {
 		pmf_count.push_back(static_cast<int>(terms.size()));
 		pmf_terms.insert(pmf_terms.end(), terms.begin(), terms.end());
 		diffusion_grid_id.push_back(-1);
-		force_grid_id.push_back(ARBD::int3(-1, -1, -1));
+		force_grid_id.push_back(MARS::int3(-1, -1, -1));
 		force_grid_scale.push_back(Vector3(1.0f));
 		return static_cast<int>(charge.size()) - 1;
 	}

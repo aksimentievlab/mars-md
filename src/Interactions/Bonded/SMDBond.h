@@ -1,13 +1,13 @@
 #pragma once
 
-#include "ARBDException.h"
-#include "ARBDLogger.h"
+#include "MARSException.h"
+#include "MARSLogger.h"
 #include "Backend/Buffer.h"
 #include "Interactions/BondedInteraction.h"
 #include "Types/Types.h"
 #include <vector>
 
-namespace ARBD {
+namespace MARS {
 
 /**
  * @brief Steered Molecular Dynamics (SMD) bond interaction
@@ -492,4 +492,4 @@ class SMDManager {
 	}
 };
 
-} // namespace ARBD
+} // namespace MARS

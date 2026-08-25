@@ -13,7 +13,7 @@
 #include "Objects/Tables.h"
 #include "Types/Types.h"
 
-namespace ARBD {
+namespace MARS {
 
 /**
  * @brief Device-side pairwise nonbonded interaction data (SoA format)
@@ -148,10 +148,10 @@ class DevicePairNonBondedInteractions {
 
 			// Create metadata struct pointing to TablesRegistry's device buffer
 			TabulatedPotential pot;
-			pot.pot = const_cast<arbd_real*>(device_buffer.data()); // Device pointer to Y values
-			pot.step_inv = 1.0f / static_cast<arbd_real>(table.step_size);
+			pot.pot = const_cast<mars_real*>(device_buffer.data()); // Device pointer to Y values
+			pot.step_inv = 1.0f / static_cast<mars_real>(table.step_size);
 			pot.size = static_cast<unsigned int>(table.Y.size());
-			pot.start = static_cast<arbd_real>(table.start);
+			pot.start = static_cast<mars_real>(table.start);
 			pot.is_periodic = false; // Pairwise potentials are not periodic
 
 			nb_pots.push_back(pot);
@@ -253,11 +253,11 @@ class DevicePairNonBondedInteractions {
 	DeviceBuffer<TabulatedPotential> nonbonded_potentials_;
 };
 
-} // namespace ARBD
+} // namespace MARS
 
 // SYCL device copyable traits
 #ifdef USE_SYCL
 #include <sycl/sycl.hpp>
 template<>
-struct sycl::is_device_copyable<ARBD::DevicePairNonBondedInteractions> : std::true_type {};
+struct sycl::is_device_copyable<MARS::DevicePairNonBondedInteractions> : std::true_type {};
 #endif

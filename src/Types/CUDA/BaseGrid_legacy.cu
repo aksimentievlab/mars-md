@@ -5,14 +5,14 @@
 
 #include "../BaseGrid.h"
 #include <cuda.h>	
-#include "ARBDLogger.h"
-#include "ARBDException.h"
+#include "MARSLogger.h"
+#include "MARSException.h"
 #include "Backend/Resource.h"
 #include "Math/Types.h"
 
 #define STRLEN 512
 
-namespace ARBD {
+namespace MARS {
 // Initialize the variables that get used a lot.
 // Also, allocate the main value array.
 void BaseGrid::init() {

@@ -4,7 +4,7 @@
 #include "Backend/Buffer.h"
 #include "Types/Types.h"
 
-namespace ARBD {
+namespace MARS {
 
 /**
  * @brief Recursive bisection patch decomposition for load balancing
@@ -51,4 +51,4 @@ class RecursiveBisectionPatchDecomposer : public PatchDecomposer {
 	int find_optimal_split_dimension(const BisectionNode& node,
 									 const HostParticleData& particles) const;
 };
-} // namespace ARBD
+} // namespace MARS

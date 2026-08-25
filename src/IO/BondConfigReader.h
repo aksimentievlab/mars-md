@@ -10,7 +10,7 @@
 #include <string_view>
 #include <vector>
 
-namespace ARBD {
+namespace MARS {
 /**
  * @brief Reader for bond configuration files
  * @param fileName Name of the configuration file to read.
@@ -189,4 +189,4 @@ class BondConfigReader {
 		}
 	}
 };
-} // namespace ARBD
+} // namespace MARS

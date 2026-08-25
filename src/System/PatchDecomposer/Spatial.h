@@ -4,7 +4,7 @@
 #include "System/PatchDecomposer.h"
 #include "Types/Types.h"
 
-namespace ARBD {
+namespace MARS {
 
 /**
  * @brief Spatial patch decomposition for uniform systems
@@ -52,4 +52,4 @@ class SpatialPatchDecomposer : public PatchDecomposer {
 									  const Vector3& system_size,
 									  const Length& cutoff) const;
 };
-} // namespace ARBD
+} // namespace MARS

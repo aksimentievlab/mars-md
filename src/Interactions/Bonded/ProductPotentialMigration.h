@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-namespace ARBD {
+namespace MARS {
 
 /**
  * @brief to be deprecated, reference only.
@@ -195,4 +195,4 @@ inline void print_product_potential(const ProductPotential& pp) {
 	printf("  Form: %d, FunctionIndex: %d\n", static_cast<int>(pp.form), pp.functionIndex);
 }
 
-} // namespace ARBD
+} // namespace MARS

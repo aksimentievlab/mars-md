@@ -7,7 +7,7 @@
 #include <random>
 #include <unordered_map>
 
-namespace ARBD {
+namespace MARS {
 
 namespace {
 void append_restart_line(std::string& buf, int type_id, const Vector3& v) {
@@ -767,8 +767,8 @@ void SimManager::write_rb_traj_frame(size_t step) {
 						 " rotXX rotXY rotXZ"
 						 " rotYX rotYY rotYZ"
 						 " rotZX rotZY rotZZ"
-						 " velX  velY  velZ"
-						 " angVelX angVelY angVelZ\n";
+						 " momX  momY  momZ"
+						 " angMomX angMomY angMomZ\n";
 		LOGINFO("SimManager: writing rigid-body trajectory to '{}'", path);
 	}
 
@@ -988,7 +988,7 @@ void SimManager::write_energy_output(size_t step) {
 	// Kinetic energy: momenta are generated/integrated in units scaled by
 	// SQRT_CAL_TO_JOULE (see generate_initial_momentum), so 0.5*p^2/m must be
 	// divided by SQRT_CAL_TO_JOULE^2 to recover kcal/mol before expressing it
-	// as a multiple of kT - matching legacy ARBD's energy.dat convention.
+	// as a multiple of kT - matching legacy MARS's energy.dat convention.
 	const auto& particle_types = sys_.get_particle_types();
 	const Temperature& temperature = sys_.get_temperature_struct();
 	const float kT = temperature.kT;
@@ -1015,7 +1015,7 @@ void SimManager::write_energy_output(size_t step) {
 	if (has_rigid_bodies_) {
 		// TODO: rigid-body kinetic/potential energy is not yet computed by
 		// SimManager; write zeros so downstream tooling still gets the file,
-		// matching legacy ARBD's rb_energy.dat format.
+		// matching legacy MARS's rb_energy.dat format.
 		if (!rb_energy_file_.is_open()) {
 			rb_energy_file_.open(sys_.get_output_name() + ".rb_energy.dat");
 		}
@@ -1073,7 +1073,7 @@ void SimManager::write_restart_files() {
 			}
 
 			// Momentum restart only applies to Langevin dynamics
-			// The "0" in the filename mirrors legacy ARBD's on-disk naming.
+			// The "0" in the filename mirrors legacy MARS's on-disk naming.
 			if (write_momentum) {
 				const std::string momentum_restart_filename = output_name + ".0.momentum.restart";
 				FILE* mout = std::fopen(momentum_restart_filename.c_str(), "w");
@@ -1099,38 +1099,4 @@ void SimManager::write_final_restart() {
 	wait_for_pending_restart_write();
 	LOGINFO("SimManager: Wrote final restart files for '{}'", sys_.get_output_name());
 }
-
-//================================================================================
-// Particle Reactions
-//================================================================================
-/*
-void SimManager::perform_reactions() {
-	Patch& patch = sys_.get_patch_manager()->get_local_patch();
-
-	// 1. Run Reaction Kernel
-	//    Sets FLAG_DEAD on some particles.
-	//    Creates new particles in a temporary "Birth Buffer".
-
-	// 2. Remove Dead Particles
-	//    Compacts DeviceParticle array.
-	//    Generates 'permutation_map'.
-	auto perm_map = patch.compact_particles();
-
-	// 3. Update Interactions (Fix Indices)
-	if (patch.has_topology_changes()) {
-		for (auto& interaction : interactions_) {
-			interaction->update_topology(perm_map);
-		}
-	}
-
-	// 4. Add New Particles
-	//    Appends from "Birth Buffer" to end of DeviceParticle.
-	//    (No index shifting for existing particles, so safe).
-	patch.append_from_buffer(birth_buffer);
-
-	// 5. Rebuild Neighbor Lists
-	//    Mandatory after moving particles.
-	neighbor_list_.force_rebuild();
-}
-*/
-} // namespace ARBD
+} // namespace MARS

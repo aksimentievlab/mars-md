@@ -4,7 +4,7 @@
 #include "System/SystemState.h"
 #include <vector>
 short single_resource_id = Global::single_resource_id;
-using namespace ARBD;
+using namespace MARS;
 using namespace Tests;
 
 std::vector<Resource> device_resources = {Resource(0), Resource(1)};

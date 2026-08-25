@@ -6,8 +6,8 @@
   transparently to numpy arrays ((3,) and (3,3)) on the way out, and accept
   any equivalently-shaped list/tuple/numpy array on the way in. This
   replaced the earlier `py::class_` bindings, which forced every call site
-  to wrap plain coordinates in `arbd.Vector3(x, y, z)` /
-  `arbd.Matrix3(...)` first - arithmetic, dot/cross, transpose, inverse are
+  to wrap plain coordinates in `mars.Vector3(x, y, z)` /
+  `mars.Matrix3(...)` first - arithmetic, dot/cross, transpose, inverse are
   just numpy's now, not a bespoke reimplementation.
 - type_caster specializations are resolved per translation unit, so the
   header must be included (before any `.def(...)`/`nb::init<...>()` call
@@ -47,7 +47,7 @@
   CMake build since add_subdirectory only cares about files on disk, but
   worth fixing with `git submodule update --init` if that ever bites.
 
-## pyarbd.cpp / pysystem.cpp / pyobjects.cpp / pybonded.cpp / pyloadfile.cpp
+## pymars.cpp / pysystem.cpp / pyobjects.cpp / pybonded.cpp / pyloadfile.cpp
 ## / pysim.cpp (pybind11 -> nanobind, 2026-08-21)
 
 - Mechanical renames: `py::`->`nb::`, `py::module_`->`nb::module_`,
@@ -97,12 +97,12 @@
   ConfigParser.cpp) never receives `USE_PYTHON` as a
   `target_compile_definitions` anywhere - only the two Python *module*
   targets (`py${PROJECT_NAME}` in src/Python/CMakeLists.txt via
-  `nanobind_add_module`, and `arbd_interactive` in
+  `nanobind_add_module`, and `mars_interactive` in
   Tests/interactive/CMakeLists.txt) get it, and neither compiles
   ConfigParser.cpp itself (they link the pre-built lib). Per
   pythontodo.md's explicit decision ("Leave USE_PYTHON dead code in place,
   never define it... Reviving it would create a third config path" -
-  arbdpy.bd.apply.BdApplier is meant to supersede it), that dead-code
+  marspy.bd.apply.BdApplier is meant to supersede it), that dead-code
   status is preserved; only the naming confusion is resolved.
 - Note: `nb::cast_error` is `using cast_error = std::bad_cast;` (a bare
   alias, not a nanobind-specific exception class) - `e.what()` in
@@ -115,7 +115,7 @@
   (`nanobind_add_module`/formerly `pybind11_add_module`), not an embedded
   interpreter, so this was the same mechanical `py::`->`nb::`,
   `def_readwrite`->`def_rw`, `PYBIND11_MODULE`->`NB_MODULE` swap as the six
-  pyarbd files - no `nb::init<>()` lambda-factory rewrites needed here
+  pymars files - no `nb::init<>()` lambda-factory rewrites needed here
   since this file only binds plain member fields. Its `Vector3_t<float>`
   binding is its own standalone `nb::class_` (x/y/z fields), separate from
   and NOT using PyTypeCasters.h's numpy-array caster - correct to leave

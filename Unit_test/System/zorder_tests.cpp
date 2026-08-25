@@ -6,7 +6,7 @@
 
 short single_resource_id = Global::single_resource_id;
 
-using namespace ARBD;
+using namespace MARS;
 using namespace Tests;
 Resource single_resource(single_resource_id);
 void generate_random_data_drs(const Resource& device,

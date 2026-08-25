@@ -19,7 +19,7 @@
 // Include adaptive kernels for Pairlist mode optimizations
 #include "AdaptiveKernels.h"
 
-namespace ARBD {
+namespace MARS {
 
 /**
  * @brief Kernel to encode particle positions into Morton codes
@@ -216,7 +216,7 @@ extern template Event launch_cuda_kernel(const Resource& resource,
 										 ValidateZOrderKernel kernel_func);
 extern template Event launch_cuda_kernel(const Resource& resource,
 										 const KernelConfig& config,
-										 ReorderDataKernel<Vector3_t<arbd_real>> kernel_func);
+										 ReorderDataKernel<Vector3_t<mars_real>> kernel_func);
 extern template Event launch_cuda_kernel(const Resource& resource,
 										 const KernelConfig& config,
 										 DisplacementKernel kernel_func);
@@ -234,31 +234,31 @@ extern template Event launch_cuda_kernel(const Resource& resource,
 										 ReorderDataKernel<uint32_t> kernel_func);
 #endif
 
-} // namespace ARBD
+} // namespace MARS
 
 // SYCL device copyability declarations
 #ifdef USE_SYCL
 template<>
-struct sycl::is_device_copyable<ARBD::MortonEncodeKernel> : std::true_type {};
+struct sycl::is_device_copyable<MARS::MortonEncodeKernel> : std::true_type {};
 
 template<typename T>
-struct sycl::is_device_copyable<ARBD::ReorderDataKernel<T>> : std::true_type {};
+struct sycl::is_device_copyable<MARS::ReorderDataKernel<T>> : std::true_type {};
 
 template<>
-struct sycl::is_device_copyable<ARBD::InverseIndexKernel> : std::true_type {};
+struct sycl::is_device_copyable<MARS::InverseIndexKernel> : std::true_type {};
 
 template<>
-struct sycl::is_device_copyable<ARBD::ValidateZOrderKernel> : std::true_type {};
+struct sycl::is_device_copyable<MARS::ValidateZOrderKernel> : std::true_type {};
 
 template<>
-struct sycl::is_device_copyable<ARBD::BoundingBoxKernel> : std::true_type {};
+struct sycl::is_device_copyable<MARS::BoundingBoxKernel> : std::true_type {};
 
 template<>
-struct sycl::is_device_copyable<ARBD::DisplacementKernel> : std::true_type {};
+struct sycl::is_device_copyable<MARS::DisplacementKernel> : std::true_type {};
 
 template<>
-struct sycl::is_device_copyable<ARBD::MortonValidationKernel> : std::true_type {};
+struct sycl::is_device_copyable<MARS::MortonValidationKernel> : std::true_type {};
 
 template<>
-struct sycl::is_device_copyable<ARBD::RemapIndicesKernel> : std::true_type {};
+struct sycl::is_device_copyable<MARS::RemapIndicesKernel> : std::true_type {};
 #endif
