@@ -1,4 +1,4 @@
-# Mesoscale to Atomistic Resolution Software for Molecular Dynamics (MARS-MD / arbd2 alpha, a successor of arbd)
+# Mesoscale to Atomistic Resolution Software for Molecular Dynamics (MARS-MD/arbd2, a successor of arbd)
 
 This development branch of MARS focuses on scaling simulations to larger systems and accelerating performance to hardware limits, while keeping the codebase maintainable and its features diverse. In particular we are targeting speed and good scaling on multi-GPU clusters. Our primary objectives are:
 
