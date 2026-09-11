@@ -236,22 +236,22 @@ void ZOrderPairlist::find_neighbors_zorder(size_t num_particles) {
 	num_pairs_ = num_pairs;
 	LOGDEBUG("pair_count AFTER kernel: {}", num_pairs);
 	// TEMPORARY diagnostic. Remove.
-	LOGINFO("PLDIAG n={} cut={:.1f} m={} cells={} extent=({:.1f},{:.1f},{:.1f}) "
-			"per=({},{},{}) boxsz=({:.1f},{:.1f},{:.1f}) pairs={}",
-			num_particles,
-			std::sqrt(cutoff_squared_),
-			m,
-			num_cells,
-			last_box_extent_.x,
-			last_box_extent_.y,
-			last_box_extent_.z,
-			box_.is_periodic(0),
-			box_.is_periodic(1),
-			box_.is_periodic(2),
-			box_.get_box_size().x,
-			box_.get_box_size().y,
-			box_.get_box_size().z,
-			num_pairs);
+	LOGDEBUG("PLDIAG n={} cut={:.1f} m={} cells={} extent=({:.1f},{:.1f},{:.1f}) "
+			 "per=({},{},{}) boxsz=({:.1f},{:.1f},{:.1f}) pairs={}",
+			 num_particles,
+			 std::sqrt(cutoff_squared_),
+			 m,
+			 num_cells,
+			 last_box_extent_.x,
+			 last_box_extent_.y,
+			 last_box_extent_.z,
+			 box_.is_periodic(0),
+			 box_.is_periodic(1),
+			 box_.is_periodic(2),
+			 box_.get_box_size().x,
+			 box_.get_box_size().y,
+			 box_.get_box_size().z,
+			 num_pairs);
 }
 
 void ZOrderPairlist::compute_particle_extent(const DeviceBuffer<Vector3>& positions,
@@ -298,6 +298,5 @@ void ZOrderPairlist::compute_particle_extent(const DeviceBuffer<Vector3>& positi
 		box_max.z = center + MIN_EXTENT * 0.5;
 	}
 }
-
 
 } // namespace MARS
