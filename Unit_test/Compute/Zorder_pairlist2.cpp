@@ -53,6 +53,14 @@ HostParticleData create_particle_grid(int nx, int ny, int nz, float spacing) {
 	return data;
 }
 
+/// The box is the Morton domain and is mandatory. Test grids start at the origin
+/// and stay well inside this one; open on every axis so nothing wraps.
+static void set_test_box(Pairlist& pairlist) {
+	PeriodicBox box(Vector3(64.0f, 64.0f, 64.0f), false, false, false);
+	box.set_origin(Vector3(-4.0f, -4.0f, -4.0f));
+	pairlist.set_periodic_box(box);
+}
+
 /**
  * @brief Print pairlist to console with optional Morton code debug
  */
@@ -185,6 +193,7 @@ TEST_CASE("ZOrder Pairlist - DEBUG Bounding Box", "[pairlist][debug]") {
 
 	// Create ZOrder pairlist
 	auto pairlist_ptr = create_pairlist(PairlistBuilderType::ZOrder, res, 100, 1000);
+	set_test_box(*pairlist_ptr);
 	auto* zorder_pairlist = static_cast<ZOrderPairlist*>(pairlist_ptr.get());
 
 	// Build pairlist
@@ -301,6 +310,7 @@ TEST_CASE("ZOrder Pairlist - Build 2x2x2 Grid", "[pairlist][zorder][print]") {
 
 	// Create ZOrder pairlist
 	auto pairlist = create_pairlist(PairlistBuilderType::ZOrder, res, 100, 1000);
+	set_test_box(*pairlist);
 
 	// Build with cutoff = 2.5 (should find nearest neighbors at distance 2.0)
 	auto start = std::chrono::high_resolution_clock::now();
@@ -332,6 +342,7 @@ TEST_CASE("ZOrder Pairlist - Build 3x3x3 Grid", "[pairlist][zorder][print]") {
 	particles.copy_from_host(host_data, 27);
 
 	auto pairlist = create_pairlist(PairlistBuilderType::ZOrder, res, 100, 1000);
+	set_test_box(*pairlist);
 
 	auto start = std::chrono::high_resolution_clock::now();
 	pairlist->build_pairlist(particles.pos(), 27, 2.5f);
@@ -369,6 +380,7 @@ TEST_CASE("ZOrder Pairlist - Different Cutoffs", "[pairlist][zorder][cutoff]") {
 	particles.copy_from_host(host_data, 3);
 
 	auto pairlist = create_pairlist(PairlistBuilderType::ZOrder, res, 10, 10);
+	set_test_box(*pairlist);
 	// RIGHT AFTER: pairlist->build_pairlist(particles.pos(), 8, 2.5f);
 	int num_particles = 3;
 
@@ -418,6 +430,7 @@ TEST_CASE("ZOrder Pairlist - Performance Scaling", "[pairlist][zorder][performan
 		particles.copy_from_host(host_data, num_particles);
 
 		auto pairlist = create_pairlist(PairlistBuilderType::ZOrder, res, 1000, 10000);
+		set_test_box(*pairlist);
 
 		// Warmup
 		pairlist->build_pairlist(particles.pos(), num_particles, tc.cutoff);
@@ -450,6 +463,7 @@ TEST_CASE("ZOrder Pairlist - Verify Pair Distances", "[pairlist][zorder][verify]
 	particles.copy_from_host(host_data, 27);
 
 	auto pairlist = create_pairlist(PairlistBuilderType::ZOrder, res, 100, 1000);
+	set_test_box(*pairlist);
 	float cutoff = 2.5f;
 	pairlist->build_pairlist(particles.pos(), 27, cutoff);
 
@@ -483,6 +497,7 @@ TEST_CASE("ZOrder Pairlist - Compare Build vs Update", "[pairlist][zorder][updat
 	particles.copy_from_host(host_data, 27);
 
 	auto pairlist = create_pairlist(PairlistBuilderType::ZOrder, res, 100, 1000);
+	set_test_box(*pairlist);
 
 	// Initial build
 	auto start_build = std::chrono::high_resolution_clock::now();

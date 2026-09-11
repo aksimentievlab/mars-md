@@ -36,6 +36,8 @@
 #include <cuda_runtime.h>
 #endif
 
+#define ENABLE_ZORDER_REORDER 1
+
 #if !defined(__CUDA_ARCH__) && !defined(__SYCL_DEVICE_ONLY__) && !defined(__METAL_VERSION__)
 #define HOST_GUARD
 #include <cmath>

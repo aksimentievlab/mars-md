@@ -61,8 +61,10 @@ class Patch {
 		  PairlistBuilderType pairlist_type = PairlistBuilderType::ZOrder)
 		: patch_id_(patch_id), capacity_(capacity), resource_(resource), particles_(capacity, resource),
 		  pair_table_idx_(capacity, resource), device_bonded_(resource) {
-		set_periodic_box(periodic_box);
+		// Must follow create_pairlist: set_periodic_box forwards the box to the
+		// pairlist, and a null pairlist_ would silently drop it.
 		pairlist_ = create_pairlist(pairlist_type, resource, capacity, kPairlistMaxPairs);
+		set_periodic_box(periodic_box);
 		initialize_spatial_structures();
 	}
 
@@ -106,11 +108,7 @@ class Patch {
 		periodic_box_device_.copy_from_host(std::vector<PeriodicBox>{box});
 
 	if (auto* zpl = dynamic_cast<ZOrderPairlist*>(pairlist_.get())) {
-		const auto bs = box.get_box_size();
-		zpl->set_periodic_box(Vector3(box.is_periodic(0) ? bs.x : 0.0f,
-		                              box.is_periodic(1) ? bs.y : 0.0f,
-		                              box.is_periodic(2) ? bs.z : 0.0f),
-		                      box.get_origin());
+		zpl->set_periodic_box(box);
 	}
 	};
 

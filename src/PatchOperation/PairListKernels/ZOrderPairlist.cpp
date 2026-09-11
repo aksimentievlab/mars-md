@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <limits>
 
 namespace MARS {
 
@@ -15,8 +16,7 @@ ZOrderPairlist::ZOrderPairlist(const Resource& resource, size_t max_particles, s
 	  sorted_positions_(max_particles, resource), persistent_bbox_min_(1, resource),
 	  persistent_bbox_max_(1, resource), cell_begin_(kInitialCoarseCells, resource),
 	  cell_end_(kInitialCoarseCells, resource),
-	  cell_neighbors_(kInitialCoarseCells * MAX_NEIGHBORS, resource), auto_bbox_(true),
-	  manual_box_min_(0.0f), manual_box_max_(1.0f), last_build_time_ms_(0.0),
+	  cell_neighbors_(kInitialCoarseCells * MAX_NEIGHBORS, resource), last_build_time_ms_(0.0),
 	  last_max_neighbors_(0) {
 
 	// Configure smart updates for Pairlist mode
@@ -45,36 +45,49 @@ void ZOrderPairlist::build_pairlist(const DeviceBuffer<Vector3>& positions,
 			 num_particles,
 			 pairlist_cutoff);
 
-	// Step 1: Determine bounding box
+	const Vector3& box_size = box_.get_box_size();
+	if (box_size.x <= 0.0f || box_size.y <= 0.0f || box_size.z <= 0.0f) {
+		MARS_Exception(ExceptionType::ValueError,
+					   "ZOrderPairlist has no simulation box (size %.3f x %.3f x %.3f). Call "
+					   "set_periodic_box() before building.",
+					   box_size.x,
+					   box_size.y,
+					   box_size.z);
+	}
+
+	// Periodic axes must encode against the simulation box, since wrapping is
+	// defined against it. Open axes use the particle extent, which is tighter and
+	// packs the coarse cells better. See dev_notes.md.
 	Vector3 box_min, box_max;
-	get_bounding_box(positions, num_particles, box_min, box_max);
+	compute_particle_extent(positions, num_particles, box_min, box_max);
+	const Vector3& origin = box_.get_origin();
+	if (box_.is_periodic(0)) {
+		box_min.x = origin.x;
+		box_max.x = origin.x + box_size.x;
+	}
+	if (box_.is_periodic(1)) {
+		box_min.y = origin.y;
+		box_max.y = origin.y + box_size.y;
+	}
+	if (box_.is_periodic(2)) {
+		box_min.z = origin.z;
+		box_max.z = origin.z + box_size.z;
+	}
+	last_box_extent_ = box_max - box_min;
 
-	// Periodic axes: encode against the simulation box, not the bbox. See dev_notes.
-	if (box_len_.x > 0.0f) {
-		box_min.x = box_origin_.x;
-		box_max.x = box_origin_.x + box_len_.x;
-	}
-	if (box_len_.y > 0.0f) {
-		box_min.y = box_origin_.y;
-		box_max.y = box_origin_.y + box_len_.y;
-	}
-	if (box_len_.z > 0.0f) {
-		box_min.z = box_origin_.z;
-		box_max.z = box_origin_.z + box_len_.z;
-	}
-
-	LOGTRACE("Bounding box: [{:.6f}, {:.6f}, {:.6f}] to [{:.6f}, {:.6f}, {:.6f}]",
+	LOGTRACE("Morton domain: [{:.6f}, {:.6f}, {:.6f}] to [{:.6f}, {:.6f}, {:.6f}]",
 			 box_min.x,
 			 box_min.y,
 			 box_min.z,
 			 box_max.x,
 			 box_max.y,
 			 box_max.z);
-	last_box_extent_ = box_max - box_min;
 	update_state(num_particles, pairlist_cutoff);
 	sorter_.sort_particles(positions, num_particles, box_min, box_max);
 	LOGTRACE("Sorted particles by Morton code");
 	resource_.synchronize_streams();
+	// TEMPORARY diagnostic for the pairlist over-count investigation. Remove.
+	LOGINFO("PAIRLIST DIAG: sort errors = {}", sorter_.validate_sorting());
 	sorter_.reorder_data(positions, sorted_positions_, num_particles);
 	LOGTRACE("Reordered positions for cache-friendly access");
 
@@ -103,7 +116,7 @@ bool ZOrderPairlist::needs_update(const DeviceBuffer<Vector3>& positions,
 								  const DeviceBuffer<Vector3>& old_positions,
 								  size_t num_particles,
 								  float skin_distance) const {
-	float max_disp = sorter_.compute_max_displacement(positions, num_particles, box_len_);
+	float max_disp = sorter_.compute_max_displacement(positions, num_particles, periodic_lengths());
 	return max_disp > (skin_distance * 0.5f);
 }
 
@@ -157,15 +170,20 @@ void ZOrderPairlist::find_neighbors_zorder(size_t num_particles) {
 	}
 	cell_begin_.fill(0u, true);
 	cell_end_.fill(0u, true);
+	// Buffers fill on the Memory stream, kernels run on Compute, and fill() only
+	// self-synchronizes under SYCL. Without this the range kernels read stale
+	// cell bounds. See dev_notes.md.
+	resource_.synchronize_streams();
 
 	// Per-cell 27-neighbor table: topology depends only on the grid, so rebuild it
 	// only when coarse_bits_/periodicity change (~once, at patch init). See dev_notes.md.
+	const Vector3 per_len = periodic_lengths();
 	const int per_mask =
-		(box_len_.x > 0.0f ? 1 : 0) | (box_len_.y > 0.0f ? 2 : 0) | (box_len_.z > 0.0f ? 4 : 0);
+		(per_len.x > 0.0f ? 1 : 0) | (per_len.y > 0.0f ? 2 : 0) | (per_len.z > 0.0f ? 4 : 0);
 	if (cell_neighbors_.size() < num_cells * static_cast<size_t>(MAX_NEIGHBORS))
 		cell_neighbors_.resize(num_cells * static_cast<size_t>(MAX_NEIGHBORS));
 	if (m != cell_neighbors_bits_ || per_mask != cell_neighbors_permask_) {
-		BuildCellNeighborsKernel nbr_table{cell_neighbors_.data(), num_cells, m, box_len_};
+		BuildCellNeighborsKernel nbr_table{cell_neighbors_.data(), num_cells, m, per_len};
 		launch_kernel(resource_, KernelConfig::for_1d(num_cells, resource_), nbr_table).wait();
 		cell_neighbors_bits_ = m;
 		cell_neighbors_permask_ = per_mask;
@@ -182,8 +200,7 @@ void ZOrderPairlist::find_neighbors_zorder(size_t num_particles) {
 									   shift};
 	launch_kernel(resource_, config, range_kernel).wait();
 
-	PeriodicBox box(box_len_, box_len_.x > 0.0f, box_len_.y > 0.0f, box_len_.z > 0.0f);
-	box.set_origin(box_origin_);
+	const PeriodicBox& box = box_;
 
 	ZOrderCellNeighborKernel kernel{sorted_positions_.data(),
 									sorter_.get_morton_codes().data(),
@@ -218,58 +235,69 @@ void ZOrderPairlist::find_neighbors_zorder(size_t num_particles) {
 	}
 	num_pairs_ = num_pairs;
 	LOGDEBUG("pair_count AFTER kernel: {}", num_pairs);
+	// TEMPORARY diagnostic. Remove.
+	LOGINFO("PLDIAG n={} cut={:.1f} m={} cells={} extent=({:.1f},{:.1f},{:.1f}) "
+			"per=({},{},{}) boxsz=({:.1f},{:.1f},{:.1f}) pairs={}",
+			num_particles,
+			std::sqrt(cutoff_squared_),
+			m,
+			num_cells,
+			last_box_extent_.x,
+			last_box_extent_.y,
+			last_box_extent_.z,
+			box_.is_periodic(0),
+			box_.is_periodic(1),
+			box_.is_periodic(2),
+			box_.get_box_size().x,
+			box_.get_box_size().y,
+			box_.get_box_size().z,
+			num_pairs);
 }
 
-void ZOrderPairlist::get_bounding_box(const DeviceBuffer<Vector3>& positions,
-									  size_t num_particles,
-									  Vector3& box_min,
-									  Vector3& box_max) const {
-	if (auto_bbox_) {
-		// Use persistent buffers to avoid recreation
-		box_min = Vector3(std::numeric_limits<float>::max());
-		box_max = Vector3(std::numeric_limits<float>::lowest());
+void ZOrderPairlist::compute_particle_extent(const DeviceBuffer<Vector3>& positions,
+											 size_t num_particles,
+											 Vector3& box_min,
+											 Vector3& box_max) const {
+	box_min = Vector3(std::numeric_limits<float>::max());
+	box_max = Vector3(std::numeric_limits<float>::lowest());
 
-		persistent_bbox_min_.copy_from_host(&box_min, 1);
-		persistent_bbox_max_.copy_from_host(&box_max, 1);
+	persistent_bbox_min_.copy_from_host(&box_min, 1);
+	persistent_bbox_max_.copy_from_host(&box_max, 1);
 
-		BoundingBoxKernel bbox_kernel{positions.data(),
-									  persistent_bbox_min_.data(),
-									  persistent_bbox_max_.data(),
-									  num_particles};
+	BoundingBoxKernel bbox_kernel{positions.data(),
+								  persistent_bbox_min_.data(),
+								  persistent_bbox_max_.data(),
+								  num_particles};
 
-		KernelConfig config = KernelConfig::for_1d(num_particles, resource_);
-		Event evt = launch_kernel(resource_, config, bbox_kernel);
-		evt.wait();
-		persistent_bbox_min_.copy_to_host(&box_min, 1, true);
-		persistent_bbox_max_.copy_to_host(&box_max, 1, true);
+	KernelConfig config = KernelConfig::for_1d(num_particles, resource_);
+	launch_kernel(resource_, config, bbox_kernel).wait();
+	persistent_bbox_min_.copy_to_host(&box_min, 1, true);
+	persistent_bbox_max_.copy_to_host(&box_max, 1, true);
 
-		// Add small margin to avoid boundary issues
-		Vector3 margin = (box_max - box_min) * 0.01f;
-		box_min -= margin;
-		box_max += margin;
-		constexpr mars_real MIN_EXTENT = 1e-4;
-		Vector3 range = box_max - box_min;
+	// Margin keeps particles off the domain boundary; MIN_EXTENT keeps a
+	// degenerate axis (a line or plane of particles) from collapsing the encode.
+	const Vector3 margin = (box_max - box_min) * 0.01f;
+	box_min -= margin;
+	box_max += margin;
+	constexpr mars_real MIN_EXTENT = 1e-4;
+	const Vector3 range = box_max - box_min;
 
-		if (range.x < MIN_EXTENT) {
-			mars_real center = box_min.x + range.x * 0.5;
-			box_min.x = center - MIN_EXTENT * 0.5;
-			box_max.x = center + MIN_EXTENT * 0.5;
-		}
-		if (range.y < MIN_EXTENT) {
-			mars_real center = box_min.y + range.y * 0.5;
-			box_min.y = center - MIN_EXTENT * 0.5;
-			box_max.y = center + MIN_EXTENT * 0.5;
-		}
-		if (range.z < MIN_EXTENT) {
-			mars_real center = box_min.z + range.z * 0.5;
-			box_min.z = center - MIN_EXTENT * 0.5;
-			box_max.z = center + MIN_EXTENT * 0.5;
-		}
-	} else {
-		// Use manually specified bounds
-		box_min = manual_box_min_;
-		box_max = manual_box_max_;
+	if (range.x < MIN_EXTENT) {
+		const mars_real center = box_min.x + range.x * 0.5;
+		box_min.x = center - MIN_EXTENT * 0.5;
+		box_max.x = center + MIN_EXTENT * 0.5;
+	}
+	if (range.y < MIN_EXTENT) {
+		const mars_real center = box_min.y + range.y * 0.5;
+		box_min.y = center - MIN_EXTENT * 0.5;
+		box_max.y = center + MIN_EXTENT * 0.5;
+	}
+	if (range.z < MIN_EXTENT) {
+		const mars_real center = box_min.z + range.z * 0.5;
+		box_min.z = center - MIN_EXTENT * 0.5;
+		box_max.z = center + MIN_EXTENT * 0.5;
 	}
 }
+
 
 } // namespace MARS

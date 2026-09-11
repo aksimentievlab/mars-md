@@ -217,3 +217,113 @@ ATOMIC_ADD via the portable macro. Shared memory dropped to just the staged tile
 Correctness of warp path: the s-loop over a tile is warp-convergent (tile_n is
 block-uniform) so every lane reaches the ballot; validI/hit=false lanes still vote.
 Dedup (sorted_j>sorted_i) and original-index ordering unchanged.
+
+## v1 vs v2 head-to-head, same machine (2026-09-11)
+
+`Tests/privite_test/cytoplasm`, 305k particles, cutoff 35 / pairlistDistance 10,
+300 steps, energy off, RTX PRO 6000 Blackwell. v1 = `arbd_stampede/build/arbd`
+on `mpipi_rna_arbd1.bd`, v2 on the matching `_arbd2.bd`.
+
+| kernel | v1 | v2 | ratio |
+|---|--:|--:|--:|
+| force, median | 1524 us | 1767 us | 1.16x slower |
+| force, total | 508.6 ms | 643.5 ms | |
+| **pairlist build, 1 launch** | **2.32 ms** | **707 ms** | **305x slower** |
+| wall clock | 0.55 s | 1.41 s | 2.6x |
+
+**One v2 pairlist build costs more than v1's entire 300-step run.** This is now
+the top optimisation target, not the force kernel.
+
+### What the build cost is NOT
+
+- **Not the single-address atomic on `pair_count`.** Replacing the per-hit atomic
+  with a count pass + one block reservation per particle (113x fewer atomics)
+  made the kernel take exactly 2x as long, i.e. two stencil walks with the atomic
+  contributing ~13 ms of the 707. The walk is the cost.
+- **Not clustering.** 3734 of 4096 coarse cells occupied, mean 82 particles,
+  max 407. Effectively uniform, ~2200 candidates per particle, ~3.4e8 candidate
+  tests total.
+- **Not `wrap_diff`.** Orthogonal fast path, a few flops.
+- **Not cell sizing.** `BuildCellNeighborsKernel` launches 4096 threads,
+  confirming m=4, 16 cells/dim at 50 A against a 45 A cutoff. Correct.
+
+The anomaly: the build does ~0.5 G candidate tests/s while the force kernel does
+~23 G pairs/s on strictly more expensive work per item. ~50x off what the work
+justifies. `ncu` could not confirm why (ERR_NVGPUCTRPERM on this host; needs a
+sysadmin to enable GPU performance counters).
+
+### What v1 does differently (`ComputeForce.cuh:301`, `createPairlists<64,64,8>`)
+
+1. Tiles particles through `__shared__ float4 particle[N]`, N=64, so the inner
+   loop reads shared rather than global.
+2. Reads positions and the neighbour table through texture objects.
+3. Applies exclusions during the build via a merge-scan against `excludeMap`, so
+   the emitted list is already exclusion-free.
+4. Warp-aggregated allocation, `atomicAggInc` (worth little here, see above).
+
+Item 1 is the likely bulk of the 305x and is the thing to try first.
+
+## Pair emission order is load-bearing (2026-09-11)
+
+Reserving a contiguous block per particle makes consecutive pair slots share the
+same `indices.x`. A warp in the *force* kernel then fires 32 atomics at one
+address and serialises: force-kernel median went 1767 -> 2521 us (+43%) with the
+build kernel otherwise untouched. The per-hit atomic interleaves slots across
+particles, so a warp lands on 32 distinct addresses.
+
+Consequence for any per-particle pairlist redesign: row-contiguous pairs plus a
+per-pair force kernel is the worst combination. It only pays off if the force
+kernel also becomes per-particle and accumulates in registers, committing once.
+
+## Correction: the earlier v1-vs-v2 numbers in this file were measured on a broken build
+
+Superseded by the CUDA 12.8/Blackwell sort bug (see `../ZOrderKernels/dev_notes.md`) and by
+the `Patch` constructor ordering bug below. The "305x slower pairlist build" figure was
+entirely the corrupt sort. After both fixes, `ZOrderCellNeighborKernel` on the 305k cytoplasm
+case is **20.2 ms**, against v1's `createPairlists` at 2.32 ms.
+
+### The box never reached the pairlist (2026-09-11)
+
+`Patch`'s constructor ran `set_periodic_box(periodic_box)` *before*
+`pairlist_ = create_pairlist(...)`. `set_periodic_box` forwards the box via
+`dynamic_cast<ZOrderPairlist*>(pairlist_.get())`, which on a null `pairlist_` yields nullptr
+and silently drops it. Consequence, for the whole history of the code:
+
+- the pairlist ran with **periodicity disabled**, so no cross-boundary pairs were ever
+  enumerated, on systems configured `per=(true,true,true)`;
+- the Morton domain came from the particle bounding box rather than the simulation box.
+
+Fixed by constructing the pairlist first. Also:
+
+- `Pairlist` (base) now owns `set_periodic_box(const PeriodicBox&)`, filling the `box_` member
+  that was already declared and unused. It takes a whole box rather than a `Vector3` where a
+  zero component had to mean both "no extent" and "do not wrap" - those are different
+  questions and conflating them is what made the bug invisible.
+- Building with a zero-size box now throws naming `set_periodic_box()`, instead of silently
+  producing a degenerate Morton domain. `PeriodicBox()` default-constructs to size zero.
+
+### get_bounding_box stays, and is NOT waste
+
+An earlier note here claimed `BoundingBoxKernel` was pure waste because a periodic box
+overwrites the result. That is only true on periodic axes. The domain selection is per axis:
+
+- **periodic axis**: `[origin, origin + box_size)`, because wrapping is defined against it;
+- **open axis**: the particle extent plus a 1% margin, which is tighter and packs the coarse
+  cells better.
+
+This is the original logic. It looked dead only because the box never arrived, so every axis
+silently took the extent path.
+
+### Measurement caveat that cost an afternoon
+
+`export CMAKE_CUDA_ARCHITECTURES=...` in `build_cuda.sh` only seeds the cache on a **fresh**
+configure. An existing `CMakeCache.txt` keeps its old value, and the build silently targets
+the wrong architecture (we ran sm_75 code JIT-translated on a sm_120 device). Pass it as
+`-DCMAKE_CUDA_ARCHITECTURES="86;120"` on the cmake line and verify with:
+
+```
+grep CMAKE_CUDA_ARCHITECTURES: build/tbgl-cuda-release/CMakeCache.txt
+```
+
+The same trap applies to `CMAKE_CUDA_COMPILER`: loading the cuda-13 module does nothing to a
+tree already configured against 12.8.

@@ -101,6 +101,17 @@ class Pairlist {
 	}
 
 	/**
+	 * @brief Set the simulation box for this patch.
+	 *
+	 * The box defines the spatial domain on every axis, periodic or not, and
+	 * carries per-axis periodicity for minimum-image wrapping. Builders must not
+	 * derive a domain from particle positions. See dev_notes.md.
+	 */
+	void set_periodic_box(const PeriodicBox& box) {
+		box_ = box;
+	}
+
+	/**
 	 * @brief Get the neighbor pairs
 	 */
 	const DeviceBuffer<int2>& get_neighbor_pairs() const {

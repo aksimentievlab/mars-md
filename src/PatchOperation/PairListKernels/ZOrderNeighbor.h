@@ -175,18 +175,9 @@ struct ZOrderCellNeighborKernel {
 				const float d2 = dr.length2();
 
 				if (d2 <= cutoff_squared) {
-#ifdef USE_CUDA
-					uint32_t pair_idx = ATOMIC_ADD(pair_count, 1U);
-#elif defined(USE_SYCL)
-					sycl::atomic_ref<uint32_t,
-									 sycl::memory_order::relaxed,
-									 sycl::memory_scope::device,
-									 sycl::access::address_space::global_space>
-						atomic_ref(*pair_count);
-					uint32_t pair_idx = atomic_ref.fetch_add(1);
-#else
-					uint32_t pair_idx = (*pair_count)++;
-#endif
+					// Per-hit atomic on purpose: the interleaved slot order it
+					// produces is load-bearing for the force kernel. See dev_notes.md.
+					const uint32_t pair_idx = ATOMIC_ADD(pair_count, 1U);
 					// Ordering them keeps the x < y invariant the sorted-index key drops.
 					if (pair_idx < max_pairs) {
 						const uint32_t a = sorted_to_original[i];

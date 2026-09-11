@@ -14,6 +14,11 @@ TEST_CASE("ZOrderPairlist Integration", "[zorder][pairlist][integration]") {
 	const float cutoff = 2.0f;
 
 	ZOrderPairlist pairlist(resource, max_particles, max_pairs);
+	// The box is the Morton domain and is mandatory; open on every axis here so
+	// no wrapping is applied, matching the old particle-extent behaviour.
+	PeriodicBox test_box(Vector3(60.0f, 60.0f, 60.0f), false, false, false);
+	test_box.set_origin(Vector3(-30.0f, -30.0f, -30.0f));
+	pairlist.set_periodic_box(test_box);
 
 	SECTION("Basic Pairlist Construction") {
 		REQUIRE(pairlist.get_type() == PairlistBuilderType::ZOrder);
@@ -111,12 +116,15 @@ TEST_CASE("ZOrderPairlist Integration", "[zorder][pairlist][integration]") {
 		// Test displacement thresholds
 		pairlist.set_displacement_thresholds(0.1f, 0.2f);
 
-		// Test bounding box mode
-		Vector3 manual_min(-5.0f, -5.0f, -5.0f);
-		Vector3 manual_max(5.0f, 5.0f, 5.0f);
-		pairlist.set_bounding_box_mode(false, manual_min, manual_max);
+		// The simulation box is the Morton domain; set it directly rather than
+		// deriving one from particle extents.
+		PeriodicBox open_box(Vector3(10.0f, 10.0f, 10.0f), false, false, false);
+		open_box.set_origin(Vector3(-5.0f, -5.0f, -5.0f));
+		pairlist.set_periodic_box(open_box);
 
-		pairlist.set_bounding_box_mode(true); // Back to auto mode
+		PeriodicBox wrapped_box(Vector3(10.0f, 10.0f, 10.0f), true, true, true);
+		wrapped_box.set_origin(Vector3(-5.0f, -5.0f, -5.0f));
+		pairlist.set_periodic_box(wrapped_box);
 	}
 
 	SECTION("Resize Functionality") {

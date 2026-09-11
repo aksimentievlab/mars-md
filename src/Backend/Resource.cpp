@@ -134,6 +134,11 @@ void Resource::synchronize_streams() const {
 	if (type_ == ResourceType::CPU)
 		return;
 	else {
+		// Streams are created lazily, and syncing may be the first thing a
+		// caller does; without this streams_ is null and the deref segfaults.
+		// Same order the get_stream_impl accessors use.
+		ensure_context();
+		ensure_queues_initialized();
 		streams_->synchronize_all();
 	}
 }

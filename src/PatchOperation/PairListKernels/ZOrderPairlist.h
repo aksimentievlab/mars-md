@@ -120,27 +120,30 @@ class ZOrderPairlist : public Pairlist {
 		sorter_.set_displacement_thresholds(validation_threshold, update_threshold);
 	}
 
-	/**
-	 * @brief Enable/disable automatic bounding box computation
-	 * @param enable If true, compute bounding box from particles
-	 * @param box_min Manual minimum bounds (used if enable=false)
-	 * @param box_max Manual maximum bounds (used if enable=false)
-	 */
-	void set_bounding_box_mode(bool enable,
-							   const Vector3& box_min = Vector3(0.0f),
-							   const Vector3& box_max = Vector3(1.0f)) {
-		auto_bbox_ = enable;
-		manual_box_min_ = box_min;
-		manual_box_max_ = box_max;
-	}
-
   private:
 	ZOrderSort sorter_;						 ///< Z-order sorting utility
 	DeviceBuffer<Vector3> sorted_positions_; ///< Positions sorted by Morton code
 
-	// Persistent buffers for bounding box computation (avoid recreation)
-	mutable DeviceBuffer<Vector3> persistent_bbox_min_; ///< Persistent bounding box minimum buffer
-	mutable DeviceBuffer<Vector3> persistent_bbox_max_; ///< Persistent bounding box maximum buffer
+	// Persistent buffers for the particle-extent reduction (avoid recreation)
+	mutable DeviceBuffer<Vector3> persistent_bbox_min_;
+	mutable DeviceBuffer<Vector3> persistent_bbox_max_;
+
+	/// Particle extent, used as the Morton domain on open axes only. A tight
+	/// domain packs the coarse cells better; measured worth far more than the
+	/// reduction costs. See dev_notes.md.
+	void compute_particle_extent(const DeviceBuffer<Vector3>& positions,
+								 size_t num_particles,
+								 Vector3& box_min,
+								 Vector3& box_max) const;
+
+	/// Per-axis periodic lengths in the form the cell kernels expect: a positive
+	/// component wraps that axis, zero leaves it open.
+	Vector3 periodic_lengths() const {
+		const Vector3& bs = box_.get_box_size();
+		return Vector3(box_.is_periodic(0) ? bs.x : 0.0f,
+					   box_.is_periodic(1) ? bs.y : 0.0f,
+					   box_.is_periodic(2) ? bs.z : 0.0f);
+	}
 
 	/// Max coarse-cell bits/dim; caps cell arrays at 8^7 entries. See dev_notes.md.
 	static constexpr int kMaxCoarseBits = 7;
@@ -157,32 +160,7 @@ class ZOrderPairlist : public Pairlist {
 	int cell_neighbors_bits_ = -1;	  ///< coarse_bits_ the table was built for (-1 = unbuilt)
 	int cell_neighbors_permask_ = -1; ///< periodicity mask the table was built for
 	int coarse_bits_ = 0;			  ///< Coarse cells per dimension = 2^coarse_bits_
-	Vector3 box_len_{0.0f};			  ///< Per-axis periodic length; <= 0 marks an open axis
-	Vector3 box_origin_{0.0f};		  ///< Lower corner of the periodic box
-	Vector3 last_box_extent_{0.0f};	  ///< Extent of the box used for the last Morton encoding
-
-  public:
-	/**
-	 * @brief Declare which axes of the simulation box are periodic.
-	 *
-	 * Per axis via box_len: a positive component wraps that axis (minimum image)
-	 * so cross-boundary pairs are enumerated; zero leaves it open. On a periodic
-	 * axis the Morton box is forced to [origin, origin+length), not the bbox.
-	 *
-	 * @param box_len Per-axis periodic lengths; a zero component marks that
-	 *        axis open, and a zero vector disables periodicity entirely.
-	 * @param box_origin Lower corner of the periodic box (PeriodicBox::get_origin()).
-	 */
-	void set_periodic_box(const Vector3& box_len, const Vector3& box_origin = Vector3(0.0f)) {
-		box_len_ = box_len;
-		box_origin_ = box_origin;
-	}
-
-  private:
-	// Configuration parameters
-	bool auto_bbox_;		 ///< Whether to auto-compute bounding box
-	Vector3 manual_box_min_; ///< Manual bounding box minimum
-	Vector3 manual_box_max_; ///< Manual bounding box maximum
+	Vector3 last_box_extent_{0.0f};	  ///< Extent of the domain used for the last Morton encoding
 
 	// Timing and statistics
 	mutable double last_build_time_ms_;
@@ -193,18 +171,6 @@ class ZOrderPairlist : public Pairlist {
 	 * @param num_particles Number of particles to process
 	 */
 	void find_neighbors_zorder(size_t num_particles);
-
-	/**
-	 * @brief Compute or use manual bounding box
-	 * @param positions Particle positions
-	 * @param num_particles Number of particles
-	 * @param box_min Output minimum bounds
-	 * @param box_max Output maximum bounds
-	 */
-	void get_bounding_box(const DeviceBuffer<Vector3>& positions,
-						  size_t num_particles,
-						  Vector3& box_min,
-						  Vector3& box_max) const;
 };
 
 } // namespace MARS
