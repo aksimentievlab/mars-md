@@ -7,7 +7,7 @@
 #include "../catch_boiler.h"
 
 #include "Backend/Resource.h"
-#include "Interactions/Nonbonded/Pairwise.h"
+#include "Interactions/DevicePairNonBondedInteraction.h"
 #include "System/PeriodicBox.h"
 #include "Types/Types.h"
 

@@ -119,6 +119,17 @@ class alignas(4 * sizeof(T)) Vector3_t {
 		z += v.z;
 		return *this;
 	}
+	/**
+	 * @brief accumulate uses +=t as well. Pure += is only for x,y,z. t is used for energy
+	 * accumulation in some cases.
+	 */
+	HOST DEVICE constexpr Vector3_t<T>& accumulate(const Vector3_t<T>& v) {
+		x += v.x;
+		y += v.y;
+		z += v.z;
+		t += v.t;
+		return *this;
+	}
 
 	HOST DEVICE constexpr Vector3_t<T>& operator-=(const Vector3_t<T>& v) {
 		x -= v.x;

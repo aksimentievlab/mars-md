@@ -1,9 +1,9 @@
 #pragma once
 
-#include "MARSException.h"
-#include "MARSLogger.h"
 #include "Backend/Buffer.h"
 #include "Interactions/BondedInteraction.h"
+#include "MARSException.h"
+#include "MARSLogger.h"
 #include "Types/Types.h"
 #include <vector>
 
@@ -55,7 +55,7 @@ class SMDBond {
 	 * @param timestep Current timestep
 	 * @return Current bond length
 	 */
-	float getCurrentBondLength(size_t timestep) const {
+	float get_bond_length(size_t timestep) const {
 		return params_.x + params_.z * timestep; // r0_0 + v * timestep
 	}
 
@@ -63,7 +63,7 @@ class SMDBond {
 	 * @brief Get spring constant
 	 * @return Spring constant
 	 */
-	float getSpringConstant() const {
+	float get_spring_constant() const {
 		return params_.y;
 	}
 
@@ -71,7 +71,7 @@ class SMDBond {
 	 * @brief Get velocity parameter
 	 * @return Velocity parameter
 	 */
-	float getVelocity() const {
+	float get_velocity() const {
 		return params_.z;
 	}
 
@@ -79,7 +79,7 @@ class SMDBond {
 	 * @brief Get particle indices
 	 * @return Pair of particle indices
 	 */
-	const int2& getParticles() const {
+	const int2& get_particles() const {
 		return ids_;
 	}
 
@@ -87,7 +87,7 @@ class SMDBond {
 	 * @brief Get all parameters
 	 * @return Parameters as float4
 	 */
-	const float4& getParams() const {
+	const float4& get_params() const {
 		return params_;
 	}
 
@@ -148,7 +148,7 @@ class SMDAngle {
 	 * @param timestep Current timestep
 	 * @return Current dihedral angle
 	 */
-	float getCurrentAngle(size_t timestep) const {
+	float get_current_angle(size_t timestep) const {
 		return params_.x + params_.z * timestep;
 	}
 
@@ -156,7 +156,7 @@ class SMDAngle {
 	 * @brief Get spring constant
 	 * @return Spring constant
 	 */
-	float getSpringConstant() const {
+	float get_spring_constant() const {
 		return params_.y;
 	}
 
@@ -164,7 +164,7 @@ class SMDAngle {
 	 * @brief Get velocity parameter
 	 * @return Velocity parameter
 	 */
-	float getVelocity() const {
+	float get_velocity() const {
 		return params_.z;
 	}
 
@@ -172,7 +172,7 @@ class SMDAngle {
 	 * @brief Get particle indices
 	 * @return Four particle indices
 	 */
-	const int4& getParticles() const {
+	const int4& get_particles() const {
 		return ids_;
 	}
 
@@ -180,7 +180,7 @@ class SMDAngle {
 	 * @brief Get all parameters
 	 * @return Parameters as float4
 	 */
-	const float4& getParams() const {
+	const float4& get_params() const {
 		return params_;
 	}
 
@@ -250,7 +250,7 @@ class SMDDihedral {
 	 * @param timestep Current timestep
 	 * @return Current dihedral angle
 	 */
-	float getCurrentDihedralAngle(size_t timestep) const {
+	float get_current_dihedral_angle(size_t timestep) const {
 		return params_.x + params_.z * timestep; // theta0_0 + v * timestep
 	}
 
@@ -258,7 +258,7 @@ class SMDDihedral {
 	 * @brief Get spring constant
 	 * @return Spring constant
 	 */
-	float getSpringConstant() const {
+	float get_spring_constant() const {
 		return params_.y;
 	}
 
@@ -266,7 +266,7 @@ class SMDDihedral {
 	 * @brief Get velocity parameter
 	 * @return Velocity parameter
 	 */
-	float getVelocity() const {
+	float get_velocity() const {
 		return params_.z;
 	}
 
@@ -274,7 +274,7 @@ class SMDDihedral {
 	 * @brief Get particle indices
 	 * @return Four particle indices
 	 */
-	const int4& getParticles() const {
+	const int4& get_particles() const {
 		return ids_;
 	}
 
@@ -282,7 +282,7 @@ class SMDDihedral {
 	 * @brief Get all parameters
 	 * @return Parameters as float4
 	 */
-	const float4& getParams() const {
+	const float4& get_params() const {
 		return params_;
 	}
 
@@ -322,31 +322,31 @@ class SMDManager {
 	 * @brief Add an SMD bond
 	 * @param bond SMD bond to add
 	 */
-	void addBond(SMDBond&& bond) {
+	void add_bond(SMDBond&& bond) {
 		smd_bonds_.push_back(bond);
 		LOGINFO("SMDManager: Added SMD bond between particles %d-%d",
-				bond.getParticles().x,
-				bond.getParticles().y);
+				bond.get_particles().x,
+				bond.get_particles().y);
 	}
 
 	/**
 	 * @brief Add an SMD dihedral
 	 * @param dihedral SMD dihedral to add
 	 */
-	void addDihedral(const SMDDihedral& dihedral) {
+	void add_dihedral(const SMDDihedral& dihedral) {
 		smd_dihedrals_.push_back(dihedral);
 		LOGINFO("SMDManager: Added SMD dihedral between particles %d-%d-%d-%d",
-				dihedral.getParticles().x,
-				dihedral.getParticles().y,
-				dihedral.getParticles().z,
-				dihedral.getParticles().t);
+				dihedral.get_particles().x,
+				dihedral.get_particles().y,
+				dihedral.get_particles().z,
+				dihedral.get_particles().t);
 	}
 
 	/**
 	 * @brief Get number of SMD bonds
 	 * @return Number of SMD bonds
 	 */
-	size_t getNumBonds() const {
+	size_t get_num_bonds() const {
 		return smd_bonds_.size();
 	}
 
@@ -354,7 +354,7 @@ class SMDManager {
 	 * @brief Get number of SMD dihedrals
 	 * @return Number of SMD dihedrals
 	 */
-	size_t getNumDihedrals() const {
+	size_t get_num_dihedrals() const {
 		return smd_dihedrals_.size();
 	}
 
@@ -362,7 +362,7 @@ class SMDManager {
 	 * @brief Enable or disable SMD interactions
 	 * @param enable Whether to enable SMD
 	 */
-	void setEnabled(bool enable) {
+	void set_enabled(bool enable) {
 		enabled_ = enable;
 	}
 
@@ -370,7 +370,7 @@ class SMDManager {
 	 * @brief Check if SMD is enabled
 	 * @return true if enabled
 	 */
-	bool isEnabled() const {
+	bool is_enabled() const {
 		return enabled_;
 	}
 
@@ -382,27 +382,27 @@ class SMDManager {
 	 * @param timestep Current timestep
 	 * @param get_energy Whether to compute energies
 	 */
-	void computeSMDForces(const Vector3* positions,
-						  Vector3* forces,
-						  float* energies,
-						  int timestep,
-						  bool get_energy) {
+	void compute_smd_forces(const Vector3* positions,
+							Vector3* forces,
+							float* energies,
+							int timestep,
+							bool get_energy) {
 		if (!enabled_)
 			return;
 
 		// Compute SMD bond forces
 		for (const auto& bond : smd_bonds_) {
-			computeBondForce(bond, positions, forces, energies, timestep, get_energy);
+			compute_bond_force(bond, positions, forces, energies, timestep, get_energy);
 		}
 
 		// Compute SMD angle forces
 		for (const auto& angle : smd_angles_) {
-			computeAngleForce(angle, positions, forces, energies, timestep, get_energy);
+			compute_angle_force(angle, positions, forces, energies, timestep, get_energy);
 		}
 
 		// Compute SMD dihedral forces
 		for (const auto& dihedral : smd_dihedrals_) {
-			computeDihedralForce(dihedral, positions, forces, energies, timestep, get_energy);
+			compute_dihedral_force(dihedral, positions, forces, energies, timestep, get_energy);
 		}
 	}
 
@@ -416,16 +416,16 @@ class SMDManager {
 	/**
 	 * @brief Compute force for a single SMD bond
 	 */
-	void computeBondForce(const SMDBond& bond,
-						  const Vector3* positions,
-						  Vector3* forces,
-						  float* energies,
-						  int timestep,
-						  bool get_energy) {
+	void compute_bond_force(const SMDBond& bond,
+							const Vector3* positions,
+							Vector3* forces,
+							float* energies,
+							int timestep,
+							bool get_energy) {
 		// Get current bond parameters
-		float r0 = bond.getCurrentBondLength(timestep);
-		float k = bond.getSpringConstant();
-		const int2& particles = bond.getParticles();
+		float r0 = bond.get_bond_length(timestep);
+		float k = bond.get_spring_constant();
+		const int2& particles = bond.get_particles();
 
 		// Calculate current bond vector and length
 		Vector3 rvec = positions[particles.y] - positions[particles.x];
@@ -450,16 +450,16 @@ class SMDManager {
 		}
 	}
 
-	void computeAngleForce(const SMDAngle& angle,
-						   const Vector3* positions,
-						   Vector3* forces,
-						   float* energies,
-						   int timestep,
-						   bool get_energy) {
+	void compute_angle_force(const SMDAngle& angle,
+							 const Vector3* positions,
+							 Vector3* forces,
+							 float* energies,
+							 int timestep,
+							 bool get_energy) {
 		// Get current angle parameters
-		float angle0 = angle.getCurrentAngle(timestep);
-		float k = angle.getSpringConstant();
-		const int3& particles = angle.getParticles();
+		float angle0 = angle.get_current_angle(timestep);
+		float k = angle.get_spring_constant();
+		const int3& particles = angle.get_particles();
 
 		// Calculate current angle vector and length
 		Vector3 ab = positions[particles.y] - positions[particles.x];
@@ -473,16 +473,16 @@ class SMDManager {
 	/**
 	 * @brief Compute force for a single SMD dihedral
 	 */
-	void computeDihedralForce(const SMDDihedral& dihedral,
-							  const Vector3* positions,
-							  Vector3* forces,
-							  float* energies,
-							  int timestep,
-							  bool get_energy) {
+	void compute_dihedral_force(const SMDDihedral& dihedral,
+								const Vector3* positions,
+								Vector3* forces,
+								float* energies,
+								int timestep,
+								bool get_energy) {
 		// Get current dihedral parameters
-		float theta0 = dihedral.getCurrentDihedralAngle(timestep);
-		float k = dihedral.getSpringConstant();
-		int4 particles = dihedral.getParticles();
+		float theta0 = dihedral.get_current_dihedral_angle(timestep);
+		float k = dihedral.get_spring_constant();
+		int4 particles = dihedral.get_particles();
 		// TODO: Implement full dihedral force calculation
 		LOGDEBUG("SMDDihedral: Computing dihedral force for particles %d-%d-%d-%d",
 				 particles.x,

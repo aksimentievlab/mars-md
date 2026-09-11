@@ -1,9 +1,5 @@
 // RigidBodyManager.h (2026)
-// Phase 4 of the rigid-body suite: orchestration on top of Phase 2's SoA
-// device storage (DeviceRigidBody/DeviceRigidBodyTypes) and Phase 3's
-// type-level force-pair list (RigidBodyForcePairList).
 #pragma once
-#include "MARSException.h"
 #include "Backend/Events.h"
 #include "Backend/KernelConfig.h"
 #include "Backend/Kernels.h"
@@ -11,6 +7,7 @@
 #include "Interactions/Nonbonded/RigidBodyAttachedParticles.h"
 #include "Interactions/Nonbonded/RigidBodyGridBatch.h"
 #include "Interactions/Nonbonded/RigidBodyParticleGridBatch.h"
+#include "MARSException.h"
 #include "Objects/DeviceParticle.h"
 #include "Objects/DeviceRigidBodyManager.h"
 #include "Objects/Grid.h"
@@ -290,10 +287,6 @@ class RigidBodyManager {
 		const BaseGridView<mars_real>* grid_views =
 			grid_manager.get_device_grid_views(grid_resource_idx).data();
 
-		// All three kernels share the GridCompute stream (architecture
-		// decision, todo.md Phase 4.2): they already saturate the GPU, so
-		// splitting further buys little, and it lets this whole pipeline
-		// overlap with the nonbonded/bonded path on the Compute stream.
 		void* grid_stream = compute_resource().get_stream(StreamType::GridCompute);
 
 		RBGridCullKernel cull{std::as_const(*bodies_).view(),

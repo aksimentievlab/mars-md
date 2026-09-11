@@ -9,6 +9,7 @@
 #include "Header.h"
 #include "IO/Reader.h"
 #include "Interactions/Nonbonded/GridGridKernels.h"
+#include "Interactions/Nonbonded/Pairwise.h"
 #include "Objects/DeviceParticle.h"
 #include "Objects/ParticleProperties.h"
 #include "SimParam.h"

@@ -32,14 +32,9 @@ struct RBGridWork {
 /**
  * @brief Cull RB-instance-pair x grid-pair candidates by distance and append
  *        survivors to the worklist, precomputing each item's lab-frame
- *        transform and block count.
- *
- * Candidates are pre-expanded on the host from RigidBodyForcePairList's
- * type-level pairs (see RigidBodyManager::prepare_grid_grid_dispatch) into
- * (rb_a, rb_b) instance pairs - that expansion is static for the run (RB
- * counts/types don't change), so only the per-step distance cull needs to
- * happen here, on-device (a host-side check would force a D2H sync every
- * step - see todo.md Phase 4.1).
+ *        transform and block count. Candidates are pre-expanded on the host from
+ * 				RigidBodyForcePairList's type-level pairs, expansion is static for the run (RB
+ * 				counts/types don't change)
  */
 struct RBGridCullKernel {
 	ConstRigidBodyView rb;

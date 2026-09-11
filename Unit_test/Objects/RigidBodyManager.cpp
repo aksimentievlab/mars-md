@@ -5,7 +5,7 @@
  *        batched across RB instances via the SoA views from Phase 2.
  */
 
-#include "System/RigidBodyManager.h"
+#include "RBOperation/RigidBodyManager.h"
 #include "../catch_boiler.h"
 #include "Backend/Events.h"
 #include "Constants.h"

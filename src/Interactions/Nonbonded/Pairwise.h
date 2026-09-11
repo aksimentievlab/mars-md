@@ -157,77 +157,19 @@ struct TabulatedNonBondedComputer {
 		const Vector3 force = geom.unit_vector * fe.force_magnitude;
 		const float energy = fe.energy * 0.5f;
 
-		atomic_add(&force_energy[indices.x], -force);
-		atomic_add(&force_energy[indices.y], force);
-
+		// get_energy is warp-uniform, so this branch costs nothing. Energy rides in
+		// .t rather than taking two extra atomics; the force-only path skips .t
+		// entirely instead of atomically adding zero. See dev_notes.md.
 		if (get_energy) {
-			atomic_add(&force_energy[indices.x].t, energy);
-			atomic_add(&force_energy[indices.y].t, energy);
+			atomic_add(&force_energy[indices.x], Vector3(-force.x, -force.y, -force.z, energy));
+			atomic_add(&force_energy[indices.y], Vector3(force.x, force.y, force.z, energy));
+		} else {
+			atomic_add_xyz(&force_energy[indices.x], -force);
+			atomic_add_xyz(&force_energy[indices.y], force);
 		}
 	}
 };
 
-/**
- * @brief Resolve per-pair table indices; run once per pairlist rebuild.
- */
-inline Event launch_resolve_pair_tables(const Resource& resource,
-										DEVICE_PTR(const int2) particle_indices,
-										DEVICE_PTR(const int) type_ids,
-										DEVICE_PTR(const int) pairwise_table_matrix,
-										DEVICE_PTR(const int) pairwise_form_matrix,
-										idx_t num_particle_types,
-										DEVICE_PTR(const int) excl_offsets,
-										DEVICE_PTR(const int) excl_neighbors,
-										idx_t num_excl_particles,
-										DEVICE_PTR(int) table_idx,
-										idx_t num_pairs) {
-	if (num_pairs == 0)
-		return Event(nullptr, resource);
-	KernelConfig config = KernelConfig::for_1d(num_pairs, resource);
-	ResolvePairTableKernel resolver{particle_indices,
-									type_ids,
-									pairwise_table_matrix,
-									pairwise_form_matrix,
-									num_particle_types,
-									excl_offsets,
-									excl_neighbors,
-									num_excl_particles,
-									table_idx,
-									num_pairs};
-	return launch_kernel(resource, config, resolver);
-}
-
-/**
- * @brief Launch pairwise tabulated nonbonded force computation.
- * @note `table_idx` must be filled by launch_resolve_pair_tables after each rebuild.
- */
-inline Event launch_pairwise_nonbonded(const Resource& resource,
-									   DEVICE_PTR(const int2) particle_indices,
-									   DEVICE_PTR(Vector3) positions,
-									   DEVICE_PTR(Vector3) force_energy,
-									   DEVICE_PTR(const int) table_idx,
-									   DEVICE_PTR(const TabulatedPotential) tables,
-									   const PeriodicBox* pbox,
-									   bool get_energy,
-									   idx_t num_pairs,
-									   float cutoff_squared) {
-	if (num_pairs == 0)
-		return Event(nullptr, resource);
-
-	KernelConfig config = KernelConfig::for_1d(num_pairs, resource);
-
-	TabulatedNonBondedComputer computer(particle_indices,
-										positions,
-										force_energy,
-										table_idx,
-										tables,
-										pbox,
-										get_energy,
-										num_pairs,
-										cutoff_squared);
-
-	return launch_kernel(resource, config, computer);
-}
 } // namespace MARS
 
 #ifdef USE_CUDA

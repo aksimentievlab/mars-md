@@ -5,7 +5,7 @@ cmake_minimum_required(VERSION 3.20)
 
 include(CTest)
 enable_testing()
-
+set(LIB_SOURCES "")
 # Single unified test binary using Catch2 amalgamated
 add_executable(mars_unit_tests
     ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp
@@ -52,10 +52,6 @@ if(USE_CUDA)
     find_package(CUDAToolkit REQUIRED)
     target_link_libraries(mars_unit_tests PRIVATE CUDA::cudart)
 
-    # basegrid_device_tests.cpp launches a named GridQueryKernel functor (see
-    # Types/basegrid_device.h) rather than an ad hoc lambda, so its
-    # launch_cuda_kernel instantiation can be forced into a real CUDA
-    # compilation unit here instead of getting the host stub.
     target_sources(mars_unit_tests PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/Types/basegrid_device_instantiations.cu
     )
@@ -137,7 +133,6 @@ target_include_directories(unit_test_config INTERFACE
     ${CMAKE_CURRENT_BINARY_DIR}/generated
 )
 
-# The rest of your target links remain the same
 target_link_libraries(mars_unit_tests PRIVATE unit_test_config)
 target_link_libraries(mars_zorder_tests PRIVATE unit_test_config)
 message(STATUS "Unit tests: available resources={${UNIT_TEST_DEVICE_ARRAY_PP}}")

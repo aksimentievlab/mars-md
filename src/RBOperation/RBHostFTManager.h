@@ -1,5 +1,4 @@
 #pragma once
-#include "MARSException.h"
 #include "ApplyHostForce.h"
 #include "Backend/Buffer.h"
 #include "Backend/Events.h"
@@ -8,6 +7,7 @@
 #include "Backend/Resource.h"
 #include "Constants.h"
 #include "Header.h"
+#include "MARSException.h"
 #include "Objects/DeviceRigidBody.h"
 #include "Types/Types.h"
 
@@ -147,11 +147,8 @@ class RBHostFTManager {
 	DeviceBuffer<Vector3> force_;
 	DeviceBuffer<Vector3> torque_;
 
-	// Full-length, indexed by device SoA slot.
 	std::vector<Vector3> baseline_force_;
 	std::vector<Vector3> baseline_torque_;
-	// Scratch for push_with_baseline/push_baseline, kept as members so a
-	// per-step publish does not reallocate.
 	std::vector<Vector3> staged_force_;
 	std::vector<Vector3> staged_torque_;
 	std::vector<int> staged_id_;

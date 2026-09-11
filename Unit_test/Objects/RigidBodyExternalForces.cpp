@@ -8,11 +8,11 @@
  * and can be checked against closed form rather than a tolerance band.
  */
 
-#include "System/RigidBodyManager.h"
 #include "../catch_boiler.h"
 #include "Constants.h"
 #include "Objects/RigidBodyProperties.h"
 #include "RBOperation/RBHostFTManager.h"
+#include "RBOperation/RigidBodyManager.h"
 
 using namespace MARS;
 
@@ -63,8 +63,7 @@ TEST_CASE("check_damping accepts a fully specified type", "[rigidbody][damping]"
 	REQUIRE_NOTHROW(t.check_damping(IntegratorType::Langevin));
 }
 
-TEST_CASE("check_damping rejects the default zero damping under Brownian",
-		  "[rigidbody][damping]") {
+TEST_CASE("check_damping rejects the default zero damping under Brownian", "[rigidbody][damping]") {
 	// trans_damping/rot_damping default to zero while mass/inertia do not, so a
 	// config that simply omits transDamping reaches the kernel with an infinite
 	// mobility and NaNs the whole trajectory on step 1.

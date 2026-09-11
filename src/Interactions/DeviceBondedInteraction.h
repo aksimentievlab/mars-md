@@ -394,7 +394,8 @@ class DeviceBondedInteractions {
 			}
 			e = int2{a, b};
 		}
-		std::sort(excl_pairs_host_.begin(), excl_pairs_host_.end(),
+		std::sort(excl_pairs_host_.begin(),
+				  excl_pairs_host_.end(),
 				  [](const int2& p, const int2& q) { return p.x != q.x ? p.x < q.x : p.y < q.y; });
 
 		int max_idx = 0;

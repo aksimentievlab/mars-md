@@ -26,7 +26,7 @@
 #include "MARSLogger.h"
 #include "Objects/DeviceParticleManager.h"
 #include "PatchOperation/ReorderManager.h"
-#include "System/RigidBodyManager.h"
+#include "RBOperation/RigidBodyManager.h"
 #include "System/SimSystem.h"
 #include "System/SystemState.h"
 

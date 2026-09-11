@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//data/server10/pinyili2/arbd_gpu01/src/**)",
+      "Read(//home/pinyili2/server10/arbd_gpu01/src/**)",
+      "Read(//data/server1/pinyili2/arbd2v/test_unit/**)"
+    ],
+    "deny": [
+      "Bash(icpx)",
+      "Bash(g++)",
+      "Bash(gcc)",
+      "Bash(nvcc)",
+      "Bash(icpx)"
+    ],
+    "ask": []
+  }
+}

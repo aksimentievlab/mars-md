@@ -117,8 +117,7 @@ if(NOT TARGET MARS::scuff)
 endif()
 
 # --- scuff-em-only sources ---------------------------------------------------
-# ScuffRigidBody.h is host-only: it includes libscuff.h, which no device compiler
-# should ever see.
+
 list(APPEND HOST_ONLY_HEADERS
     RBOperation/ScuffRigidBody.h
 )

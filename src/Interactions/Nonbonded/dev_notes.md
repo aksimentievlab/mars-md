@@ -147,3 +147,40 @@ pairs past the interaction cutoff whose tabulated lookup would be out of range
 (a spurious interaction). Positions change every step, so the cutoff must be
 re-tested every step — removing the skin is exactly what would force a rebuild
 every step.
+
+## Scatter atomics: never add `.t` unless energy is wanted (2026-09-11)
+
+`atomic_add(Vector3_t*)` issues **four** `atomicAdd`s, one per component. In the
+force path `.t` is always zero, because `operator*` and unary minus both build
+their result through the three-argument ctor which zeroes `t`. SASS confirmed it:
+`ATOMG.E.ADD.F32 ... [R2.64+0xc], RZ` — an atomic adding the zero register.
+
+v1's `atomicAdd(Vector3*)` (`CudaUtil.cuh:88`) adds three components. So v2 was
+sending 8 atomics per pair where v1 sends 6, and the 8/6 ratio predicted v2's
+measured 1.39× per-launch regression against v1 on this kernel almost exactly.
+
+Fix: `atomic_add_xyz` (Types.h) for the force-only path, and pack energy into
+`.t` when it is wanted instead of taking two extra atomics. `get_energy` is a
+kernel member, hence warp-uniform, so branching on it costs nothing.
+
+| path | before | after |
+|---|--:|--:|
+| energy off | 8 | 6 |
+| energy on | 10 | 8 |
+
+Measured on the 305k-particle cytoplasm case (`Tests/privite_test/cytoplasm`,
+300 steps, RTX PRO 6000 Blackwell), force-kernel median **2322 µs → 1767 µs,
+1.31×**. That kernel is ~97% of production GPU time.
+
+### What did NOT work, and why
+
+Replacing the atomics with plain `+=` (racy, measurement only) made the kernel
+**34% slower**, 2322 → 3109 µs. `atomicAdd` with an unused return compiles to a
+single transaction executed by the ALU in the L2 slice; the line never enters
+the SM. A plain read-modify-write is `LDG` + `FADD` + `STG`: two transactions
+plus full L2 latency exposed in a register dependency.
+
+**The cost is the number of atomic messages, not their atomicity.** Do not try
+to remove atomics; remove *redundant* ones. This is also why the per-particle
+full neighbour list is not obviously a win: it would double the distance and
+table work to eliminate atomics that are individually cheap.

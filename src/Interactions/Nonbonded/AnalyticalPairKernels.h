@@ -26,10 +26,6 @@ enum AnalyticalPairTerm : uint32_t {
 /**
  * @brief All analytical nonbonded pair potentials in one pass over the pairlist
  *
- * One kernel rather than one per potential: the pair geometry is the expensive
- * part and is shared, and a single concrete type needs a single explicit CUDA
- * instantiation (see NonbondedInstantiations.cu) instead of one per term.
- *
  * Sign convention matches AnalyticalBondComputer: `force_magnitude` is
  * @f$-dU/dr@f$, positive when the pair repels, applied as `-force` to the first
  * particle and `+force` to the second along the first-to-second unit vector.
@@ -75,8 +71,7 @@ struct AnalyticalPairKernel {
 		mars_real energy = mars_real(0);
 
 		if (enabled_terms & PAIR_TERM_COULOMB) {
-			const ScalarForceEnergy fe =
-				ColumbPotential::compute(geom.r_ij, geom.distance, qi, qj);
+			const ScalarForceEnergy fe = ColumbPotential::compute(geom.r_ij, geom.distance, qi, qj);
 			force_magnitude += fe.force_magnitude;
 			energy += fe.energy;
 		}

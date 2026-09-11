@@ -18,13 +18,13 @@ list(APPEND HOST_DEVICE_HEADERS
     Interactions/TabulatedPotential.h
     Interactions/Interactions.h
     Interactions/Exclusion.h
+    Interactions/DevicePairNonBondedInteraction.h
     Interactions/SMDGrid.h
 )
 
 list(APPEND HOST_ONLY_HEADERS
     Interactions/BondedInteraction.h
     Interactions/NonBondedInteraction.h
-    Interactions/DevicePairNonBondedInteraction.h
     Interactions/Improper.h
 )
 

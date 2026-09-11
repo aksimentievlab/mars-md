@@ -38,10 +38,7 @@ remapped **in place on device** by reinterpreting the int2/int3/int4 buffer as a
 int array and calling `sorter.remap_indices` (indices[i] = inv[indices[i]]). Composes
 across repeated reorders: each buffer is in current slot order, inv maps current→new.
 
-**Exclusions can't be remapped in place** — the CSR (excl_offsets_/excl_neighbors_) is
-variable-length per particle. `rebuild_exclusions_after_reorder` remaps the retained
-canonical edge list (`excl_pairs_host_`, kept in sync each reorder), re-canonicalizes
-(swap so a<b), re-sorts, and rebuilds the CSR with the exact same host logic as
+**Exclusions can't be remapped in place** — the Compressed Sparse Row (CSR) (excl_offsets_/excl_neighbors_) is variable-length per particle. `rebuild_exclusions_after_reorder` remaps the retained canonical edge list (`excl_pairs_host_`, kept in sync each reorder), re-canonicalizes (swap so a<b), re-sorts, and rebuilds the CSR with the exact same host logic as
 copy_from_host. num_excl_particles_ and the neighbor total can change, so offsets/
 neighbors buffers are reallocated. Host roundtrip is fine at reorder cadence.
 

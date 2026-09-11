@@ -31,7 +31,7 @@ class ParticleTypeManager;
 /**
  * @brief Method selection criteria
  */
-struct MethodSelectionCriteria {
+struct LongRangeHOST {
 	size_t particle_count;
 	float charge_density_variation; ///< 0.0 = uniform, 1.0 = highly clustered
 	bool is_periodic;
@@ -138,8 +138,8 @@ class CutoffAMRElectrostatics : public LongRangeElectrostatics {
 	size_t max_refinement_levels_;
 
 	// Cutoff functions
-	enum class CutoffType { Hard, Smooth, ReactionField, Damped, ForceShifted };
-	CutoffType cutoff_type_;
+	enum class cutoff_type { hard, smooth, reaction_field, damped, force_shifted };
+	cutoff_type cutoff_type_;
 
   public:
 	CutoffAMRElectrostatics(const Config& config)
@@ -147,7 +147,7 @@ class CutoffAMRElectrostatics : public LongRangeElectrostatics {
 		  refinement_threshold_(config.parameters.at("refinement_threshold")),
 		  coarsening_threshold_(config.parameters.at("coarsening_threshold")),
 		  max_refinement_levels_(static_cast<size_t>(config.parameters.at("max_levels"))),
-		  cutoff_type_(static_cast<CutoffType>(config.parameters.at("cutoff_type"))) {
+		  cutoff_type_(static_cast<cutoff_type>(config.parameters.at("cutoff_type"))) {
 
 		initialize_amr_hierarchy();
 	}
@@ -207,8 +207,8 @@ class CutoffAMRElectrostatics : public LongRangeElectrostatics {
 	void initialize_amr_hierarchy() {
 		// Create initial coarse grid
 		Matrix3_t<mars_real> basis = Matrix3_t<mars_real>(config_.cutoff_distance,
-												  config_.cutoff_distance,
-												  config_.cutoff_distance);
+														  config_.cutoff_distance,
+														  config_.cutoff_distance);
 		Vector3 origin(-50.0f, -50.0f, -50.0f); // System-dependent
 
 		auto coarse_grid = std::make_unique<BaseGrid<mars_real>>(basis, origin, 32, 32, 32);
@@ -252,13 +252,6 @@ class CutoffAMRElectrostatics : public LongRangeElectrostatics {
 
 	void deposit_particle_to_amr(const Vector3& position, float contribution) {
 		// Find appropriate AMR level and deposit particle
-		for (auto& grid : particle_count_grids_) {
-			if (grid->in_bounds(position)) {
-				Vector3 grid_pos = grid->to_grid(position);
-				idx_t idx = grid->index(grid_pos);
-				(*grid)[idx] += static_cast<int>(contribution);
-			}
-		}
 	}
 
 	void build_amr_neighbor_lists(const DeviceParticle& particles) {
@@ -289,7 +282,6 @@ class CutoffAMRElectrostatics : public LongRangeElectrostatics {
 /**
  * @brief PPPM/PME: Traditional mesh-based methods
  */
-template<typename DeviceParticle>
 class PPPMElectrostatics : public LongRangeElectrostatics {
   private:
 	std::unique_ptr<BaseGrid<mars_real>> charge_grid_;
@@ -435,22 +427,22 @@ class PPPMElectrostatics : public LongRangeElectrostatics {
 template<typename DeviceParticle>
 class FMMElectrostatics : public LongRangeElectrostatics {
   private:
-	struct FMMNode {
+	struct fmm_node {
 		Vector3 center;
 		float size;
 		size_t level;
 		std::vector<std::complex<float>> multipole_coeffs;
 		std::vector<std::complex<float>> local_coeffs;
 		std::vector<size_t> particle_indices;
-		std::unique_ptr<FMMNode> children[8];
-		FMMNode* parent = nullptr;
+		std::unique_ptr<fmm_node> children[8];
+		fmm_node* parent = nullptr;
 
 		bool is_leaf() const {
 			return children[0] == nullptr;
 		}
 	};
 
-	std::unique_ptr<FMMNode> tree_root_;
+	std::unique_ptr<fmm_node> tree_root_;
 	size_t max_particles_per_leaf_;
 	size_t multipole_order_;
 	float theta_; // Accuracy parameter
@@ -546,13 +538,13 @@ class FMMElectrostatics : public LongRangeElectrostatics {
 /**
  * @brief Factory for creating appropriate long-range method
  */
-class LongRangeMethodFactory {
+class LongRangeFactory {
   public:
 	/**
 	 * @brief Automatically select best method based on system characteristics
 	 */
 	static std::unique_ptr<LongRangeElectrostatics>
-	create_optimal_method(const MethodSelectionCriteria& criteria) {
+	create_optimal_method(const LongRangeHOST& criteria) {
 
 		LongRangeElectrostatics::Config config;
 
@@ -633,7 +625,7 @@ class UnifiedLongRangeExample {
   public:
 	void demonstrate_usage() {
 		// 1. Define system characteristics
-		MethodSelectionCriteria criteria;
+		method_selection_criteria criteria;
 		criteria.particle_count = 100000;
 		criteria.charge_density_variation = 0.3f; // Moderately clustered
 		criteria.is_periodic = true;
@@ -641,17 +633,17 @@ class UnifiedLongRangeExample {
 		criteria.accuracy_requirement = 0.8f;
 
 		// 2. Automatically select optimal method
-		auto solver = LongRangeMethodFactory::create_optimal_method(criteria);
+		auto solver = long_range_method_factory::create_optimal_method(criteria);
 
 		std::cout << "Selected method: " << solver->name() << std::endl;
 		std::cout << "Description: " << solver->description() << std::endl;
 
 		// 3. Or manually choose a specific method
-		LongRangeElectrostatics::Config manual_config;
+		long_range_electrostatics::config_type manual_config;
 		manual_config.method = LongRangeMethod::CutoffAMR;
 		manual_config.parameters["refinement_threshold"] = 30.0f;
 
-		auto manual_solver = LongRangeMethodFactory::create_method(manual_config);
+		auto manual_solver = long_range_method_factory::create_method(manual_config);
 
 		// 4. Use in simulation
 		DeviceParticle particles(100000);
@@ -674,7 +666,7 @@ class UnifiedLongRangeExample {
 	}
 
   private:
-	void compare_methods(const MethodSelectionCriteria& criteria,
+	void compare_methods(const method_selection_criteria& criteria,
 						 DeviceParticle& particles,
 						 const ParticleTypeView& types) {
 
@@ -683,11 +675,11 @@ class UnifiedLongRangeExample {
 												LongRangeMethod::FMM};
 
 		for (auto method : methods) {
-			LongRangeElectrostatics::Config config;
+			long_range_electrostatics::config_type config;
 			config.method = method;
 
 			try {
-				auto solver = LongRangeMethodFactory::create_method(config);
+				auto solver = long_range_method_factory::create_method(config);
 
 				// Benchmark
 				auto start = std::chrono::high_resolution_clock::now();

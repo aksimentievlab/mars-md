@@ -51,12 +51,6 @@ class RigidBodyPdbPsfReader {
 				p.type_name = cosmetic.resname;
 				p.position = cosmetic.body_frame_position;
 				rt.attached_particle.push_back(p);
-				// Index into this type's attached_particle vector - type-local,
-				// so it is well defined here. The *global* particle index is
-				// not: that depends on how many instances precede this one, and
-				// is resolved later as rb.attached_start + this value. Stays -1
-				// for template atoms that are cosmetic only, which is what marks
-				// them for position-by-transform in the trajectory writer.
 				cosmetic.attached_particle_index =
 					static_cast<int>(rt.attached_particle.size()) - 1;
 			}

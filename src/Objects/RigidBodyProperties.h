@@ -3,8 +3,8 @@
 // Author: Pin-Yi Li <pinyili2@illinois.edu>
 // Metal does not support inheritance, so create a new class.
 #pragma once
-#include "MARSException.h"
 #include "Header.h"
+#include "MARSException.h"
 #include "Objects/ParticleProperties.h"
 #include "SimParam.h"
 #include "Types/BaseGrid.h"
@@ -39,9 +39,8 @@ struct RigidBodyIO {
 
 	// Half-open range [attached_start, attached_start + attached_count) into the
 	// global particle array holding this instance's copy of its type's
-	// attached-particle template. Assigned by ConfigParser's post-parse fold-in
-	// pass, which appends every instance's copy after all regular particles
-	// (legacy layout: regular [0,num), then all attached contiguous).
+	// attached-particle template. Assigned by ConfigParser's, which appends every instance's copy
+	// after all regular particles (legacy layout: regular [0,num), then all attached contiguous).
 	// attached_count == 0 means the type declared no attached particles.
 	int attached_start = -1;
 	int attached_count = 0;
@@ -79,11 +78,7 @@ class RigidBodyType {
 	std::vector<ParticleIO> attached_particle;
 	std::vector<CosmeticParticle> template_particles;
 	std::vector<int2> template_bonds;
-	// One GridTerm (grid_id + scale + scale_slope + boundary_condition) per
-	// referenced grid - mirrors ParticleType::pmf_grids (see Types/GridTerm.h)
-	// instead of separate parallel id/scale arrays, since a grid-force kernel
-	// reads one of these per grid rather than combining several arrays.
-	// Parallel to (same length/order as) the key vectors below.
+
 	std::vector<GridTerm> potential_grids;
 	std::vector<GridTerm> density_grids;
 	std::vector<GridTerm> pmf_grids;

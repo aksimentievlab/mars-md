@@ -95,8 +95,7 @@ TEST_CASE("IntegratorTest", "[free][bd]") {
 	float kT = MARS::constants::BOLTZMANN * temperature; // 0.596 kcal/mol
 	int num_steps = 10000;								 // 0.2 ns total
 	Vector3 box_size(100.0f, 100.0f, 100.0f);
-	// Origin defaults to (0,0,0), so the primary image is [0,100) per axis -
-	// the particles start at the box center (50,50,50).
+
 	PeriodicBox sim_box(box_size);
 
 	// Expected MSD = 6*D*t
@@ -192,9 +191,6 @@ TEST_CASE("BondedForcesTest", "[free][bonded]") {
 	}
 	std::cout << "Built " << bonded_interactions.get_num_bonds() << " bonds" << std::endl;
 
-	// Match the real mpipi_k18 patch's capacity (from the spatial decomposer)
-	// rather than num_particles, in case scale/capacity is what triggers the
-	// illegal-address crash rather than particle/bond count.
 	PeriodicBox box(Vector3(500.0f, 500.0f, 500.0f));
 	Patch patch(0, 1024000, res, box);
 	patch.set_particle_count(num_particles);
@@ -210,10 +206,6 @@ TEST_CASE("BondedForcesTest", "[free][bonded]") {
 
 	DeviceParticleTypes device_types(std::vector<ParticleType>{ParticleType("Ar")}, res);
 
-	// Mirror the real SimManager::execute_force_calculation sequence: PMF/
-	// nonbonded runs first every step (a no-op here since there are 0 grids,
-	// matching mpipi_k18), then bonded forces. Testing whether that ordering
-	// (not just calculate_bonded_forces in isolation) is needed to reproduce.
 	std::cout << "Calling calculate_nonbonded_forces (0 grids, should no-op)..." << std::endl;
 	NonBondedInteractions nb_interactions;
 	DeviceBuffer<BaseGridView<float>> empty_grid_views;
@@ -230,9 +222,6 @@ TEST_CASE("BondedForcesTest", "[free][bonded]") {
 	nb_evt.wait();
 	std::cout << "calculate_nonbonded_forces returned successfully" << std::endl;
 
-	// Host-side sanity check: replicate TabulatedPotential::compute exactly,
-	// using the real loaded Y data, to confirm the math itself gives a
-	// nonzero force at this bond distance before trusting the device result.
 	{
 		const Table& t = tables_registry.get_bond_functions()[function_index];
 		float dx = 1.885f;
@@ -340,11 +329,6 @@ TEST_CASE("DeviceBondedInteractionsDirectTest", "[free][bonded][dbi]") {
 	TablesRegistry tables_registry;
 	int function_index = tables_registry.get_or_load_bond(bond_file);
 
-	// Match the real mpipi_k18 scenario exactly: it also loads 190 pairwise
-	// nonbonded tables (19 types, i<=j) into the SAME TablesRegistry before
-	// build_device_arrays() - testing whether that (191 tables total,
-	// matching the real crash) versus just 1 (this test previously) changes
-	// anything about the bond kernel's behavior.
 	{
 		// Reuse the single real bond file's contents as a stand-in Y-table
 		// for all 190 nonbonded slots - only the table *count*/memory layout

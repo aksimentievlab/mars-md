@@ -128,6 +128,27 @@ HOST DEVICE inline T atomic_fetch_add(T* ptr, T value) {
 };
 
 // Specialized atomic_add for Vector3_t - do component-wise atomics
+/// Atomically add x, y and z only, leaving t untouched.
+/// For force-only scatter, where t would otherwise cost an atomic adding zero.
+template<typename T>
+HOST DEVICE inline void atomic_add_xyz(Vector3_t<T>* ptr, const Vector3_t<T>& value) {
+#ifdef USE_CUDA
+#ifdef __CUDA_ARCH__
+	atomicAdd(&(ptr->x), value.x);
+	atomicAdd(&(ptr->y), value.y);
+	atomicAdd(&(ptr->z), value.z);
+#else
+	*ptr += value;
+#endif
+#elif defined(USE_SYCL) || defined(USE_METAL)
+	atomic_add(&(ptr->x), value.x);
+	atomic_add(&(ptr->y), value.y);
+	atomic_add(&(ptr->z), value.z);
+#else
+	*ptr += value;
+#endif
+}
+
 template<typename T>
 HOST DEVICE inline void atomic_add(Vector3_t<T>* ptr, const Vector3_t<T>& value) {
 #ifdef USE_CUDA
