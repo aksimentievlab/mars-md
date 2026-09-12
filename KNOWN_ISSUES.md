@@ -1,0 +1,1 @@
+- **Use only CUDA>13.0 for BlackWell GPUs** CUB radix sort is silently wrong on Blackwell under CUDA 12.8. The Morton sort returned an unsorted array and the pairlist was built from garbage cell ranges
