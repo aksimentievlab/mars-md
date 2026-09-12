@@ -1,5 +1,7 @@
 # AnalyticalPairKernels.h implementation notes
 
+## (2026/9/12) DEAD and absorbed into Pairwise.h
+
 ## One kernel, not one per potential
 
 Every analytical nonbonded term runs inside a single `AnalyticalPairKernel`

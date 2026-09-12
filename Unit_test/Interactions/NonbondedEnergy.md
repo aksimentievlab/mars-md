@@ -47,10 +47,10 @@ convention fails loudly rather than silently doubling the reported energy.
 - one pair: total is `U(r)`, each endpoint carries `U(r)/2`
 - attractive well: energy is negative at `r = 3`, positive on the wall
 - 16 jittered lattice sites, all 120 pairs, against a direct CPU pair sum
-- exclusions: an excluded pair drops exactly its own `U` from the total
 - cutoff: a pair beyond `cutoff` drops exactly its own `U`
 
-Exclusions are supplied as CSR (`excl_offsets` / `excl_neighbors`) with each
-exclusion stored on both endpoints, matching what
-`DeviceBondedInteractions::exclusion_offsets()` builds; the kernel only scans
-`indices.x`'s list.
+Exclusions are **not** covered here. They are applied by the pairlist builder,
+so an excluded pair never reaches these kernels and there is nothing for them
+to test; `run_pairwise` takes whatever pair list it is handed. The exclusion
+CSR and `ExclusionView::is_excluded` are covered in
+`Compute/zorder_pairlist_tests.cpp`.

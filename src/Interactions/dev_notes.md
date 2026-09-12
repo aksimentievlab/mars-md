@@ -43,3 +43,14 @@ copy_from_host. num_excl_particles_ and the neighbor total can change, so offset
 neighbors buffers are reallocated. Host roundtrip is fine at reorder cadence.
 
 Template method so ZOrderSort.h stays out of this header (instantiated in Patch.cpp).
+
+## DeviceExclusions.h
+
+`ExclusionView` is the borrowed device view of the exclusion CSR that
+`DeviceBondedInteractions` owns (`excl_offsets_` / `excl_neighbors_`). It sits
+here rather than under `PatchOperation/` because the storage and its reorder
+rebuild are owned here; the pairlist only borrows the pointers, and they must
+stay valid until the next build.
+
+Consumers and the reasoning behind filtering at pairlist-emit time are in
+`PatchOperation/PairListKernels/dev_notes.md`.

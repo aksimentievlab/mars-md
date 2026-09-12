@@ -44,14 +44,17 @@ class DevicePairNonBondedInteractions {
 	DevicePairNonBondedInteractions(idx_t num_particle_types, const Resource& resource)
 		: resource_(resource), num_particle_types_(num_particle_types),
 		  pairwise_table_matrix_(num_particle_types * num_particle_types, resource),
-		  pairwise_form_matrix_(num_particle_types * num_particle_types, resource) {
+		  pairwise_form_matrix_(num_particle_types * num_particle_types, resource),
+		  pairwise_term_matrix_(num_particle_types * num_particle_types, resource) {
 		// Initialize all pairs to -1 (no interaction) with ONE bulk copy
 		std::vector<int> init_tables(num_particle_types * num_particle_types, -1);
 		std::vector<int> init_forms(num_particle_types * num_particle_types,
 									static_cast<int>(InteractionForm::Tabulated));
+		std::vector<uint32_t> init_tags(num_particle_types * num_particle_types, PAIR_TERM_NONE);
 
 		pairwise_table_matrix_.copy_from_host(init_tables.data(), init_tables.size());
 		pairwise_form_matrix_.copy_from_host(init_forms.data(), init_forms.size());
+		pairwise_term_matrix_.copy_from_host(init_tags.data(), init_tags.size());
 
 		LOGDEBUG("DevicePairNonBondedInteractions: Allocated for {} particle types ({} pairs)",
 				 num_particle_types,
@@ -59,14 +62,54 @@ class DevicePairNonBondedInteractions {
 	}
 
 	/**
+	 * @brief Map an analytical potential's name to its AnalyticalPairTerm bit.
+	 * @return The term bit, or PAIR_TERM_NONE if the name is not recognised.
+	 */
+	static uint32_t analytical_term_bit(const std::string& function_name) {
+		if (function_name == "coulomb" || function_name == "columb")
+			return PAIR_TERM_COULOMB;
+		if (function_name == "debye_huckel")
+			return PAIR_TERM_DEBYE_HUCKEL;
+		if (function_name == "onck")
+			return PAIR_TERM_ONCK;
+		if (function_name == "gaussian")
+			return PAIR_TERM_GAUSSIAN;
+		if (function_name == "softcore")
+			return PAIR_TERM_SOFTCORE;
+		return PAIR_TERM_NONE;
+	}
+
+	/**
+	 * @brief Encode a type pair as a term mask plus tabulated table index.
+	 * @return Packed pair tag; PAIR_TERM_NONE when the pair has no pair interaction.
+	 * @throws ValueError if the table index does not fit above the term mask.
+	 */
+	static uint32_t
+	encode_pair_tag(int function_index, InteractionForm form, const std::string& function_name) {
+		if (form == InteractionForm::Analytical) {
+			return make_pair_tag(analytical_term_bit(function_name), -1);
+		}
+		if (form != InteractionForm::Tabulated || function_index < 0) {
+			return PAIR_TERM_NONE;
+		}
+		if (function_index > kMaxPairTableIndex) {
+			MARS_Exception(
+				ExceptionType::ValueError,
+				"Tabulated nonbonded table index %d exceeds the %d a pair tag can carry.",
+				function_index,
+				kMaxPairTableIndex);
+		}
+		return make_pair_tag(PAIR_TERM_TABULATED, function_index);
+	}
+
+	/**
 	 * @brief Copy pairwise interactions from host (BULK COPY - call once)
-	 *
 	 * Builds type-pair matrix from PairNonBonded list with ONE device copy.
 	 * Matrix layout: [type1 * num_types + type2] → (table_index, form)
 	 *
 	 * @param host_pairs Vector of PairNonBonded from TablesRegistry
 	 *
-	 * Example:
+	 * @example
 	 *   const auto& pairs = tables_registry.get_pair_nonbonded_types();
 	 *   device_nb->copy_pairwise_from_host(pairs);
 	 */
@@ -75,6 +118,7 @@ class DevicePairNonBondedInteractions {
 		std::vector<int> table_matrix(num_particle_types_ * num_particle_types_, -1);
 		std::vector<int> form_matrix(num_particle_types_ * num_particle_types_,
 									 static_cast<int>(InteractionForm::Tabulated));
+		std::vector<uint32_t> tag_matrix(num_particle_types_ * num_particle_types_, PAIR_TERM_NONE);
 
 		for (const auto& pair : host_pairs) {
 			// PairNonBonded already ensures type_id_1 <= type_id_2
@@ -99,11 +143,17 @@ class DevicePairNonBondedInteractions {
 
 			form_matrix[idx1] = static_cast<int>(pair.form);
 			form_matrix[idx2] = static_cast<int>(pair.form);
+
+			const uint32_t tag =
+				encode_pair_tag(pair.function_index, pair.form, pair.function_name);
+			tag_matrix[idx1] = tag;
+			tag_matrix[idx2] = tag;
 		}
 
 		// ONE bulk copy to device for each matrix
 		pairwise_table_matrix_.copy_from_host(table_matrix.data(), table_matrix.size());
 		pairwise_form_matrix_.copy_from_host(form_matrix.data(), form_matrix.size());
+		pairwise_term_matrix_.copy_from_host(tag_matrix.data(), tag_matrix.size());
 
 		LOGINFO("DevicePairNonBondedInteractions: Copied {} pairwise interactions to device",
 				host_pairs.size());
@@ -188,6 +238,14 @@ class DevicePairNonBondedInteractions {
 	}
 
 	/**
+	 * @brief Get pairwise table tag matrix (for kernel use)
+	 * @return Device pointer to flattened matrix; entry is a packed pair tag
+	 */
+	DEVICE_PTR(const uint32_t) pairwise_term_matrix() const {
+		return pairwise_term_matrix_.data();
+	}
+
+	/**
 	 * @brief Get array of nonbonded potential structs (for kernel use)
 	 * @return Device pointer to TabulatedPotential array
 	 */
@@ -217,7 +275,7 @@ class DevicePairNonBondedInteractions {
 	 * @brief Get pairwise table index for type pair (i, j)
 	 * @return Index into nonbonded_potentials_, or -1 if no interaction
 	 *
-	 * Usage in kernel:
+	 * @example
 	 *   int table_idx = device_nb->get_pairwise_table_index(type_i, type_j);
 	 *   if (table_idx >= 0) {
 	 *       const TabulatedPotential& pot = device_nb->nonbonded_potentials()[table_idx];
@@ -248,72 +306,13 @@ class DevicePairNonBondedInteractions {
 		pairwise_table_matrix_; // Index into nonbonded_potentials_ (-1 = no interaction)
 	DeviceBuffer<int> pairwise_form_matrix_; // InteractionForm enum value
 
+	DeviceBuffer<uint32_t> pairwise_term_matrix_; // term mask + table index
+
 	// Array of potential structs (indexed by pairwise_table_matrix_)
 	// Each struct contains pointer to TablesRegistry's device Y-value buffer
 	DeviceBuffer<TabulatedPotential> nonbonded_potentials_;
 };
 
-/**
- * @brief Resolve per-pair table indices; run once per pairlist rebuild.
- */
-inline Event launch_resolve_pair_tables(const Resource& resource,
-										DEVICE_PTR(const int2) particle_indices,
-										DEVICE_PTR(const int) type_ids,
-										DEVICE_PTR(const int) pairwise_table_matrix,
-										DEVICE_PTR(const int) pairwise_form_matrix,
-										idx_t num_particle_types,
-										DEVICE_PTR(const int) excl_offsets,
-										DEVICE_PTR(const int) excl_neighbors,
-										idx_t num_excl_particles,
-										DEVICE_PTR(int) table_idx,
-										idx_t num_pairs) {
-	if (num_pairs == 0)
-		return Event(nullptr, resource);
-	KernelConfig config = KernelConfig::for_1d(num_pairs, resource);
-	ResolvePairTableKernel resolver{particle_indices,
-									type_ids,
-									pairwise_table_matrix,
-									pairwise_form_matrix,
-									num_particle_types,
-									excl_offsets,
-									excl_neighbors,
-									num_excl_particles,
-									table_idx,
-									num_pairs};
-	return launch_kernel(resource, config, resolver);
-}
-
-/**
- * @brief Launch pairwise tabulated nonbonded force computation.
- * @note `table_idx` must be filled by launch_resolve_pair_tables after each rebuild.
- */
-inline Event launch_pairwise_nonbonded(const Resource& resource,
-									   DEVICE_PTR(const int2) particle_indices,
-									   DEVICE_PTR(Vector3) positions,
-									   DEVICE_PTR(Vector3) force_energy,
-									   DEVICE_PTR(const int) table_idx,
-									   DEVICE_PTR(const TabulatedPotential) tables,
-									   const PeriodicBox* pbox,
-									   bool get_energy,
-									   idx_t num_pairs,
-									   float cutoff_squared) {
-	if (num_pairs == 0)
-		return Event(nullptr, resource);
-
-	KernelConfig config = KernelConfig::for_1d(num_pairs, resource);
-
-	TabulatedNonBondedComputer computer(particle_indices,
-										positions,
-										force_energy,
-										table_idx,
-										tables,
-										pbox,
-										get_energy,
-										num_pairs,
-										cutoff_squared);
-
-	return launch_kernel(resource, config, computer);
-}
 } // namespace MARS
 
 // SYCL device copyable traits

@@ -26,7 +26,7 @@ list(APPEND HOST_DEVICE_HEADERS
     PatchOperation/PairListKernels/ClusterCompute.h
     PatchOperation/PairListKernels/ZOrderNeighbor.h
     PatchOperation/PairListKernels/ZOrderPairlist.h
-    PatchOperation/PairListKernels/AdaptiveZOrderNeighbor.h
+    #PatchOperation/PairListKernels/AdaptiveZOrderNeighbor.h
     PatchOperation/PairListKernels/DisplacementTracker.h
     PatchOperation/PairListKernels/DecomposeKernels.h
     # Integrator headers

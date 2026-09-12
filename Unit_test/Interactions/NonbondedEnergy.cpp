@@ -69,8 +69,6 @@ std::pair<mars_real, std::vector<Vector3>> run_pairwise(const Resource& res,
 														const std::vector<MARS::int2>& pairs,
 														const PairTable& table,
 														int num_types,
-														const std::vector<int>& excl_offsets,
-														const std::vector<int>& excl_neighbors,
 														mars_real cutoff) {
 	const idx_t n = static_cast<idx_t>(positions.size());
 
@@ -92,59 +90,48 @@ std::pair<mars_real, std::vector<Vector3>> run_pairwise(const Resource& res,
 	DeviceBuffer<MARS::int2> pairs_buf(pairs.size(), res);
 	pairs_buf.copy_from_host(pairs.data(), pairs.size());
 
-	// Every type pair maps to table 0 and is Tabulated.
-	std::vector<int> table_matrix(static_cast<size_t>(num_types) * num_types, 0);
-	std::vector<int> form_matrix(table_matrix.size(), static_cast<int>(InteractionForm::Tabulated));
-	DeviceBuffer<int> table_matrix_buf(table_matrix.size(), res);
-	table_matrix_buf.copy_from_host(table_matrix.data(), table_matrix.size());
-	DeviceBuffer<int> form_matrix_buf(form_matrix.size(), res);
-	form_matrix_buf.copy_from_host(form_matrix.data(), form_matrix.size());
-
-	// Both buffers are allocated non-empty even when there are no exclusions:
-	// a zero-length DeviceBuffer is null, and copy_from_host rejects that.
-	// num_excl_particles below is what actually disables the exclusion scan.
-	DeviceBuffer<int> excl_off_buf(std::max<size_t>(excl_offsets.size(), 1), res);
-	if (!excl_offsets.empty()) {
-		excl_off_buf.copy_from_host(excl_offsets.data(), excl_offsets.size());
-	}
-	DeviceBuffer<int> excl_nbr_buf(std::max<size_t>(excl_neighbors.size(), 1), res);
-	if (!excl_neighbors.empty()) {
-		excl_nbr_buf.copy_from_host(excl_neighbors.data(), excl_neighbors.size());
-	}
-	const idx_t num_excl_particles =
-		excl_offsets.empty() ? 0 : static_cast<idx_t>(excl_offsets.size() - 1);
+	// Every type pair is Tabulated against table 0.
+	std::vector<uint32_t> tag_matrix(
+		static_cast<size_t>(num_types) * num_types,
+		DevicePairNonBondedInteractions::encode_pair_tag(0, InteractionForm::Tabulated, ""));
+	DeviceBuffer<uint32_t> tag_matrix_buf(tag_matrix.size(), res);
+	tag_matrix_buf.copy_from_host(tag_matrix.data(), tag_matrix.size());
 
 	PeriodicBox box_host(Vector3(1000.0f, 1000.0f, 1000.0f));
 	DeviceBuffer<PeriodicBox> box_buf(1, res);
 	box_buf.copy_from_host(&box_host, 1);
 
 	const idx_t num_pairs = static_cast<idx_t>(pairs.size());
-	DeviceBuffer<int> table_idx_buf(std::max<size_t>(pairs.size(), 1), res);
+	DeviceBuffer<uint32_t> pair_tag_buf(std::max<size_t>(pairs.size(), 1), res);
 
-	// Resolve per-pair table indices (exclusions + type->table), then apply forces.
+	// Resolve per-pair term tags (type->terms), then apply forces.
 	launch_resolve_pair_tables(res,
 							   pairs_buf.data(),
 							   types_buf.data(),
-							   table_matrix_buf.data(),
-							   form_matrix_buf.data(),
+							   tag_matrix_buf.data(),
 							   static_cast<idx_t>(num_types),
-							   excl_off_buf.data(),
-							   excl_nbr_buf.data(),
-							   num_excl_particles,
-							   table_idx_buf.data(),
+							   pair_tag_buf.data(),
 							   num_pairs)
 		.wait();
 
+	// PAIR_TERM_TABULATED reads only pos / ForceEnergy / type_id, so the
+	// per-type view is never dereferenced here.
+	ParticleView particle_view{};
+	particle_view.pos = pos_buf.data();
+	particle_view.ForceEnergy = force_buf.data();
+	particle_view.type_id = types_buf.data();
+
 	launch_pairwise_nonbonded(res,
 							  pairs_buf.data(),
-							  pos_buf.data(),
-							  force_buf.data(),
-							  table_idx_buf.data(),
+							  particle_view,
+							  pair_tag_buf.data(),
 							  tables.data(),
+							  ParticleTypeView{},
 							  box_buf.data(),
 							  /*get_energy=*/true,
 							  num_pairs,
-							  cutoff > 0 ? cutoff * cutoff : mars_real(0))
+							  cutoff > 0 ? cutoff * cutoff : mars_real(0),
+							  PAIR_TERM_TABULATED)
 		.wait();
 
 	std::vector<Vector3> out(n);
@@ -176,8 +163,6 @@ TEST_CASE("Pairwise nonbonded energy of one pair equals U(r)",
 					 {MARS::int2{0, 1}},
 					 table,
 					 1,
-					 {},
-					 {},
 					 mars_real(0));
 
 	const mars_real expected = table.interpolated(r);
@@ -201,8 +186,6 @@ TEST_CASE("Pairwise nonbonded energy is negative inside an attractive well",
 										   {MARS::int2{0, 1}},
 										   table,
 										   1,
-										   {},
-										   {},
 										   mars_real(0));
 	auto [on_wall, ignored2] = run_pairwise(res,
 											{Vector3(0.0f, 0.0f, 0.0f), Vector3(1.0f, 0.0f, 0.0f)},
@@ -210,8 +193,6 @@ TEST_CASE("Pairwise nonbonded energy is negative inside an attractive well",
 											{MARS::int2{0, 1}},
 											table,
 											1,
-											{},
-											{},
 											mars_real(0));
 	(void)ignored1;
 	(void)ignored2;
@@ -245,8 +226,7 @@ TEST_CASE("Pairwise nonbonded energy matches a direct CPU pair sum",
 		}
 	}
 
-	auto [total, per_particle] =
-		run_pairwise(res, pos, types, pairs, table, 1, {}, {}, mars_real(0));
+	auto [total, per_particle] = run_pairwise(res, pos, types, pairs, table, 1, mars_real(0));
 
 	mars_real expected = mars_real(0);
 	for (const auto& p : pairs) {
@@ -258,33 +238,8 @@ TEST_CASE("Pairwise nonbonded energy matches a direct CPU pair sum",
 	REQUIRE(total == Catch::Approx(expected).epsilon(1e-3));
 }
 
-TEST_CASE("Pairwise nonbonded energy drops excluded pairs",
-		  "[forces][nonbonded][tabulated][energy][exclusions]") {
-	initialize_backend_once();
-	Resource res(Global::single_resource_id);
-
-	const PairTable table(
-		[](mars_real r) { return (r - mars_real(3)) * (r - mars_real(3)) - mars_real(1); });
-	const std::vector<Vector3> pos{Vector3(0.0f, 0.0f, 0.0f),
-								   Vector3(3.5f, 0.0f, 0.0f),
-								   Vector3(7.0f, 0.0f, 0.0f)};
-	const std::vector<int> types(3, 0);
-	const std::vector<MARS::int2> pairs{MARS::int2{0, 1}, MARS::int2{0, 2}, MARS::int2{1, 2}};
-
-	auto [unexcluded, ignored] =
-		run_pairwise(res, pos, types, pairs, table, 1, {}, {}, mars_real(0));
-	(void)ignored;
-
-	// CSR over 3 particles excluding the (0,1) pair, stored on both endpoints.
-	const std::vector<int> excl_offsets{0, 1, 2, 2};
-	const std::vector<int> excl_neighbors{1, 0};
-	auto [excluded, ignored2] =
-		run_pairwise(res, pos, types, pairs, table, 1, excl_offsets, excl_neighbors, mars_real(0));
-	(void)ignored2;
-
-	const mars_real dropped = table.interpolated(mars_real(3.5));
-	REQUIRE(excluded == Catch::Approx(unexcluded - dropped).epsilon(1e-3));
-}
+// Exclusions are applied by the pairlist builder and never reach these kernels;
+// they are covered in Compute/zorder_pairlist_tests.cpp.
 
 TEST_CASE("Pairwise nonbonded energy drops pairs beyond the cutoff",
 		  "[forces][nonbonded][tabulated][energy][cutoff]") {
@@ -300,7 +255,7 @@ TEST_CASE("Pairwise nonbonded energy drops pairs beyond the cutoff",
 	const std::vector<MARS::int2> pairs{MARS::int2{0, 1}, MARS::int2{0, 2}, MARS::int2{1, 2}};
 
 	// Cutoff 5 keeps (0,1) at 3.5 and (1,2) at 4.5, drops (0,2) at 8.
-	auto [total, ignored] = run_pairwise(res, pos, types, pairs, table, 1, {}, {}, mars_real(5));
+	auto [total, ignored] = run_pairwise(res, pos, types, pairs, table, 1, mars_real(5));
 	(void)ignored;
 
 	const mars_real expected =

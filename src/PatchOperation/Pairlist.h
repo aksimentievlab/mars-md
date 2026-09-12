@@ -11,6 +11,7 @@
 
 #include "Backend/Buffer.h"
 #include "Backend/Resource.h"
+#include "Interactions/DeviceExclusions.h"
 #include "System/PeriodicBox.h"
 #include "Types/Types.h"
 #include "Types/Vector3.h"
@@ -112,6 +113,13 @@ class Pairlist {
 	}
 
 	/**
+	 * @brief Supply the exclusion CSR so excluded pairs are never emitted.
+	 */
+	void set_exclusions(const ExclusionView& exclusions) {
+		exclusions_ = exclusions;
+	}
+
+	/**
 	 * @brief Get the neighbor pairs
 	 */
 	const DeviceBuffer<int2>& get_neighbor_pairs() const {
@@ -188,7 +196,8 @@ class Pairlist {
 	uint32_t num_pairs_;
 	float cutoff_;
 	float cutoff_squared_;
-	PeriodicBox box_; ///< Reference to periodic box per patch
+	PeriodicBox box_;		   ///< Reference to periodic box per patch
+	ExclusionView exclusions_; ///< Borrowed exclusion CSR; empty view excludes nothing
 
 	DeviceBuffer<int2> neighbor_pairs_; ///< Neighbor particle pairs (i, j)
 	DeviceBuffer<uint32_t> pair_count_; ///< Atomic counter for pair generation

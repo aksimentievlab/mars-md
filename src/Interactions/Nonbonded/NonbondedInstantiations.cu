@@ -32,6 +32,11 @@ template Event launch_cuda_kernel(const Resource& resource,
 								  const KernelConfig& config,
 								  AnalyticalPairKernel kernel_func);
 
+// Analytical terms and the tabulated potential in one pass (Pairwise.h).
+template Event launch_cuda_kernel(const Resource& resource,
+								  const KernelConfig& config,
+								  PairNonbondedComputer kernel_func);
+
 // Launched with a trailing argument pack from Patch::calculate_nonbonded_forces
 // (only when force/PMF grids are present), so the pack is spelled out here.
 template Event launch_cuda_kernel(const Resource& resource,

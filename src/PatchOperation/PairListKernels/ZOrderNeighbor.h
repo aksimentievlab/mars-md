@@ -10,6 +10,7 @@
 
 #include "../ZOrderKernels/MortonCode.h"
 #include "Header.h"
+#include "Interactions/DeviceExclusions.h"
 #include "System/PeriodicBox.h"
 #include "Types/Types.h"
 #include "Types/Vector3.h"
@@ -131,7 +132,8 @@ struct BuildCellNeighborsKernel {
  * Particles stay Morton-sorted (force-kernel locality); neighbors come from the
  * 27 coarse cells around each particle. Cell side >= pairlist cutoff so the
  * stencil covers the cutoff sphere. Periodicity is per axis via `box_len`
- * (positive wraps with minimum image, zero is open). See dev_notes.md.
+ * (positive wraps with minimum image, zero is open). Excluded pairs are
+ * dropped here rather than downstream. See dev_notes.md.
  */
 struct ZOrderCellNeighborKernel {
 	const Vector3* __restrict__ sorted_positions;
@@ -146,8 +148,9 @@ struct ZOrderCellNeighborKernel {
 	float cutoff_squared;
 	size_t num_particles;
 	size_t max_pairs;
-	int shift;		 ///< 3 * (bits_per_dim - m); recovers a cell index from a Morton code
-	PeriodicBox box; ///< minimum-image periodic box; open axes left unwrapped
+	int shift;				  ///< 3 * (bits_per_dim - m); recovers a cell index from a Morton code
+	PeriodicBox box;		  ///< minimum-image periodic box; open axes left unwrapped
+	ExclusionView exclusions; ///< excluded pairs are dropped before emission
 
 	DEVICE void operator()(idx_t i) const {
 		if (i >= num_particles)
@@ -157,6 +160,12 @@ struct ZOrderCellNeighborKernel {
 		const uint32_t sorted_i = static_cast<uint32_t>(i);
 		const uint32_t cell = static_cast<uint32_t>(sorted_morton_codes[i] >> shift);
 		const uint32_t* nbrs = cell_neighbors + static_cast<size_t>(cell) * MAX_NEIGHBORS;
+
+		// Both endpoint's original index and its exclusion row depend only on i,
+		// so they are loaded once rather than per candidate. See dev_notes.md.
+		const int a = static_cast<int>(sorted_to_original[i]);
+		const int excl_begin = exclusions.row_begin(a);
+		const int excl_end = exclusions.row_end(a);
 
 		for (int k = 0; k < MAX_NEIGHBORS; ++k) {
 			const uint32_t ncell = nbrs[k];
@@ -175,15 +184,15 @@ struct ZOrderCellNeighborKernel {
 				const float d2 = dr.length2();
 
 				if (d2 <= cutoff_squared) {
+					const int b = static_cast<int>(sorted_to_original[j]);
+					if (exclusions.row_contains(excl_begin, excl_end, b))
+						continue;
 					// Per-hit atomic on purpose: the interleaved slot order it
 					// produces is load-bearing for the force kernel. See dev_notes.md.
 					const uint32_t pair_idx = ATOMIC_ADD(pair_count, 1U);
 					// Ordering them keeps the x < y invariant the sorted-index key drops.
 					if (pair_idx < max_pairs) {
-						const uint32_t a = sorted_to_original[i];
-						const uint32_t b = sorted_to_original[j];
-						neighbor_pairs[pair_idx] =
-							int2(static_cast<int>(a < b ? a : b), static_cast<int>(a < b ? b : a));
+						neighbor_pairs[pair_idx] = int2(a < b ? a : b, a < b ? b : a);
 					}
 				}
 			}

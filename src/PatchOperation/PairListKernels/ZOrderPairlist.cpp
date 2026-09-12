@@ -86,8 +86,7 @@ void ZOrderPairlist::build_pairlist(const DeviceBuffer<Vector3>& positions,
 	sorter_.sort_particles(positions, num_particles, box_min, box_max);
 	LOGTRACE("Sorted particles by Morton code");
 	resource_.synchronize_streams();
-	// TEMPORARY diagnostic for the pairlist over-count investigation. Remove.
-	LOGINFO("PAIRLIST DIAG: sort errors = {}", sorter_.validate_sorting());
+	LOGDEBUG("PAIRLIST DIAG: sort errors = {}", sorter_.validate_sorting());
 	sorter_.reorder_data(positions, sorted_positions_, num_particles);
 	LOGTRACE("Reordered positions for cache-friendly access");
 
@@ -214,7 +213,8 @@ void ZOrderPairlist::find_neighbors_zorder(size_t num_particles) {
 									num_particles,
 									max_pairs_,
 									shift,
-									box};
+									box,
+									exclusions_};
 
 	Event launch_event = launch_kernel(resource_, config, kernel);
 	launch_event.wait();
@@ -235,7 +235,6 @@ void ZOrderPairlist::find_neighbors_zorder(size_t num_particles) {
 	}
 	num_pairs_ = num_pairs;
 	LOGDEBUG("pair_count AFTER kernel: {}", num_pairs);
-	// TEMPORARY diagnostic. Remove.
 	LOGDEBUG("PLDIAG n={} cut={:.1f} m={} cells={} extent=({:.1f},{:.1f},{:.1f}) "
 			 "per=({},{},{}) boxsz=({:.1f},{:.1f},{:.1f}) pairs={}",
 			 num_particles,

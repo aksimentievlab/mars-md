@@ -327,3 +327,60 @@ grep CMAKE_CUDA_ARCHITECTURES: build/tbgl-cuda-release/CMakeCache.txt
 
 The same trap applies to `CMAKE_CUDA_COMPILER`: loading the cuda-13 module does nothing to a
 tree already configured against 12.8.
+
+## Exclusion filtering moved into the build (step 1 of 5)
+
+Excluded pairs used to reach `neighbor_pairs_` and were dropped later by
+`ResolvePairTableKernel`'s CSR scan (`Interactions/Nonbonded/Pairwise.h`).
+They are now dropped at emit time instead.
+
+### Why at emit time
+
+The CSR scan runs on exactly the pairs that already passed the cutoff test, so
+the scan itself costs the same either way. What it buys:
+
+- The list shrinks by the excluded-and-in-cutoff count. Every downstream pass
+  over `num_pairs` gets shorter, not just the nonbonded one.
+- `ResolvePairTableKernel` loses the scan and four members (steps 2-3 will cut
+  it to three loads and a store).
+- Exclusions apply to *every* nonbonded term, so this is the right layer.
+  The type->table lookup stays in Resolve because Coulomb and the analytical
+  terms want pairs that have no tabulated entry.
+
+### Shared view
+
+`ExclusionView` (`Interactions/DeviceExclusions.h`) holds the borrowed CSR
+pointers and `is_excluded(a, b)`. It lives in `Interactions/` because the CSR
+is owned by `DeviceBondedInteractions`; the pairlist only borrows it.
+
+`Pairlist::set_exclusions` stores one, and each builder passes it to its emit
+kernel. A default-constructed view has `num_particles == 0`, so `is_excluded`
+returns false before touching the null pointers — a builder that is never
+given exclusions behaves exactly as before.
+
+### Emit sites covered
+
+- `ZOrderCellNeighborKernel` (ZOrderNeighbor.h) — the default builder.
+- `CellNeighborKernel` (DecomposeKernels.h) — used by `CellListPairlist`.
+- `AdaptiveZOrderNeighborKernel` (AdaptiveZOrderNeighbor.h) — **not covered**;
+  it is not launched from anywhere. If it is ever revived it needs the same
+  three lines, otherwise exclusions silently stop being applied once
+  `ResolvePairTableKernel` drops its scan in step 3.
+
+### Index space
+
+The CSR is indexed by patch-local particle index. Z-order emits
+`sorted_to_original[...]`, which is that same space, so the lookup is direct.
+`ensure_bonded_topology_ready()` runs earlier in `calculate_nonbonded_forces`
+than the rebuild block, so a reorder's rebuilt CSR is already in place.
+
+One incidental change in `ZOrderCellNeighborKernel`: the two
+`sorted_to_original` loads moved out of the `pair_idx < max_pairs` guard, since
+the exclusion test needs them before the atomic. That guard only fails on
+overflow, which is fatal anyway.
+
+### Step 1 is independently verifiable
+
+`ResolvePairTableKernel` keeps its exclusion scan for now, so the filtering is
+redundant rather than load-bearing. Pair counts should drop; forces and
+energies should not move. The scan comes out in step 3.

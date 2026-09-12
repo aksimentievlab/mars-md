@@ -60,7 +60,7 @@ class Patch {
 		  const PeriodicBox& periodic_box,
 		  PairlistBuilderType pairlist_type = PairlistBuilderType::ZOrder)
 		: patch_id_(patch_id), capacity_(capacity), resource_(resource), particles_(capacity, resource),
-		  pair_table_idx_(capacity, resource), device_bonded_(resource) {
+		  pair_tag_(capacity, resource), device_bonded_(resource) {
 		// Must follow create_pairlist: set_periodic_box forwards the box to the
 		// pairlist, and a null pairlist_ would silently drop it.
 		pairlist_ = create_pairlist(pairlist_type, resource, capacity, kPairlistMaxPairs);
@@ -591,8 +591,8 @@ class Patch {
 	HostParticleData host_particles_;	 ///< used for staging on HOST.
 	DeviceParticle particles_;			 ///< Local particle data in SoA format
 	std::unique_ptr<Pairlist> pairlist_; ///< Pairlist for neighbor finding and spatial organization
-	DeviceBuffer<int>
-		pair_table_idx_; ///< Per-pair tabulated-table index, resolved each rebuild (-1 = skip)
+	DeviceBuffer<uint32_t>
+		pair_tag_; ///< Per-pair term mask + table index, resolved each rebuild (0 = skip)
 	bool pairlist_built_{
 		false}; ///< True once pairlist_ has been built; gates the displacement skip check
 #ifdef ENABLE_ZORDER_REORDER

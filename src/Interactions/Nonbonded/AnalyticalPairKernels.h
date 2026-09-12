@@ -11,19 +11,6 @@
 namespace MARS {
 
 /**
- * @brief Which analytical pair terms a single AnalyticalPairKernel applies
- * @see AnalyticalPairKernels.md
- */
-enum AnalyticalPairTerm : uint32_t {
-	PAIR_TERM_NONE = 0u,
-	PAIR_TERM_COULOMB = 1u << 0,
-	PAIR_TERM_DEBYE_HUCKEL = 1u << 1,
-	PAIR_TERM_ONCK = 1u << 2,
-	PAIR_TERM_GAUSSIAN = 1u << 3,
-	PAIR_TERM_SOFTCORE = 1u << 4
-};
-
-/**
  * @brief All analytical nonbonded pair potentials in one pass over the pairlist
  *
  * Sign convention matches AnalyticalBondComputer: `force_magnitude` is
@@ -37,6 +24,7 @@ struct AnalyticalPairKernel {
 	DEVICE_PTR(const Vector3) __restrict__ positions;
 	DEVICE_PTR(Vector3) force_energy;
 	DEVICE_PTR(const int) __restrict__ type_ids;
+	DEVICE_PTR(const uint32_t) __restrict__ pair_tag; ///< per-pair terms; null applies every term
 	ParticleTypeView types;
 	const PeriodicBox* __restrict__ pbox;
 
@@ -52,6 +40,11 @@ struct AnalyticalPairKernel {
 
 	KERNEL_FUNC void operator()(idx_t i) const {
 		if (i >= num_pairs)
+			return;
+
+		// Per-pair terms gate the run-global mask; a null tag leaves it ungated.
+		const uint32_t terms = pair_tag ? (pair_tag[i] & enabled_terms) : enabled_terms;
+		if (terms == PAIR_TERM_NONE)
 			return;
 
 		const int2& indices = neighbor_pairs[i];
@@ -70,27 +63,27 @@ struct AnalyticalPairKernel {
 		mars_real force_magnitude = mars_real(0);
 		mars_real energy = mars_real(0);
 
-		if (enabled_terms & PAIR_TERM_COULOMB) {
+		if (terms & PAIR_TERM_COULOMB) {
 			const ScalarForceEnergy fe = ColumbPotential::compute(geom.r_ij, geom.distance, qi, qj);
 			force_magnitude += fe.force_magnitude;
 			energy += fe.energy;
 		}
-		if (enabled_terms & PAIR_TERM_DEBYE_HUCKEL) {
+		if (terms & PAIR_TERM_DEBYE_HUCKEL) {
 			const ScalarForceEnergy fe = debye_huckel.compute(geom.distance, qi, qj);
 			force_magnitude += fe.force_magnitude;
 			energy += fe.energy;
 		}
-		if (enabled_terms & PAIR_TERM_ONCK) {
+		if (terms & PAIR_TERM_ONCK) {
 			const ScalarForceEnergy fe = onck.compute(geom.distance, qi, qj);
 			force_magnitude += fe.force_magnitude;
 			energy += fe.energy;
 		}
-		if (enabled_terms & PAIR_TERM_GAUSSIAN) {
+		if (terms & PAIR_TERM_GAUSSIAN) {
 			const ScalarForceEnergy fe = gaussian.compute(geom.distance);
 			force_magnitude += fe.force_magnitude;
 			energy += fe.energy;
 		}
-		if (enabled_terms & PAIR_TERM_SOFTCORE) {
+		if (terms & PAIR_TERM_SOFTCORE) {
 			// softcoreForce returns dU/dr divided by r, so it needs converting
 			// to this kernel's -dU/dr. eps and radius are per particle type.
 			const mars_real rad = mars_real(0.5) * (types.radius[type_i] + types.radius[type_j]);

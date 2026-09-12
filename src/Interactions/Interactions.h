@@ -39,7 +39,8 @@ struct CalcDistance {
 	mars_real distance;	 // distance between two particles
 	Vector3 unit_vector; // unit vector in the direction of the vector
 
-	DEVICE static CalcDistance compute(const Vector3& from, const Vector3& to, const PeriodicBox* pbox) {
+	DEVICE static CalcDistance
+	compute(const Vector3& from, const Vector3& to, const PeriodicBox* pbox) {
 		CalcDistance dist;
 		dist.r_ij = pbox->wrap_diff(to - from);
 		dist.distance = dist.r_ij.length();

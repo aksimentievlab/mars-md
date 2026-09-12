@@ -112,40 +112,44 @@ Event Patch::calculate_nonbonded_forces(const NonBondedInteractions& interaction
 	}
 
 	if (rebuild) {
+		// ensure_bonded_topology_ready() above refreshed the CSR, so this picks up
+		// any reorder. Excluded pairs never enter the list. See dev_notes.md.
+		pairlist_->set_exclusions(ExclusionView{device_bonded_.exclusion_offsets(),
+												device_bonded_.exclusion_neighbors(),
+												device_bonded_.num_excl_particles()});
 		pairlist_->build_pairlist(particles_.pos(), particle_count_, pairlist_cutoff);
 		pairlist_built_ = true;
 
-		// Resolve per-pair table indices once per rebuild (see Pairwise.h / dev_notes).
+		// Resolve per-pair term tags once per rebuild (see Pairwise.h / dev_notes).
 		const size_t np = pairlist_->get_num_pairs();
-		if (pair_table_idx_.size() < np)
-			pair_table_idx_.resize(np);
+		if (pair_tag_.size() < np)
+			pair_tag_.resize(np);
 		if (np > 0) {
 			launch_resolve_pair_tables(resource_,
 									   pairlist_->get_neighbor_pairs().data(),
 									   particle_view.type_id,
-									   device_pair_nb_->pairwise_table_matrix(),
-									   device_pair_nb_->pairwise_form_matrix(),
+									   device_pair_nb_->pairwise_term_matrix(),
 									   device_pair_nb_->num_particle_types(),
-									   device_bonded_.exclusion_offsets(),
-									   device_bonded_.exclusion_neighbors(),
-									   device_bonded_.num_excl_particles(),
-									   pair_table_idx_.data(),
+									   pair_tag_.data(),
 									   np)
 				.wait();
 		}
 	}
 
+	// Only the tabulated term is wired up here; analytical terms join the same
+	// pass by adding their bits once their parameters are plumbed through.
 	evt = launch_pairwise_nonbonded(
 		resource_,
 		pairlist_->get_neighbor_pairs().data(),
-		particle_view.pos,
-		particle_view.ForceEnergy,
-		pair_table_idx_.data(),
+		particle_view,
+		pair_tag_.data(),
 		device_pair_nb_->nonbonded_potentials(),
+		particle_types.view(),
 		pbox,
 		compute_energy,
 		pairlist_->get_num_pairs(),
-		interaction_cutoff > 0.0f ? interaction_cutoff * interaction_cutoff : 0.0f);
+		interaction_cutoff > 0.0f ? interaction_cutoff * interaction_cutoff : 0.0f,
+		PAIR_TERM_TABULATED);
 
 	return evt;
 }

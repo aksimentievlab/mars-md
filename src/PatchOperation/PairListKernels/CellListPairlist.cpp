@@ -195,7 +195,8 @@ void CellListPairlist::find_neighbors_celllist(const DeviceBuffer<Vector3>& posi
 							  n_cells_,
 							  num_particles,
 							  max_pairs_,
-							  num_replicas_};
+							  num_replicas_,
+							  exclusions_};
 
 	KernelConfig config = KernelConfig::for_1d(num_particles * num_replicas_, resource_);
 	launch_kernel(resource_, config, kernel);

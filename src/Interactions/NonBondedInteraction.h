@@ -148,6 +148,97 @@ class NonBondedInteractions {
 	std::vector<LongRangeNonBonded> long_range_nonbonded_{};
 };
 
+/**
+ * @brief Resolve per-pair table tags; run once per pairlist rebuild.
+ * @note Exclusions are applied by the pairlist builder, not here.
+ */
+inline Event launch_resolve_pair_tables(const Resource& resource,
+										DEVICE_PTR(const int2) particle_indices,
+										DEVICE_PTR(const int) type_ids,
+										DEVICE_PTR(const uint32_t) pairwise_term_matrix,
+										idx_t num_particle_types,
+										DEVICE_PTR(uint32_t) pair_tag,
+										idx_t num_pairs) {
+	if (num_pairs == 0)
+		return Event(nullptr, resource);
+	KernelConfig config = KernelConfig::for_1d(num_pairs, resource);
+	ResolvePairTableKernel resolver{particle_indices,
+									type_ids,
+									pairwise_term_matrix,
+									num_particle_types,
+									pair_tag,
+									num_pairs};
+	return launch_kernel(resource, config, resolver);
+}
+
+/**
+ * @brief Launch pairwise tabulated nonbonded force computation.
+ * @note `pair_tag` must be filled by launch_resolve_pair_tables after each rebuild.
+ */
+inline Event launch_tabulated_nonbonded(const Resource& resource,
+										DEVICE_PTR(const int2) particle_indices,
+										DEVICE_PTR(Vector3) positions,
+										DEVICE_PTR(Vector3) force_energy,
+										DEVICE_PTR(const uint32_t) pair_tag,
+										DEVICE_PTR(const TabulatedPotential) tables,
+										const PeriodicBox* pbox,
+										bool get_energy,
+										idx_t num_pairs,
+										float cutoff_squared) {
+	if (num_pairs == 0)
+		return Event(nullptr, resource);
+
+	KernelConfig config = KernelConfig::for_1d(num_pairs, resource);
+
+	TabulatedNonBondedComputer computer(particle_indices,
+										positions,
+										force_energy,
+										pair_tag,
+										tables,
+										pbox,
+										get_energy,
+										num_pairs,
+										cutoff_squared);
+
+	return launch_kernel(resource, config, computer);
+}
+/**
+ * @brief Launch every enabled nonbonded pair term in one pass over the pairlist.
+ * @todo fix the PeriodicBox to DEVICE_PTR(const PeriodicBox) in the kernel;  `enabled_terms` gates
+ * the run; the per-pair tag narrows it further, so a pair contributes a term only when both agree.
+ * Analytical potentials are assigned on the returned functor's members before launch when their
+ * bits are enabled.
+ * @note `pair_tag` must be filled by launch_resolve_pair_tables after each rebuild.
+ */
+inline Event launch_pairwise_nonbonded(const Resource& resource,
+									   DEVICE_PTR(const int2) particle_indices,
+									   ParticleView particles,
+									   DEVICE_PTR(const uint32_t) pair_tag,
+									   DEVICE_PTR(const TabulatedPotential) tables,
+									   ParticleTypeView types,
+									   const PeriodicBox* pbox,
+									   bool get_energy,
+									   idx_t num_pairs,
+									   float cutoff_squared,
+									   uint32_t enabled_terms) {
+	if (num_pairs == 0 || enabled_terms == PAIR_TERM_NONE)
+		return Event(nullptr, resource);
+
+	KernelConfig config = KernelConfig::for_1d(num_pairs, resource);
+
+	PairNonbondedComputer computer(particle_indices,
+								   particles,
+								   pair_tag,
+								   tables,
+								   types,
+								   pbox,
+								   get_energy,
+								   num_pairs,
+								   cutoff_squared,
+								   enabled_terms);
+
+	return launch_kernel(resource, config, computer);
+}
 /// How a convolution's output is normalized.
 enum class ConvolutionNormalization {
 	VoxelSum, ///< sum(rho*K); matches the reference gen_pot tool

@@ -1,7 +1,9 @@
 #include "../catch_boiler.h"
 #include "PatchOperation/PairListKernels/ZOrderPairlist.h"
 #include "PatchOperation/ZOrderKernels/ZOrderSort.h"
+#include <algorithm>
 #include <random>
+#include <utility>
 #include <vector>
 
 using namespace MARS;
@@ -175,5 +177,118 @@ TEST_CASE("ZOrderPairlist Integration", "[zorder][pairlist][integration]") {
 
 		const auto& sorted_positions = pairlist.get_sorted_positions();
 		REQUIRE(sorted_positions.size() >= num_particles);
+	}
+}
+
+namespace {
+
+/// @brief Read the built pairlist back as a sorted list of (lo, hi) pairs.
+std::vector<std::pair<int, int>> read_pairs(const Pairlist& pairlist) {
+	const size_t n = pairlist.get_num_pairs();
+	std::vector<std::pair<int, int>> out;
+	if (n == 0) {
+		return out;
+	}
+	std::vector<MARS::int2> raw(n);
+	pairlist.get_neighbor_pairs().copy_to_host(raw.data(), n);
+	out.reserve(n);
+	for (const auto& p : raw) {
+		out.emplace_back(p.x < p.y ? p.x : p.y, p.x < p.y ? p.y : p.x);
+	}
+	std::sort(out.begin(), out.end());
+	return out;
+}
+
+} // namespace
+
+TEST_CASE("ZOrderPairlist drops excluded pairs at build time", "[zorder][pairlist][exclusions]") {
+	initialize_backend_once();
+	const auto& resource = Resource(Global::single_resource_id);
+
+	ZOrderPairlist pairlist(resource, 64, 256);
+	PeriodicBox box(Vector3(60.0f, 60.0f, 60.0f), false, false, false);
+	box.set_origin(Vector3(-30.0f, -30.0f, -30.0f));
+	pairlist.set_periodic_box(box);
+
+	// Four collinear particles one unit apart. At cutoff 2.5 every pair except
+	// (0,3) is in range, so the unfiltered list is a known set of five.
+	const size_t num_particles = 4;
+	const std::vector<Vector3> positions{Vector3(0.0f, 0.0f, 0.0f),
+										 Vector3(1.0f, 0.0f, 0.0f),
+										 Vector3(2.0f, 0.0f, 0.0f),
+										 Vector3(3.0f, 0.0f, 0.0f)};
+	DeviceBuffer<Vector3> device_positions(num_particles, resource);
+	device_positions.copy_from_host(positions.data(), num_particles);
+	const float cutoff = 2.5f;
+
+	const std::vector<std::pair<int, int>> all_pairs{{0, 1}, {0, 2}, {1, 2}, {1, 3}, {2, 3}};
+
+	SECTION("Empty view excludes nothing") {
+		pairlist.set_exclusions(ExclusionView{});
+		pairlist.build_pairlist(device_positions, num_particles, cutoff);
+		REQUIRE(read_pairs(pairlist) == all_pairs);
+	}
+
+	SECTION("Excluded pairs never reach the list") {
+		// Symmetric CSR over all four particles excluding (0,1) and (1,3):
+		//   p0 -> {1}   p1 -> {0, 3}   p2 -> {}   p3 -> {1}
+		const std::vector<int> offsets{0, 1, 3, 3, 4};
+		const std::vector<int> excluded{1, 0, 3, 1};
+
+		DeviceBuffer<int> off_buf(offsets.size(), resource);
+		off_buf.copy_from_host(offsets.data(), offsets.size());
+		DeviceBuffer<int> excl_buf(excluded.size(), resource);
+		excl_buf.copy_from_host(excluded.data(), excluded.size());
+
+		pairlist.set_exclusions(
+			ExclusionView{off_buf.data(), excl_buf.data(), static_cast<idx_t>(num_particles)});
+		pairlist.build_pairlist(device_positions, num_particles, cutoff);
+
+		const std::vector<std::pair<int, int>> expected{{0, 2}, {1, 2}, {2, 3}};
+		REQUIRE(read_pairs(pairlist) == expected);
+		REQUIRE(pairlist.get_num_pairs() == expected.size());
+	}
+
+	SECTION("Either endpoint's row alone is enough to drop the pair") {
+		// The builder scans only the row of the endpoint whose thread emits the
+		// pair, and Morton order decides which that is. A symmetric CSR covering
+		// every particle named in an exclusion makes that choice irrelevant, and
+		// DeviceBondedInteractions always builds one (num_excl_particles is the
+		// largest excluded index plus one). Here only particle 3's row lists the
+		// (1,3) exclusion, so the pair survives -- which is what makes storing
+		// each exclusion under both partners load-bearing rather than redundant.
+		const std::vector<int> offsets{0, 1, 2, 2, 3};
+		const std::vector<int> excluded{1, 0, 1};
+
+		DeviceBuffer<int> off_buf(offsets.size(), resource);
+		off_buf.copy_from_host(offsets.data(), offsets.size());
+		DeviceBuffer<int> excl_buf(excluded.size(), resource);
+		excl_buf.copy_from_host(excluded.data(), excluded.size());
+
+		pairlist.set_exclusions(
+			ExclusionView{off_buf.data(), excl_buf.data(), static_cast<idx_t>(num_particles)});
+		pairlist.build_pairlist(device_positions, num_particles, cutoff);
+
+		// (0,1) is listed under both 0 and 1, so it goes. (1,3) is listed only
+		// under 3, and particle 1 emits it, so it stays.
+		const std::vector<std::pair<int, int>> expected{{0, 2}, {1, 2}, {1, 3}, {2, 3}};
+		REQUIRE(read_pairs(pairlist) == expected);
+	}
+
+	SECTION("Excluding every in-range pair empties the list") {
+		//   p0 -> {1, 2}   p1 -> {0, 2, 3}   p2 -> {0, 1, 3}   p3 -> {1, 2}
+		const std::vector<int> offsets{0, 2, 5, 8, 10};
+		const std::vector<int> excluded{1, 2, 0, 2, 3, 0, 1, 3, 1, 2};
+
+		DeviceBuffer<int> off_buf(offsets.size(), resource);
+		off_buf.copy_from_host(offsets.data(), offsets.size());
+		DeviceBuffer<int> excl_buf(excluded.size(), resource);
+		excl_buf.copy_from_host(excluded.data(), excluded.size());
+
+		pairlist.set_exclusions(
+			ExclusionView{off_buf.data(), excl_buf.data(), static_cast<idx_t>(num_particles)});
+		pairlist.build_pairlist(device_positions, num_particles, cutoff);
+
+		REQUIRE(pairlist.get_num_pairs() == 0);
 	}
 }

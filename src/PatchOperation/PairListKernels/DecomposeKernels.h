@@ -12,6 +12,7 @@
  * - Validation kernels
  *********************************************************************/
 
+#include "Interactions/DeviceExclusions.h"
 #include "Types/BaseGrid.h"
 #include "Types/Types.h"
 
@@ -265,6 +266,7 @@ struct CellNeighborKernel {
 	size_t num_particles;
 	size_t max_pairs;
 	int numReplicas;
+	ExclusionView exclusions; ///< excluded pairs are dropped before emission
 
 	DEVICE void operator()(idx_t idx) const {
 		if (idx >= num_particles * numReplicas)
@@ -282,6 +284,10 @@ struct CellNeighborKernel {
 
 		Vector3 pos_i = positions[particle_i];
 		Vector3_t<int> cell_coord = cell_i.pos;
+
+		// Loop-invariant: load this endpoint's exclusion row once, not per candidate.
+		const int excl_begin = exclusions.row_begin(static_cast<int>(particle_i));
+		const int excl_end = exclusions.row_end(static_cast<int>(particle_i));
 
 		// Search neighboring cells (3x3x3 = 27 cells including self)
 		for (int dx = -1; dx <= 1; dx++) {
@@ -318,6 +324,10 @@ struct CellNeighborKernel {
 							float dist_squared = dr.length2();
 
 							if (dist_squared <= cutoff_squared) {
+								if (exclusions.row_contains(excl_begin,
+															excl_end,
+															static_cast<int>(particle_j)))
+									continue;
 								// Found a neighbor pair
 #ifdef __CUDA_ARCH__
 								uint32_t pair_idx = atomicAdd(pair_count, 1);
