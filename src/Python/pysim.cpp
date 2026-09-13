@@ -10,7 +10,7 @@
   get_nonbonded_interactions() in pysystem.cpp) since it's tied to particle
   type definitions, which are also SimSystem-owned.
 
-  @note Example usage (in Python):
+  @example (in Python):
   ```python
   >>> from arbd2v import SimSystem, ConfigParser, SimManager, Resource, ResourceType
   >>> sys = SimSystem([Resource(ResourceType.CUDA, 0)])
@@ -20,7 +20,7 @@
   >>> mgr.run()
   >>> mgr.get_total_time()
 
-  # Pure-Python configuration, no ConfigParser:
+  @example Pure-Python configuration, no ConfigParser:
   >>> mgr = SimManager(sys)
   >>> mgr.send_particles(my_particle_list)
   >>> mgr.send_bonded_interactions(my_bonded_interactions)

@@ -34,7 +34,7 @@ void def_float_property(nb::class_<Class>& cls, const char* py_name) {
 // HOST PARTICLE IO (ConfigParser initial topology)
 // ============================================================================
 /**
- * @note Example usage (in Python):
+ * @example(in Python):
  * ```python
  * >>> from pymars import ConfigParser, SimSystem, Resource, ResourceType, ParticleIO
  * >>> sys = SimSystem([Resource(ResourceType.CUDA, 0)])
@@ -51,14 +51,14 @@ void def_float_property(nb::class_<Class>& cls, const char* py_name) {
  * `id` (C++) is not exposed - it's an insertion-order index the engine
  * assigns itself (ConfigParser.cpp: `p.id = init_particles_.size()`), not
  * something a Python caller supplies or should rely on.
+ * Every Python-constructed particle gets a unique handle so bonded
+ * terms can name it before SimManager.stage_particles() fixes the
+ * ordering (see ParticleUids in Interactions/BondedInteraction.h).
+ * Note a copy shares its source's handle and so refers to the same
+ * logical particle for bonding purposes.
  */
 void declare_particle_io(nb::module_& m) {
 	nb::class_<ParticleIO>(m, "Particle")
-		// Every Python-constructed particle gets a unique handle so bonded
-		// terms can name it before SimManager.stage_particles() fixes the
-		// ordering (see ParticleUids in Interactions/BondedInteraction.h).
-		// Note a copy shares its source's handle and so refers to the same
-		// logical particle for bonding purposes.
 		.def("__init__",
 			 [](ParticleIO* self) {
 				 static std::atomic<int> next_uid{0};
@@ -81,40 +81,41 @@ void declare_particle_io(nb::module_& m) {
 }
 
 /**
- * @note Example usage (in Python):
+ * @example(in Python):
  * ```python
  * >>> from pymars import ParticleType
  * >>> pt = ParticleType("A")
  * >>> pt.diffusivity = [43.5, 43.5, 43.5]
  * >>> pt.damping_coefficient = [10.0, 10.0, 10.0]
  * ```
+ * @note Bound so nanobind/stl/vector.h can convert ParticleType::pmf_grids
+ * (std::vector<GridTerm>) instead of failing at attribute access.
+ * @note `grid_id` (C++) is not settable directly - like the other
+ * insertion-order-assigned ids in this file, it's an index into GridManager's
+ * grid views, only meaningful once GridManager has actually loaded the grid.
+ * Build from the GridKey that GridManager.add_dense_grid()/add_grid()
+ * returns instead; `grid_id` stays readable for introspection.
  */
 void declare_particle_type(nb::module_& m) {
-	// Bound so nanobind/stl/vector.h can convert ParticleType::pmf_grids
-	// (std::vector<GridTerm>) instead of failing at attribute access.
-	// `grid_id` (C++) is not settable directly - like the other insertion-
-	// order-assigned ids in this file, it's an index into GridManager's grid
-	// views, only meaningful once GridManager has actually loaded the grid.
-	// Build from the GridKey that GridManager.add_dense_grid()/add_grid()
-	// returns instead; `grid_id` stays readable for introspection.
 	nb::class_<GridTerm>(m, "GridTerm")
 		.def(nb::init<>())
-		.def("__init__",
-			 [](GridTerm* self,
-				const GridKey& grid,
-				float scale,
-				float scale_slope,
-				int boundary_condition) {
-				 new (self) GridTerm{};
-				 self->grid_id = grid.grid_id;
-				 self->scale = scale;
-				 self->scale_slope = scale_slope;
-				 self->boundary_condition = boundary_condition;
-			 },
-			 nb::arg("grid"),
-			 nb::arg("scale") = 1.0f,
-			 nb::arg("scale_slope") = 0.0f,
-			 nb::arg("boundary_condition") = -1)
+		.def(
+			"__init__",
+			[](GridTerm* self,
+			   const GridKey& grid,
+			   float scale,
+			   float scale_slope,
+			   int boundary_condition) {
+				new (self) GridTerm{};
+				self->grid_id = grid.grid_id;
+				self->scale = scale;
+				self->scale_slope = scale_slope;
+				self->boundary_condition = boundary_condition;
+			},
+			nb::arg("grid"),
+			nb::arg("scale") = 1.0f,
+			nb::arg("scale_slope") = 0.0f,
+			nb::arg("boundary_condition") = -1)
 		.def_prop_ro("grid_id", [](const GridTerm& t) { return t.grid_id; })
 		.def_rw("scale", &GridTerm::scale)
 		.def_rw("scale_slope", &GridTerm::scale_slope)
@@ -124,11 +125,13 @@ void declare_particle_type(nb::module_& m) {
 				   ", scale=" + std::to_string(t.scale) + ")";
 		});
 
-	// `id` (C++) is not exposed - it's only meaningful after
-	// SimSystem::assign_particle_type_ids() runs (insertion-order assigned),
-	// so a value read here before that point would just be stale/wrong. Look
-	// it up by name via SimSystem.get_particle_type_id() instead once types
-	// are registered.
+	/**
+	 * @note `id` (C++) is not exposed - it's only meaningful after
+	 * SimSystem::assign_particle_type_ids() runs (insertion-order assigned),
+	 * so a value read here before that point would just be stale/wrong. Look
+	 * it up by name via SimSystem.get_particle_type_id() instead once types
+	 * are registered.
+	 */
 	auto cls =
 		nb::class_<ParticleType>(m, "ParticleType")
 			.def(nb::init<const std::string&>(), nb::arg("name"))
@@ -158,12 +161,14 @@ void declare_particle_type(nb::module_& m) {
 // RIGID BODY BINDINGS
 // ============================================================================
 
-// `id` (C++) is not exposed here either - same insertion-order-assigned
-// bookkeeping field as ParticleIO::id (SimManager.cpp assigns it from
-// init_rigid_bodies_.size() when staged), not user-supplied data. `type_id`
-// (C++) is not exposed either, for the same reason ParticleType.id isn't:
-// use type_name (like ParticleIO) instead, resolved by SimSystem at
-// SystemState::set_init_rigid_body_data() time.
+/**
+ * @note `id` (C++) is not exposed here either - same insertion-order-assigned
+ * bookkeeping field as ParticleIO::id (SimManager.cpp assigns it from
+ * init_rigid_bodies_.size() when staged), not user-supplied data. `type_id`
+ * (C++) is not exposed either, for the same reason ParticleType.id isn't:
+ * use type_name (like ParticleIO) instead, resolved by SimSystem at
+ * SystemState::set_init_rigid_body_data() time.
+ */
 void declare_rigid_body(nb::module_& m) {
 	nb::class_<RigidBodyIO>(m, "RigidBody")
 		.def(nb::init<>())
@@ -185,17 +190,20 @@ void declare_rigid_body(nb::module_& m) {
 		});
 }
 
-// `id` (C++) is not exposed - same insertion-order-assigned-by-SimSystem
-// caveat as ParticleType::id above; look it up by name via
-// SimSystem.get_rigid_body_type_id() instead.
+/**
+ * @note `id` (C++) is not exposed - same insertion-order-assigned-by-SimSystem
+ * caveat as ParticleType::id above; look it up by name via
+ * SimSystem.get_rigid_body_type_id() instead.
+ */
 void declare_rigid_body_type(nb::module_& m) {
 	auto cls = nb::class_<RigidBodyType>(m, "RigidBodyType")
-				   .def("__init__",
-						[](RigidBodyType* self, const std::string& name) {
-							new (self) RigidBodyType{};
-							self->name = name;
-						},
-						nb::arg("name"))
+				   .def(
+					   "__init__",
+					   [](RigidBodyType* self, const std::string& name) {
+						   new (self) RigidBodyType{};
+						   self->name = name;
+					   },
+					   nb::arg("name"))
 				   .def_rw("name", &RigidBodyType::name)
 				   .def_rw("mass", &RigidBodyType::mass)
 				   .def_rw("charge", &RigidBodyType::charge)
@@ -235,10 +243,13 @@ void declare_rigid_body_type(nb::module_& m) {
 // ============================================================================
 // SystemState is an internal runtime container managed by SimManager.
 // Python users should:
-// 1. Configure the system via SimSystem
-// 2. Provide initial data via ConfigParser or direct ParticleIO creation
-// 3. Run simulation via SimManager (when exposed)
-// 4. Read results from output files (DCD, etc.)
+/**
+ * @note Python users should:
+ * 1. Configure the system via SimSystem
+ * 2. Provide initial data via ConfigParser or direct ParticleIO creation
+ * 3. Run simulation via SimManager (when exposed)
+ * 4. Read results from output files (DCD, etc.)
+ */
 
 void init_pyobjects(nb::module_& m) {
 	declare_particle_io(m);
