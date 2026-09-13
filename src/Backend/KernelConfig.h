@@ -260,7 +260,7 @@ struct KernelConfig {
 		switch (resource.type()) {
 		case ResourceType::CUDA:
 			// Use CUDA-specific configuration
-			block_size.x = 256; // Optimal for most CUDA kernels
+			block_size.x = 64; // EXPERIMENT: was 256; see dev_notes.md
 			grid_size.x = std::max(1UL, (thread_count + block_size.x - 1) / block_size.x);
 			grid_size.y = 1;
 			grid_size.z = 1;
