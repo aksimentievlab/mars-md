@@ -291,4 +291,53 @@ TEST_CASE("ZOrderPairlist drops excluded pairs at build time", "[zorder][pairlis
 
 		REQUIRE(pairlist.get_num_pairs() == 0);
 	}
+
+	SECTION("Particles sharing a rigid body never pair") {
+		// 0 and 1 on body 7, 2 on body 9, 3 unattached. Only (0,1) shares a body.
+		const std::vector<int> body{7, 7, 9, -1};
+		DeviceBuffer<int> body_buf(body.size(), resource);
+		body_buf.copy_from_host(body.data(), body.size());
+
+		pairlist.set_exclusions(ExclusionView{nullptr, nullptr, 0, body_buf.data()});
+		pairlist.build_pairlist(device_positions, num_particles, cutoff);
+
+		const std::vector<std::pair<int, int>> expected{{0, 2}, {1, 2}, {1, 3}, {2, 3}};
+		REQUIRE(read_pairs(pairlist) == expected);
+	}
+
+	SECTION("Unattached particles are never excluded by the body test") {
+		// Every particle unattached: -1 must not match -1.
+		const std::vector<int> body{-1, -1, -1, -1};
+		DeviceBuffer<int> body_buf(body.size(), resource);
+		body_buf.copy_from_host(body.data(), body.size());
+
+		pairlist.set_exclusions(ExclusionView{nullptr, nullptr, 0, body_buf.data()});
+		pairlist.build_pairlist(device_positions, num_particles, cutoff);
+
+		REQUIRE(read_pairs(pairlist) == all_pairs);
+	}
+
+	SECTION("Body test and CSR compose") {
+		// Body drops (0,1); the CSR drops (2,3). Both must apply.
+		const std::vector<int> body{5, 5, -1, -1};
+		DeviceBuffer<int> body_buf(body.size(), resource);
+		body_buf.copy_from_host(body.data(), body.size());
+
+		//   p0 -> {}   p1 -> {}   p2 -> {3}   p3 -> {2}
+		const std::vector<int> offsets{0, 0, 0, 1, 2};
+		const std::vector<int> excluded{3, 2};
+		DeviceBuffer<int> off_buf(offsets.size(), resource);
+		off_buf.copy_from_host(offsets.data(), offsets.size());
+		DeviceBuffer<int> excl_buf(excluded.size(), resource);
+		excl_buf.copy_from_host(excluded.data(), excluded.size());
+
+		pairlist.set_exclusions(ExclusionView{off_buf.data(),
+											  excl_buf.data(),
+											  static_cast<idx_t>(num_particles),
+											  body_buf.data()});
+		pairlist.build_pairlist(device_positions, num_particles, cutoff);
+
+		const std::vector<std::pair<int, int>> expected{{0, 2}, {1, 2}, {1, 3}};
+		REQUIRE(read_pairs(pairlist) == expected);
+	}
 }
