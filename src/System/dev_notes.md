@@ -105,3 +105,59 @@ gather_particles_to_state(SystemState&)` takes the opposite shape; the
 difference is deliberate, not an oversight.
 
 Callers pair it with `SystemState::mark_rigid_bodies_synced()`.
+
+## 2026-09-12 — single-patch plan hard-coded the box origin to (0,0,0)
+
+`SimSystem`'s single-patch decomposition plan filled `patch_min_bounds` with a literal
+`Vector3(0,0,0)` and `patch_max_bounds` with the box *size*, rather than the box origin and
+`origin + size`. `DecompositionPlan::set_periodic_box()` then saw `have_bounds == true`, skipped
+the branch that derives bounds from `system_box.get_origin()`, and did
+`pbox.set_origin(patch_min_bounds[0])` — so every patch got `origin = (0,0,0)`.
+
+Nothing upstream was wrong: `ConfigParser` -> `SimSystem::set_origin` -> `sim_box_.set_origin`
+all carry the configured origin, and `plan.system_box = sim_box_` copies it. Those four literals
+were the only break, and they suppressed the code that would otherwise have been correct.
+
+### Symptom: silently non-periodic neighbour lists
+
+On cytoplasm (`origin -400`, `systemSize 800`, fully periodic) the pairlist reproduced the
+**open** neighbour list exactly and found **zero** cross-boundary pairs:
+
+| | pairs | vs scipy cKDTree |
+|---|--:|---|
+| before | 55,928,261 | matches *open* count (56,231,831 - 303,567 exclusions), 3 short |
+| after | **55,929,837** | matches *periodic* count (56,233,409 - 303,567), 5 short |
+
+1,576 pairs recovered — every one a missing force term at a box face.
+
+Mechanism: `build_pairlist` sets the Morton domain to `[origin, origin+size)` on periodic axes.
+With `origin=(0,0,0)` that is `[0,800)` while the particles occupy `[-400,400)`. Negative
+coordinates clamp into edge cells, which *preserves* the open list — clamped particles share a
+cell, cells are always searched, and spurious candidates die on the distance test — but destroys
+periodic adjacency. A particle at `z=-393.7` clamps to cell 0; its true wrapped partner at
+`z=+390.3` sits in cell 7; cells 0 and 7 are never stencil neighbours.
+
+`wrap_diff` only needs the box *length*, not the origin, which is why forces were otherwise sane
+and only the boundary shell was affected. Anything calling `PeriodicBox::wrap()` (absolute
+wrapping) against these patch boxes was working in the wrong image.
+
+### Why it hid for so long
+
+- The deficit is 0.003% of the list and confined to a shell one cutoff thick at each face.
+- It only appears when the box origin is not `(0,0,0)`.
+- It only appears when particles actually approach a boundary. Here the x and y gaps across the
+  periodic faces (61.1 A and 46.4 A) exceed the 45 A cutoff, so the deficit was almost entirely
+  in z, whose gap is 16.0 A.
+- `PLDIAG` did not print the origin. It does now.
+
+### Related, still open
+
+`PatchManager::initialize_local_patches` (`PatchManager.cpp`) passes a `Vector3` where `Patch`
+expects a `PeriodicBox`, compiling only through the non-explicit
+`PeriodicBox(const Vector3&, bool=true, bool=true, bool=true)` converting constructor, and drops
+the origin the same way. It currently has **no callers**. Marking that constructor `explicit`
+would turn this class of mistake into a compile error.
+
+`ConfigParser`'s `periodicity_map` (`allperiodic`/`twodimensional`/`onedimensional`/`open`) is
+declared and never used, so periodicity cannot be set from a config file at all. It defaults to
+all-periodic via `SimSystem::sim_box_`, which is why this system was periodic despite no key.

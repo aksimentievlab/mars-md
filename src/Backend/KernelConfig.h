@@ -259,8 +259,8 @@ struct KernelConfig {
 		// Backend-specific 1D auto-configuration
 		switch (resource.type()) {
 		case ResourceType::CUDA:
-			// Use CUDA-specific configuration
-			block_size.x = 64; // EXPERIMENT: was 256; see dev_notes.md
+			// 64 beats 256 on every kernel that can fill the GPU; measured, see dev_notes.md.
+			block_size.x = 64;
 			grid_size.x = std::max(1UL, (thread_count + block_size.x - 1) / block_size.x);
 			grid_size.y = 1;
 			grid_size.z = 1;

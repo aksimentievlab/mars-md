@@ -235,8 +235,8 @@ void ZOrderPairlist::find_neighbors_zorder(size_t num_particles) {
 	}
 	num_pairs_ = num_pairs;
 	LOGDEBUG("pair_count AFTER kernel: {}", num_pairs);
-	LOGDEBUG("PLDIAG n={} cut={:.1f} m={} cells={} extent=({:.1f},{:.1f},{:.1f}) "
-			 "per=({},{},{}) boxsz=({:.1f},{:.1f},{:.1f}) pairs={}",
+	LOGINFO("PLDIAG n={} cut={:.1f} m={} cells={} extent=({:.1f},{:.1f},{:.1f}) "
+			"per=({},{},{}) boxsz=({:.1f},{:.1f},{:.1f}) org=({:.1f},{:.1f},{:.1f}) pairs={}",
 			 num_particles,
 			 std::sqrt(cutoff_squared_),
 			 m,
@@ -250,6 +250,9 @@ void ZOrderPairlist::find_neighbors_zorder(size_t num_particles) {
 			 box_.get_box_size().x,
 			 box_.get_box_size().y,
 			 box_.get_box_size().z,
+			 box_.get_origin().x,
+			 box_.get_origin().y,
+			 box_.get_origin().z,
 			 num_pairs);
 }
 

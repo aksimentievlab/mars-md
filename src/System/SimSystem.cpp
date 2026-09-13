@@ -122,12 +122,15 @@ void SimSystem::create_single_patch_manager(SystemState& state) {
 						sim_box_.get_periodicity()[1],
 						sim_box_.get_periodicity()[2]};
 
-	// Single patch covers entire system
-	Vector3 system_size = get_box_size();
-	plan.patch_min_bounds.push_back(Vector3(0.0f, 0.0f, 0.0f));
-	plan.patch_max_bounds.push_back(system_size);
-	plan.system_min = Vector3(0.0f, 0.0f, 0.0f);
-	plan.system_max = system_size;
+	// Single patch covers entire system. Bounds start at the box origin, not at
+	// the coordinate origin: set_periodic_box() copies patch_min_bounds into the
+	// patch's PeriodicBox origin. See dev_notes.md.
+	const Vector3 system_origin = sim_box_.get_origin();
+	const Vector3 system_size = get_box_size();
+	plan.patch_min_bounds.push_back(system_origin);
+	plan.patch_max_bounds.push_back(system_origin + system_size);
+	plan.system_min = system_origin;
+	plan.system_max = system_origin + system_size;
 
 	// Assign the single resource
 	plan.patch_resources.push_back(resources_[0]);
