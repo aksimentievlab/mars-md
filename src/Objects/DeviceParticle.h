@@ -24,6 +24,7 @@ struct ParticleView {
 	DEVICE_PTR(Vector3) __restrict__ orient;
 	DEVICE_PTR(uint32_t) __restrict__ flags; // Combined flags
 	DEVICE_PTR(Vector3) __restrict__ external_force; // Per-particle diffusion vector (x/y/z
+	DEVICE_PTR(int) __restrict__ attached_rigid_body_id; ///< -1 when unattached
 };
 
 struct ConstParticleView {
@@ -35,6 +36,7 @@ struct ConstParticleView {
 	CONSTANT_PTR(Vector3) __restrict__ orient;
 	CONSTANT_PTR(uint32_t) __restrict__ flags;
 	CONSTANT_PTR(Vector3) __restrict__ external_force;
+	CONSTANT_PTR(int) __restrict__ attached_rigid_body_id; ///< -1 when unattached
 };
 /**
  * @param pmf_grid_offset Index of first PMF grid for this type in pmf_grid_terms

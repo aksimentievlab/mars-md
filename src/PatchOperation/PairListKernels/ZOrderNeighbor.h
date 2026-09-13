@@ -166,6 +166,7 @@ struct ZOrderCellNeighborKernel {
 		const int a = static_cast<int>(sorted_to_original[i]);
 		const int excl_begin = exclusions.row_begin(a);
 		const int excl_end = exclusions.row_end(a);
+		const int excl_body = exclusions.body_of(a);
 
 		for (int k = 0; k < MAX_NEIGHBORS; ++k) {
 			const uint32_t ncell = nbrs[k];
@@ -185,7 +186,8 @@ struct ZOrderCellNeighborKernel {
 
 				if (d2 <= cutoff_squared) {
 					const int b = static_cast<int>(sorted_to_original[j]);
-					if (exclusions.row_contains(excl_begin, excl_end, b))
+					if (exclusions.same_body(excl_body, b) ||
+						exclusions.row_contains(excl_begin, excl_end, b))
 						continue;
 					// Per-hit atomic on purpose: the interleaved slot order it
 					// produces is load-bearing for the force kernel. See dev_notes.md.

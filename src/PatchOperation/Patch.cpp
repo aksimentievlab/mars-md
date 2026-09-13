@@ -114,9 +114,13 @@ Event Patch::calculate_nonbonded_forces(const NonBondedInteractions& interaction
 	if (rebuild) {
 		// ensure_bonded_topology_ready() above refreshed the CSR, so this picks up
 		// any reorder. Excluded pairs never enter the list. See dev_notes.md.
-		pairlist_->set_exclusions(ExclusionView{device_bonded_.exclusion_offsets(),
-												device_bonded_.exclusion_neighbors(),
-												device_bonded_.num_excl_particles()});
+		pairlist_->set_exclusions(
+			ExclusionView{device_bonded_.exclusion_offsets(),
+						  device_bonded_.exclusion_neighbors(),
+						  device_bonded_.num_excl_particles(),
+						  exclude_rigid_body_attached_
+							  ? particles_.attached_rigid_body_id().data()
+							  : nullptr});
 		pairlist_->build_pairlist(particles_.pos(), particle_count_, pairlist_cutoff);
 		pairlist_built_ = true;
 
@@ -541,6 +545,10 @@ void Patch::copy_particles_from_host(const HostParticleData& host_data,
 		temp_data.energy[i] = host_data.energy[host_idx];
 		temp_data.orient[i] = host_data.orient[host_idx];
 		temp_data.flags[i] = host_data.flags[host_idx];
+		temp_data.attached_rigid_body_id[i] =
+			host_idx < host_data.attached_rigid_body_id.size()
+				? host_data.attached_rigid_body_id[host_idx]
+				: -1;
 	}
 
 	// Copy to device

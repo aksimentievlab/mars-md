@@ -152,3 +152,21 @@ Single-patch invariant: global_id is a dense permutation of [0,count); the loop 
 if that is violated.
 
 
+
+## 2026-09-12 — every per-particle device array must be added to DeviceParticle::permute
+
+`attached_rigid_body_id_` was added to `DeviceParticle` for the rigid-body exclusion test but not
+to `permute()`. With `ENABLE_ZORDER_REORDER` on (it is, via `Header.h`), the first Z-order reorder
+left that array indexed by pre-reorder slots while `pos_`/`id_`/`type_id_`/`flags_` had moved.
+The pairlist then excluded the wrong pairs.
+
+The symptom was not a wrong answer that looked wrong — it was a *performance* regression that
+looked like the reorder itself misbehaving: `PairNonbondedComputer` went from 28,576 ns (no
+reorder) to 49,739 ns (reorder + stale ids), i.e. worse than not reordering at all, at an almost
+unchanged pair count. After permuting the array it is 24,320 ns, and v2 edges v1 for the first
+time on this system.
+
+Nothing in the type system enforces this. When adding a per-particle `DeviceBuffer` to
+`DeviceParticle`, add it to `permute()` in the same edit. A cheap check that the reorder covers a
+new array: count `ReorderDataKernel<T>` launches in an nsys profile — they went 200 -> 300 per run
+here (`id_`, `type_id_`, `attached_rigid_body_id_` x 100 reorders).

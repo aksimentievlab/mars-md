@@ -502,6 +502,15 @@ class Patch {
 	bool is_bonded_prepared() const {
 		return bonded_device_data_prepared_;
 	}
+
+	/**
+	 * @brief Drop nonbonded pairs whose particles share a rigid body (default on).
+	 * @note Matches ARBD v1, which excludes every intra-rigid-body pair. Must be set
+	 *       before the first pairlist build to take effect.
+	 */
+	void set_exclude_rigid_body_attached(bool enabled) {
+		exclude_rigid_body_attached_ = enabled;
+	}
 #endif
 
 	/**
@@ -628,6 +637,7 @@ class Patch {
 
 	DeviceBondedInteractions device_bonded_;
 	bool bonded_device_data_prepared_{false};
+	bool exclude_rigid_body_attached_{true};
 
 	// Device-side pairwise nonbonded topology (type-pair -> table matrix)
 	std::unique_ptr<DevicePairNonBondedInteractions> device_pair_nb_;

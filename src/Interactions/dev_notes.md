@@ -54,3 +54,38 @@ stay valid until the next build.
 
 Consumers and the reasoning behind filtering at pairlist-emit time are in
 `PatchOperation/PairListKernels/dev_notes.md`.
+
+## 2026-09-12 — rigid-body exclusions use an O(1) same-body test, not the CSR
+
+v1 excludes every pair of particles attached to the same rigid body, unconditionally, with no
+cutoff and no bond graph (`arbd/src/Configuration.cpp`, the block before the second
+`printf("Built %d exclusions.")`). On npc_6enl_beads that is C(437,2) = 95,266 pairs; v2 was
+generating none of them, so it evaluated nonbonded forces on 27% of pairs v1 drops.
+
+**Do not route this through the exclusion CSR.** `ExclusionView::row_contains` is a linear scan,
+called per in-cutoff candidate. The all-pairs rule gives each of the 437 attached particles a
+436-entry row, so every candidate touching an attached particle would cost up to 436 comparisons.
+The CSR sizing comment in `DeviceBondedInteraction.h` assumes "~degree(i), typically 1-2 for a
+linear polymer" -- off by ~200x. `rebuild_exclusions_after_reorder` would also do a host
+round-trip and re-sort of all 95,266 pairs at reorder cadence.
+
+Instead `ExclusionView` carries `rigid_body_id`, the per-particle RB instance id (-1 unattached),
+and the pairlist drops a pair when both endpoints share a non-negative id. `body_of()` hoists out
+of the neighbour loop next to `row_begin`/`row_end`; only the partner's id is a per-candidate
+gather, alongside the `sorted_to_original[j]` load already there. Semantically identical to v1,
+O(1), no CSR growth, and the reorder path needs nothing new.
+
+A null `rigid_body_id` disables the test, and `body_of()` returns -1 in that case so `same_body()`
+short-circuits before dereferencing. That null is also the off switch for
+`Patch::set_exclude_rigid_body_attached` (default on).
+
+The host side needed no new plumbing: `ConfigParser::fold_in_attached_particles` already sets
+`ParticleIO::attached_rigid_body_id = rb.id`, `rb.id` is assigned per *instance* (not per type),
+`SystemState` pushes it into the global SoA, and `SystemState.cpp` carries it through the Z-order
+permutation. What was missing was only the upload: `DeviceParticle` now owns the buffer and
+`Patch::copy_particles_from_host` copies the column. Absent host data fills -1 rather than
+leaving a stale buffer.
+
+Verification is by pair count, not by any log line: this design adds no CSR entries, so the
+"Prepared N exclusions" message is unchanged. Toggle the flag and the emitted pair count must
+differ by exactly the intra-body pair total.

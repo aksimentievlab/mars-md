@@ -56,7 +56,7 @@ if(TARGET MARS::scuff)
     message(STATUS "Linking lib${PROJECT_NAME} against scuff-em")
 endif()
 
-# For SYCL builds, apply -fsycl-targets only to device sources
+# For SYCL builds, apply -fsycl-targets to every source that is not host-only
 # Note: -fsycl is already set globally in root CMakeLists.txt
 if(USE_SYCL_ICPX OR USE_SYCL_ACPP)
     # Some files are pure host code and should not be compiled with SYCL at all
@@ -76,16 +76,25 @@ if(USE_SYCL_ICPX OR USE_SYCL_ACPP)
             )
         endif()
     endforeach()
+    # Everything that is not explicitly host-only gets device compilation.
+    # A TU built with bare -fsycl emits a spir64 image the CUDA backend cannot
+    # load, so any kernel it instantiates fails at launch. See dev_notes.md.
+    set(SYCL_DEVICE_SOURCES ${LIB_SOURCES})
+    if(PURE_HOST_SOURCES)
+        list(REMOVE_ITEM SYCL_DEVICE_SOURCES ${PURE_HOST_SOURCES})
+    endif()
+    if(SYCL_HOST_SOURCES)
+        list(REMOVE_ITEM SYCL_DEVICE_SOURCES ${SYCL_HOST_SOURCES})
+    endif()
+
     message(STATUS "Configuring SYCL compilation:")
-    message(STATUS "  Device sources (with kernels): ${SYCL_DEVICE_SOURCES}")
+    list(LENGTH SYCL_DEVICE_SOURCES _sycl_device_count)
+    message(STATUS "  Device sources (with kernels): ${_sycl_device_count} files")
     message(STATUS "  Host SYCL sources (runtime API): ${SYCL_HOST_SOURCES}")
 
-    # Apply -fsycl-targets ONLY to device sources (files with kernels)
-    # These files need device compilation
     foreach(source ${SYCL_DEVICE_SOURCES})
         get_filename_component(source_abs "${CMAKE_CURRENT_SOURCE_DIR}/${source}" ABSOLUTE)
         if(EXISTS "${source_abs}")
-            message(STATUS "  Marking ${source} for SYCL device compilation with targets")
             set_source_files_properties("${source_abs}"
                 PROPERTIES
                 COMPILE_FLAGS "${SYCL_DEVICE_EXTRA_FLAGS} -DSYCL_DEVICE_SOURCE"

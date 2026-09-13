@@ -179,3 +179,55 @@ temperature is unsupported, and the generated vector is not yet routed into
 initial-state storage. Particle reactions remain a design stub: run the reaction
 kernel, compact dead particles, remap topology, append births, and rebuild the
 neighbor list.
+
+## 2026-09-12 — SYCL device compilation must cover every kernel-bearing TU
+
+`build/tbgl-icpx-sycl-debug/mars` aborted before step 1 on npc_6enl_beads:
+
+```
+No kernel named _ZTSZZN4MARS21launch_sycl_kernel_1dINS_25ApplyExternalForcesKernelE... was found
+```
+
+35 SYCL kernels were registered in the host binary; only 26 were present in the nvptx device
+image. The nine missing ones were the entire `RBOperation` set — `ApplyExternalForcesKernel`,
+`RBCosmeticPositionsKernel`, `RBGridCullKernel`, `RBGridPrefixSumKernel`, `RBIntegrateBDKernel`,
+`RBIntegrateDLMKernel`, `RBLangevinForceKernel`, `RBParticleGridBuildKernel`,
+`RBSyncAttachedPositionsKernel`. `ApplyExternalForcesKernel` was merely the first one launched,
+so SYCL could not run *any* rigid-body system.
+
+Cause: `SYCL_DEVICE_EXTRA_FLAGS` (`-fsycl-targets=nvptx64-nvidia-cuda ... --cuda-gpu-arch=sm_80`)
+was applied per source file from a hand-curated `SYCL_DEVICE_SOURCES` list, and that list was
+appended to in exactly one place project-wide — `PatchOperation/CMakeLists.txt` — five files.
+`RBOperation/CMakeLists.txt` registers `RBOpKernel.cu` for CUDA and has no SYCL branch. So
+`SimManager.cpp`, the only TU instantiating `launch_sycl_kernel_1d<ApplyExternalForcesKernel>`
+(via `SimManager.h` -> `RigidBodyManager.h` -> `RBHostFTManager.h`), compiled with bare `-fsycl`
+and emitted a **spir64** image, which the CUDA backend cannot load. 41 TUs got nvptx, 29 did not.
+
+This is the SYCL analogue of the CUDA rule in CLAUDE.md: a kernel needs a TU that actually
+compiles it for the target. Under CUDA the symptom is `NotImplementedError` from the host stub;
+under SYCL it is a runtime "No kernel named ... was found".
+
+Fix: `SYCL_DEVICE_SOURCES` is now derived as `LIB_SOURCES` minus `PURE_HOST_SOURCES` minus
+`SYCL_HOST_SOURCES` instead of being curated by hand. Opt-out, not opt-in. Adding
+`SimManager.cpp` to the old list would have cleared this one error and then failed on the next RB
+kernel.
+
+Note the `list(APPEND SYCL_DEVICE_SOURCES ...)` block still sitting in
+`PatchOperation/CMakeLists.txt` is now dead — the variable is overwritten in `src/CMakeLists.txt`.
+Harmless, but delete it when convenient so it does not read as authoritative.
+
+Cost: every TU now pays nvptx device compilation, so SYCL builds are slower. A build that cannot
+run rigid bodies is not a working build.
+
+### How to check this without running anything
+
+The device images live in the `__CLANG_OFFLOAD_BUNDLE` ELF section. Extract it by offset
+(`readelf -S` for offset/size, then `dd ... iflag=skip_bytes,count_bytes`) and compare the kernel
+names it contains against the ones the host binary registers:
+
+```
+strings -a <binary>    | grep -oE "_ZTSZZN4MARS21launch_sycl_kernel_[123]dINS_[0-9]+[A-Za-z]+"
+strings -a <bundle.bin> | grep -oE "_ZTSZZN4MARS21launch_sycl_kernel_[123]dINS_[0-9]+[A-Za-z]+"
+```
+
+Anything in the first list but not the second will fail at launch.

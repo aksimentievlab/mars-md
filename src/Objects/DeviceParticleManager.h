@@ -14,7 +14,7 @@ class DeviceParticle {
 		: capacity_(capacity), count_(0), resource_(resource), id_(capacity, resource),
 		  type_id_(capacity, resource), pos_(capacity, resource), mom_(capacity, resource),
 		  ForceEnergy_(capacity, resource), orient_(capacity, resource),
-		  flags_(capacity, resource)
+		  flags_(capacity, resource), attached_rigid_body_id_(capacity, resource)
 #ifdef ENABLE_ZORDER_REORDER
 		  ,
 		  reorder_scratch_vec3_(capacity, resource), reorder_scratch_int_(capacity, resource),
@@ -31,7 +31,9 @@ class DeviceParticle {
 				mom_.data(),
 				ForceEnergy_.data(),
 				orient_.data(),
-				flags_.data()};
+				flags_.data(),
+				nullptr,
+				attached_rigid_body_id_.data()};
 	}
 
 	ConstParticleView view() const {
@@ -41,7 +43,9 @@ class DeviceParticle {
 				mom_.data(),
 				ForceEnergy_.data(),
 				orient_.data(),
-				flags_.data()};
+				flags_.data(),
+				nullptr,
+				attached_rigid_body_id_.data()};
 	}
 
 	// Getters for raw buffers (if needed for copy/reorder)
@@ -65,6 +69,12 @@ class DeviceParticle {
 	}
 	DeviceBuffer<Vector3>& mom() {
 		return mom_;
+	}
+	DeviceBuffer<int>& attached_rigid_body_id() {
+		return attached_rigid_body_id_;
+	}
+	const DeviceBuffer<int>& attached_rigid_body_id() const {
+		return attached_rigid_body_id_;
 	}
 
 	// Management
@@ -119,6 +129,14 @@ class DeviceParticle {
 		// Flags
 		if (!host.flags.empty())
 			flags_.copy_from_host(host.flags.data(), count);
+
+		// Rigid-body attachment. Absent host data means "nothing attached", and the
+		// pairlist's same-body test must see -1, not a stale buffer. See dev_notes.md.
+		if (host.attached_rigid_body_id.size() >= static_cast<size_t>(count)) {
+			attached_rigid_body_id_.copy_from_host(host.attached_rigid_body_id.data(), count);
+		} else {
+			attached_rigid_body_id_.fill(-1, true);
+		}
 
 		count_ = count;
 	}
@@ -181,6 +199,8 @@ class DeviceParticle {
 		std::swap(type_id_, reorder_scratch_int_);
 		sorter.reorder_data(flags_, reorder_scratch_uint32_, n);
 		std::swap(flags_, reorder_scratch_uint32_);
+		sorter.reorder_data(attached_rigid_body_id_, reorder_scratch_int_, n);
+		std::swap(attached_rigid_body_id_, reorder_scratch_int_);
 		reordered_ = true;
 	}
 
@@ -249,6 +269,7 @@ class DeviceParticle {
 	DeviceBuffer<Vector3> ForceEnergy_;
 	DeviceBuffer<Vector3> orient_;
 	DeviceBuffer<uint32_t> flags_; // Replaces 3 bool arrays
+	DeviceBuffer<int> attached_rigid_body_id_; // -1 when unattached
 
 #ifdef ENABLE_ZORDER_REORDER
 	DeviceBuffer<Vector3> reorder_scratch_vec3_;
