@@ -32,8 +32,6 @@ __all__ = [
     "LONG_RANGE_MAP",
     "INTEGRATOR_MAP",
     "OUTPUT_FORMAT_MAP",
-    "canonical_key",
-    "is_known_key",
 ]
 
 
@@ -329,29 +327,3 @@ ANALYTICAL_BOND_TYPES: Final[tuple[str, ...]] = (
 )
 ANALYTICAL_ANGLE_TYPES: Final[tuple[str, ...]] = ANALYTICAL_BOND_TYPES
 ANALYTICAL_DIHEDRAL_TYPES: Final[tuple[str, ...]] = ANALYTICAL_BOND_TYPES
-
-
-def canonical_key(key: str) -> str:
-    """Return the canonical model field a key fills, or ``""`` if unknown."""
-    for table in (
-        GLOBAL_KEYS,
-        TOP_LEVEL_ELEMENT_KEYS,
-        PARTICLE_FIELD_KEYS,
-        RIGID_BODY_FIELD_KEYS,
-    ):
-        owner = table.get(key)
-        if owner is not None:
-            return owner.field
-    return ""
-
-
-def is_known_key(key: str) -> bool:
-    """True if the engine recognizes ``key`` at all, applied or not."""
-    return (
-        key in BLOCK_HEADERS
-        or key in GLOBAL_KEYS
-        or key in TOP_LEVEL_ELEMENT_KEYS
-        or key in PARTICLE_FIELD_KEYS
-        or key in RIGID_BODY_FIELD_KEYS
-        or key in KNOWN_UNSUPPORTED_KEYS
-    )

@@ -30,7 +30,7 @@ Vec3 = tuple[float, float, float]
 
 @dataclass(frozen=True, slots=True)
 class UnsupportedKey:
-    """A key the engine recognizes but does not act on."""
+    """A key the engine does not act on: unrecognized, deprecated, or dropped."""
 
     key: str
     value: str

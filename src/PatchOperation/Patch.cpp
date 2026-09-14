@@ -53,8 +53,6 @@ Event Patch::calculate_nonbonded_forces(const NonBondedInteractions& interaction
 										const Vector3& electric_field,
 										int interpolation_scheme,
 										bool compute_energy) {
-	(void)interactions;
-
 	particles_.clear_forces();
 
 	const idx_t num_particles = particles_.size();
@@ -79,7 +77,7 @@ Event Patch::calculate_nonbonded_forces(const NonBondedInteractions& interaction
 	if (!pairwise_nb_device_data_prepared_) {
 		device_pair_nb_ =
 			std::make_unique<DevicePairNonBondedInteractions>(particle_types.size(), resource_);
-		device_pair_nb_->copy_pairwise_from_host(tables_registry.get_pair_nonbonded_types());
+		device_pair_nb_->copy_pairwise_from_host(interactions.get_pair_nonbonded());
 		device_pair_nb_->link_pairwise_tables(tables_registry, resource_idx);
 		pairwise_nb_device_data_prepared_ = true;
 	}
@@ -140,8 +138,6 @@ Event Patch::calculate_nonbonded_forces(const NonBondedInteractions& interaction
 		}
 	}
 
-	// Only the tabulated term is wired up here; analytical terms join the same
-	// pass by adding their bits once their parameters are plumbed through.
 	evt = launch_pairwise_nonbonded(
 		resource_,
 		pairlist_->get_neighbor_pairs().data(),
@@ -153,7 +149,8 @@ Event Patch::calculate_nonbonded_forces(const NonBondedInteractions& interaction
 		compute_energy,
 		pairlist_->get_num_pairs(),
 		interaction_cutoff > 0.0f ? interaction_cutoff * interaction_cutoff : 0.0f,
-		PAIR_TERM_TABULATED);
+		interactions.enabled_terms(),
+		interactions.get_solvent_params());
 
 	return evt;
 }

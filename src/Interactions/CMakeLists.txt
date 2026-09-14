@@ -3,7 +3,6 @@
 
 list(APPEND LIB_SOURCES
     Interactions/BondedInteraction.cpp
-    Interactions/NonBondedInteraction.cpp
 )
 
 list(APPEND HOST_DEVICE_HEADERS

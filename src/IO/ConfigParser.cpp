@@ -1050,10 +1050,13 @@ void ConfigParser::get_elements(const Reader& reader) {
 				// Resolve file path relative to config file
 				std::string resolved_path = resolve_file_path(file_path, file_name_);
 
-				// Load the pair nonbonded interaction
-				sim_system_ref_->get_tables_registry().load_pair_nonbonded(type_id_1,
-																		   type_id_2,
-																		   resolved_path);
+				auto& registry = sim_system_ref_->get_tables_registry();
+				const int table_index = registry.load_nonbonded(resolved_path);
+				sim_system_ref_->get_nonbonded_interactions().add_pair_nonbonded(
+					PairNonBonded(type_id_1,
+								  type_id_2,
+								  registry.get_nonbonded()[table_index].name,
+								  table_index));
 				LOGDEBUG("Loaded tabulatedFile: type {}@{} from '{}'",
 						 type_id_1,
 						 type_id_2,

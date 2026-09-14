@@ -22,8 +22,8 @@ struct CosmeticParticle {
 };
 
 struct RigidBodyIO {
-	int id;
-	int type_id;
+	int id{-1};
+	int type_id{-1};
 	std::string type_name;
 	Vector3 position;
 	Matrix3 orientation;

@@ -196,11 +196,12 @@ void declare_rigid_body(nb::module_& m) {
 		.def_rw("external_torque", &RigidBodyIO::external_torque)
 		.def_rw("is_dummy", &RigidBodyIO::is_dummy)
 		.def_rw("has_orientation", &RigidBodyIO::has_orientation)
-		// Half-open range into the global particle array holding this instance's
-		// copy of its type's attached-particle template. Read-only: the applier
-		// assigns it when it lays out the attached block.
-		.def_prop_ro("attached_start", [](const RigidBodyIO& rb) { return rb.attached_start; })
-		.def_prop_ro("attached_count", [](const RigidBodyIO& rb) { return rb.attached_count; })
+		// id, attached_start and attached_count are set by whoever lays out the
+		// attached-particle block: ConfigParser in C++, the staging helper in
+		// Python (mirrors ConfigParser::fold_in_attached_particles).
+		.def_rw("id", &RigidBodyIO::id)
+		.def_rw("attached_start", &RigidBodyIO::attached_start)
+		.def_rw("attached_count", &RigidBodyIO::attached_count)
 		.def("__repr__", [](const RigidBodyIO& rb) {
 			return "RigidBody(type_name='" + rb.type_name +
 				   "', position=" + rb.position.to_string() + ")";

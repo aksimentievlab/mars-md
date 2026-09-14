@@ -1,4 +1,9 @@
 #include "Backend/Resource.h"
+#ifdef USE_CUDA
+#include "Backend/CUDA/CUDAManager.h"
+#elif defined(USE_SYCL)
+#include "Backend/SYCL/SYCLManager.h"
+#endif
 #include "IO/ConfigParser.h"
 #include "Interactions/NonBondedInteraction.h"
 #include "Objects/RigidBodyProperties.h"
@@ -180,6 +185,17 @@ void init_pysystem(nb::module_& m) {
 		.def(
 			"__init__",
 			[](SimSystem* self, const std::vector<short>& gpus) {
+				// Device discovery, once per process; what mars.cpp does before
+				// building any Resource. See dev_notes.md.
+				static bool backend_discovered = false;
+				if (!backend_discovered) {
+#ifdef USE_CUDA
+					CUDA::Manager::init();
+#elif defined(USE_SYCL)
+					SYCL::Manager::init();
+#endif
+					backend_discovered = true;
+				}
 				std::vector<Resource> resources;
 				resources.reserve(gpus.size());
 				for (short device_id : gpus) {

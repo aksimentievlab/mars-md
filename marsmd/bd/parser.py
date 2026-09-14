@@ -10,9 +10,7 @@ See dev_notes.md for the block-cursor semantics and why they are a superset of
 
 from __future__ import annotations
 
-from typing import Literal
-
-from .errors import BdKeywordError, BdParseError
+from .errors import BdParseError
 from .keywords import (
     BLOCK_HEADERS,
     DECOMPOSER_MAP,
@@ -24,7 +22,6 @@ from .keywords import (
     PARTICLE_FIELD_KEYS,
     RIGID_BODY_FIELD_KEYS,
     RIGID_BODY_PMF_KEYS,
-    TOP_LEVEL_ELEMENT_KEYS,
     TOPOLOGY_KEYS,
 )
 from .model import (
@@ -47,9 +44,7 @@ from .tokens import (
     tokenize,
 )
 
-__all__ = ["BdParser", "parse_file", "parse_string", "UnknownPolicy"]
-
-UnknownPolicy = Literal["strict", "warn", "ignore"]
+__all__ = ["BdParser", "parse_file", "parse_string"]
 
 _BOUNDARY_CONDITIONS = {"dirichlet": 0, "neumann": 1, "periodic": 2}
 
@@ -136,12 +131,8 @@ def _apply_rb_scales(
 class BdParser:
     """Turn ``.bd`` text into a :class:`BdConfig`.
 
-    :param unknown: what to do with a keyword the engine does not recognize.
-        ``strict`` raises (the default, matching the engine), ``warn`` collects
-        it into ``config.unsupported`` and emits a warning, ``ignore`` collects
-        it silently.
-    :param strip_comments: strip trailing ``#`` comments from values. Off by
-        default; see :func:`marsmd.bd.tokens.strip_trailing_comment`.
+    A key the engine does not recognize is collected in ``config.unsupported``
+    with a reason, never raised: the engine ignores such keys, and so does this.
 
     :example:
         >>> config = BdParser().parse_file("run.bd")
@@ -150,14 +141,6 @@ class BdParser:
         >>> [p.name for p in config.particles]
         ['B', 'P', 'rb']
     """
-
-    def __init__(
-        self, *, unknown: UnknownPolicy = "strict", strip_comments: bool = False
-    ):
-        if unknown not in ("strict", "warn", "ignore"):
-            raise ValueError(f"unknown policy must be strict/warn/ignore, got {unknown!r}")
-        self.unknown = unknown
-        self.strip_comments = strip_comments
 
     # -- entry points ------------------------------------------------------
 
@@ -169,7 +152,7 @@ class BdParser:
     def parse_string(self, text: str, *, source_path: str = "") -> BdConfig:
         """Parse ``.bd`` text. ``source_path`` only records where it came from."""
         config = BdConfig(source_path=source_path)
-        lines = list(iter_parameter_lines(text, strip_comments=self.strip_comments))
+        lines = list(iter_parameter_lines(text))
 
         i = 0
         while i < len(lines):
@@ -217,28 +200,9 @@ class BdParser:
         return False
 
     def _handle_unknown(self, line: SourceLine, config: BdConfig) -> None:
-        """Dispatch a key no table claims, per the configured policy."""
-        reason = KNOWN_UNSUPPORTED_KEYS.get(line.key)
-        if reason is not None:
-            self._record_unsupported(line, config, reason)
-            return
-
-        if self.unknown == "strict":
-            raise BdKeywordError(
-                f"unrecognized keyword {line.key!r}",
-                config.source_path,
-                line.line_no,
-                line.raw,
-            )
-        if self.unknown == "warn":
-            import warnings
-
-            warnings.warn(
-                f"{config.source_path}:{line.line_no}: unrecognized keyword "
-                f"{line.key!r}",
-                stacklevel=3,
-            )
-        self._record_unsupported(line, config, "unrecognized")
+        """Record a key no table claims. The engine ignores it; so do we."""
+        reason = KNOWN_UNSUPPORTED_KEYS.get(line.key, "unrecognized; the engine ignores it")
+        self._record_unsupported(line, config, reason)
 
     # -- top-level ---------------------------------------------------------
 
@@ -282,34 +246,14 @@ class BdParser:
     def _parse_tabulated_file(
         self, line: SourceLine, config: BdConfig
     ) -> TabulatedPair | None:
-        """Parse ``i@j@path``.
-
-        The engine warns and skips a malformed entry rather than failing the
-        parse; strict mode raises instead so a typo is not silently dropped.
-        """
-        value = line.value
-        parts = value.split("@", 2)
-        if len(parts) != 3:
-            if self.unknown == "strict":
-                raise BdParseError(
-                    "tabulatedFile: expected 'i@j@path'",
-                    config.source_path,
-                    line.line_no,
-                    line.raw,
-                )
-            self._record_unsupported(line, config, "malformed tabulatedFile")
-            return None
+        """Parse ``i@j@path``. A malformed entry is recorded and skipped, as the engine does."""
+        parts = line.value.split("@", 2)
         try:
+            if len(parts) != 3:
+                raise ValueError(line.value)
             return TabulatedPair(int(parts[0]), int(parts[1]), parts[2])
         except ValueError:
-            if self.unknown == "strict":
-                raise BdParseError(
-                    "tabulatedFile: type ids must be integers",
-                    config.source_path,
-                    line.line_no,
-                    line.raw,
-                ) from None
-            self._record_unsupported(line, config, "malformed tabulatedFile")
+            self._record_unsupported(line, config, "malformed tabulatedFile; expected i@j@path")
             return None
 
     def _apply_global(self, line: SourceLine, config: BdConfig) -> None:
@@ -601,11 +545,11 @@ class BdParser:
         config.rigid_bodies.append(block)
         return i
 
-def parse_file(path: str, **kwargs) -> BdConfig:
+def parse_file(path: str) -> BdConfig:
     """Convenience wrapper for :meth:`BdParser.parse_file`."""
-    return BdParser(**kwargs).parse_file(path)
+    return BdParser().parse_file(path)
 
 
-def parse_string(text: str, *, source_path: str = "", **kwargs) -> BdConfig:
+def parse_string(text: str, *, source_path: str = "") -> BdConfig:
     """Convenience wrapper for :meth:`BdParser.parse_string`."""
-    return BdParser(**kwargs).parse_string(text, source_path=source_path)
+    return BdParser().parse_string(text, source_path=source_path)

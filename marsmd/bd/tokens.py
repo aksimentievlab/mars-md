@@ -17,9 +17,7 @@ __all__ = [
     "is_comment_or_blank",
     "tokenize",
     "split_key_value",
-    "strip_trailing_comment",
     "iter_parameter_lines",
-    "parse_float",
     "parse_int",
     "parse_vector3",
     "parse_matrix3_rows",
@@ -47,20 +45,6 @@ def tokenize(value: str) -> list[str]:
     return value.split()
 
 
-def strip_trailing_comment(value: str) -> str:
-    """Drop a trailing ``#`` comment from a value.
-
-    Off by default. C++ keeps the comment text in the value and survives only
-    because ``std::stoi`` stops at the first non-digit -- so ``0 # deprecated``
-    reads as ``0``. Any code path that does not go through ``stoi`` sees the
-    whole string.
-    """
-    hash_pos = value.find("#")
-    if hash_pos == -1:
-        return value
-    return value[:hash_pos].rstrip()
-
-
 def split_key_value(line: str) -> tuple[str, str]:
     """Split a line into its first token and the whitespace-joined remainder.
 
@@ -73,14 +57,11 @@ def split_key_value(line: str) -> tuple[str, str]:
     return toks[0], " ".join(toks[1:])
 
 
-def iter_parameter_lines(
-    text: str, *, strip_comments: bool = False
-) -> Iterator[SourceLine]:
+def iter_parameter_lines(text: str) -> Iterator[SourceLine]:
     """Yield every parameter line of a config file, in order.
 
-    :param text: full file contents.
-    :param strip_comments: drop trailing ``#`` comments from values. Off by
-        default to match the engine.
+    A trailing ``# comment`` stays in the value, as in the engine; only
+    ``std::stoi``-style integer parsing tolerates it (see :func:`parse_int`).
     """
     for line_no, raw in enumerate(text.splitlines(), start=1):
         if is_comment_or_blank(raw):
@@ -88,23 +69,12 @@ def iter_parameter_lines(
         key, value = split_key_value(raw)
         if not key:
             continue
-        if strip_comments:
-            value = strip_trailing_comment(value)
         yield SourceLine(key=key, value=value, line_no=line_no, raw=raw)
 
 
 # ---------------------------------------------------------------------------
 # value parsers
 # ---------------------------------------------------------------------------
-
-
-def parse_float(value: str, *, key: str, line: SourceLine, path: str = "") -> float:
-    try:
-        return float(tokenize(value)[0])
-    except (ValueError, IndexError) as exc:
-        raise BdParseError(
-            f"{key}: expected a number, got {value!r}", path, line.line_no, line.raw
-        ) from exc
 
 
 def parse_int(value: str, *, key: str, line: SourceLine, path: str = "") -> int:
@@ -129,7 +99,7 @@ def parse_int(value: str, *, key: str, line: SourceLine, path: str = "") -> int:
 
 
 def parse_vector3(
-    value: str, *, key: str, line: SourceLine, path: str = "", fallback=(0.0, 0.0, 0.0)
+    value: str, *, key: str, line: SourceLine, path: str = ""
 ) -> tuple[float, float, float]:
     """Parse ``"x y z"``.
 

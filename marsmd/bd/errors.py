@@ -21,7 +21,3 @@ class BdParseError(BdError):
         where = f"{path}:{line_no}" if path else f"line {line_no}"
         detail = f"\n    {line.strip()}" if line else ""
         super().__init__(f"{where}: {message}{detail}")
-
-
-class BdKeywordError(BdParseError):
-    """An unrecognized keyword was seen under ``strict`` policy."""

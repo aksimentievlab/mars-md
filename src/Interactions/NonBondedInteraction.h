@@ -1,7 +1,7 @@
 #pragma once
 /**
  * @file NonBondedInteraction.h
- * @brief Host-side nonbonded interaction definitions
+ * @brief Host-side nonbonded pair list: which type pairs interact, and how
  */
 
 #include "Backend/Kernels.h"
@@ -16,40 +16,75 @@
 #include "Types/BaseGrid.h"
 
 namespace MARS {
-namespace AnalyticalNameList {
-const std::vector<std::string> pair_nonbonded_types = {"LJ"};
-const std::vector<std::string> long_range_nonbonded_types = {"E-field", "Pmf"};
-} // namespace AnalyticalNameList
 
+/// @brief The analytical pair term a name denotes, or PAIR_TERM_NONE
+inline uint32_t pair_term_from_name(const std::string& function_name) {
+	if (function_name == "coulomb" || function_name == "columb")
+		return PAIR_TERM_COULOMB;
+	if (function_name == "debye_huckel")
+		return PAIR_TERM_DEBYE_HUCKEL;
+	if (function_name == "onck")
+		return PAIR_TERM_ONCK;
+	if (function_name == "gaussian")
+		return PAIR_TERM_GAUSSIAN;
+	if (function_name == "softcore")
+		return PAIR_TERM_SOFTCORE;
+	return PAIR_TERM_NONE;
+}
+
+/**
+ * @brief One type pair and its interaction: analytical by name, or tabulated by
+ *        index into TablesRegistry::get_nonbonded()
+ */
 struct PairNonBonded {
 	int type_id_1{-1};
-	int type_id_2{-1}; ///< for callers that don't already know the numeric type ids yet
+	int type_id_2{-1};
 	std::string type_name_1{};
 	std::string type_name_2{};
-	int id{-1};
 	std::string function_name{""};
 	InteractionForm form{InteractionForm::Tabulated};
 	int function_index{-1};
 
-	PairNonBonded(int type_id_1, int type_id_2, const std::string& function_name) {
+	/// Analytical pair by type id
+	PairNonBonded(int type_id_1, int type_id_2, const std::string& function_name)
+		: PairNonBonded(type_id_1, type_id_2, function_name, -1) {}
+
+	/// Tabulated pair by type id; @p table_index from TablesRegistry
+	PairNonBonded(int type_id_1, int type_id_2, const std::string& function_name, int table_index) {
 		this->type_id_1 = std::min(type_id_1, type_id_2);
 		this->type_id_2 = std::max(type_id_1, type_id_2);
-		set_function(function_name);
+		set_function(function_name, table_index);
 	}
 
+	/// Analytical pair by type name
 	PairNonBonded(const std::string& type_name_1,
 				  const std::string& type_name_2,
 				  const std::string& function_name)
+		: PairNonBonded(type_name_1, type_name_2, function_name, -1) {}
+
+	/// Tabulated pair by type name; @p table_index from TablesRegistry
+	PairNonBonded(const std::string& type_name_1,
+				  const std::string& type_name_2,
+				  const std::string& function_name,
+				  int table_index)
 		: type_name_1(type_name_1), type_name_2(type_name_2) {
-		set_function(function_name);
+		set_function(function_name, table_index);
+	}
+
+	bool is_analytical() const {
+		return form == InteractionForm::Analytical;
+	}
+
+	/// The term bits this pair contributes to the enabled mask
+	uint32_t term_bits() const {
+		return is_analytical() ? pair_term_from_name(function_name) : PAIR_TERM_TABULATED;
 	}
 
 	/**
 	 * @brief Resolve type_name_1/type_name_2 into type_id_1/type_id_2.
 	 * @param name_to_id Callable mapping a type name to its assigned id.
 	 * @note No-op when the names are empty (ids were supplied directly).
-	 *       Templated on the lookup so this header stays independent of
-	 *       SimSystem, which includes it transitively via Objects/Tables.h.
+	 *       Templated on the lookup so this header stays independent of SimSystem.
 	 */
 	template<typename NameToId>
 	void resolve_type_names(NameToId&& name_to_id) {
@@ -63,79 +98,85 @@ struct PairNonBonded {
 	}
 
   private:
-	void set_function(const std::string& function_name) {
-		auto it = std::find(AnalyticalNameList::pair_nonbonded_types.begin(),
-							AnalyticalNameList::pair_nonbonded_types.end(),
-							function_name);
-		if (it != AnalyticalNameList::pair_nonbonded_types.end()) {
-			form = InteractionForm::Analytical;
-			function_index = std::distance(AnalyticalNameList::pair_nonbonded_types.begin(), it);
-		} else {
-			form = InteractionForm::Tabulated;
-		}
+	void set_function(const std::string& function_name, int table_index) {
 		this->function_name = function_name;
+		if (table_index >= 0) {
+			form = InteractionForm::Tabulated;
+			function_index = table_index;
+			return;
+		}
+		if (pair_term_from_name(function_name) == PAIR_TERM_NONE) {
+			throw_value_error("PairNonBonded: '%s' is not an analytical pair term and no table "
+							  "index was given",
+							  function_name.c_str());
+		}
+		form = InteractionForm::Analytical;
+		function_index = -1;
 	}
-};
-
-struct LongRangeNonBonded {
-	int type_id{-1};
-	std::string function_name{""};
-	InteractionForm form{InteractionForm::Grid};
-	int function_index{-1};
 };
 
 /**
- * @brief Host-side nonbonded interaction registry
- *
- * Owns configuration metadata only. Device buffers live in
- * DevicePairNonBondedInteractions (pairwise) and GridManager (PMF/force grids).
+ * @brief Solvent constants of the screened electrostatic pair terms
+ * @note One solvent per system, so these are global; defaults equal the
+ *       functor defaults in Columb.h
  */
+struct SolventParams {
+	mars_real debye_length{10}; ///< Debye-Huckel screening length, Angstrom
+	mars_real dielectric{80};	///< Debye-Huckel relative dielectric
+	mars_real onck_kappa{0.1};	///< Onck inverse screening length, 1/Angstrom
+	mars_real onck_sz{80};		///< Onck bulk dielectric plateau
+	mars_real onck_z{6.86};		///< Onck sigmoid width, Angstrom
+};
+
+/// @brief The system's nonbonded pair list, owned by SimSystem
 class NonBondedInteractions {
   public:
-	NonBondedInteractions(std::vector<PairNonBonded> pair_nonbonded,
-						  std::vector<LongRangeNonBonded> long_range_nonbonded)
-		: pair_nonbonded_(std::move(pair_nonbonded)),
-		  long_range_nonbonded_(std::move(long_range_nonbonded)) {}
 	NonBondedInteractions() = default;
-	~NonBondedInteractions() = default;
+	explicit NonBondedInteractions(std::vector<PairNonBonded> pair_nonbonded)
+		: pair_nonbonded_(std::move(pair_nonbonded)) {}
 
-	void add_pair_nonbonded(const PairNonBonded& pair_nonbonded) {
-		pair_nonbonded_.push_back(pair_nonbonded);
+	void set_solvent_params(const SolventParams& params) {
+		solvent_ = params;
 	}
-	void add_long_range_nonbonded(const LongRangeNonBonded& long_range_nonbonded) {
-		long_range_nonbonded_.push_back(long_range_nonbonded);
+	const SolventParams& get_solvent_params() const {
+		return solvent_;
 	}
 
-	void prepare_device_data();
-	void cleanup_device_data();
+	/// @brief Append a pair; a pair already declared (by id or by name) is kept as is
+	void add_pair_nonbonded(const PairNonBonded& pair) {
+		for (const auto& existing : pair_nonbonded_) {
+			if (same_pair(existing, pair)) {
+				LOGWARN("NonBondedInteractions: pair ({}, {}) already declared as '{}'; "
+						"ignoring '{}'",
+						existing.type_name_1.empty() ? std::to_string(existing.type_id_1)
+													 : existing.type_name_1,
+						existing.type_name_2.empty() ? std::to_string(existing.type_id_2)
+													 : existing.type_name_2,
+						existing.function_name,
+						pair.function_name);
+				return;
+			}
+		}
+		pair_nonbonded_.push_back(pair);
+	}
 
 	const std::vector<PairNonBonded>& get_pair_nonbonded() const {
 		return pair_nonbonded_;
 	}
-	const std::vector<LongRangeNonBonded>& get_long_range_nonbonded() const {
-		return long_range_nonbonded_;
-	}
-
 	size_t get_num_pair_nonbonded() const {
 		return pair_nonbonded_.size();
 	}
-	size_t get_num_long_range_nonbonded() const {
-		return long_range_nonbonded_.size();
+
+	/// @brief Union of every declared pair's term bits; the kernel's enabled mask
+	uint32_t enabled_terms() const {
+		uint32_t terms = PAIR_TERM_NONE;
+		for (const auto& pair : pair_nonbonded_) {
+			terms |= pair.term_bits();
+		}
+		return terms;
 	}
 
-	void assign_id() {
-		for (size_t i = 0; i < pair_nonbonded_.size(); ++i) {
-			pair_nonbonded_[i].id = static_cast<int>(i);
-		}
-		for (size_t i = 0; i < long_range_nonbonded_.size(); ++i) {
-			long_range_nonbonded_[i].type_id = static_cast<int>(i);
-		}
-	}
-
-	/**
-	 * @brief Resolve every name-specified pair into numeric type ids.
-	 * @see PairNonBonded::resolve_type_names
-	 */
+	/// @brief Resolve every name-declared pair into type ids
 	template<typename NameToId>
 	void resolve_type_names(NameToId&& name_to_id) {
 		for (auto& pair : pair_nonbonded_) {
@@ -144,8 +185,17 @@ class NonBondedInteractions {
 	}
 
   private:
+	static bool same_pair(const PairNonBonded& a, const PairNonBonded& b) {
+		const bool by_name = !a.type_name_1.empty() && !b.type_name_1.empty();
+		if (by_name) {
+			return (a.type_name_1 == b.type_name_1 && a.type_name_2 == b.type_name_2) ||
+				   (a.type_name_1 == b.type_name_2 && a.type_name_2 == b.type_name_1);
+		}
+		return a.type_id_1 >= 0 && a.type_id_1 == b.type_id_1 && a.type_id_2 == b.type_id_2;
+	}
+
 	std::vector<PairNonBonded> pair_nonbonded_{};
-	std::vector<LongRangeNonBonded> long_range_nonbonded_{};
+	SolventParams solvent_{};
 };
 
 /**
@@ -206,8 +256,7 @@ inline Event launch_tabulated_nonbonded(const Resource& resource,
  * @brief Launch every enabled nonbonded pair term in one pass over the pairlist.
  * @todo fix the PeriodicBox to DEVICE_PTR(const PeriodicBox) in the kernel;  `enabled_terms` gates
  * the run; the per-pair tag narrows it further, so a pair contributes a term only when both agree.
- * Analytical potentials are assigned on the returned functor's members before launch when their
- * bits are enabled.
+ * @param solvent Screening constants set on the electrostatic functors before launch
  * @note `pair_tag` must be filled by launch_resolve_pair_tables after each rebuild.
  */
 inline Event launch_pairwise_nonbonded(const Resource& resource,
@@ -220,7 +269,8 @@ inline Event launch_pairwise_nonbonded(const Resource& resource,
 									   bool get_energy,
 									   idx_t num_pairs,
 									   float cutoff_squared,
-									   uint32_t enabled_terms) {
+									   uint32_t enabled_terms,
+									   const SolventParams& solvent) {
 	if (num_pairs == 0 || enabled_terms == PAIR_TERM_NONE)
 		return Event(nullptr, resource);
 
@@ -236,6 +286,11 @@ inline Event launch_pairwise_nonbonded(const Resource& resource,
 								   num_pairs,
 								   cutoff_squared,
 								   enabled_terms);
+	computer.debye_huckel.screen_length = solvent.debye_length;
+	computer.debye_huckel.epsilon = solvent.dielectric;
+	computer.onck.kappa = solvent.onck_kappa;
+	computer.onck.sz = solvent.onck_sz;
+	computer.onck.z = solvent.onck_z;
 
 	return launch_kernel(resource, config, computer);
 }

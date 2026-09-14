@@ -22,6 +22,7 @@
 #include "Backend/Buffer.h"
 #include "Backend/Resource.h"
 #include "IO/DxIO.h"
+#include "Interactions/NonBondedInteraction.h"
 #include "MARSException.h"
 #include "MARSLogger.h"
 #include "Objects/Grid.h"

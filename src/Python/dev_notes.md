@@ -188,6 +188,60 @@ then fails at import:
 Bindings removed; Python does not expose simulation timing. Do not re-add them
 unless a definition lands first.
 
+## Backend discovery must run before the first Resource (2026-09-14)
+
+`mars.cpp` calls `CUDA::Manager::init()` (or the SYCL one) before it builds any
+`Resource`. The bindings never did, so under Python every
+`KernelConfig::validate_block_size` call threw inside
+`CUDA::Manager::get_device_properties`, was swallowed, logged "Failed to query
+CUDA device limits, using default block size", and **rewrote the block size to
+256**. Kernels that carry their own `block_size` and size shared memory from it
+(`RBReduceAttachedForcesKernel`: 128 threads, `2 * 128 * sizeof(Vector3)` of
+shared) were then launched with 256 threads: an out-of-bounds shared write,
+seen as "illegal memory access" the moment a rigid body had attached particles.
+Pure-particle runs survived because their kernels take the block size from the
+config alone. The `SimSystem.__init__` binding now runs the discovery once per
+process; the 144k-line warning flood in the fixture logs was the same defect.
+
+Engine-side fragility left as is: the fallback in `validate_block_size` changes
+an explicit block size silently. A kernel that sizes shared memory itself has
+no way to notice.
+
+## In-memory tables and grids (2026-09-14)
+
+The model engine (`marsmd/model`) must not write `.dat`/`.dx` files just to
+read them back. Until now `TablesRegistry` only had file loaders and
+`GridManager` only `add_dense_grid(filename)`, so `Table.set_values` and
+`Grid.from_numpy` were orphans: nothing accepted the result.
+
+Added in `src/Objects`: `TablesRegistry::add_bond/add_angle/add_dihedral/add_nonbonded(Table)`;
+`GridManager::add_dense_grid(name, BaseGrid)` (the file overload now delegates
+to it). Bound in `pytables.cpp` and `pyloadfile.cpp`.
+
+Which type pairs interact is not a table concern: that list is
+`SimSystem.get_nonbonded_interactions()`, and a `PairNonBonded` is analytical
+by name (`coulomb`, `debye_huckel`, `onck`, `gaussian`, `softcore`) or
+tabulated by the index `load_nonbonded`/`add_nonbonded` return. See
+`src/Interactions/dev_notes.md` for why the registry used to hold that list.
+
+Two rules the bindings inherit:
+
+- Angle/dihedral X is in **degrees** on the way in. `Table::read_file` converts to
+  radians; `set_values` does not, so `add_angle/add_dihedral` do it. Bond and
+  nonbonded X is untouched.
+- The `name` given to `add_dense_grid` is the key `get_grid_key()` takes, and
+  `SimSystem::assign_particle_type_ids` re-derives every particle-type grid id
+  from `pmf_grid_names` / `diffusion_grid_name` / `force_grid_names` through
+  that lookup at `init()`. The name stored on the type must be the registered
+  key, byte for byte, or the grid id silently becomes -1.
+
+`RigidBody.id`, `attached_start`, `attached_count` are now writable: only
+`ConfigParser::fold_in_attached_particles` ever laid out the attached block, so
+the staging path (both `marsmd.bd` and the model engine) has to do it in Python.
+
+`TablesRegistry` is an engine seam for `marsmd`'s own staging code, not a user
+API; the model layer exposes `add_nonbonded_interaction(a, b, name | potential)`.
+
 ## find_package(Python) must be repeated in src/Python/CMakeLists.txt
 
 `nanobind_build_library()` (extern/nanobind/cmake/nanobind-config.cmake:306)

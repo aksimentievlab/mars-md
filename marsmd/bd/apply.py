@@ -254,7 +254,7 @@ class BdApplier:
             setattr(rbt, keys_attr, keys)
 
         if block.input_pdb and block.input_psf:
-            _core().load_rigid_body_pdb_psf(
+            core.load_rigid_body_pdb_psf(
                 rbt,
                 resolve_file_path(block.input_pdb, self.config.source_path),
                 resolve_file_path(block.input_psf, self.config.source_path),

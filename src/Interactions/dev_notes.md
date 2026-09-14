@@ -89,3 +89,53 @@ leaving a stale buffer.
 Verification is by pair count, not by any log line: this design adds no CSR entries, so the
 "Prepared N exclusions" message is unchanged. Toggle the flag and the emitted pair count must
 differ by exactly the intra-body pair total.
+
+## 2026-09-14 — the nonbonded pair list lives in NonBondedInteractions, not TablesRegistry
+
+`NonBondedInteractions` was dead: `Patch::calculate_nonbonded_forces` took it and never read
+it, `prepare_device_data`/`cleanup_device_data` were empty, `LongRangeNonBonded` had no consumer,
+and the pair list Patch really used was `TablesRegistry::pair_nonbonded_types_`. So "which type
+pairs interact" had ended up inside the table cache, and an analytical pair (no table at all)
+could not be declared: `PairNonBonded::set_function` recognised only `AnalyticalNameList =
+{"LJ"}` while the device encoder (`analytical_term_bit`) knew `coulomb`, `debye_huckel`, `onck`,
+`gaussian`, `softcore`. On top of that `Patch.cpp` passed a hardcoded `PAIR_TERM_TABULATED` as
+the enabled mask, so a correctly tagged analytical pair would still have been skipped.
+
+Now, mirroring the bonded side (`BondedInteractions` owns terms, the registry owns tables):
+
+- `TablesRegistry` holds tables only. `load_nonbonded(path)` / `add_nonbonded(Table)` return an
+  index into `get_nonbonded()`, deduplicated by name (file stem) like the bonded loaders. The old
+  `load_pair_nonbonded(i, j, path)` made a fresh table per pair even for the same file.
+- `NonBondedInteractions` (owned by `SimSystem`) is the pair list. `PairNonBonded(i, j, name)`
+  is analytical, `PairNonBonded(i, j, name, table_index)` tabulated; by type name too, resolved
+  at `build_name_to_id_maps`. `add_pair_nonbonded` keeps the first declaration of a pair.
+- One name list, `pair_term_from_name` in `NonBondedInteraction.h` (host-only; `Pairwise.h` is
+  device code shared with Metal and stays free of `std::string`). The device encoder calls it.
+- `Patch` builds the type-pair matrix from `interactions.get_pair_nonbonded()` and passes
+  `interactions.enabled_terms()` as the mask. Tabulated-only runs get the same mask as before.
+
+Physics of what a declared pair gets: the device tag carries only that pair's own bits, and the
+kernel applies `tag & enabled_terms`, so a tabulated pair never picks up an analytical term and
+a tabulated-only run is bit-for-bit what it was. `coulomb` is unscreened vacuum Coulomb,
+`332.0636 qi qj / r` kcal/mol with charges in e (`constants::COULOMB`), and `softcore` takes
+`eps`/`radius` per particle type. The screened terms need solvent constants that are neither
+per type nor derivable in the kernel: Debye-Huckel λ and ε, Onck κ, Sz and z. One solvent per
+system, so they are global, in `SolventParams` on the pair list
+(`NonBondedInteractions::set_solvent_params`), and `launch_pairwise_nonbonded` copies them onto
+the functors before launch. Before this the functor defaults (λ = 10 Å, ε = 80; κ = 0.1,
+z = 6.86) were the only values a run could ever use, and `SimSystem::salt_concentration_` was
+stored and read nowhere. `SolventParams` defaults equal the functor defaults, so nothing moves
+for a run that never sets them. Deriving λ from salt and temperature is the caller's job
+(Python: 3.04 Å / sqrt(I[M]) at 298 K); the engine does not guess.
+
+Open: `gaussian` amp and σ are pair properties (well depth ε_ij, width σ_ij), not solvent
+constants, and the kernel still reads them from the functor defaults (amp = 1, σ = 1,
+no cutoff). Making them per pair needs a per-pair parameter matrix beside the tag matrix in
+`DevicePairNonBondedInteractions`, filled from fields on `PairNonBonded`, and
+`GaussianPotential::compute` in `Pairwise.h` (device code, shared with Metal) taking them from
+it. Until then a `gaussian` pair is only good for exercising the kernel.
+
+`load_nonbonded` dedupes by resolved path, not by file stem: two different `nb.dat` files in
+different directories are different potentials. The bonded loaders still key by stem.
+
+`NonBondedInteraction.cpp` is an empty stub to be removed together with its CMake entry.

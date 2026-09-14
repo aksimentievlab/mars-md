@@ -1,7 +1,7 @@
-"""Command-line entry point: ``python -m marsmd.run CONFIG.bd``.
+"""Command-line entry point: ``python -m marsmd CONFIG.bd [OUTPUT]``.
 
-Parsing, resolution and reporting work today. Launching a simulation is Phase
-D and raises with an explanation.
+Same shape as ``arbd [-g N] CONFIG.bd OUTPUT``: parse the config, resolve the
+files it names, print a summary, run.
 """
 
 from __future__ import annotations
@@ -17,55 +17,28 @@ __all__ = ["main", "build_parser"]
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
-        prog="python -m marsmd.run",
+        prog="python -m marsmd",
         description="Read an ARBD .bd configuration and run it.",
     )
     p.add_argument("config", metavar="CONFIG.bd", help="configuration file")
     p.add_argument(
         "output", nargs="?", default=None, help="output base name (overrides outputName)"
     )
-
     # The backend is fixed when the engine is built; this picks a device only.
-    p.add_argument("--gpu", type=int, default=0, metavar="N", help="run on device N")
-
+    p.add_argument("-g", "--gpu", type=int, default=0, metavar="N", help="run on device N")
+    p.add_argument("--steps", type=int, help="override the configured step count")
     p.add_argument(
         "--dry-run",
         action="store_true",
         help="print the resolved configuration and exit without simulating",
     )
-
-    unknown = p.add_mutually_exclusive_group()
-    unknown.add_argument(
-        "--strict",
-        dest="unknown",
-        action="store_const",
-        const="strict",
-        help="raise on an unrecognized keyword (default)",
-    )
-    unknown.add_argument(
-        "--warn",
-        dest="unknown",
-        action="store_const",
-        const="warn",
-        help="warn on an unrecognized keyword and continue",
-    )
-    unknown.add_argument(
-        "--ignore",
-        dest="unknown",
-        action="store_const",
-        const="ignore",
-        help="silently collect unrecognized keywords",
-    )
-    p.set_defaults(unknown="strict")
-
     p.add_argument(
         "--dump-json", metavar="FILE", help="write the parsed config as JSON ('-' for stdout)"
     )
-    p.add_argument("--steps", type=int, help="override the configured step count")
     return p
 
 
-def _summarize(config, resolved, *, load: bool) -> str:
+def _summarize(config, resolved, *, loaded: bool) -> str:
     g = config.globals
     lines = [
         f"config           {config.source_path}",
@@ -100,7 +73,7 @@ def _summarize(config, resolved, *, load: bool) -> str:
         f"tabulated pairs  {len(config.tabulated_pairs)}",
         f"topology files   {len(config.topology_files)}",
     ]
-    if load:
+    if loaded:
         topo = resolved.topology
         lines += [
             f"  particles      {len(resolved.particles)}",
@@ -120,12 +93,21 @@ def _summarize(config, resolved, *, load: bool) -> str:
     return "\n".join(lines)
 
 
+def _dump_json(config, target: str) -> None:
+    payload = config.to_json() + "\n"
+    if target == "-":
+        sys.stdout.write(payload)
+        return
+    with open(target, "w", encoding="utf-8") as fh:
+        fh.write(payload)
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
     try:
-        config = BdParser(unknown=args.unknown).parse_file(args.config)
-    except BdError as exc:
+        config = BdParser().parse_file(args.config)
+    except (OSError, BdError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
 
@@ -134,34 +116,28 @@ def main(argv: list[str] | None = None) -> int:
     if args.steps is not None:
         config.globals.steps = args.steps
 
-    if args.dump_json:
-        payload = config.to_json()
-        if args.dump_json == "-":
-            print(payload)
-        else:
-            with open(args.dump_json, "w", encoding="utf-8") as fh:
-                fh.write(payload + "\n")
-
     # A dry run must not need the data files to be present.
+    loaded = not args.dry_run
     try:
-        resolved = resolve_inputs(config, load=not args.dry_run)
+        if args.dump_json:
+            _dump_json(config, args.dump_json)
+        resolved = resolve_inputs(config, load=loaded)
     except (OSError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
 
+    print(_summarize(config, resolved, loaded=loaded))
     if args.dry_run:
-        print(_summarize(config, resolved, load=False))
         return 0
 
-    print(_summarize(config, resolved, load=True))
-
+    # Only failures with a one-line explanation are caught; an engine error
+    # keeps its traceback.
     try:
         sim = BdSimulation(config, gpu=args.gpu, resolved=resolved)
-        sim.simulate()
-    except (ImportError, NotImplementedError, RuntimeError, ValueError) as exc:
-        print(f"\nerror: {exc}", file=sys.stderr)
+    except (ImportError, NotImplementedError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
         return 2
-
+    sim.simulate()
     return 0
 
 

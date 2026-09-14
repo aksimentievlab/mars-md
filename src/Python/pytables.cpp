@@ -1,4 +1,3 @@
-#include "Interactions/NonBondedInteraction.h"
 #include "Objects/Tables.h"
 
 #include <nanobind/nanobind.h>
@@ -46,12 +45,30 @@ void init_pytables(nb::module_& m) {
 			 nb::arg("file_name"),
 			 nb::arg("config_file_path") = "",
 			 "Load (or reuse) a tabulated dihedral potential; returns its function_index")
-		.def("load_pair_nonbonded",
-			 &TablesRegistry::load_pair_nonbonded,
-			 nb::arg("type_id_1"),
-			 nb::arg("type_id_2"),
+		.def("load_nonbonded",
+			 &TablesRegistry::load_nonbonded,
 			 nb::arg("file_name"),
-			 "Load a tabulated nonbonded pair potential; returns its function_index")
+			 nb::arg("config_file_path") = "",
+			 "Load (or reuse) a tabulated nonbonded pair potential; returns the table index "
+			 "a PairNonBonded takes")
+		// In-memory registration: build a Table with set_values(), then hand it
+		// over. Angle/dihedral X is in degrees, as in the .dat files.
+		.def("add_nonbonded",
+			 &TablesRegistry::add_nonbonded,
+			 nb::arg("table"),
+			 "Register an in-memory nonbonded pair table under table.name; returns its index")
+		.def("add_bond",
+			 &TablesRegistry::add_bond,
+			 nb::arg("table"),
+			 "Register an in-memory bond table under table.name; returns its function_index")
+		.def("add_angle",
+			 &TablesRegistry::add_angle,
+			 nb::arg("table"),
+			 "Register an in-memory angle table (X in degrees); returns its function_index")
+		.def("add_dihedral",
+			 &TablesRegistry::add_dihedral,
+			 nb::arg("table"),
+			 "Register an in-memory dihedral table (X in degrees); returns its function_index")
 		// Name -> function_index maps. Copied into plain dicts on the way out.
 		.def("get_bond_name_to_idx", &TablesRegistry::get_bond_name_to_idx)
 		.def("get_angle_name_to_idx", &TablesRegistry::get_angle_name_to_idx)
@@ -60,7 +77,7 @@ void init_pytables(nb::module_& m) {
 		.def("get_angle_functions", &TablesRegistry::get_angle_functions)
 		.def("get_dihedral_functions", &TablesRegistry::get_dihedral_functions)
 		.def("get_nonbonded_functions", &TablesRegistry::get_nonbonded_functions)
-		.def("get_pair_nonbonded_types", &TablesRegistry::get_pair_nonbonded_types)
+		.def("get_nonbonded_name_to_idx", &TablesRegistry::get_nonbonded_name_to_idx)
 		.def("build_device_arrays",
 			 &TablesRegistry::build_device_arrays,
 			 "Upload every loaded table to each configured resource")

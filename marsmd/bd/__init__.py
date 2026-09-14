@@ -20,7 +20,7 @@ without a compiled engine.
 
 from __future__ import annotations
 
-from .errors import BdError, BdKeywordError, BdParseError
+from .errors import BdError, BdParseError
 from .model import (
     BdConfig,
     Globals,
@@ -37,7 +37,6 @@ from .paths import resolve_file_path
 __all__ = [
     "BdConfig",
     "BdError",
-    "BdKeywordError",
     "BdParseError",
     "BdParser",
     "Globals",

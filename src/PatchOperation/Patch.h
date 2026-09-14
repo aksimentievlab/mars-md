@@ -196,8 +196,8 @@ class Patch {
 	 * pairwise kernel runs, and this function is called first each step (see
 	 * SimManager::execute_force_calculation) - so bonded topology is prepared
 	 * lazily from whichever of the two calculate_* calls runs first.
-	 * @param interactions Non-bonded interaction parameters from SimSystem (currently unused -
-	 *        pairwise metadata is sourced from tables_registry, see get_pair_nonbonded_types())
+	 * @param interactions The system's nonbonded pair list; the device type-pair matrix and
+	 *        the enabled term mask are built from it
 	 * @param bonded_interactions Bonded topology, needed to populate exclusions
 	 * @param particle_types Device particle type data from SimSystem
 	 * @param tables_registry Tabulated potential tables (bonded and nonbonded)

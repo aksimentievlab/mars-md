@@ -1,8 +1,11 @@
 #pragma once
+#include "Backend/Buffer.h"
+#include "Backend/Resource.h"
 #include "Header.h"
 #include "IO/FileHandle.h"
-#include "Interactions/NonBondedInteraction.h"
 #include "Types/Types.h"
+#include <algorithm>
+#include <filesystem>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -222,32 +225,54 @@ class TablesRegistry {
 		return dihedral_name_to_idx_[name];
 	}
 
-	int load_pair_nonbonded(int type_id_1, int type_id_2, std::string_view file_name) {
-		type_id_1 = std::min(type_id_1, type_id_2);
-		type_id_2 = std::max(type_id_1, type_id_2);
-		std::string name = std::filesystem::path(file_name).stem().string();
-		// check if the pair nonbonded already exists
-		auto it =
-			std::find_if(pair_nonbonded_types_.begin(),
-						 pair_nonbonded_types_.end(),
-						 [type_id_1, type_id_2](const PairNonBonded& pair) {
-							 return pair.type_id_1 == type_id_1 && pair.type_id_2 == type_id_2;
-						 });
-		if (it != pair_nonbonded_types_.end()) {
-			LOGWARN("PairNonBonded of type {} and {} already exists: {}",
-					type_id_1,
-					type_id_2,
-					name);
-			return it->function_index;
+	/**
+	 * @brief Load a nonbonded pair table from file, or reuse one already loaded from that path
+	 * @return index into get_nonbonded(); a PairNonBonded carries it as function_index
+	 */
+	HOST int load_nonbonded(std::string_view file_name, std::string_view config_file_path = "") {
+		std::string resolved_path =
+			config_file_path.empty()
+				? std::string(file_name)
+				: resolve_file_path(std::string(file_name), std::string(config_file_path));
+		auto it = nonbonded_name_to_idx_.find(resolved_path);
+		if (it != nonbonded_name_to_idx_.end()) {
+			return it->second;
 		}
-		PairNonBonded pair_nonbonded(type_id_1, type_id_2, name);
-
 		Table table(TabulatedType::NonBondedPair);
-		table.read_file(file_name);
+		table.read_file(resolved_path);
 		nonbonded_functions_.push_back(std::move(table));
-		pair_nonbonded.function_index = static_cast<int>(nonbonded_functions_.size() - 1);
-		pair_nonbonded_types_.push_back(pair_nonbonded);
-		return pair_nonbonded_types_.size() - 1;
+		nonbonded_name_to_idx_[resolved_path] = static_cast<int>(nonbonded_functions_.size() - 1);
+		return nonbonded_name_to_idx_[resolved_path];
+	}
+
+	/// @brief Register an in-memory nonbonded pair table under table.name
+	HOST int add_nonbonded(Table table) {
+		return add_table(nonbonded_functions_,
+						 nonbonded_name_to_idx_,
+						 std::move(table),
+						 TabulatedType::NonBondedPair);
+	}
+
+	/**
+	 * @brief Register an in-memory bond table under table.name
+	 * @return function_index; an existing name returns its index unchanged
+	 */
+	HOST int add_bond(Table table) {
+		return add_table(bond_functions_, bond_name_to_idx_, std::move(table), TabulatedType::Bond);
+	}
+	/// @brief Register an in-memory angle table; abscissa in degrees, converted here
+	HOST int add_angle(Table table) {
+		return add_table(angle_functions_,
+						 angle_name_to_idx_,
+						 std::move(table),
+						 TabulatedType::Angle);
+	}
+	/// @brief Register an in-memory dihedral table; abscissa in degrees, converted here
+	HOST int add_dihedral(Table table) {
+		return add_table(dihedral_functions_,
+						 dihedral_name_to_idx_,
+						 std::move(table),
+						 TabulatedType::Dihedral);
 	}
 	const std::unordered_map<std::string, int>& get_angle_name_to_idx() const {
 		return angle_name_to_idx_;
@@ -257,6 +282,9 @@ class TablesRegistry {
 	}
 	const std::unordered_map<std::string, int>& get_bond_name_to_idx() const {
 		return bond_name_to_idx_;
+	}
+	const std::unordered_map<std::string, int>& get_nonbonded_name_to_idx() const {
+		return nonbonded_name_to_idx_;
 	}
 	const std::vector<Table>& get_angle() const {
 		return angle_functions_;
@@ -268,9 +296,6 @@ class TablesRegistry {
 		return bond_functions_;
 	}
 
-	const std::vector<PairNonBonded>& get_pair_nonbonded_types() const {
-		return pair_nonbonded_types_;
-	}
 	const std::vector<Table>& get_nonbonded() const {
 		return nonbonded_functions_;
 	}
@@ -323,6 +348,34 @@ class TablesRegistry {
 	}
 
   private:
+	static void check_table(const Table& table) {
+		if (table.name.empty()) {
+			throw_value_error("TablesRegistry: an in-memory table needs a name");
+		}
+		if (table.X.size() < 2 || table.X.size() != table.Y.size()) {
+			throw_value_error("TablesRegistry: table '%s' needs at least 2 (X, Y) values",
+							  table.name.c_str());
+		}
+	}
+
+	/// Shared by add_bond/add_angle/add_dihedral: dedupe on name, then append.
+	static int add_table(std::vector<Table>& tables,
+						 std::unordered_map<std::string, int>& name_to_idx,
+						 Table table,
+						 TabulatedType type) {
+		check_table(table);
+		auto it = name_to_idx.find(table.name);
+		if (it != name_to_idx.end()) {
+			return it->second;
+		}
+		table.type = type;
+		table.check_same_step_size();
+		table.convert_angular_abscissa_to_radians();
+		tables.push_back(std::move(table));
+		name_to_idx[tables.back().name] = static_cast<int>(tables.size() - 1);
+		return static_cast<int>(tables.size() - 1);
+	}
+
 	void build_device_arrays_impl(const std::vector<Resource>& resources) {
 		LOGTRACE("TablesRegistry: Building device arrays for {} tables across {} resources",
 				 angle_functions_.size() + dihedral_functions_.size() + bond_functions_.size() +
@@ -407,7 +460,7 @@ class TablesRegistry {
 	std::unordered_map<std::string, int> angle_name_to_idx_;
 	std::unordered_map<std::string, int> dihedral_name_to_idx_;
 	std::unordered_map<std::string, int> bond_name_to_idx_;
-	std::vector<PairNonBonded> pair_nonbonded_types_;
+	std::unordered_map<std::string, int> nonbonded_name_to_idx_;
 	std::vector<Table> angle_functions_;
 	std::vector<Table> dihedral_functions_;
 	std::vector<Table> bond_functions_;

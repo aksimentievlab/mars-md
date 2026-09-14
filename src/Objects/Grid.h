@@ -101,8 +101,24 @@ class GridManager {
 		}
 
 		// Load grid from file
-		BaseGrid<mars_real> grid =
-			DXReader::read_from_file<float>(resolve_file_path(filename, config_file_path));
+		return add_dense_grid(
+			filename, DXReader::read_from_file<float>(resolve_file_path(filename, config_file_path)));
+	}
+
+	/**
+	 * @brief Register an in-memory dense grid
+	 * @param name Lookup key, registered verbatim
+	 * @param grid Grid data, moved in
+	 * @return GridKey with assigned grid_id; an existing name returns its key unchanged
+	 */
+	GridKey add_dense_grid(const std::string& name, BaseGrid<mars_real> grid) {
+		auto it = fname_to_gridkey_.find(name);
+		if (it != fname_to_gridkey_.end()) {
+			LOGINFO("GridManager: Grid '{}' already registered (grid_id={})",
+					name,
+					it->second.grid_id);
+			return it->second;
+		}
 
 		// Assign unified grid_id
 		int grid_id = next_grid_id_++;
@@ -110,15 +126,15 @@ class GridManager {
 		int dense_idx = dense_grids_.size() - 1;
 
 		// Create GridKey
-		GridKey key(filename, GridFormat::Dense);
+		GridKey key(name, GridFormat::Dense);
 		key.grid_id = grid_id;
 
 		// Store mappings
-		fname_to_gridkey_[filename] = key;
+		fname_to_gridkey_[name] = key;
 		grid_keys_.push_back(key);
 		grid_id_to_dense_idx_[grid_id] = dense_idx;
 
-		LOGINFO("GridManager: Loaded dense grid '{}' → grid_id={}", filename, grid_id);
+		LOGINFO("GridManager: Registered dense grid '{}' → grid_id={}", name, grid_id);
 		return key;
 	}
 

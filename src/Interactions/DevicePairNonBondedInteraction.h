@@ -62,24 +62,6 @@ class DevicePairNonBondedInteractions {
 	}
 
 	/**
-	 * @brief Map an analytical potential's name to its AnalyticalPairTerm bit.
-	 * @return The term bit, or PAIR_TERM_NONE if the name is not recognised.
-	 */
-	static uint32_t analytical_term_bit(const std::string& function_name) {
-		if (function_name == "coulomb" || function_name == "columb")
-			return PAIR_TERM_COULOMB;
-		if (function_name == "debye_huckel")
-			return PAIR_TERM_DEBYE_HUCKEL;
-		if (function_name == "onck")
-			return PAIR_TERM_ONCK;
-		if (function_name == "gaussian")
-			return PAIR_TERM_GAUSSIAN;
-		if (function_name == "softcore")
-			return PAIR_TERM_SOFTCORE;
-		return PAIR_TERM_NONE;
-	}
-
-	/**
 	 * @brief Encode a type pair as a term mask plus tabulated table index.
 	 * @return Packed pair tag; PAIR_TERM_NONE when the pair has no pair interaction.
 	 * @throws ValueError if the table index does not fit above the term mask.
@@ -87,7 +69,7 @@ class DevicePairNonBondedInteractions {
 	static uint32_t
 	encode_pair_tag(int function_index, InteractionForm form, const std::string& function_name) {
 		if (form == InteractionForm::Analytical) {
-			return make_pair_tag(analytical_term_bit(function_name), -1);
+			return make_pair_tag(pair_term_from_name(function_name), -1);
 		}
 		if (form != InteractionForm::Tabulated || function_index < 0) {
 			return PAIR_TERM_NONE;
@@ -107,11 +89,10 @@ class DevicePairNonBondedInteractions {
 	 * Builds type-pair matrix from PairNonBonded list with ONE device copy.
 	 * Matrix layout: [type1 * num_types + type2] → (table_index, form)
 	 *
-	 * @param host_pairs Vector of PairNonBonded from TablesRegistry
+	 * @param host_pairs The system's pair list, NonBondedInteractions::get_pair_nonbonded()
 	 *
 	 * @example
-	 *   const auto& pairs = tables_registry.get_pair_nonbonded_types();
-	 *   device_nb->copy_pairwise_from_host(pairs);
+	 *   device_nb->copy_pairwise_from_host(sys.get_nonbonded_interactions().get_pair_nonbonded());
 	 */
 	void copy_pairwise_from_host(const std::vector<PairNonBonded>& host_pairs) {
 		// Build entire matrix on host

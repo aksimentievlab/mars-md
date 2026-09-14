@@ -224,6 +224,14 @@ void declare_loadfile(nb::module_& m) {
 			 },
 			 nb::arg("filename"),
 			 "Load a dense grid from a .dx file")
+		.def(
+			"add_dense_grid",
+			[](GridManager& gm, const std::string& name, const BaseGrid<mars_real>& grid) {
+				return gm.add_dense_grid(name, grid);
+			},
+			nb::arg("name"),
+			nb::arg("grid"),
+			"Register an in-memory Grid under name; the name is the key get_grid_key() takes")
 		.def("add_sparse_grid",
 			 [](GridManager& gm, const std::string& filename) {
 				 return gm.add_sparse_grid(filename);

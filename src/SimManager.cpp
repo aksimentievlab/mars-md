@@ -120,6 +120,12 @@ void SimManager::init() {
 	}
 
 	if (!pending_initial_rigid_bodies_.empty()) {
+		// Resolve in place: prepare_attached_particles reads this list too.
+		for (RigidBodyIO& rb : pending_initial_rigid_bodies_) {
+			if (!rb.type_name.empty()) {
+				rb.type_id = sys_.get_rigid_body_type_id(rb.type_name);
+			}
+		}
 		sys_state_.set_init_rigid_body_data(pending_initial_rigid_bodies_);
 		LOGINFO("SimManager: Loaded {} initial rigid bodies into system state",
 				pending_initial_rigid_bodies_.size());
@@ -157,8 +163,6 @@ void SimManager::init() {
 	LOGINFO("SimManager: Grids transferred to all resources");
 	sys_.get_tables_registry().build_device_arrays();
 	LOGINFO("SimManager: Tables transferred to all resources");
-	sys_.get_nonbonded_interactions().prepare_device_data();
-	LOGINFO("SimManager: Nonbonded interactions transferred to all resources");
 
 	if (!sys_.get_rigid_body_types().empty()) {
 		rigid_body_manager_ = std::make_unique<RigidBodyManager>(sys_.get_resources());
