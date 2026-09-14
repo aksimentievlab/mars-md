@@ -130,3 +130,77 @@
   no `add_subdirectory(Tests)` anywhere, not in CMakeLists.txt or
   CMakePresets.json), so none of this - including the now-renamed
   `USE_PYTHON` plumbing here - is on any currently-configured build path.
+
+## Module rename: `marsmd` -> `marsmd._core` (Phase A, 2026-09-13)
+
+`pymars.cpp` used to declare `NB_MODULE(marsmd, ...)` and `CMakeLists.txt` set
+`OUTPUT_NAME "marsmd"`. That name collides with the pure-Python parser package
+at the repo root, which is also `marsmd`. The extension is now `_core`, a
+submodule re-exported by `marsmd/__init__.py`.
+
+Layout:
+
+- The `.so` builds where CMake normally puts it,
+  `build/<preset>/src/Python/_core.cpython-311-*.so`. No
+  `LIBRARY_OUTPUT_DIRECTORY` override.
+- `marsmd/_core...so` is a **symlink** into the active build dir, refreshed by
+  `build_cuda.sh` after `ninja`.
+- `PYTHONPATH=$PWD` (repo root) is the only entry needed.
+
+Why symlink rather than build straight into `marsmd/`: two presets are in
+regular use (`tbgl-cuda-release`, `tbgl-icpx-sycl-debug`). Building in-source
+would let a SYCL build silently overwrite the CUDA module with nothing in
+`git status` to show it, since the file is gitignored by construction. With a
+symlink `ls -l marsmd/` names the backend being imported.
+
+This also kills a latent bug: `OUTPUT_NAME "${PROJECT_NAME}"` combined with
+`PROJECT_NAME_SUFFIX` (root `CMakeLists.txt`) produced a module file named for
+the suffix while the init symbol stayed `PyInit_mars` - unimportable. Both
+sides are literals now.
+
+### init order in NB_MODULE
+
+`init_pyloadfile` and `init_pyobjects` run first. Later declarations name
+`Grid`/`GridKey`/`ParticleType`/`RigidBodyType` in their signatures, and
+nanobind only renders a readable signature for a type already registered -
+otherwise the docstring shows an opaque C++ mangled name. Functional either
+way; this is purely about generated signatures.
+
+### pynonbonded.cpp was orphaned
+
+`pynonbonded.cpp` (PairNonBonded, LongRangeNonBonded, NonBondedInteractions)
+existed but was in neither the `CMakeLists.txt` source list nor `pymars.cpp`'s
+init chain - it compiled nowhere. Now wired. `SimSystem::get_nonbonded_interactions`
+in `pysystem.cpp` returns `NonBondedInteractions`, so without this the return
+type was unregistered and every call raised at runtime.
+
+## SimManager timing getters removed from pysim.cpp (Phase A)
+
+`SimManager::get_total_time()`, `get_io_time()` and `get_energy_time()` are
+declared in `src/SimManager.h:110,115,120` with no definition. That is
+deliberate on the C++ side - the executable never references them.
+
+`pysim.cpp` bound all three. A `.so` links happily with undefined symbols and
+then fails at import:
+
+    undefined symbol: _ZNK4MARS10SimManager14get_total_timeEv
+
+Bindings removed; Python does not expose simulation timing. Do not re-add them
+unless a definition lands first.
+
+## find_package(Python) must be repeated in src/Python/CMakeLists.txt
+
+`nanobind_build_library()` (extern/nanobind/cmake/nanobind-config.cmake:306)
+reads `${Python_INCLUDE_DIRS}` as a **plain variable**, not a target property.
+`extern/nanobind/CMakeLists.txt:145` runs its own `find_package(Python)`, but
+that is a *sibling* directory scope to `src/Python` - the root adds both with
+`add_subdirectory`, so the variable does not reach here. Symptom: every
+nanobind-static source fails with `fatal error: Python.h: No such file`, even
+though the cache shows Python found with the right include dir.
+
+This is how nanobind's CMake contract works, not a defect in either tree: any
+directory calling `nanobind_add_module` must have found Python itself. So
+`find_package(Python 3.10 REQUIRED COMPONENTS Interpreter Development.Module)`
+sits at the top of `src/Python/CMakeLists.txt`. Pin the interpreter from the
+command line (`build_cuda.sh` passes `-DPython_EXECUTABLE=`), never hardcode it
+in the CMakeLists.

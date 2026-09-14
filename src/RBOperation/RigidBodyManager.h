@@ -412,7 +412,7 @@ class RigidBodyManager {
 	}
 
 	/**
-	 * @brief Batched particle-RB grid forces (Phase 4.3): rebuild per-candidate
+	 * @brief Batched particle-RB grid forces: rebuild per-candidate
 	 *        transforms, then the batched force kernel - two kernels back to
 	 *        back on the GridCompute stream, no host sync between them.
 	 *

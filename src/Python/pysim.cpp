@@ -10,26 +10,21 @@
   get_nonbonded_interactions() in pysystem.cpp) since it's tied to particle
   type definitions, which are also SimSystem-owned.
 
+  A manager is bound to exactly one SimSystem for its lifetime. Configure that
+  system directly, then stage the per-run data; init() consumes it.
+
   @example (in Python):
   ```python
-  >>> from arbd2v import SimSystem, ConfigParser, SimManager, Resource, ResourceType
-  >>> sys = SimSystem([Resource(ResourceType.CUDA, 0)])
-  >>> parser = ConfigParser(sys, "circovirus.bd")
-  >>> mgr = SimManager(sys, parser)
-  >>> mgr.init()
-  >>> mgr.run()
-  >>> mgr.get_total_time()
-
-  @example Pure-Python configuration, no ConfigParser:
+  >>> from marsmd import SimSystem, SimManager, Resource
+  >>> sys = SimSystem([Resource(0)])
   >>> mgr = SimManager(sys)
-  >>> mgr.send_particles(my_particle_list)
-  >>> mgr.send_bonded_interactions(my_bonded_interactions)
-  >>> mgr.send_rigid_bodies(my_rigid_body_list)
+  >>> mgr.stage_particles(my_particle_list)
+  >>> mgr.stage_bonded_interactions(my_bonded_interactions)
+  >>> mgr.stage_rigid_bodies(my_rigid_body_list)
   >>> mgr.init()
   >>> mgr.run()
   ```
 */
-#include "IO/ConfigParser.h"
 #include "SimManager.h"
 
 #include <nanobind/nanobind.h>
@@ -44,20 +39,11 @@ void init_pysim(nb::module_& m) {
 		.def(nb::init<SimSystem&>(),
 			 nb::arg("sys"),
 			 nb::keep_alive<1, 2>(),
-			 "Construct without a ConfigParser - configure via send_particles/"
-			 "send_bonded_interactions/send_rigid_bodies before init()")
-		.def(nb::init<SimSystem&, const ConfigParser&>(),
-			 nb::arg("sys"),
-			 nb::arg("parser"),
-			 nb::keep_alive<1, 2>(),
-			 "Construct from a loaded ConfigParser")
+			 "Bind to one SimSystem for this manager's lifetime. Configure that "
+			 "system directly, stage_*() the initial data, then init().")
 		.def("init",
 			 &SimManager::init,
 			 "Set up domain decomposition, output writers, IMD, and initial conditions")
-		.def("load_config",
-			 &SimManager::load_config,
-			 nb::arg("parser"),
-			 "Load particles/bonded interactions/rigid bodies from a ConfigParser")
 		.def("stage_particles",
 			 &SimManager::set_initial_particles,
 			 nb::arg("particles"),
@@ -86,10 +72,5 @@ void init_pysim(nb::module_& m) {
 			 nb::arg("path") = "",
 			 "Write a PDB snapshot of the current positions, same atom order and "
 			 "topology as write_psf(). Defaults to '<outputName>.pdb'.")
-		.def("get_total_time", &SimManager::get_total_time)
-		.def("get_io_time", &SimManager::get_io_time)
-		.def("get_energy_time", &SimManager::get_energy_time)
-		.def("__repr__", [](const SimManager& mgr) {
-			return "SimManager(total_time=" + std::to_string(mgr.get_total_time()) + "s)";
-		});
+		.def("__repr__", [](const SimManager&) { return std::string("SimManager()"); });
 }

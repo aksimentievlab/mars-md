@@ -149,10 +149,13 @@ Event launch_cuda_kernel(const Resource& resource,
 		local_config.problem_size = new_problem;
 	}
 
-	// Set device context
+	// Set device context (skip switch when already current)
 	int old_device;
 	CUDA_CHECK(cudaGetDevice(&old_device));
-	CUDA_CHECK(cudaSetDevice(static_cast<int>(resource.id())));
+	const int target_device = static_cast<int>(resource.id());
+	if (old_device != target_device) {
+		CUDA_CHECK(cudaSetDevice(target_device));
+	}
 
 	// Launch kernel using generic wrapper
 	dim3 grid(local_config.grid_size.x, local_config.grid_size.y, local_config.grid_size.z);
@@ -172,7 +175,9 @@ Event launch_cuda_kernel(const Resource& resource,
 	CUDA_CHECK(cudaEventRecord(completion_event, stream));
 
 	// Restore device context
-	CUDA_CHECK(cudaSetDevice(old_device));
+	if (old_device != target_device) {
+		CUDA_CHECK(cudaSetDevice(old_device));
+	}
 
 	return Event(completion_event, resource);
 }
@@ -210,7 +215,10 @@ Event launch_cuda_kernel_with_workitem(const Resource& resource,
 
 	int old_device;
 	CUDA_CHECK(cudaGetDevice(&old_device));
-	CUDA_CHECK(cudaSetDevice(static_cast<int>(resource.id())));
+	const int target_device = static_cast<int>(resource.id());
+	if (old_device != target_device) {
+		CUDA_CHECK(cudaSetDevice(target_device));
+	}
 
 	dim3 grid(local_config.grid_size.x, local_config.grid_size.y, local_config.grid_size.z);
 	dim3 block(local_config.block_size.x, local_config.block_size.y, local_config.block_size.z);
@@ -229,7 +237,9 @@ Event launch_cuda_kernel_with_workitem(const Resource& resource,
 	CUDA_CHECK(cudaEventCreateWithFlags(&completion_event, cudaEventDisableTiming));
 	CUDA_CHECK(cudaEventRecord(completion_event, stream));
 
-	CUDA_CHECK(cudaSetDevice(old_device));
+	if (old_device != target_device) {
+		CUDA_CHECK(cudaSetDevice(old_device));
+	}
 
 	return Event(completion_event, resource);
 }

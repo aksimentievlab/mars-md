@@ -1,12 +1,12 @@
 #pragma once
 
-#include "MARSException.h"
-#include "MARSLogger.h"
 #include "Constants.h"
 #include "IO/DxIO.h"
 #include "IO/Reader.h"
 #include "Interactions/BondedInteraction.h"
 #include "Interactions/Interactions.h"
+#include "MARSException.h"
+#include "MARSLogger.h"
 #include "Objects/ParticleProperties.h"
 #include "Objects/RigidBodyProperties.h"
 #include "SimParam.h"
@@ -32,7 +32,7 @@ namespace MARS {
  *       (grids, particle arrays) during initialization. Configuration should be discarded
  *       after SimSystem construction.
  *
- * @note Designed to interact with pybind11 for Python interface and text file parsers.
+ * @note Designed to interact with nanobind for Python interface and text file parsers.
  */
 struct Configuration {
 	// Physical parameters
@@ -86,12 +86,12 @@ struct Configuration {
 
 	// Initial Objects
 	std::vector<RigidBodyIO> init_rigid_bodies{}; // init state only
-	std::vector<ParticleIO> init_particles{}; // init only
-	std::vector<Bond> init_bonds{};				// init only, can be modified during simulation
-	std::vector<Angle> init_angles{};			// init only, can also be modified during simulation
-	std::vector<Dihedral> init_dihedrals{};		// init only
-	std::vector<Exclude> init_exclusions{};		// init only
-	std::vector<Restraint> restraints{};		// Can be released during simulation
+	std::vector<ParticleIO> init_particles{};	  // init only
+	std::vector<Bond> init_bonds{};				  // init only, can be modified during simulation
+	std::vector<Angle> init_angles{};		// init only, can also be modified during simulation
+	std::vector<Dihedral> init_dihedrals{}; // init only
+	std::vector<Exclude> init_exclusions{}; // init only
+	std::vector<Restraint> restraints{};	// Can be released during simulation
 
 	bool enable_smd{false};
 

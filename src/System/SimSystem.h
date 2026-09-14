@@ -13,18 +13,17 @@
  * @param Decomposition coordination (decompose_system, rebalance_system)
  * @note Should NOT contain: Mutable particle positions/velocities, Runtime state that changes every
  * timestep
- * @version 2.0
  * @date 2025-09-09
  *
  * @copyright Copyright (c) 2025
  *
  */
 
-#include "MARSException.h"
-#include "MARSLogger.h"
 #include "Backend/Buffer.h"
 #include "Backend/Resource.h"
 #include "IO/DxIO.h"
+#include "MARSException.h"
+#include "MARSLogger.h"
 #include "Objects/Grid.h"
 #include "Objects/RigidBodyProperties.h"
 #include "Objects/Tables.h"

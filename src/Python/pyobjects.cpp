@@ -4,6 +4,7 @@
 #include "PyTypeCasters.h"
 #include <atomic>
 #include <nanobind/nanobind.h>
+#include <nanobind/stl/array.h>
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/vector.h>
 
@@ -148,7 +149,16 @@ void declare_particle_type(nb::module_& m) {
 			.def_rw("pmf_grids", &ParticleType::pmf_grids)
 			.def_rw("pmf_grid_names", &ParticleType::pmf_grid_names)
 			.def_rw("diffusion_grid_id", &ParticleType::diffusion_grid_id)
+			// int3 is Vector3_t<mars_int>, so PyTypeCasters.h converts it to a
+			// length-3 numpy array like any other Vector3.
 			.def_rw("force_grid_id", &ParticleType::force_grid_id)
+			.def_rw("force_grid_scale", &ParticleType::force_grid_scale)
+			// SimSystem::assign_particle_type_ids() re-derives every grid_id from
+			// these name fields at init(), so an id set from Python without the
+			// matching name is silently reset to -1.
+			.def_rw("diffusion_grid_name", &ParticleType::diffusion_grid_name)
+			.def_rw("force_grid_names", &ParticleType::force_grid_names)
+			.def_rw("rigid_body_potential_keys", &ParticleType::rigid_body_potential_keys)
 			.def("__repr__", [](const ParticleType& pt) {
 				return "ParticleType(name='" + pt.name + "', num=" + std::to_string(pt.num) + ")";
 			});
@@ -182,8 +192,15 @@ void declare_rigid_body(nb::module_& m) {
 			[](RigidBodyIO& rb, const Vector3& value) { rb.angular_momentum = value; })
 		.def_rw("force", &RigidBodyIO::force)
 		.def_rw("torque", &RigidBodyIO::torque)
+		.def_rw("external_force", &RigidBodyIO::external_force)
+		.def_rw("external_torque", &RigidBodyIO::external_torque)
 		.def_rw("is_dummy", &RigidBodyIO::is_dummy)
 		.def_rw("has_orientation", &RigidBodyIO::has_orientation)
+		// Half-open range into the global particle array holding this instance's
+		// copy of its type's attached-particle template. Read-only: the applier
+		// assigns it when it lays out the attached block.
+		.def_prop_ro("attached_start", [](const RigidBodyIO& rb) { return rb.attached_start; })
+		.def_prop_ro("attached_count", [](const RigidBodyIO& rb) { return rb.attached_count; })
 		.def("__repr__", [](const RigidBodyIO& rb) {
 			return "RigidBody(type_name='" + rb.type_name +
 				   "', position=" + rb.position.to_string() + ")";
@@ -211,6 +228,18 @@ void declare_rigid_body_type(nb::module_& m) {
 				   .def_rw("eps", &RigidBodyType::eps)
 				   .def_rw("mu", &RigidBodyType::mu)
 				   .def_rw("num_grid_files", &RigidBodyType::num_grid_files)
+				   .def_rw("pmf_scale", &RigidBodyType::pmf_scale)
+				   .def_rw("pmf_scale_slope", &RigidBodyType::pmf_scale_slope)
+				   .def_rw("pmf_smd_freq", &RigidBodyType::pmf_smd_freq)
+				   .def_rw("is_plasmonic", &RigidBodyType::is_plasmonic)
+				   // One GridTerm per grid file, each with its own scale/slope/BC.
+				   // The *_keys are the GridManager map keys the terms resolve from.
+				   .def_rw("potential_grids", &RigidBodyType::potential_grids)
+				   .def_rw("density_grids", &RigidBodyType::density_grids)
+				   .def_rw("pmf_grids", &RigidBodyType::pmf_grids)
+				   .def_rw("potential_grid_keys", &RigidBodyType::potential_grid_keys)
+				   .def_rw("density_grid_keys", &RigidBodyType::density_grid_keys)
+				   .def_rw("pmf_keys", &RigidBodyType::pmf_keys)
 				   .def_prop_rw(
 					   "attached_particles",
 					   [](RigidBodyType& rbt) -> std::vector<ParticleIO>& {

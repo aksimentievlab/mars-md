@@ -1,10 +1,11 @@
 #include "Backend/Resource.h"
 #include "IO/ConfigParser.h"
 #include "Interactions/NonBondedInteraction.h"
+#include "Objects/RigidBodyProperties.h"
+#include "Objects/Tables.h"
 #include "PyTypeCasters.h"
 #include "SimParam.h"
 #include "System/SimSystem.h"
-
 // nanobind core
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/string.h>
@@ -26,12 +27,7 @@ using namespace MARS;
  * - **SystemState**: Internal runtime state (NOT exposed to Python - managed by SimManager)
  * @usage: Option 1: Load from existing config file (use ConfigParser)
  * ```python
- * from arbd2v import ConfigParser, SimSystem, Resource, ResourceType
- *
- * # Create resources (e.g., GPU or CPU)
- * resources = [Resource(ResourceType.CUDA, 0)]  # Use CUDA GPU 0
- * # Or for CPU: resources = [Resource(ResourceType.CPU)]
- *
+ * from marsmd import ConfigParser, SimSystem, Resource
  * # Create SimSystem with resources
  * sys = SimSystem(resources)
  *
@@ -47,11 +43,6 @@ using namespace MARS;
  *
  * @usage: Option 2: Pure Python configuration (no ConfigParser needed)
  * ```python
- * from arbd2v import SimSystem, ParticleType, Resource, ResourceType
- *
- * # Create resources
- * resources = [Resource(ResourceType.CUDA, 0)]  # Use CUDA GPU 0
- *
  * # Create and configure system directly
  * sys = SimSystem(resources)
  * sys.set_temperature(300.0)
@@ -106,17 +97,17 @@ void init_pysystem(nb::module_& m) {
 		.value("PDB", OutputFormat::PDB)
 		.value("HDF5", OutputFormat::HDF5);
 
+	// Required by set_particle_integrator_type / set_rigid_body_integrator_type,
+	// which are uncallable without it.
+	nb::enum_<IntegratorType>(m, "IntegratorType")
+		.value("Langevin", IntegratorType::Langevin)
+		.value("Brownian", IntegratorType::Brownian)
+		.value("VelocityVerlet", IntegratorType::VelocityVerlet);
+
 	// Temperature format enum
 	nb::enum_<Temperature::Format>(m, "TemperatureFormat")
 		.value("Value", Temperature::Format::Value)
 		.value("Grid", Temperature::Format::Grid);
-
-	// Resource type enum
-	nb::enum_<ResourceType>(m, "ResourceType")
-		.value("CPU", ResourceType::CPU)
-		.value("CUDA", ResourceType::CUDA)
-		.value("SYCL", ResourceType::SYCL)
-		.value("METAL", ResourceType::METAL);
 
 	//================================================================================
 	// Basic Structure Bindings
@@ -177,34 +168,27 @@ void init_pysystem(nb::module_& m) {
 		.def("get_volume", &PeriodicBox::get_volume, "Get box volume");
 
 	//================================================================================
-	// Resource Binding - Computational resources (CPU, GPU, etc.)
-	//================================================================================
-	nb::class_<Resource>(m, "Resource")
-		.def(nb::init<>(), "Create default resource (CPU)")
-		.def(nb::init<short>(), nb::arg("device_id"), "Create resource with device ID")
-		.def(nb::init<ResourceType, short>(),
-			 nb::arg("resource_type"),
-			 nb::arg("device_id") = 0,
-			 "Create resource with type and device ID")
-		.def("type", &Resource::type, "Get resource type")
-		.def("id", &Resource::id, "Get device ID")
-		.def("is_device", &Resource::is_device, "Check if resource is a device (GPU)")
-		.def("is_host", &Resource::is_host, "Check if resource is host (CPU)")
-		.def("supports_async",
-			 &Resource::supports_async,
-			 "Check if resource supports async operations")
-		.def("validate", &Resource::validate, "Validate that resource exists and is accessible")
-		.def("__repr__", &Resource::toString, "Get string representation")
-		.def("__eq__", &Resource::operator==)
-		.def("__ne__", &Resource::operator!=)
-		.def("__lt__", &Resource::operator<);
-	//================================================================================
 	// SimSystem Binding - Time-immutable system configuration
 	//================================================================================
 
 	nb::class_<SimSystem>(m, "SimSystem")
-		.def(nb::init<std::vector<Resource>>(), nb::arg("resources"), "Create simulation system")
-		// Physical parameters
+		/**
+		 * @brief Create a simulation system on the given device indices.
+		 * @param gpus device indices, defaulting to device 0. The backend is
+		 *        fixed when the engine is built, so only the device is chosen.
+		 */
+		.def(
+			"__init__",
+			[](SimSystem* self, const std::vector<short>& gpus) {
+				std::vector<Resource> resources;
+				resources.reserve(gpus.size());
+				for (short device_id : gpus) {
+					resources.emplace_back(device_id);
+				}
+				new (self) SimSystem(resources);
+			},
+			nb::arg("gpus") = std::vector<short>{0},
+			"Create a simulation system on the given device indices")
 		.def(
 			"set_temperature_value",
 			[](SimSystem& sys, float temp) { sys.set_temperature(temp); },
@@ -229,6 +213,16 @@ void init_pysystem(nb::module_& m) {
 			"get_cutoff",
 			[](const SimSystem& sys) -> float { return static_cast<float>(sys.get_cutoff()); },
 			"Get interaction cutoff distance")
+		.def(
+			"set_pairlist_cutoff",
+			[](SimSystem& sys, float cutoff) { sys.set_pairlist_cutoff(Length(cutoff)); },
+			nb::arg("pairlist_cutoff"),
+			"Set pairlist cutoff distance")
+		.def("set_base_seed", &SimSystem::set_base_seed, nb::arg("seed"), "Set the base RNG seed")
+		.def("set_salt_concentration",
+			 &SimSystem::set_salt_concentration,
+			 nb::arg("salt_concentration"),
+			 "Set salt concentration")
 		.def("set_box_size",
 			 &SimSystem::set_box_size,
 			 nb::arg("x"),
@@ -236,6 +230,12 @@ void init_pysystem(nb::module_& m) {
 			 nb::arg("z"),
 			 "Set box dimensions")
 		.def("get_box_size", &SimSystem::get_box_size, "Get box dimensions")
+		.def("set_origin",
+			 &SimSystem::set_origin,
+			 nb::arg("x"),
+			 nb::arg("y"),
+			 nb::arg("z"),
+			 "Set the simulation box origin")
 		.def("set_periodicity",
 			 &SimSystem::set_periodicity,
 			 nb::arg("px"),
@@ -286,6 +286,25 @@ void init_pysystem(nb::module_& m) {
 			 nb::arg("period"),
 			 "Set trajectory output period")
 		.def("get_output_period", &SimSystem::get_output_period, "Get trajectory output period")
+		.def("set_neighbor_list_rebuild_period",
+			 &SimSystem::set_neighbor_list_rebuild_period,
+			 nb::arg("period"),
+			 "Set neighbor list rebuild period")
+		.def("get_neighbor_list_rebuild_period",
+			 &SimSystem::get_neighbor_list_rebuild_period,
+			 "Get neighbor list rebuild period")
+		.def("set_reorder_period",
+			 &SimSystem::set_reorder_period,
+			 nb::arg("period"),
+			 "Set particle reorder period")
+		.def("set_rb_update_period",
+			 &SimSystem::set_rb_update_period,
+			 nb::arg("period"),
+			 "Set rigid body update period")
+		.def("set_estimated_particles",
+			 &SimSystem::set_estimated_particles,
+			 nb::arg("estimated_particles"),
+			 "Hint the expected particle count for preallocation")
 		.def("set_energy_output_period",
 			 &SimSystem::set_energy_output_period,
 			 nb::arg("period"),
@@ -339,6 +358,12 @@ void init_pysystem(nb::module_& m) {
 			 static_cast<GridManager& (SimSystem::*)()>(&SimSystem::get_grid_manager),
 			 nb::rv_policy::reference_internal,
 			 "Get GridManager for unified grid management")
+		// By reference: TablesRegistry owns device buffers, and its copy ctor
+		// would reallocate every one of them.
+		.def("get_tables_registry",
+			 static_cast<TablesRegistry& (SimSystem::*)()>(&SimSystem::get_tables_registry),
+			 nb::rv_policy::reference_internal,
+			 "Get TablesRegistry - the tabulated potential cache that assigns function_index")
 		.def("get_nonbonded_interactions",
 			 static_cast<NonBondedInteractions& (SimSystem::*)()>(
 				 &SimSystem::get_nonbonded_interactions),
@@ -361,9 +386,12 @@ void init_pysystem(nb::module_& m) {
 	// The initial data (particles, bonds, etc.) is retrieved once during initialization
 	// and then discarded. It does NOT create SystemState - that's created separately.
 	nb::class_<ConfigParser>(m, "ConfigParser")
+		// keep_alive: ConfigParser holds a raw SimSystem*, so the system must
+		// outlive the parser.
 		.def(nb::init<SimSystem&, std::string_view>(),
 			 nb::arg("sim_system"),
 			 nb::arg("file_name"),
+			 nb::keep_alive<1, 2>(),
 			 "Load configuration from file and configure SimSystem")
 		.def("get_sim_system",
 			 static_cast<SimSystem& (ConfigParser::*)()>(&ConfigParser::get_sim_system),
@@ -374,6 +402,15 @@ void init_pysystem(nb::module_& m) {
 				 &ConfigParser::get_init_particles),
 			 nb::rv_policy::reference_internal,
 			 "Get initial particles (temporary data)")
+		.def("get_init_bonded_interactions",
+			 &ConfigParser::get_init_bonded_interactions,
+			 nb::rv_policy::reference_internal,
+			 "Get parsed bonds/angles/dihedrals/exclusions/restraints (temporary data)")
+		.def("get_init_rigid_bodies",
+			 static_cast<std::vector<RigidBodyIO>& (ConfigParser::*)()>(
+				 &ConfigParser::get_init_rigid_bodies),
+			 nb::rv_policy::reference_internal,
+			 "Get initial rigid bodies (temporary data)")
 		.def("validate", &ConfigParser::validate, "Validate loaded configuration")
 		.def("__repr__", [](const ConfigParser& parser) {
 			const auto& sys = parser.get_sim_system();

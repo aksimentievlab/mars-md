@@ -65,10 +65,26 @@ void declare_bond(nb::module_& m) {
 			nb::arg("i"),
 			nb::arg("j"),
 			nb::arg("bond"))
+		/// Index-based form, for `.bd` topology files, which name raw indices.
+		.def(
+			"__init__",
+			[](Bond* self, int ind1, int ind2, const std::string& name) {
+				new (self) Bond{};
+				self->ind1 = ind1;
+				self->ind2 = ind2;
+				self->function_name = name;
+			},
+			nb::arg("ind1"),
+			nb::arg("ind2"),
+			nb::arg("bond"))
 		.def_rw("name", &Bond::function_name)
 		.def_rw("form", &Bond::form)
 		.def_rw("flag", &Bond::flag)
-		.def("add_exclusion", &Bond::add_exclusion)
+		.def_prop_ro("ind1", [](const Bond& b) { return b.ind1; })
+		.def_prop_ro("ind2", [](const Bond& b) { return b.ind2; })
+		/// Resolved by TablesRegistry; -1 until then, which the device reads as
+		/// an out-of-bounds table lookup.
+		.def_rw("function_index", &Bond::function_index)
 		.def("__repr__", [](const Bond& b) { return "Bond(name='" + b.function_name + "')"; });
 }
 
@@ -92,8 +108,27 @@ void declare_angle(nb::module_& m) {
 			nb::arg("j"),
 			nb::arg("k"),
 			nb::arg("angle"))
+		/// Index-based form, for `.bd` topology files, which name raw indices.
+		.def(
+			"__init__",
+			[](Angle* self, int ind1, int ind2, int ind3, const std::string& name) {
+				new (self) Angle{};
+				self->ind1 = ind1;
+				self->ind2 = ind2;
+				self->ind3 = ind3;
+				self->function_name = name;
+				self->form = InteractionForm::Tabulated;
+			},
+			nb::arg("ind1"),
+			nb::arg("ind2"),
+			nb::arg("ind3"),
+			nb::arg("angle"))
 		.def_rw("name", &Angle::function_name)
 		.def_rw("form", &Angle::form)
+		.def_prop_ro("ind1", [](const Angle& a) { return a.ind1; })
+		.def_prop_ro("ind2", [](const Angle& a) { return a.ind2; })
+		.def_prop_ro("ind3", [](const Angle& a) { return a.ind3; })
+		.def_rw("function_index", &Angle::function_index)
 		.def("__repr__", [](const Angle& a) { return "Angle(name='" + a.function_name + "')"; });
 }
 
@@ -120,8 +155,30 @@ void declare_dihedral(nb::module_& m) {
 			nb::arg("k"),
 			nb::arg("l"),
 			nb::arg("dihedral"))
+		/// Index-based form, for `.bd` topology files, which name raw indices.
+		.def(
+			"__init__",
+			[](Dihedral* self, int ind1, int ind2, int ind3, int ind4, const std::string& name) {
+				new (self) Dihedral{};
+				self->ind1 = ind1;
+				self->ind2 = ind2;
+				self->ind3 = ind3;
+				self->ind4 = ind4;
+				self->function_name = name;
+				self->form = InteractionForm::Tabulated;
+			},
+			nb::arg("ind1"),
+			nb::arg("ind2"),
+			nb::arg("ind3"),
+			nb::arg("ind4"),
+			nb::arg("dihedral"))
 		.def_rw("name", &Dihedral::function_name)
 		.def_rw("form", &Dihedral::form)
+		.def_prop_ro("ind1", [](const Dihedral& d) { return d.ind1; })
+		.def_prop_ro("ind2", [](const Dihedral& d) { return d.ind2; })
+		.def_prop_ro("ind3", [](const Dihedral& d) { return d.ind3; })
+		.def_prop_ro("ind4", [](const Dihedral& d) { return d.ind4; })
+		.def_rw("function_index", &Dihedral::function_index)
 		.def("__repr__",
 			 [](const Dihedral& d) { return "Dihedral(name='" + d.function_name + "')"; });
 }
@@ -138,6 +195,10 @@ void declare_exclude(nb::module_& m) {
 			},
 			nb::arg("i"),
 			nb::arg("j"))
+		/// Index-based form, for `.bd` topology files, which name raw indices.
+		.def(nb::init<int, int>(), nb::arg("ind1"), nb::arg("ind2"))
+		.def_prop_ro("ind1", [](const Exclude& e) { return e.ind1; })
+		.def_prop_ro("ind2", [](const Exclude& e) { return e.ind2; })
 		.def("__eq__", [](const Exclude& a, const Exclude& b) { return a == b; })
 		.def("__ne__", [](const Exclude& a, const Exclude& b) { return a != b; })
 		.def("__lt__", [](const Exclude& a, const Exclude& b) { return a < b; })
@@ -161,6 +222,9 @@ void declare_restraint(nb::module_& m) {
 			nb::arg("i"),
 			nb::arg("r0"),
 			nb::arg("k"))
+		/// Index-based form, for `.bd` topology files, which name raw indices.
+		.def(nb::init<int, Vector3, float>(), nb::arg("ind"), nb::arg("r0"), nb::arg("k"))
+		.def_prop_ro("ind", [](const Restraint& r) { return r.ind; })
 		.def_rw("r0", &Restraint::r0)
 		.def_rw("k", &Restraint::k)
 		.def("__repr__", [](const Restraint& r) {
@@ -200,6 +264,19 @@ void declare_bonded_interaction(nb::module_& m) {
 		.def("get_num_bonds", &BondedInteractions::get_num_bonds)
 		.def("get_num_angles", &BondedInteractions::get_num_angles)
 		.def("get_num_dihedrals", &BondedInteractions::get_num_dihedrals)
+		// Read-side snapshots. nanobind/stl/vector.h converts by value, so the
+		// returned lists are copies - mutating them does nothing to the system.
+		.def("get_bonds", &BondedInteractions::get_bonds)
+		.def("get_angles", &BondedInteractions::get_angles)
+		.def("get_dihedrals", &BondedInteractions::get_dihedrals)
+		.def("get_exclusions", &BondedInteractions::get_exclusions)
+		.def("get_restraints", &BondedInteractions::get_restraints)
+		.def("make_exclusions",
+			 &BondedInteractions::make_exclusions,
+			 nb::arg("num_particles"),
+			 nb::arg("exclusion_depth"),
+			 "Generate exclusions by walking the bond graph to the given depth")
+		.def("clear", &BondedInteractions::clear)
 		.def("__repr__", [](const BondedInteractions& bi) {
 			return "BondedInteraction(bonds=" + std::to_string(bi.get_num_bonds()) +
 				   ", angles=" + std::to_string(bi.get_num_angles()) +

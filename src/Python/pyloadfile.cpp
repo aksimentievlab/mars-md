@@ -30,6 +30,7 @@
   .dx -> .vdb -> .nvdb converter that doesn't exist yet.
 	Calling it from Python surfaces that same error.
 */
+#include "IO/RigidBodyVisualize.h"
 #include "Objects/Grid.h"
 #include "Objects/Tables.h"
 #include "PyTypeCasters.h"
@@ -249,8 +250,38 @@ void declare_loadfile(nb::module_& m) {
 		});
 }
 
+/**
+ * @brief Fill a RigidBodyType's attached-particle and cosmetic templates from
+ * a PSF/PDB pair.
+ *
+ * Mutates @p rt in place. Atoms whose segname carries @p attached_marker
+ * become real attached particles; the rest become cosmetic (visualization-only)
+ * particles. Positions are stored in the body frame, relative to
+ * @p reference_point.
+ *
+ * @example
+ * ```python
+ * >>> rbt = RigidBodyType("nucleosome")
+ * >>> load_rigid_body_pdb_psf(rbt, "nuc.pdb", "nuc.psf", [0, 0, 0], [pt_a, pt_b])
+ * >>> len(rbt.attached_particles)
+ * 12
+ * ```
+ */
+static void declare_rigid_body_pdb_psf(nb::module_& m) {
+	m.def("load_rigid_body_pdb_psf",
+		  &RigidBodyPdbPsfReader::load,
+		  nb::arg("rigid_body_type"),
+		  nb::arg("pdb_path"),
+		  nb::arg("psf_path"),
+		  nb::arg("reference_point"),
+		  nb::arg("known_particle_types"),
+		  nb::arg("attached_marker") = constants::kAttachedSegnameMarker,
+		  "Populate a RigidBodyType's template/attached particles from a PSF+PDB pair");
+}
+
 void init_pyloadfile(nb::module_& m) {
 	declare_loadfile(m);
+	declare_rigid_body_pdb_psf(m);
 
 	nb::enum_<TabulatedType>(m, "TabulatedType")
 		.value("NonBondedPair", TabulatedType::NonBondedPair)
