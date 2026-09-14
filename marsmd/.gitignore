@@ -1,0 +1,4 @@
+# The compiled extension is a symlink into the active build directory,
+# refreshed by build_cuda.sh. Never committed.
+*.so
+__pycache__/
