@@ -1,4 +1,3 @@
-#include "Interactions/BondedInteraction.h"
 #include "Interactions/Interactions.h"
 #include "Interactions/NonBondedInteraction.h"
 #include "Objects/ParticleProperties.h"
@@ -38,9 +37,6 @@ void declare_nonbonded_interaction(nb::module_& m) {
 			return "PairNonBonded(type_a='" + p.type_name_1 + "', type_b='" + p.type_name_2 +
 				   "', name='" + p.function_name + "')";
 		});
-
-	// `type_id` is not exposed: NonBondedInteractions::assign_id() overwrites
-	// it with the term's own index, so it is an output, not an input.
 	nb::class_<LongRangeNonBonded>(m, "LongRangeNonBonded")
 		.def(nb::init<>())
 		.def_rw("name", &LongRangeNonBonded::function_name)

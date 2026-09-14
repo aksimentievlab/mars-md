@@ -267,9 +267,14 @@ struct UnifiedPolicy {
 									  size_t bytes,
 									  void* queue = nullptr,
 									  bool sync = false) {
-		// For SYCL unified memory, use regular memcpy since both src and dst are
-		// accessible from host
-		std::memcpy(dst, src, bytes);
+		if (queue) {
+			auto& q = *static_cast<sycl::queue*>(queue);
+			auto ev = q.memcpy(dst, src, bytes);
+			if (sync)
+				ev.wait();
+		} else {
+			std::memcpy(dst, src, bytes);
+		}
 	}
 };
 

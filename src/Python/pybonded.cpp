@@ -1,6 +1,5 @@
 #include "Interactions/BondedInteraction.h"
 #include "Interactions/Interactions.h"
-#include "Interactions/NonBondedInteraction.h"
 #include "Objects/ParticleProperties.h"
 #include "PyTypeCasters.h"
 #include <nanobind/nanobind.h>
@@ -174,9 +173,9 @@ void declare_restraint(nb::module_& m) {
 // ============================================================================
 
 /**
- * @note Example usage (in Python):
+ * @example:
  * ```python
- * >>> from arbd2v import BondedInteraction
+ * >>> from marsmd import BondedInteraction
  * >>> bi = BondedInteraction()
  * >>> print(bi)
  * BondedInteraction()
