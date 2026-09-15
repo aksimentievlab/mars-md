@@ -16,6 +16,31 @@ namespace {
 std::string bond_table_path() {
 	return (std::filesystem::path(__FILE__).parent_path() / "bond-19.190-3.800.dat").string();
 }
+
+// bond-19.190-3.800.dat is a HarmonicBond(k=19.190, r0=3.800) written through
+// AbstractPotential.write_file() with a force cap, so away from r0 it is a
+// straight line (constant |force|), not the raw 0.5*k*(r-r0)^2 formula. Mirror
+// TabulatedPotential::compute() (src/Interactions/TabulatedPotential.h) on the
+// host so tests can check kernel/device output against the exact table used,
+// whatever its shape.
+struct BondReference {
+	float force_magnitude;
+	float energy;
+};
+
+BondReference reference_bond_lookup(const Table& t, float dx) {
+	float w = (dx - t.start) / t.step_size;
+	int home = static_cast<int>(std::floor(w));
+	w -= static_cast<float>(home);
+	if (home >= static_cast<int>(t.Y.size()) - 1) {
+		return {0.0f, t.Y.back()};
+	}
+	if (home < 0)
+		home = 0;
+	float U0 = t.Y[home];
+	float dU = t.Y[home + 1] - U0;
+	return {-dU / t.step_size, dU * w + U0};
+}
 } // namespace
 
 TEST_CASE("RandomTest", "[free][random]") {
@@ -74,7 +99,7 @@ TEST_CASE("IntegratorTest", "[free][bd]") {
 
 	float D = 149.0f;					// Å²/ns (calculated as kT/(gamma*mass))
 	ptype.diffusion = Vector3(D, D, D); // Å²/ns ✓
-
+	std::vector<int> seeds = {203, 123414, 1240, 342, 603};
 	std::vector<ParticleType> types = {ptype};
 	DeviceParticleTypes device_types(types, res);
 
@@ -108,51 +133,59 @@ TEST_CASE("IntegratorTest", "[free][bd]") {
 	std::cout << "Total time: " << total_time << " ns" << std::endl;
 	std::cout << "Expected MSD = " << expected_msd << " Å²" << std::endl;
 
-	// Run integration
+	// Run integration once per seed and pool all (seed x particle) samples into a
+	// single MSD estimate, instead of relying on one noisy 100-particle run.
 	auto particle_view = particles.view();
 	auto type_view = device_types.view();
 
-	for (int step = 0; step < num_steps; step++) {
-		launch_BD<float>(res,
-						 particle_view,
-						 type_view,
-						 dt,
-						 step,
-						 kT,
-						 100,
-						 sim_box,
-						 5,
-						 step,
-						 /*grid_configs=*/nullptr,
-						 /*electric_field=*/Vector3{0.0f, 0.0f, 0.0f},
-						 /*interpolation_scheme=*/1);
+	double total_msd = 0.0;
+	const int total_samples = static_cast<int>(seeds.size()) * 100;
+
+	for (int seed : seeds) {
+		particles.copy_from_host(init, 100); // reset positions/force for this seed
+
+		for (int step = 0; step < num_steps; step++) {
+			launch_BD<float>(res,
+							 particle_view,
+							 type_view,
+							 dt,
+							 step,
+							 kT,
+							 100,
+							 sim_box,
+							 seed,
+							 step,
+							 /*grid_configs=*/nullptr,
+							 /*electric_field=*/Vector3{0.0f, 0.0f, 0.0f},
+							 /*interpolation_scheme=*/1);
+		}
+
+		HostParticleData final;
+		particles.copy_to_host(final, 100);
+
+		for (int i = 0; i < 100; i++) {
+			Vector3 disp = final.pos[i] - init.pos[i];
+
+			// Apply minimum image convention for PBC (use roundf!)
+			disp.x -= box_size.x * roundf(disp.x / box_size.x); // ✓
+			disp.y -= box_size.y * roundf(disp.y / box_size.y); // ✓
+			disp.z -= box_size.z * roundf(disp.z / box_size.z); // ✓
+
+			total_msd += disp.length2();
+		}
 	}
 
-	// Calculate MSD
-	HostParticleData final;
-	particles.copy_to_host(final, 100);
+	float msd = static_cast<float>(total_msd / total_samples);
 
-	float msd = 0.0f;
-	for (int i = 0; i < 100; i++) {
-		Vector3 disp = final.pos[i] - init.pos[i];
-
-		// Apply minimum image convention for PBC (use roundf!)
-		disp.x -= box_size.x * roundf(disp.x / box_size.x); // ✓
-		disp.y -= box_size.y * roundf(disp.y / box_size.y); // ✓
-		disp.z -= box_size.z * roundf(disp.z / box_size.z); // ✓
-
-		msd += disp.length2();
-		std::cout << "final pos: " << final.pos[i].x << ", " << final.pos[i].y << ", "
-				  << final.pos[i].z << std::endl;
-		std::cout << final.force[i].x << ", " << final.force[i].y << ", " << final.force[i].z
-				  << std::endl;
-	}
-	msd /= 100.0f;
-
-	std::cout << "Measured MSD = " << msd << " Å²" << std::endl;
+	std::cout << "Measured MSD (avg over " << seeds.size() << " seeds x 100 particles) = " << msd
+			  << " Å²" << std::endl;
 	std::cout << "Ratio = " << msd / expected_msd << std::endl;
 
-	REQUIRE(msd == Approx(expected_msd).epsilon(0.2));
+	// For 3D free diffusion, |disp|^2 / (2Dt) ~ chi2_3, giving relative std sqrt(2/3)
+	// per sample. With 5 seeds x 100 particles = 500 iid samples, the relative std of
+	// the mean is sqrt(2/3)/sqrt(500) ≈ 3.7%; 10% keeps ~2.7 sigma of headroom against
+	// false failures while still catching a real scaling bug (e.g. wrong D or dt).
+	REQUIRE(msd == Approx(expected_msd).epsilon(0.10));
 }
 
 TEST_CASE("BondedForcesTest", "[free][bonded]") {
@@ -222,18 +255,10 @@ TEST_CASE("BondedForcesTest", "[free][bonded]") {
 	nb_evt.wait();
 	std::cout << "calculate_nonbonded_forces returned successfully" << std::endl;
 
-	{
-		const Table& t = tables_registry.get_bond_functions()[function_index];
-		float dx = 1.885f;
-		float w = (dx - t.start) / t.step_size;
-		int home = static_cast<int>(std::floor(w));
-		w -= home;
-		float U0 = t.Y[home];
-		float dU = t.Y[home + 1] - U0;
-		std::cout << "HOST check: dx=" << dx << " home=" << home << " U0=" << U0 << " dU=" << dU
-				  << " step_inv=" << (1.0f / t.step_size)
-				  << " expected_force_mag=" << (dU / t.step_size) << std::endl;
-	}
+	const Table& bond_table = tables_registry.get_bond_functions()[function_index];
+	const BondReference ref = reference_bond_lookup(bond_table, 1.885f);
+	std::cout << "HOST reference: dx=1.885 force_magnitude=" << ref.force_magnitude
+			  << " energy=" << ref.energy << std::endl;
 
 	std::cout << "Calling calculate_bonded_forces..." << std::endl;
 	Event evt =
@@ -242,13 +267,29 @@ TEST_CASE("BondedForcesTest", "[free][bonded]") {
 	std::cout << "calculate_bonded_forces returned successfully" << std::endl;
 
 	HostParticleData final_data;
-	patch.copy_particles_to_host(final_data, 0, num_particles);
+	patch.copy_particles_to_host(final_data, 0, num_particles, /*need_energy=*/true);
 	std::cout << "force[0]: " << final_data.force[0].x << ", " << final_data.force[0].y << ", "
 			  << final_data.force[0].z << std::endl;
 	std::cout << "force[1]: " << final_data.force[1].x << ", " << final_data.force[1].y << ", "
 			  << final_data.force[1].z << std::endl;
 
-	REQUIRE(true);
+	// Uniform spacing => every interior particle gets equal and opposite pulls
+	// from its two neighboring bonds and nets to zero; only the chain ends see
+	// the bare bond force (see reference_bond_lookup/BondComputer.h sign convention).
+	const float tol = 0.05f;
+	REQUIRE(final_data.force[0].x == Approx(0.0f).margin(tol));
+	REQUIRE(final_data.force[0].y == Approx(0.0f).margin(tol));
+	REQUIRE(final_data.force[0].z == Approx(-ref.force_magnitude).margin(tol));
+
+	REQUIRE(final_data.force[num_particles - 1].x == Approx(0.0f).margin(tol));
+	REQUIRE(final_data.force[num_particles - 1].y == Approx(0.0f).margin(tol));
+	REQUIRE(final_data.force[num_particles - 1].z == Approx(ref.force_magnitude).margin(tol));
+
+	for (idx_t i = 1; i + 1 < num_particles; ++i) {
+		REQUIRE(final_data.force[i].x == Approx(0.0f).margin(tol));
+		REQUIRE(final_data.force[i].y == Approx(0.0f).margin(tol));
+		REQUIRE(final_data.force[i].z == Approx(0.0f).margin(tol));
+	}
 }
 
 TEST_CASE("DirectTabulatedBondKernelTest", "[free][bonded][direct]") {
@@ -272,6 +313,14 @@ TEST_CASE("DirectTabulatedBondKernelTest", "[free][bonded][direct]") {
 	pot.is_periodic = false;
 	std::cout << "pot.step_inv=" << pot.step_inv << " pot.size=" << pot.size
 			  << " pot.start=" << pot.start << " pot.pot=" << (void*)pot.pot << std::endl;
+
+	// Struct fields copied straight from the loaded table - a mismatch here means
+	// TabulatedPotential is reading the wrong table/offset on device.
+	REQUIRE(pot.size == static_cast<unsigned int>(table.Y.size()));
+	REQUIRE(pot.start == Approx(table.start));
+	REQUIRE(pot.step_inv == Approx(1.0 / table.step_size));
+
+	const BondReference ref = reference_bond_lookup(table, 1.885f);
 
 	DeviceBuffer<TabulatedPotential> tables_buf(1, res);
 	tables_buf.copy_from_host(std::vector<TabulatedPotential>{pot});
@@ -318,7 +367,15 @@ TEST_CASE("DirectTabulatedBondKernelTest", "[free][bonded][direct]") {
 	std::cout << "direct force[1]: " << host_force[1].x << ", " << host_force[1].y << ", "
 			  << host_force[1].z << std::endl;
 
-	REQUIRE(true);
+	// unit_vector points from particle 0 to particle 1 (+z), so 0 gets -force,
+	// 1 gets +force (TabulatedBondComputer::operator() in BondComputer.h).
+	const float tol = 0.05f;
+	REQUIRE(host_force[0].x == Approx(0.0f).margin(tol));
+	REQUIRE(host_force[0].y == Approx(0.0f).margin(tol));
+	REQUIRE(host_force[0].z == Approx(-ref.force_magnitude).margin(tol));
+	REQUIRE(host_force[1].x == Approx(0.0f).margin(tol));
+	REQUIRE(host_force[1].y == Approx(0.0f).margin(tol));
+	REQUIRE(host_force[1].z == Approx(ref.force_magnitude).margin(tol));
 }
 
 TEST_CASE("DeviceBondedInteractionsDirectTest", "[free][bonded][dbi]") {
@@ -335,7 +392,9 @@ TEST_CASE("DeviceBondedInteractionsDirectTest", "[free][bonded][dbi]") {
 		// matters for this test, not the nonbonded physics.
 		for (int i = 0; i < 19; ++i) {
 			for (int j = i; j < 19; ++j) {
-				tables_registry.load_pair_nonbonded(i, j, bond_file);
+				Table table(TabulatedType::NonBondedPair);
+				table.read_file(bond_file, "nb-" + std::to_string(i) + "-" + std::to_string(j));
+				tables_registry.add_nonbonded(std::move(table));
 			}
 		}
 	}
@@ -365,6 +424,10 @@ TEST_CASE("DeviceBondedInteractionsDirectTest", "[free][bonded][dbi]") {
 	device_bonded.copy_from_host(interactions);
 	device_bonded.link_tables(tables_registry, 0);
 	std::cout << "device_bonded.num_bonds()=" << device_bonded.num_bonds() << std::endl;
+	REQUIRE(device_bonded.num_bonds() == static_cast<idx_t>(num_particles - 1));
+
+	const Table& bond_table = tables_registry.get_bond_functions()[function_index];
+	const BondReference ref = reference_bond_lookup(bond_table, 1.885f);
 
 	std::vector<Vector3> host_pos(num_particles);
 	std::vector<Vector3> host_force_init(num_particles);
@@ -402,5 +465,18 @@ TEST_CASE("DeviceBondedInteractionsDirectTest", "[free][bonded][dbi]") {
 	std::cout << "dbi force[64]: " << host_force[64].x << ", " << host_force[64].y << ", "
 			  << host_force[64].z << std::endl;
 
-	REQUIRE(true);
+	// Same uniform-chain cancellation as BondedForcesTest, but exercised through
+	// the DeviceBondedInteractions accessors instead of Patch::calculate_bonded_forces.
+	const float tol = 0.05f;
+	REQUIRE(host_force[0].x == Approx(0.0f).margin(tol));
+	REQUIRE(host_force[0].y == Approx(0.0f).margin(tol));
+	REQUIRE(host_force[0].z == Approx(-ref.force_magnitude).margin(tol));
+
+	REQUIRE(host_force[num_particles - 1].x == Approx(0.0f).margin(tol));
+	REQUIRE(host_force[num_particles - 1].y == Approx(0.0f).margin(tol));
+	REQUIRE(host_force[num_particles - 1].z == Approx(ref.force_magnitude).margin(tol));
+
+	REQUIRE(host_force[64].x == Approx(0.0f).margin(tol));
+	REQUIRE(host_force[64].y == Approx(0.0f).margin(tol));
+	REQUIRE(host_force[64].z == Approx(0.0f).margin(tol));
 }

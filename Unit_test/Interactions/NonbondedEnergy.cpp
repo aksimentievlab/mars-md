@@ -131,7 +131,8 @@ std::pair<mars_real, std::vector<Vector3>> run_pairwise(const Resource& res,
 							  /*get_energy=*/true,
 							  num_pairs,
 							  cutoff > 0 ? cutoff * cutoff : mars_real(0),
-							  PAIR_TERM_TABULATED)
+							  PAIR_TERM_TABULATED,
+							  SolventParams{})
 		.wait();
 
 	std::vector<Vector3> out(n);
