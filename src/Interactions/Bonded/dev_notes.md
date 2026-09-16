@@ -231,3 +231,76 @@ already included that header for its `device_bonded_` member.
 `BondedInstantiations.cu` forces `launch_cuda_kernel` for every computer in this directory into a real CUDA translation unit, with matching `extern template` declarations at the bottom of each header.
 
 Without them, any host-only `.cpp` that calls a launcher — or calls `Patch::calculate_bonded_forces`, which calls all of them — implicitly instantiates the non-CUDA stub in `KernelHelper.cuh` and throws `NotImplementedError` at runtime. This applies to the concrete computers (`TabulatedBondComputer`, `HarmonicRestraintComputer`, ...) exactly as much as to the templated `AnalyticalBondComputer<N>`: being a non-template type is no exemption, because it is `launch_cuda_kernel` that is the template.
+
+## Bonded force clamp (`kMaxBondedForce`, `clamp_bonded_force`)
+
+ARBD v1 guards the dihedral force in `TabulatedMethods.cuh`; MARS had nothing. Without
+a guard the nupod hinged-nup98 Langevin run shows intermittent KE spikes
+(295k -> 399k -> 507k kT) decaying back, one dihedral transiting near-collinear per
+spike. With all bonded terms disabled the same run sits at exactly 1.00x equipartition.
+
+v1 does it by zeroing inside a collinearity band, plus a magnitude cap:
+
+    force = (ab2*bc2*crossABC.rLength2() > 100 || bc2*cd2*crossBCD.rLength2() > 100) ? 0 : fe.x;
+    if (force > 1000) force = 1000;
+
+`ab2*bc2/|ab x bc|^2` is `1/sin^2` of the ab-bc angle, so that fires within ~5.7 degrees
+of collinear — where `f1 = -|bc| * crossABC.rLength2() * crossABC` (magnitude
+`|bc|/|ab x bc|`) diverges.
+
+**MARS clamps instead of zeroing, and clamps the assembled force, not the table term.**
+Two reasons. Zeroing a force that is otherwise correct is itself non-conservative, and
+it discards a real restoring term. And clamping `fe.force_magnitude` would not help:
+the divergence lives in the geometric prefactor `|bc|/|ab x bc|`, not in `dU/dphi`, so
+capping the table term leaves `f1` unbounded.
+
+`clamp_bonded_force` scales a vector back to `kMaxBondedForce` keeping its direction,
+and is applied to `f1`/`f2`/`f3` (dihedral) and `force1`/`force3` (angle). Momentum is
+still conserved exactly: the applied forces telescope
+(`f1 + (f2-f1) + (f3-f2) + (-f3) = 0`, and `force1 + -(force1+force3) + force3 = 0`)
+whatever the clamped values are. The end particles therefore carry the clamp bound
+while the middle ones receive differences and are bounded by twice it.
+
+The clamp is inert for healthy geometry: the near-collinear unit-test triple sits at
+`|f1| = |bc|/|ab x bc| * SLOPE = 50`, far below the bound, which is why
+`Tabulated dihedral stays exact on a near-collinear triple` still holds.
+
+Exactly-zero cross products need no guard — `Vector3::rLength2()` returns 0 rather than
+inf/NaN for zero length, so `f1`/`f2`/`f3` collapse to zero on their own. Residual
+hazard left alone (v1 has it too): a *perfectly* collinear quadruplet makes
+`cos_phi = 0/0 = NaN`, so `dihedral_angle` is NaN and the table lookup indexes on
+`floor(NaN)`. The force is zero either way, but a NaN energy can still be accumulated.
+
+**Angle: do NOT clamp `dUdtheta`.** This was tried and reverted. `dUdtheta =
+(dU/dtheta)/sin(theta)` does diverge as theta -> 0 (the nupod tables rest at 180 deg,
+so dU/dtheta stays at -33.6 while sin -> 0, giving -1913 at 1 deg and -33577 at 0),
+but that divergence is *cancelled*: the bracket it multiplies collapses like
+`n_hat*sin(theta)/|u|`, so the force tends to `(dU/dtheta)*n_hat/|u|` and stays small
+(0.2-1.8 at the smallest angles actually observed). Clamping `dUdtheta` breaks the
+cancellation and makes the force non-conservative exactly where it fires.
+
+Measured against a numerical gradient of the same tabulated energy, over the 400
+smallest-theta angles of a real frame: uncapped gives median relative error 5e-8 and
+max 0.000; with a 1000 clamp, two angles break by up to 43%. That is energy injection,
+not protection. `Tabulated angle force tracks finite differences across a theta sweep`
+in `Unit_test/Interactions/TabulatedBonded.cpp` pins this down to 0.5 deg.
+
+The residual hazard is the `sin_floor = 1e-3` already in the kernel, which is the same
+kind of non-conservative clamp but only bites within 0.057 deg of collinear. No angle
+in the nupod trajectory reaches it (min theta observed 0.34 deg).
+
+**What actually triggered it.** One bond — atoms 8924-8925, two mass-30 S005 beads on
+`wlcbond-2.560-12.000.dat`, k ~ 3875 kcal/mol/A^2 — has `dt*omega = 6.58` at
+`dt = 2e-5 ns`, well past the velocity-Verlet stability limit of 2. It is the only such
+bond out of 460,316 (every other is <= 0.48). v1 never sees it: v1 launches bonds over
+`numBonds/2` on the assumption that the file is fully bidirectional, but this file has
+66,668 single-listed bonds, so the first `numBonds/2 = 426,982` *lines* cover only
+238,840 *unique* pairs — v1 silently omits 221,476 unique bonds, 48% of the topology,
+including this one (line 459,382, past the cutoff). Split by that cutoff, the bonds v1
+sees have max `dt*omega` 0.475 and zero unstable; the bonds v1 never sees contain the
+single unstable one. v1's apparent stability on this system is partly an artifact of
+simulating half the bonded topology.
+
+That bond is a modeling/timestep issue, not a code one: k=3875 on mass-30 beads needs
+dt <~ 6 fs. But it is *not* what drove the 4x heating — with bonds+dihedrals enabled
+and angles off the run is flat, so the unstable bond alone is not sufficient.

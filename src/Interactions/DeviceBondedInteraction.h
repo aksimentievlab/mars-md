@@ -364,13 +364,14 @@ class DeviceBondedInteractions {
 	void remap_particle_indices(Sorter& sorter) {
 		if (num_bonds_ > 0)
 			sorter.remap_indices(reinterpret_cast<int*>(bond_indices_.data()),
-								 static_cast<size_t>(num_bonds_) * 2);
+								 static_cast<size_t>(num_bonds_) * (sizeof(int2) / sizeof(int)));
 		if (num_angles_ > 0)
 			sorter.remap_indices(reinterpret_cast<int*>(angle_indices_.data()),
-								 static_cast<size_t>(num_angles_) * 3);
+								 static_cast<size_t>(num_angles_) * (sizeof(int3) / sizeof(int)));
 		if (num_dihedrals_ > 0)
 			sorter.remap_indices(reinterpret_cast<int*>(dihedral_indices_.data()),
-								 static_cast<size_t>(num_dihedrals_) * 4);
+								 static_cast<size_t>(num_dihedrals_) *
+									 (sizeof(int4) / sizeof(int)));
 		if (num_restraints_ > 0)
 			sorter.remap_indices(restraint_particle_ids_.data(),
 								 static_cast<size_t>(num_restraints_));

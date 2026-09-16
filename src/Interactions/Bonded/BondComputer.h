@@ -9,6 +9,17 @@
 
 namespace MARS {
 
+inline constexpr mars_real kMaxBondedForce = mars_real(1000);
+
+/// @brief Limit a bonded force to kMaxBondedForce, preserving its direction.
+HOST DEVICE inline Vector3 clamp_bonded_force(const Vector3& f) {
+	const mars_real l2 = f.length2();
+	if (l2 > kMaxBondedForce * kMaxBondedForce) {
+		return f * (kMaxBondedForce / math::sqrt(l2));
+	}
+	return f;
+}
+
 // ============================================================================
 // BOND COMPUTERS - Functor pattern for launch_kernel
 // ============================================================================
@@ -239,10 +250,10 @@ struct TabulatedAngleComputer {
 		const mars_real inv_ab = mars_real(1) / math::sqrt(geom.ab.length2());
 		const mars_real inv_bc = mars_real(1) / math::sqrt(geom.bc.length2());
 
-		const Vector3 force1 =
-			(dUdtheta * inv_ab) * (geom.ab * (geom.cos_angle * inv_ab) + geom.bc * inv_bc);
-		const Vector3 force3 =
-			-(dUdtheta * inv_bc) * (geom.bc * (geom.cos_angle * inv_bc) + geom.ab * inv_ab);
+		const Vector3 force1 = clamp_bonded_force(
+			(dUdtheta * inv_ab) * (geom.ab * (geom.cos_angle * inv_ab) + geom.bc * inv_bc));
+		const Vector3 force3 = clamp_bonded_force(
+			-(dUdtheta * inv_bc) * (geom.bc * (geom.cos_angle * inv_bc) + geom.ab * inv_ab));
 		const mars_real energy = fe.energy * mars_real(1.0 / 3.0);
 
 		atomic_add(&force_energy[indices.x], force1);
@@ -310,9 +321,9 @@ struct TabulatedDihedralComputer {
 			TabulatedPotential::compute(geom.dihedral_angle, &tables[table_indices[i]]);
 
 		// Phase 3: Apply forces (see BondComputer.md)
-		const Vector3 f1 = geom.f1 * fe.force_magnitude;
-		const Vector3 f2 = geom.f2 * fe.force_magnitude;
-		const Vector3 f3 = geom.f3 * fe.force_magnitude;
+		const Vector3 f1 = clamp_bonded_force(geom.f1 * fe.force_magnitude);
+		const Vector3 f2 = clamp_bonded_force(geom.f2 * fe.force_magnitude);
+		const Vector3 f3 = clamp_bonded_force(geom.f3 * fe.force_magnitude);
 		const mars_real energy = fe.energy * mars_real(0.25);
 
 		atomic_add(&force_energy[indices.x], f1);

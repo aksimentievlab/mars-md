@@ -12,6 +12,23 @@ those buffers as a flat `int[]` of length `N*components` and remap every int in
 one launch. `DeviceBuffer<int2>::data()` is contiguous POD, so
 `reinterpret_cast<int*>` + count `N*2` is valid (pointer cast only; no host deref).
 
+**`components` is NOT what the type name says — derive it with `sizeof`.** `int3`
+and `int4` are both `Vector3_t<mars_int>`, which is `alignas(4*sizeof(T))` over
+`x, y, z, t` — *four* ints either way. Only `int2` (`Vec2<mars_int>`) really holds
+two. Passing `num_angles * 3` for an `int3` buffer therefore walks a 4-int-stride
+array as if it were packed triples: it rewrites the padding `t` slots and leaves
+the last quarter of the real indices un-remapped, silently corrupting the angle
+topology on the first reorder. All call sites now use
+`N * (sizeof(T) / sizeof(int))` so the count cannot drift from the layout.
+
+Symptom when this was live: with `reorderPeriod 1000`, a nupod Langevin run was
+correct through frame 0 and then, from the first reorder onward, angles spanned
+unrelated atoms — PE jumped +208k kcal/mol in one interval and KE ran to ~4x
+equipartition. Bonds (`int2`, x2) and dihedrals (`int4`, x4) had correct counts
+and were unaffected, which is why disabling angles alone made the run flat.
+The padding is safe to remap: `Vector3_t(x,y,z)` zeroes `t`, and 0 is a valid
+slot, so it maps to a real index and is never read by the angle kernel.
+
 **Sentinel guard.** The kernel skips `old < 0 || old >= map_size` so padding and
 "no particle" markers survive a reorder untouched. `map_size = num_particles_`
 (the valid range of `inverse_indices_`, which is allocated to `max_particles_`

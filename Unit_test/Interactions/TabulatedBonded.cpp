@@ -202,6 +202,37 @@ TEST_CASE("Tabulated angle force matches finite differences", "[force][bonded][a
 	}
 }
 
+TEST_CASE("Tabulated angle force tracks finite differences across a theta sweep",
+		  "[force][bonded][angle]") {
+	// dUdtheta = (dU/dtheta)/sin(theta) diverges as theta -> 0, but the bracket it
+	// multiplies collapses like sin(theta), so the force stays finite. Clamping
+	// dUdtheta itself breaks that cancellation and silently makes the force
+	// non-conservative; clamping the assembled force does not. See dev_notes.md.
+	const RampTable table(0.0, constants::PI, TABLE_N, SLOPE, false);
+
+	for (const double degrees : {0.5, 1.0, 2.5, 5.0, 30.0, 90.0, 150.0, 179.0}) {
+		const double theta = degrees * constants::PI / 180.0;
+		const std::array<Vector3, 3> p{Vector3(1.7f, 0.0f, 0.0f),
+									   Vector3(0.0f, 0.0f, 0.0f),
+									   Vector3(static_cast<float>(1.1 * std::cos(theta)),
+											   static_cast<float>(1.1 * std::sin(theta)),
+											   0.0f)};
+
+		const auto got = run_angle(p, table, false);
+		const auto want = reference_forces<3>(
+			p,
+			[](const std::array<Vector3, 3>& q) { return reference_angle(q); });
+
+		INFO("theta = " << degrees << " deg");
+		for (size_t i = 0; i < 3; ++i) {
+			INFO("particle " << i);
+			REQUIRE(got[i].x == Approx(want[i].x).epsilon(2e-2).margin(2e-3));
+			REQUIRE(got[i].y == Approx(want[i].y).epsilon(2e-2).margin(2e-3));
+			REQUIRE(got[i].z == Approx(want[i].z).epsilon(2e-2).margin(2e-3));
+		}
+	}
+}
+
 TEST_CASE("Tabulated angle conserves momentum and angular momentum", "[force][bonded][angle]") {
 	const RampTable table(0.0, constants::PI, TABLE_N, SLOPE, false);
 	const auto p = generic_angle_config();
@@ -381,6 +412,35 @@ TEST_CASE("Tabulated dihedral stays exact on a near-collinear triple",
 		REQUIRE(got[i].y == Approx(want[i].y).epsilon(1e-2).margin(2e-3));
 		REQUIRE(got[i].z == Approx(want[i].z).epsilon(1e-2).margin(2e-3));
 	}
+}
+
+TEST_CASE("Bonded force clamp bounds the magnitude and keeps momentum",
+		  "[force][bonded][dihedral]") {
+	// Close enough to collinear that |f1| = |bc|/|ab x bc| * SLOPE ~ 2.5e4 and the
+	// clamp fires. It must bound the magnitude, keep the direction, and still
+	// telescope to zero net force.
+	const RampTable table(-constants::PI, constants::PI, TABLE_N, SLOPE, true);
+	const std::array<Vector3, 4> p{Vector3(2.0f, 1e-4f, 0.0f),
+								   Vector3(1.0f, 0.0f, 0.0f),
+								   Vector3(0.0f, 0.0f, 0.0f),
+								   Vector3(-0.5f, 0.8f, 0.3f)};
+
+	const auto got = run_dihedral(p, table, false);
+
+	// The end particles receive f1 and -f3 directly, so they carry the clamp
+	// bound; the middle two receive differences and so are bounded by twice it.
+	REQUIRE(got[0].length() > 0.0f);
+	REQUIRE(got[0].length() <= Approx(kMaxBondedForce).epsilon(1e-3));
+	REQUIRE(got[3].length() <= Approx(kMaxBondedForce).epsilon(1e-3));
+	for (size_t i = 0; i < 4; ++i) {
+		INFO("particle " << i);
+		REQUIRE(got[i].length() <= Approx(2 * kMaxBondedForce).epsilon(1e-3));
+	}
+
+	const Vector3 net = sum_force<4>(got);
+	REQUIRE(net.x == Approx(0.0f).margin(1e-2));
+	REQUIRE(net.y == Approx(0.0f).margin(1e-2));
+	REQUIRE(net.z == Approx(0.0f).margin(1e-2));
 }
 
 TEST_CASE("Tabulated dihedral skips non-tabulated forms", "[force][bonded][dihedral]") {
