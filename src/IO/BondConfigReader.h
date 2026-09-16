@@ -4,10 +4,12 @@
 #include "Interactions/Bonded/Analytical.h"
 #include "Interactions/BondedInteraction.h"
 #include "Objects/Tables.h"
+#include <cstdint>
 #include <sstream>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 
 namespace MARS {
@@ -49,6 +51,15 @@ class BondConfigReader {
 	BondedInteractions& bonded_interactions_;
 	TablesRegistry& tables_registry_;
 	std::string config_file_path_;
+	/// Unordered pair (min,max) -> index in bonds_, to drop bidirectional duplicates.
+	std::unordered_map<uint64_t, size_t> seen_bond_slot_;
+
+	/// Order-independent key for a bonded pair.
+	static uint64_t canonical_bond_key(int a, int b) {
+		const uint32_t lo = static_cast<uint32_t>(a < b ? a : b);
+		const uint32_t hi = static_cast<uint32_t>(a < b ? b : a);
+		return (static_cast<uint64_t>(lo) << 32) | hi;
+	}
 
 	void parse_angle_line(const std::string& line) {
 		std::istringstream iss(line);
@@ -158,6 +169,22 @@ class BondConfigReader {
 				tables_registry_.get_or_load_bond(bond.function_name, config_file_path_);
 		}
 
+		const uint64_t bond_key = canonical_bond_key(bond.ind1, bond.ind2);
+		auto slot = seen_bond_slot_.find(bond_key);
+		if (slot != seen_bond_slot_.end()) {
+			const Bond& existing = bonded_interactions_.get_bonds()[slot->second];
+			if (existing.function_name != bond.function_name) {
+				LOGWARN("BondConfigReader.h: duplicate bond ({}, {}) with conflicting "
+						"potential '{}' vs '{}' - keeping the latter",
+						bond.ind1,
+						bond.ind2,
+						existing.function_name,
+						bond.function_name);
+				bonded_interactions_.set_bond(slot->second, bond);
+			}
+			return;
+		}
+		seen_bond_slot_.emplace(bond_key, bonded_interactions_.get_num_bonds());
 		bonded_interactions_.add_bond(bond);
 
 		if (add_exclusions || replaces_nonbonded) {

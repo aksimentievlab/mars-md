@@ -23,6 +23,7 @@ add_executable(mars_unit_tests
     ${CMAKE_CURRENT_LIST_DIR}/Objects/TestParticle.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Compute/BDKernels.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Compute/StochasticIntegrators.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/Compute/BAOABEquilibration.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Interactions/Forces.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Interactions/TabulatedBonded.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Interactions/AnalyticalNB.cpp
@@ -36,6 +37,7 @@ add_executable(mars_unit_tests
     ${CMAKE_CURRENT_LIST_DIR}/IO/RigidBodyConfigParsing.cpp
     ${CMAKE_CURRENT_LIST_DIR}/System/SingleGPU.cpp
     ${CMAKE_CURRENT_LIST_DIR}/System/SinglePatchSimulation.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/System/BoltzmannMomentumInit.cpp
     ${CMAKE_CURRENT_LIST_DIR}/System/SinglePatchRigidBodySimulation.cpp
 )
 # Includes

@@ -7,7 +7,7 @@ namespace MARS {
 
 void SimSystem::validate_physical_parameters() const {
 
-	if (temperature_.value <= mars_real(0.0)) {
+	if (temperature_.value < mars_real(0.0)) {
 		throw Exception(ExceptionType::ValueError,
 						SourceLocation(),
 						"Temperature must be greater than 0");

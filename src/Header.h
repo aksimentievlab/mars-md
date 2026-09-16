@@ -212,7 +212,7 @@ using threadgroup_ptr = threadgroup T*;
 #define DEVICE_PTR(T) device T*
 #endif
 #ifndef CONSTANT_PTR
-#define CONSTANT_PTR(T) constant T*
+#define CONSTANT_PTR(T) constant device T*
 #endif
 #ifndef THREAD_PTR
 #define THREAD_PTR(T) thread T*

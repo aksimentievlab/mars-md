@@ -276,6 +276,10 @@ class BondedInteractions {
 	void add_bond(const Bond& bond) {
 		bonds_.push_back(bond);
 	}
+	/// Overwrite an existing bond in place (used to resolve duplicate-pair conflicts).
+	void set_bond(size_t i, const Bond& bond) {
+		bonds_[i] = bond;
+	}
 	void add_angle(const Angle& angle) {
 		angles_.push_back(angle);
 	}

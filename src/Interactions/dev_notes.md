@@ -139,3 +139,8 @@ it. Until then a `gaussian` pair is only good for exercising the kernel.
 different directories are different potentials. The bonded loaders still key by stem.
 
 `NonBondedInteraction.cpp` is an empty stub to be removed together with its CMake entry.
+
+`BondedInteractions::set_bond(i, bond)` overwrites an existing bond in place. Added
+for `BondConfigReader`'s bidirectional-bond dedup: when a duplicate pair carries a
+conflicting potential, the latest definition replaces the stored one (see
+`src/IO/dev_notes.md`).

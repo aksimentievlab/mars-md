@@ -1,6 +1,7 @@
 #include "SimManager.h"
 #include "PatchOperation/ZOrderKernels/ZOrderSort.h"
 #include "System/PatchManager.h"
+#include <algorithm>
 #include <charconv>
 #include <cstdio>
 #include <fstream>
@@ -112,6 +113,21 @@ void SimManager::init() {
 				}
 				return it->second;
 			});
+		}
+
+		// Langevin needs momenta. If none were supplied (no inputMomentum / restart
+		// columns), seed them from Maxwell-Boltzmann - matching ARBD's else-Boltzmann
+		// fallback. Provided momenta always win.
+		if (sys_.get_particle_algorithm() == IntegratorType::Langevin) {
+			const bool momentum_provided =
+				std::any_of(pending_initial_particles_.begin(),
+							pending_initial_particles_.end(),
+							[](const ParticleIO& p) { return p.momentum.length2() > 0.0f; });
+			if (!momentum_provided) {
+				generate_initial_momentum(Vector3(0.0f));
+			} else {
+				LOGINFO("SimManager: Using provided initial momenta (skipping Boltzmann seed)");
+			}
 		}
 
 		sys_state_.set_init_particle_data(pending_initial_particles_);
@@ -319,7 +335,11 @@ void SimManager::execute_force_calculation(size_t step) {
 	}
 
 #ifdef ENABLE_ZORDER_REORDER
-	if (sys_.get_reorder_period() > 0) {
+	int reorder_period = sys_.get_reorder_period() > 0
+							 ? sys_.get_reorder_period()
+							 : static_cast<int>(sys_.get_neighbor_list_rebuild_period());
+	sys_.set_reorder_period(reorder_period);
+	if (reorder_period > 0) {
 		auto& reorder_patches = patch_mgr->get_patches();
 		if (!reorder_patches.empty() && reorder_patches.front()) {
 			if (!reorder_mgr_) {
@@ -924,53 +944,45 @@ void SimManager::generate_initial_particles(std::vector<Vector3>& positions,
  */
 void SimManager::generate_initial_momentum(const Vector3& v_com) {
 	const Temperature& temperature = sys_.get_temperature_struct();
-	float kT = 1.0f;
 	if (temperature.format == Temperature::Format::Grid) {
 		throw Exception(ExceptionType::RuntimeError,
 						SourceLocation(),
 						"Grid temperature not supported for initial momentum generation");
-	} else {
-		kT = temperature.kT; // Fix: don't redeclare, just assign
 	}
+	const float kT = temperature.kT;
 
-	const size_t num_particles = sys_state_.get_num_particles();
+	const size_t num_particles = pending_initial_particles_.size();
 	const auto& particle_types = sys_.get_particle_types();
-	std::vector<Vector3> momentum(num_particles);
 
-	// Constants for unit conversion
-	// SQRT_CAL_TO_JOULE = 2.046167337e4 (from Constants.h)
-
-	// Initialize random number generator for host-side generation
-	static std::random_device rd;
-	static std::mt19937 gen(rd());
+	// Seed offset by +2 to avoid colliding with other RNG streams (matches ARBD).
+	std::mt19937 gen(static_cast<std::mt19937::result_type>(sys_.get_base_seed() + 127));
 	std::normal_distribution<double> gaussian(0.0, 1.0);
 
-	// Generate momenta from Maxwell-Boltzmann distribution
-	// p = sqrt(kT * m) * random_gaussian
-	Vector3 total_momentum(0.0, 0.0, 0.0);
-
-	for (size_t i = 0; i < num_particles; ++i) {
-		int typ = particle_types[i].id;
-		double M = particle_types[typ].mass;
-		double sigma = sqrt(kT * M) * constants::SQRT_CAL_TO_JOULE;
-
-		Vector3 tmp(gaussian(gen) * sigma, gaussian(gen) * sigma, gaussian(gen) * sigma);
-
-		momentum[i] = tmp;
-		total_momentum += tmp;
+	// Maxwell-Boltzmann: p = sqrt(kT * m) * N(0,1) per component. SQRT_CAL_TO_JOULE
+	// folds ARBD's 2.046167337e4 * 1e-4 unit conversion into one factor.
+	Vector3 total_momentum(0.0f);
+	for (auto& particle : pending_initial_particles_) {
+		const int type_id = sys_.get_particle_type_id(particle.type_name);
+		const double M = particle_types[type_id].mass;
+		const double sigma = std::sqrt(kT * M) * constants::SQRT_CAL_TO_JOULE;
+		particle.momentum =
+			Vector3(gaussian(gen) * sigma, gaussian(gen) * sigma, gaussian(gen) * sigma);
+		total_momentum += particle.momentum;
 	}
 
-	// Remove center of mass momentum to ensure zero net momentum
+	// Remove net drift, then impose the requested COM velocity (ARBD Boltzmann).
 	if (num_particles > 1) {
-		Vector3 p_com = total_momentum / static_cast<double>(num_particles);
-		for (size_t i = 0; i < num_particles; ++i) {
-			int typ = particle_types[i].id;
-			double M = particle_types[typ].mass;
-			momentum[i] = momentum[i] - p_com + M * v_com;
+		const Vector3 p_com = total_momentum / static_cast<double>(num_particles);
+		for (auto& particle : pending_initial_particles_) {
+			const int type_id = sys_.get_particle_type_id(particle.type_name);
+			const double M = particle_types[type_id].mass;
+			particle.momentum = particle.momentum - p_com + M * v_com;
 		}
 	}
 
-	LOGINFO("SimManager: Generated initial momenta for {} particles at kT={}", num_particles, kT);
+	LOGINFO("SimManager: Generated Maxwell-Boltzmann momenta for {} particles at kT={}",
+			num_particles,
+			kT);
 }
 
 //================================================================================

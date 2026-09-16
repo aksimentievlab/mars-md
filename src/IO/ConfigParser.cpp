@@ -535,8 +535,8 @@ static void load_restart_file(const std::string& path,
 							  std::vector<ParticleIO>& out,
 							  const std::string& config_file_path,
 							  const std::vector<ParticleType>& particle_types) {
-	// Format: type_id coord_x coord_y coord_z
-	// particle_id is the line order (0-based index)
+
+	const bool overwrite_existing = !out.empty();
 	std::string resolved_path = resolve_file_path(path, config_file_path);
 	try {
 		MARS::FileHandle fh(resolved_path.c_str(), "r");
@@ -554,28 +554,46 @@ static void load_restart_file(const std::string& path,
 				LOGWARN("load_restart_file: Invalid line (expected 4 tokens): {}", s);
 				continue;
 			}
-			ParticleIO p{};
-			p.id = line_number; // particle_id is the line order
 			int type_id = std::stoi(toks[0]);
-			p.position.x = std::stof(toks[1]);
-			p.position.y = std::stof(toks[2]);
-			p.position.z = std::stof(toks[3]);
+			const Vector3 pos(std::stof(toks[1]), std::stof(toks[2]), std::stof(toks[3]));
 
-			// Map type_id to type_name using particle_types vector
-			if (type_id >= 0 && static_cast<size_t>(type_id) < particle_types.size()) {
-				p.type_name = particle_types[type_id].name;
+			if (overwrite_existing) {
+				// Overwrite position only; keep staged type_name/momentum.
+				if (static_cast<size_t>(line_number) >= out.size()) {
+					LOGWARN("load_restart_file: restart has more particles than staged ({}) - "
+							"ignoring extras",
+							out.size());
+					break;
+				}
+				out[static_cast<size_t>(line_number)].position = pos;
 			} else {
-				LOGWARN("load_restart_file: Invalid particle type_id {} (max: {})",
-						type_id,
-						particle_types.size() - 1);
-				continue;
+				ParticleIO p{};
+				p.id = line_number; // particle_id is the line order
+				p.position = pos;
+				// Map type_id to type_name using particle_types vector
+				if (type_id >= 0 && static_cast<size_t>(type_id) < particle_types.size()) {
+					p.type_name = particle_types[type_id].name;
+				} else {
+					LOGWARN("load_restart_file: Invalid particle type_id {} (max: {})",
+							type_id,
+							particle_types.size() - 1);
+					continue;
+				}
+				out.push_back(p);
 			}
-			out.push_back(p);
 			line_number++;
 		}
 		if (line)
 			free(line);
-		LOGINFO("load_restart_file: Loaded {} particles from '{}'", out.size(), resolved_path);
+		if (overwrite_existing && static_cast<size_t>(line_number) != out.size()) {
+			LOGWARN("load_restart_file: restart updated {} of {} staged particles (count mismatch)",
+					line_number,
+					out.size());
+		}
+		LOGINFO("load_restart_file: {} {} particles from '{}'",
+				overwrite_existing ? "Updated coordinates for" : "Loaded",
+				line_number,
+				resolved_path);
 	} catch (const std::exception& e) {
 		LOGWARN("load_restart_file: Failed to read restart file from '{}': {}", path, e.what());
 	}
@@ -634,9 +652,8 @@ void ConfigParser::get_elements(const Reader& reader) {
 		"constantTorque",
 	};
 
-	// Set by the top-level inputRBCoordinates key, applied after the loop (see
-	// there for why it cannot be handled inline).
 	std::string rb_coordinates_file;
+	std::string restart_coordinates_file;
 
 	const bool has_explicit_particle_source =
 		std::any_of(params.begin(), params.end(), [](const auto& kv) {
@@ -1075,11 +1092,8 @@ void ConfigParser::get_elements(const Reader& reader) {
 		} else if (key == "inputParticles" || key == "input_particles") {
 			load_particles_file(value, init_particles_, file_name_);
 		} else if (key == "restartCoordinates" || key == "restart_coordinates") {
-			// Load restart coordinates: format is particle_id type_id coord_x coord_y coord_z
-			load_restart_file(value,
-							  init_particles_,
-							  file_name_,
-							  sim_system_ref_->get_particle_types());
+			// Deferred; applied after the first pass. See dev_notes.md.
+			restart_coordinates_file = value;
 		} else if (key == "inputRBCoordinates" || key == "input_rb_coordinates") {
 			rb_coordinates_file = resolve_file_path(value, file_name_);
 		} else if (key == "rigidBodyGridGridPeriod" || key == "rigid_body_grid_grid_period") {
@@ -1087,6 +1101,13 @@ void ConfigParser::get_elements(const Reader& reader) {
 		}
 
 		++i;
+	}
+
+	if (!restart_coordinates_file.empty()) {
+		load_restart_file(restart_coordinates_file,
+						  init_particles_,
+						  file_name_,
+						  sim_system_ref_->get_particle_types());
 	}
 
 	if (!rb_coordinates_file.empty()) {
