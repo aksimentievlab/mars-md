@@ -9,9 +9,11 @@ a built extension -- the import is deferred to first use, so
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 from types import ModuleType
 
 from . import aux
+from ..staging import fold_in_attached_particles
 from .model import BdConfig, ParticleBlock, RigidBodyBlock
 from .paths import resolve_file_path
 
@@ -204,28 +206,27 @@ class BdApplier:
         if block.trans_damping is not None:
             pt.damping_coefficient = block.trans_damping
 
+        # A type's grid names must be the keys the grids were registered under:
+        # init() re-derives every grid id from them (see dev_notes.md).
         manager = system.get_grid_manager()
+        paths = self.resolved.grid_paths
         pt.pmf_grids, _ = self._grid_terms(system, block.grid_files)
         pt.pmf_grid_names = [
-            e.filename
-            for e in block.grid_files
-            if manager.has_grid(self.resolved.grid_paths[e.filename])
+            paths[e.filename] for e in block.grid_files if manager.has_grid(paths[e.filename])
         ]
 
         if block.diffusion_grid_file is not None:
-            key = manager.add_dense_grid(
-                self.resolved.grid_paths[block.diffusion_grid_file]
-            )
+            key = manager.add_dense_grid(paths[block.diffusion_grid_file])
             if key.is_valid():
                 pt.diffusion_grid_id = key.grid_id
-                pt.diffusion_grid_name = block.diffusion_grid_file
+                pt.diffusion_grid_name = paths[block.diffusion_grid_file]
 
         # force_grid_names is a fixed std::array<3>; the engine takes x/y/z or nothing.
-        force = list(block.force_grid_files)
+        force = [paths[name] for name in block.force_grid_files]
         if len(force) == 3:
             ids = []
-            for name in force:
-                key = manager.add_dense_grid(self.resolved.grid_paths[name])
+            for path in force:
+                key = manager.add_dense_grid(path)
                 ids.append(key.grid_id if key.is_valid() else -1)
             pt.force_grid_names = force
             pt.force_grid_id = ids
@@ -264,12 +265,14 @@ class BdApplier:
         return rbt
 
     def _apply_tabulated(self, system) -> None:
+        core = _core()
         registry = system.get_tables_registry()
+        pairs = system.get_nonbonded_interactions()
         for pair in self.config.tabulated_pairs:
-            registry.load_pair_nonbonded(
-                pair.type_id_1,
-                pair.type_id_2,
-                self.resolved.tabulated_paths[pair.filename],
+            path = self.resolved.tabulated_paths[pair.filename]
+            index = registry.load_nonbonded(path)
+            pairs.add_pair_nonbonded(
+                core.PairNonBonded(pair.type_id_1, pair.type_id_2, Path(path).stem, index)
             )
 
     # -- staging payloads -----------------------------------------------------
@@ -407,8 +410,13 @@ class BdSimulation:
         if not self.system.is_valid():
             raise ValueError("invalid system configuration")
         manager = self.manager
-        manager.stage_particles(self.applier.build_particles())
-        manager.stage_rigid_bodies(self.applier.build_rigid_bodies())
+        particles = self.applier.build_particles()
+        bodies = self.applier.build_rigid_bodies()
+        fold_in_attached_particles(
+            particles, bodies, {t.name: t for t in self.system.get_rigid_body_types()}
+        )
+        manager.stage_particles(particles)
+        manager.stage_rigid_bodies(bodies)
         manager.stage_bonded_interactions(self.applier.build_bonded(self.system))
         manager.init()
 
