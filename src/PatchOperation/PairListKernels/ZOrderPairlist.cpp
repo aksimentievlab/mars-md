@@ -6,9 +6,95 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstdlib>
 #include <limits>
 
 namespace MARS {
+
+namespace {
+
+constexpr int kMortonBits = []() constexpr {
+	int b = 0;
+	for (auto v = MortonCode::max_coord_device; v; v >>= 1)
+		++b;
+	return b;
+}();
+
+int env_int(const char* name, int fallback) {
+	const char* raw = std::getenv(name);
+	if (!raw || !*raw)
+		return fallback;
+	char* end = nullptr;
+	const long v = std::strtol(raw, &end, 10);
+	return (end && *end == '\0') ? static_cast<int>(v) : fallback;
+}
+
+} // namespace
+
+void ZOrderPairlist::select_coarse_grid(float cutoff, size_t num_particles) {
+	coarse_bits_ = 0;
+	cell_radii_ = int3(1, 1, 1);
+	neighbors_per_cell_ = 1;
+
+	const double extent[3] = {static_cast<double>(last_box_extent_.x),
+							  static_cast<double>(last_box_extent_.y),
+							  static_cast<double>(last_box_extent_.z)};
+	if (cutoff <= 0.0f || extent[0] <= 0.0 || extent[1] <= 0.0 || extent[2] <= 0.0 ||
+		num_particles == 0)
+		return;
+
+	const size_t byte_cap =
+		static_cast<size_t>(std::max(
+			1, env_int("MARS_ZORDER_TABLE_MB", static_cast<int>(kCellNeighborBytesCap >> 20))))
+		<< 20;
+	const int forced_bits = env_int("MARS_ZORDER_BITS", -1);
+	const double density = static_cast<double>(num_particles) / (extent[0] * extent[1] * extent[2]);
+
+	int best_m = 0;
+	int best_r[3] = {1, 1, 1};
+	long long best_slots = 1;
+	double best_cost = 0.0;
+	bool have_best = false;
+
+	for (int m = 0; m <= std::min(kMortonBits, kMaxCoarseBits); ++m) {
+		const long long n = 1LL << m;
+		const size_t num_cells = static_cast<size_t>(1) << (3 * m);
+
+		int r[3];
+		long long span[3];
+		double volume = 1.0;
+		for (int a = 0; a < 3; ++a) {
+			const double side = extent[a] / static_cast<double>(n);
+			r[a] = static_cast<int>(std::ceil(static_cast<double>(cutoff) / side));
+			span[a] = std::min(2LL * r[a] + 1LL, n);
+			volume *= static_cast<double>(span[a]) * side;
+		}
+		const long long slots = span[0] * span[1] * span[2];
+
+		const size_t bytes =
+			num_cells * (static_cast<size_t>(slots) * sizeof(uint32_t) + 2 * sizeof(uint32_t));
+		const bool over_cap = (m > 0 && bytes > byte_cap);
+
+		const double cost = static_cast<double>(slots) + volume * density;
+		const bool take = (forced_bits >= 0) ? (m == forced_bits)
+											 : (!over_cap && (!have_best || cost < best_cost));
+		if (take) {
+			have_best = true;
+			best_cost = cost;
+			best_m = m;
+			best_r[0] = r[0];
+			best_r[1] = r[1];
+			best_r[2] = r[2];
+			best_slots = slots;
+		}
+		if (forced_bits >= 0 ? (m >= forced_bits) : over_cap)
+			break;
+	}
+
+	coarse_bits_ = best_m;
+	cell_radii_ = int3(best_r[0], best_r[1], best_r[2]);
+	neighbors_per_cell_ = static_cast<int>(best_slots);
+}
 
 ZOrderPairlist::ZOrderPairlist(const Resource& resource, size_t max_particles, size_t max_pairs)
 	: Pairlist(resource, max_particles, max_pairs),
@@ -141,26 +227,11 @@ void ZOrderPairlist::find_neighbors_zorder(size_t num_particles) {
 			 max_pairs_,
 			 cutoff_squared_);
 
-	// Largest m whose cell is still >= cutoff (27-cell stencil must cover it). See dev_notes.md.
+	// Cells are sized against the encoded extent, not the box. See dev_notes.md.
 	const float cutoff = std::sqrt(cutoff_squared_);
-	// max_bits from max_coord_device (compile-time), matching MortonCode::encode. See dev_notes.md.
-	constexpr int max_bits = []() constexpr {
-		int b = 0;
-		for (auto v = MortonCode::max_coord_device; v; v >>= 1)
-			++b;
-		return b;
-	}();
-	int m = 0;
-	if (cutoff > 0.0f) {
-		// Size cells against the encoded extent, not the box. See dev_notes.md.
-		const float min_extent =
-			std::min({last_box_extent_.x, last_box_extent_.y, last_box_extent_.z});
-		if (min_extent > 0.0f) {
-			m = static_cast<int>(std::floor(std::log2(min_extent / cutoff)));
-		}
-	}
-	m = std::max(0, std::min({m, max_bits, kMaxCoarseBits}));
-	coarse_bits_ = m;
+	constexpr int max_bits = kMortonBits;
+	select_coarse_grid(cutoff, num_particles);
+	const int m = coarse_bits_;
 
 	const size_t num_cells = static_cast<size_t>(1) << (3 * m);
 	if (cell_begin_.size() < num_cells) {
@@ -174,18 +245,27 @@ void ZOrderPairlist::find_neighbors_zorder(size_t num_particles) {
 	// cell bounds. See dev_notes.md.
 	resource_.synchronize_streams();
 
-	// Per-cell 27-neighbor table: topology depends only on the grid, so rebuild it
-	// only when coarse_bits_/periodicity change (~once, at patch init). See dev_notes.md.
+	// Per-cell neighbor table: topology depends only on the grid, so rebuild it only
+	// when bits/radii/periodicity change (~once, at patch init). See dev_notes.md.
 	const Vector3 per_len = periodic_lengths();
 	const int per_mask =
 		(per_len.x > 0.0f ? 1 : 0) | (per_len.y > 0.0f ? 2 : 0) | (per_len.z > 0.0f ? 4 : 0);
-	if (cell_neighbors_.size() < num_cells * static_cast<size_t>(MAX_NEIGHBORS))
-		cell_neighbors_.resize(num_cells * static_cast<size_t>(MAX_NEIGHBORS));
-	if (m != cell_neighbors_bits_ || per_mask != cell_neighbors_permask_) {
-		BuildCellNeighborsKernel nbr_table{cell_neighbors_.data(), num_cells, m, per_len};
+	const size_t table_size = num_cells * static_cast<size_t>(neighbors_per_cell_);
+	if (cell_neighbors_.size() < table_size)
+		cell_neighbors_.resize(table_size);
+	if (m != cell_neighbors_bits_ || per_mask != cell_neighbors_permask_ ||
+		cell_radii_.x != cell_neighbors_radii_.x || cell_radii_.y != cell_neighbors_radii_.y ||
+		cell_radii_.z != cell_neighbors_radii_.z) {
+		BuildCellNeighborsKernel nbr_table{cell_neighbors_.data(),
+										   num_cells,
+										   m,
+										   cell_radii_,
+										   neighbors_per_cell_,
+										   per_len};
 		launch_kernel(resource_, KernelConfig::for_1d(num_cells, resource_), nbr_table).wait();
 		cell_neighbors_bits_ = m;
 		cell_neighbors_permask_ = per_mask;
+		cell_neighbors_radii_ = cell_radii_;
 	}
 
 	const int shift = 3 * (max_bits - m);
@@ -212,6 +292,7 @@ void ZOrderPairlist::find_neighbors_zorder(size_t num_particles) {
 									cutoff_squared_,
 									num_particles,
 									max_pairs_,
+									neighbors_per_cell_,
 									shift,
 									box,
 									exclusions_};
@@ -235,12 +316,20 @@ void ZOrderPairlist::find_neighbors_zorder(size_t num_particles) {
 	}
 	num_pairs_ = num_pairs;
 	LOGDEBUG("pair_count AFTER kernel: {}", num_pairs);
-	LOGDEBUG("PLDIAG n={} cut={:.1f} m={} cells={} extent=({:.1f},{:.1f},{:.1f}) "
+	LOGDEBUG("PLDIAG n={} cut={:.1f} m={} cells={} stencil=({},{},{})x{} "
+			 "cell=({:.1f},{:.1f},{:.1f}) extent=({:.1f},{:.1f},{:.1f}) "
 			 "per=({},{},{}) boxsz=({:.1f},{:.1f},{:.1f}) org=({:.1f},{:.1f},{:.1f}) pairs={}",
 			 num_particles,
 			 std::sqrt(cutoff_squared_),
 			 m,
 			 num_cells,
+			 cell_radii_.x,
+			 cell_radii_.y,
+			 cell_radii_.z,
+			 neighbors_per_cell_,
+			 last_box_extent_.x / (1 << m),
+			 last_box_extent_.y / (1 << m),
+			 last_box_extent_.z / (1 << m),
 			 last_box_extent_.x,
 			 last_box_extent_.y,
 			 last_box_extent_.z,

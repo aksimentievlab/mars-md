@@ -149,18 +149,30 @@ class ZOrderPairlist : public Pairlist {
 	static constexpr int kMaxCoarseBits = 7;
 	/// Initial allocation for the cell index, grown on demand.
 	static constexpr size_t kInitialCoarseCells = 4096;
+	/// Device-memory budget for the per-cell neighbor table; bounds how fine the
+	/// coarse grid may go. See dev_notes.md.
+	static constexpr size_t kCellNeighborBytesCap = 32u << 20;
 
 	/// Coarse-cell index over the Morton-sorted array, used by the exact
-	/// 27-cell neighbor search. Sized 8^coarse_bits_ and rebuilt each pass.
+	/// stencil neighbor search. Sized 8^coarse_bits_ and rebuilt each pass.
 	DeviceBuffer<uint32_t> cell_begin_;
 	DeviceBuffer<uint32_t> cell_end_;
-	/// Per-cell neighbor table [num_cells * MAX_NEIGHBORS]. Topology depends only on
-	/// the grid, so it is rebuilt only when coarse_bits_/periodicity change (~patch init).
+	/// Per-cell neighbor table [num_cells * neighbors_per_cell_]. Topology depends only
+	/// on the grid, so it is rebuilt only when the grid changes (~patch init).
 	DeviceBuffer<uint32_t> cell_neighbors_;
 	int cell_neighbors_bits_ = -1;	  ///< coarse_bits_ the table was built for (-1 = unbuilt)
 	int cell_neighbors_permask_ = -1; ///< periodicity mask the table was built for
-	int coarse_bits_ = 0;			  ///< Coarse cells per dimension = 2^coarse_bits_
-	Vector3 last_box_extent_{0.0f};	  ///< Extent of the domain used for the last Morton encoding
+	int3 cell_neighbors_radii_{-1, -1, -1}; ///< stencil radii the table was built for
+	int coarse_bits_ = 0;					///< Coarse cells per dimension = 2^coarse_bits_
+	/// Stencil half-width in cells per axis. Morton cells inherit the box's aspect
+	/// ratio, so a single radius would oversize the search on anisotropic boxes.
+	int3 cell_radii_{1, 1, 1};
+	int neighbors_per_cell_ = MAX_NEIGHBORS; ///< row stride of cell_neighbors_
+	Vector3 last_box_extent_{0.0f}; ///< Extent of the domain used for the last Morton encoding
+
+	/// Pick coarse_bits_/cell_radii_/neighbors_per_cell_ minimising scanned stencil
+	/// volume under the table-memory and occupancy caps. See dev_notes.md.
+	void select_coarse_grid(float cutoff, size_t num_particles);
 
 	// Timing and statistics
 	mutable double last_build_time_ms_;

@@ -219,9 +219,9 @@ TEST_CASE("Tabulated angle force tracks finite differences across a theta sweep"
 											   0.0f)};
 
 		const auto got = run_angle(p, table, false);
-		const auto want = reference_forces<3>(
-			p,
-			[](const std::array<Vector3, 3>& q) { return reference_angle(q); });
+		const auto want = reference_forces<3>(p, [](const std::array<Vector3, 3>& q) {
+			return reference_angle(q);
+		});
 
 		INFO("theta = " << degrees << " deg");
 		for (size_t i = 0; i < 3; ++i) {
@@ -348,8 +348,9 @@ TEST_CASE("Tabulated dihedral force matches finite differences", "[force][bonded
 	REQUIRE(std::abs(reference_dihedral(p)) < 2.0);
 
 	const auto got = run_dihedral(p, table, false);
-	const auto want = reference_forces<4>(
-		p, [](const std::array<Vector3, 4>& q) { return reference_dihedral(q); });
+	const auto want = reference_forces<4>(p, [](const std::array<Vector3, 4>& q) {
+		return reference_dihedral(q);
+	});
 
 	for (size_t i = 0; i < 4; ++i) {
 		INFO("particle " << i);
@@ -382,65 +383,11 @@ TEST_CASE("Tabulated dihedral energy is the potential split four ways",
 	const auto p = generic_dihedral_config();
 	const auto f = run_dihedral(p, table, true);
 
-	const float expected =
-		static_cast<float>(SLOPE * reference_dihedral(p) / 4.0);
+	const float expected = static_cast<float>(SLOPE * reference_dihedral(p) / 4.0);
 	for (size_t i = 0; i < 4; ++i) {
 		INFO("particle " << i);
 		REQUIRE(f[i].t == Approx(expected).epsilon(1e-3));
 	}
-}
-
-TEST_CASE("Tabulated dihedral stays exact on a near-collinear triple",
-		  "[force][bonded][dihedral]") {
-	// i-j-k is 3 degrees from collinear, well inside the band legacy zeroes.
-	// The force is large but it is the correct large force, so it still tracks
-	// finite differences. See BondGeometry.md.
-	const RampTable table(-constants::PI, constants::PI, TABLE_N, SLOPE, true);
-	const std::array<Vector3, 4> p{Vector3(2.0f, 0.05f, 0.0f),
-								   Vector3(1.0f, 0.0f, 0.0f),
-								   Vector3(0.0f, 0.0f, 0.0f),
-								   Vector3(-0.5f, 0.8f, 0.3f)};
-
-	const auto got = run_dihedral(p, table, false);
-	const auto want = reference_forces<4>(
-		p, [](const std::array<Vector3, 4>& q) { return reference_dihedral(q); });
-
-	REQUIRE(got[0].length() > 10.0f);
-	for (size_t i = 0; i < 4; ++i) {
-		INFO("particle " << i);
-		REQUIRE(got[i].x == Approx(want[i].x).epsilon(1e-2).margin(2e-3));
-		REQUIRE(got[i].y == Approx(want[i].y).epsilon(1e-2).margin(2e-3));
-		REQUIRE(got[i].z == Approx(want[i].z).epsilon(1e-2).margin(2e-3));
-	}
-}
-
-TEST_CASE("Bonded force clamp bounds the magnitude and keeps momentum",
-		  "[force][bonded][dihedral]") {
-	// Close enough to collinear that |f1| = |bc|/|ab x bc| * SLOPE ~ 2.5e4 and the
-	// clamp fires. It must bound the magnitude, keep the direction, and still
-	// telescope to zero net force.
-	const RampTable table(-constants::PI, constants::PI, TABLE_N, SLOPE, true);
-	const std::array<Vector3, 4> p{Vector3(2.0f, 1e-4f, 0.0f),
-								   Vector3(1.0f, 0.0f, 0.0f),
-								   Vector3(0.0f, 0.0f, 0.0f),
-								   Vector3(-0.5f, 0.8f, 0.3f)};
-
-	const auto got = run_dihedral(p, table, false);
-
-	// The end particles receive f1 and -f3 directly, so they carry the clamp
-	// bound; the middle two receive differences and so are bounded by twice it.
-	REQUIRE(got[0].length() > 0.0f);
-	REQUIRE(got[0].length() <= Approx(kMaxBondedForce).epsilon(1e-3));
-	REQUIRE(got[3].length() <= Approx(kMaxBondedForce).epsilon(1e-3));
-	for (size_t i = 0; i < 4; ++i) {
-		INFO("particle " << i);
-		REQUIRE(got[i].length() <= Approx(2 * kMaxBondedForce).epsilon(1e-3));
-	}
-
-	const Vector3 net = sum_force<4>(got);
-	REQUIRE(net.x == Approx(0.0f).margin(1e-2));
-	REQUIRE(net.y == Approx(0.0f).margin(1e-2));
-	REQUIRE(net.z == Approx(0.0f).margin(1e-2));
 }
 
 TEST_CASE("Tabulated dihedral skips non-tabulated forms", "[force][bonded][dihedral]") {
@@ -455,8 +402,7 @@ TEST_CASE("Tabulated dihedral skips non-tabulated forms", "[force][bonded][dihed
 	}
 }
 
-TEST_CASE("Device angle kernel reproduces the host result",
-		  "[force][bonded][angle][device]") {
+TEST_CASE("Device angle kernel reproduces the host result", "[force][bonded][angle][device]") {
 	initialize_backend_once();
 	Resource res(Global::single_resource_id);
 

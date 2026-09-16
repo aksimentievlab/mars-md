@@ -384,3 +384,147 @@ overflow, which is fatal anyway.
 `ResolvePairTableKernel` keeps its exclusion scan for now, so the filtering is
 redundant rather than load-bearing. Pair counts should drop; forces and
 energies should not move. The scan comes out in step 3.
+
+## The build's 8.4x gap to v1 is oversized coarse cells on anisotropic boxes (2026-09-16)
+
+`find_neighbors_zorder` picks `m = floor(log2(min_extent / cutoff))` and
+`BuildCellNeighborsKernel` walks a fixed +/-1 stencil (`MAX_NEIGHBORS = 27`). Morton codes
+divide every axis the same number of times, so **the narrowest axis dictates `m` and the wide
+axes get cells far larger than the cutoff**.
+
+| | box | cutoff+skin | m | cell sizes | cell/cutoff | stencil volume |
+| --- | --- | --: | --: | --- | --: | --: |
+| cytoplasm | 800^3 cubic | 45 | 4 | 50.0 / 50.0 / 50.0 | 1.11x | 1.4x ideal |
+| nupod | 2748.7 x **2040** x 2748.7 | 75 | 4 | 171.8 / 127.5 / 171.8 | **2.29x** | **12x ideal** |
+
+nupod cannot use m=5 today because y would fall to 63.75 A, under the 75 A cutoff, and a
++/-1 stencil would then miss pairs. So m=4 is *correct* given the fixed stencil — the fixed
+stencil is the bug.
+
+This predicts everything observed. Scanned volume is 12x ideal on nupod and the measured
+build gap to v1 is 8.4x (the shortfall is because the particle blob fills only part of the
+box). On cytoplasm the ratio is 1.11x and v2's build is *faster* than v1's (2.08 ms vs
+2.22 ms). The earlier note in this file dismissing cell sizing — "16 cells/dim at 50 A
+against a 45 A cutoff, correct" — was measured on cytoplasm, where it happens to be true, and
+does not generalise to an anisotropic box.
+
+### Fix: per-axis stencil radius, not a traditional cell list
+
+Let the stencil radius per axis be `ceil(cutoff / cell_size_axis)` instead of 1, and choose
+`m` to minimise total scanned volume under a memory cap:
+
+| m | cells/dim | cell sizes | stencil | scanned volume | vs now |
+| --: | --: | --- | --- | --: | --: |
+| 4 (today) | 16 | 171.8 / 127.5 / 171.8 | 3x3x3 | 1.02e8 | — |
+| **5** | 32 | 85.9 / 63.8 / 85.9 | **3x5x3** | 2.12e7 | **4.8x less** |
+| 6 | 64 | 43.0 / 31.9 / 43.0 | 5x7x5 | 1.03e7 | 9.9x less |
+
+m=5 needs a 32,768-cell table at 45 neighbours = 5.9 MB; m=6 would need 183 MB. So m=5 is the
+practical choice and should recover most of the build gap.
+
+Everything the current design depends on survives: cells remain Morton-code prefixes, so a
+cell is still a contiguous run of the sorted array, and `BuildCellRangesKernel` is unchanged.
+What changes is `MAX_NEIGHBORS` becoming a runtime per-axis product rather than a hardcoded
+27, and the `m` search minimising scanned volume rather than just clamping at cell >= cutoff.
+
+**Do not replace this with a traditional cell list to fix it.** Morton ordering is doing real
+work elsewhere — the force kernel decays 24.5% between reorders (see
+`Interactions/Nonbonded/dev_notes.md`) — and the search grid and the memory layout are
+separable concerns. Only the search grid is wrong.
+
+### Implementation, branch `stencil` (2026-09-16)
+
+Three files, all portable — no CUDA-specific path, nothing that a SYCL or Metal backend
+cannot follow.
+
+**`ZOrderNeighbor.h`.** `BuildCellNeighborsKernel` gains `int3 z_order_raddi` and
+`int neighbors_per_cell`; `ZOrderCellNeighborKernel` gains `neighbors_per_cell`. Every
+`MAX_NEIGHBORS` in both becomes the runtime stride. The hardcoded offset bounds are replaced
+by `axis_range()`:
+
+```
+axis_range(periodic, r, n) = periodic && 2r+1 >= n ? [0, n-1] : [-r, r]
+```
+
+This generalises the old `p_lo/p_hi` narrowing rather than replacing it. At r=1 it reproduces
+master exactly: n>=3 gives [-1,1], n==2 gives [0,1], n==1 gives [0,0]. The periodic branch
+matters because wrapping offsets onto a grid narrower than the stencil would list the same
+cell twice and emit every pair in it twice.
+
+`MAX_NEIGHBORS` in `Header.h` is left at 27 — `BaseGridDevice.h` uses it for an unrelated
+`IndexList`, and the pairlist no longer refers to it except as the initial allocation size.
+
+**`ZOrderPairlist.h`.** New members `cell_radii_`, `neighbors_per_cell_`, and
+`cell_neighbors_radii_` (the table's cache key now includes the radii, so a radius change
+rebuilds it — master keyed on `m` and periodicity alone, which was already slightly unsound
+since an open axis's extent drifts with the particle blob).
+
+**`ZOrderPairlist.cpp`.** `select_coarse_grid()` replaces the one-line `m` formula. It sweeps
+m = 0..min(10, kMaxCoarseBits), and for each computes per-axis `r = ceil(cutoff / side)` and
+`span = min(2r+1, n)`.
+
+#### Why the objective is not just scanned volume
+
+Minimising scanned volume alone over-refines on sparse systems: at m=6 a particle walks 175
+stencil slots, and if the cells are nearly empty that is 175 `cell_begin`/`cell_end` loads to
+find almost nothing. The cost model therefore charges both terms, per particle:
+
+```
+cost(m) = slots + scanned_volume * density
+```
+
+— one header load per slot, one distance test per particle inside the scanned volume,
+weighted equally. Equal weighting is the conservative choice: it over-charges refinement
+(a header load is two adjacent uint32 shared across the warp, cheaper than a distance test),
+so a fine grid has to earn its place. This removed the need for a separate minimum-occupancy
+guard; the `slots` term self-regulates.
+
+Where the crossover lands (N = particle count):
+
+| system | m=4 | m=5 | m=5 wins above |
+| --- | --- | --- | --: |
+| nupod | 27 + 6.59e-3 N | 45 + 1.37e-3 N | N > 3,450 |
+| cytoplasm | 27 + 6.59e-3 N | 125 + 3.81e-3 N | N > 35,000 |
+
+Both production systems are far above their crossover, so both should land on m=5. Cytoplasm
+moving too is expected and harmless — 1.7x fewer distance tests on a build that already beat
+v1.
+
+#### Memory cap, and why it is 32 MB
+
+Bounded as `num_cells * (slots * 4 + 8)` bytes, counting the neighbor table plus
+`cell_begin`/`cell_end`. Both terms rise monotonically with m, so the sweep can `break`.
+
+| m | nupod table | cytoplasm table |
+| --: | --: | --: |
+| 5 | 6.4 MB | 16.6 MB |
+| 6 | 185 MB | 766 MB |
+
+32 MB admits m=5 for both and excludes m=6 for both. m=6 would be another 2x on nupod's
+scanned volume and is worth a try on a large-memory card — hence the override below rather
+than a recompile.
+
+#### Overrides
+
+- `MARS_ZORDER_TABLE_MB` — raise the cap (e.g. `256` to let nupod reach m=6).
+- `MARS_ZORDER_BITS` — force `m` outright, bypassing both cost model and cap. For A/B against
+  master, `MARS_ZORDER_BITS=4` reproduces master's grid on these two systems.
+
+`PLDIAG` now logs `stencil=(rx,ry,rz)xSLOTS` and the per-axis cell size, so the chosen grid is
+visible at LOGDEBUG without re-deriving it.
+
+#### Correctness argument
+
+- **Coverage.** `side = extent / 2^m` *under*-estimates the true cell width, which is
+  `extent * 2^(10-m) / 1023`. So `r = ceil(cutoff / side)` is at or above the true
+  requirement — conservative, never short.
+- **No double emission.** `j > i` on the sorted index still does the deduplication; it does
+  not depend on stencil shape, only on the stencil being symmetric, which `[-r, r]` and the
+  full-axis sweep both are.
+- **No table overrun.** Per axis the builder writes at most `min(2r+1, n)` entries (periodic
+  hits it exactly; open clamps below it), which is exactly the `span` the host multiplied into
+  the stride.
+- **Unchanged.** `BuildCellRangesKernel`, the Morton encode, the per-hit emission atomic, and
+  the reorder cadence. This touches only which cells get scanned.
+
+Not yet measured — build and profile before trusting the table above.

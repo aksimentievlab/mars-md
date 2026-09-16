@@ -5,7 +5,7 @@
  * @brief Exact neighbor enumeration over Morton-sorted particles.
  *
  * BuildCellRangesKernel indexes the sorted array by coarse cell, and
- * ZOrderCellNeighborKernel walks the 27-cell stencil around each particle.
+ * ZOrderCellNeighborKernel walks the per-axis stencil around each particle.
  *********************************************************************/
 
 #include "../ZOrderKernels/MortonCode.h"
@@ -43,17 +43,21 @@ struct BuildCellRangesKernel {
 };
 
 /**
- * @brief Precompute each coarse cell's up-to-27 neighbor cell indices.
+ * @brief Precompute each coarse cell's neighbor cell indices.
  *
- * The stencil topology depends only on the grid (coarse_bits, per-axis
- * periodicity), not on particle positions, so it is built once per grid and
- * reused across rebuilds. Slots are padded to MAX_NEIGHBORS with kInvalidCell.
- * See dev_notes.md.
+ * Morton splits every axis into the same 2^m cells, so on an anisotropic box the
+ * cells are anisotropic too and a fixed +-1 stencil would force the coarsest axis
+ * on all three. Each axis therefore carries its own radius. The topology depends
+ * only on the grid (coarse_bits, radii, per-axis periodicity), not on particle
+ * positions, so it is built once per grid and reused across rebuilds. Rows are
+ * padded to neighbors_per_cell with kInvalidCell. See dev_notes.md.
  */
 struct BuildCellNeighborsKernel {
-	uint32_t* cell_neighbors; ///< [num_cells * MAX_NEIGHBORS] output
+	uint32_t* cell_neighbors; ///< [num_cells * neighbors_per_cell] output
 	size_t num_cells;
 	int coarse_bits; ///< m: coarse cells per dim = 2^m
+	int3 z_order_raddi;
+	int neighbors_per_cell;
 	Vector3 box_len; ///< per-axis periodic length; <= 0 marks an open axis
 
 	DEVICE static inline uint32_t compact_by3(uint32_t x) {
@@ -74,6 +78,16 @@ struct BuildCellNeighborsKernel {
 		return x;
 	}
 
+	DEVICE static inline void axis_range(bool periodic, int r, int n, int& lo, int& hi) {
+		if (periodic && 2 * r + 1 >= n) {
+			lo = 0;
+			hi = n - 1;
+		} else {
+			lo = -r;
+			hi = r;
+		}
+	}
+
 	DEVICE void operator()(idx_t c) const {
 		if (c >= num_cells)
 			return;
@@ -88,14 +102,12 @@ struct BuildCellNeighborsKernel {
 		const bool per_y = box_len.y > 0.0f;
 		const bool per_z = box_len.z > 0.0f;
 
-		// Periodic axes: narrow offsets when n <= 2 so no cell aliases. See dev_notes.md.
-		const int p_lo = (n >= 3) ? -1 : 0;
-		const int p_hi = (n >= 2) ? 1 : 0;
-		const int x_lo = per_x ? p_lo : -1, x_hi = per_x ? p_hi : 1;
-		const int y_lo = per_y ? p_lo : -1, y_hi = per_y ? p_hi : 1;
-		const int z_lo = per_z ? p_lo : -1, z_hi = per_z ? p_hi : 1;
+		int x_lo, x_hi, y_lo, y_hi, z_lo, z_hi;
+		axis_range(per_x, z_order_raddi.x, n, x_lo, x_hi);
+		axis_range(per_y, z_order_raddi.y, n, y_lo, y_hi);
+		axis_range(per_z, z_order_raddi.z, n, z_lo, z_hi);
 
-		uint32_t* out = cell_neighbors + static_cast<size_t>(cell) * MAX_NEIGHBORS;
+		uint32_t* out = cell_neighbors + static_cast<size_t>(cell) * neighbors_per_cell;
 		int k = 0;
 		for (int dx = x_lo; dx <= x_hi; ++dx) {
 			int nx = static_cast<int>(cx) + dx;
@@ -121,19 +133,19 @@ struct BuildCellNeighborsKernel {
 				}
 			}
 		}
-		for (; k < MAX_NEIGHBORS; ++k)
+		for (; k < neighbors_per_cell; ++k)
 			out[k] = kInvalidCell;
 	}
 };
 
 /**
- * @brief Exact Z-order neighbor finding via a 27-cell stencil.
+ * @brief Exact Z-order neighbor finding over a per-axis cell stencil.
  *
  * Particles stay Morton-sorted (force-kernel locality); neighbors come from the
- * 27 coarse cells around each particle. Cell side >= pairlist cutoff so the
- * stencil covers the cutoff sphere. Periodicity is per axis via `box_len`
- * (positive wraps with minimum image, zero is open). Excluded pairs are
- * dropped here rather than downstream. See dev_notes.md.
+ * cells BuildCellNeighborsKernel listed for each particle's own cell, whose radii
+ * cover the cutoff sphere on every axis independently. Periodicity is per axis
+ * via `box_len` (positive wraps with minimum image, zero is open). Excluded pairs
+ * are dropped here rather than downstream. See dev_notes.md.
  */
 struct ZOrderCellNeighborKernel {
 	const Vector3* __restrict__ sorted_positions;
@@ -141,13 +153,14 @@ struct ZOrderCellNeighborKernel {
 	const uint32_t* __restrict__ sorted_to_original;
 	const uint32_t* __restrict__ cell_begin;
 	const uint32_t* __restrict__ cell_end;
-	const uint32_t* __restrict__ cell_neighbors; ///< [num_cells * MAX_NEIGHBORS] from
+	const uint32_t* __restrict__ cell_neighbors; ///< [num_cells * neighbors_per_cell] from
 												 ///< BuildCellNeighborsKernel
 	int2* neighbor_pairs;
 	uint32_t* pair_count;
 	float cutoff_squared;
 	size_t num_particles;
 	size_t max_pairs;
+	int neighbors_per_cell;
 	int shift;				  ///< 3 * (bits_per_dim - m); recovers a cell index from a Morton code
 	PeriodicBox box;		  ///< minimum-image periodic box; open axes left unwrapped
 	ExclusionView exclusions; ///< excluded pairs are dropped before emission
@@ -159,7 +172,7 @@ struct ZOrderCellNeighborKernel {
 		const Vector3 pos_i = sorted_positions[i];
 		const uint32_t sorted_i = static_cast<uint32_t>(i);
 		const uint32_t cell = static_cast<uint32_t>(sorted_morton_codes[i] >> shift);
-		const uint32_t* nbrs = cell_neighbors + static_cast<size_t>(cell) * MAX_NEIGHBORS;
+		const uint32_t* nbrs = cell_neighbors + static_cast<size_t>(cell) * neighbors_per_cell;
 
 		// Both endpoint's original index and its exclusion row depend only on i,
 		// so they are loaded once rather than per candidate. See dev_notes.md.
@@ -168,7 +181,7 @@ struct ZOrderCellNeighborKernel {
 		const int excl_end = exclusions.row_end(a);
 		const int excl_body = exclusions.body_of(a);
 
-		for (int k = 0; k < MAX_NEIGHBORS; ++k) {
+		for (int k = 0; k < neighbors_per_cell; ++k) {
 			const uint32_t ncell = nbrs[k];
 			if (ncell == kInvalidCell)
 				continue;
