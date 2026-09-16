@@ -57,6 +57,7 @@ struct DihedralGeometry {
 	Vector3 ab, bc, cd;		  // Vectors
 	mars_real dihedral_angle; // Computed dihedral angle
 	Vector3 f1, f2, f3;		  // force directions
+	bool degenerate{0};		  // true if the dihedral is degenerate (collinear)
 
 	DEVICE static DihedralGeometry
 	compute(const Vector3* positions, const int4& particle_indices, const PeriodicBox* pbox) {
@@ -78,6 +79,8 @@ struct DihedralGeometry {
 		geom.f3 = -geom.bc.length() * crossBCD.rLength2() * crossBCD;
 		geom.f2 = -(geom.ab.dot(geom.bc) * geom.bc.rLength2()) * geom.f1 -
 				  (geom.bc.dot(geom.cd) * geom.bc.rLength2()) * geom.f3;
+		geom.degenerate = (geom.ab.length2() * geom.bc.length2() * crossABC.rLength2() > 100) ||
+						  (geom.bc.length2() * geom.cd.length2() * crossBCD.rLength2() > 100);
 
 		return geom;
 	}

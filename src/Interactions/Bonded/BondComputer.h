@@ -250,10 +250,10 @@ struct TabulatedAngleComputer {
 		const mars_real inv_ab = mars_real(1) / math::sqrt(geom.ab.length2());
 		const mars_real inv_bc = mars_real(1) / math::sqrt(geom.bc.length2());
 
-		const Vector3 force1 = clamp_bonded_force(
-			(dUdtheta * inv_ab) * (geom.ab * (geom.cos_angle * inv_ab) + geom.bc * inv_bc));
-		const Vector3 force3 = clamp_bonded_force(
-			-(dUdtheta * inv_bc) * (geom.bc * (geom.cos_angle * inv_bc) + geom.ab * inv_ab));
+		const Vector3 force1 =
+			(dUdtheta * inv_ab) * (geom.ab * (geom.cos_angle * inv_ab) + geom.bc * inv_bc);
+		const Vector3 force3 =
+			-(dUdtheta * inv_bc) * (geom.bc * (geom.cos_angle * inv_bc) + geom.ab * inv_ab);
 		const mars_real energy = fe.energy * mars_real(1.0 / 3.0);
 
 		atomic_add(&force_energy[indices.x], force1);
@@ -319,11 +319,16 @@ struct TabulatedDihedralComputer {
 		// Phase 2: Lookup force from tabulated potential (see BondComputer.md)
 		const ScalarForceEnergy fe =
 			TabulatedPotential::compute(geom.dihedral_angle, &tables[table_indices[i]]);
+		mars_real magnitude = geom.degenerate ? mars_real(0) : fe.force_magnitude;
+		if (magnitude > kMaxBondedForce)
+			magnitude = kMaxBondedForce;
+		else if (magnitude < -kMaxBondedForce)
+			magnitude = -kMaxBondedForce;
 
 		// Phase 3: Apply forces (see BondComputer.md)
-		const Vector3 f1 = clamp_bonded_force(geom.f1 * fe.force_magnitude);
-		const Vector3 f2 = clamp_bonded_force(geom.f2 * fe.force_magnitude);
-		const Vector3 f3 = clamp_bonded_force(geom.f3 * fe.force_magnitude);
+		const Vector3 f1 = geom.f1 * magnitude;
+		const Vector3 f2 = geom.f2 * magnitude;
+		const Vector3 f3 = geom.f3 * magnitude;
 		const mars_real energy = fe.energy * mars_real(0.25);
 
 		atomic_add(&force_energy[indices.x], f1);

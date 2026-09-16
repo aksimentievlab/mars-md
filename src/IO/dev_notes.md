@@ -134,3 +134,51 @@ surfaced it, transDamping-400 beads stayed at 0.5 kT/dof. Angles (`nupod-0.angle
 are not doubled. Dihedrals show a ~1.03x duplication with some reversed
 `(l k j i)` entries carrying a *different* table — left alone, since a reversed
 dihedral samples -phi and may be a legitimate second term, not a duplicate.
+
+### Duplicate-bond summary warning (2026-09-16)
+
+`read_file` now ends with a single `LOGWARN` whenever any BOND line was collapsed:
+count, total, percentage, unique kept, and how many carried a conflicting
+potential. Counters (`bond_lines_`, `duplicate_bonds_`, `conflicting_bonds_`)
+reset per `read_file` call; `seen_bond_slot_` deliberately does not, so dedup
+still spans multiple bond files. Without this the dedup was silent — a malformed
+generator could double every bond and nothing in the log would say so.
+
+### Corrections to the section above, from a direct v1/v2 audit
+
+Two claims above are wrong and should not be reused:
+
+1. **"measured PE ratio v2/v1 ~= 1.82 matched the 1.855 duplication factor"** — no.
+   Converged bond-only runs on hinged-nup98 give v1 271k vs v2 247k, a ratio of
+   **1.09**, not 1.82. Bond energy is a near-blind detector of double-counting:
+   - The doubled pairs are the stiff structural bonds, sitting at the bottom of
+     their wells: 393,648 of them hold 25.7k (0.065 each), while the 66,668
+     singly-listed bonds hold 257.9k (3.87 each). Doubling ~0 gives ~0.
+   - Equipartition then *cancels* what is left. <U> = kT/2 per bond DOF regardless
+     of force constant, so doubling the stiffness halves the mean energy per bond:
+     measured 0.0653 (v1) vs 0.1635 (v2) per doubled bond, ratio 0.40 vs the 0.50
+     predicted. v1's doubled contribution (2 x 25.7k = 51.4k) is *smaller* than
+     v2's single one (64.4k). The direct energy signature is negative.
+   - The residual +22k gap is indirect: v1's over-stiff network strains the floppy
+     singly-listed bonds, which hold ~90% of the energy (257.9k vs 222.9k).
+
+   The observable that actually resolves it is the per-bond thermal fluctuation
+   amplitude with the singly-listed bonds as control: v1/v2 = **0.805** on doubled
+   pairs vs **1.022** on the control (1/sqrt(2) = 0.707 if perfectly relaxed).
+   Do not use the sd of bond length *across* bonds — that is ~2.05 A in both codes,
+   dominated by the static spread of rest lengths between bond types, and has no
+   sensitivity at all.
+
+2. **"ARBD hides this by launching its bond kernel over `numBonds/2`"** — the
+   `/2` and the `ind1 < ind2` filter in `GrandBrownTown.cu` undo `readBonds`'
+   own deliberate double-append (one line -> `(i,j)` and `(j,i)`). They filter on
+   *direction*, not identity. A pair written twice as reciprocals becomes 4 Bond
+   entries and survives as 2. v1 has **no** dedup anywhere: no `std::unique`, no
+   set, `numBonds` is never reduced, and `addExclusion` does not dedup either.
+   Confirmed from v1's own instrumented `bondlist_dump.txt`: 66,668 pairs once,
+   393,648 twice. So MARS's dedup is a deliberate divergence from v1, not a
+   restoration of v1 behaviour.
+
+The 4x Langevin heating was **not** caused by the duplication. Root cause was the
+`int3` stride bug in `remap_particle_indices` (see
+`PatchOperation/ZOrderKernels/dev_notes.md`).

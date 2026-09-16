@@ -31,6 +31,9 @@ class BondConfigReader {
 				? std::string(fileName)
 				: resolve_file_path(std::string(fileName), std::string(config_file_path));
 		Reader reader(resolved_path);
+		bond_lines_ = 0;
+		duplicate_bonds_ = 0;
+		conflicting_bonds_ = 0;
 		for (auto [key, value] : reader) {
 			std::string line = value;
 			if (key == "ANGLE") {
@@ -45,6 +48,19 @@ class BondConfigReader {
 				parse_restraint_line(value);
 			}
 		}
+		if (duplicate_bonds_ > 0) {
+			LOGWARN("BondConfigReader.h: {}: {} of {} BOND lines duplicate a pair already "
+					"defined ({:.2f}%) - {} unique bonds kept, {} had a conflicting potential. "
+					"One line per bond is expected; both directions are added internally, so "
+					"listing a pair twice would double its force.",
+					resolved_path,
+					duplicate_bonds_,
+					bond_lines_,
+					100.0 * static_cast<double>(duplicate_bonds_) /
+						static_cast<double>(bond_lines_),
+					bond_lines_ - duplicate_bonds_,
+					conflicting_bonds_);
+		}
 	}
 
   private:
@@ -53,6 +69,9 @@ class BondConfigReader {
 	std::string config_file_path_;
 	/// Unordered pair (min,max) -> index in bonds_, to drop bidirectional duplicates.
 	std::unordered_map<uint64_t, size_t> seen_bond_slot_;
+	size_t bond_lines_{0};		 ///< BOND lines accepted from the current file
+	size_t duplicate_bonds_{0};	 ///< of those, collapsed onto an existing pair
+	size_t conflicting_bonds_{0}; ///< of those, carrying a different potential
 
 	/// Order-independent key for a bonded pair.
 	static uint64_t canonical_bond_key(int a, int b) {
@@ -169,11 +188,14 @@ class BondConfigReader {
 				tables_registry_.get_or_load_bond(bond.function_name, config_file_path_);
 		}
 
+		++bond_lines_;
 		const uint64_t bond_key = canonical_bond_key(bond.ind1, bond.ind2);
 		auto slot = seen_bond_slot_.find(bond_key);
 		if (slot != seen_bond_slot_.end()) {
+			++duplicate_bonds_;
 			const Bond& existing = bonded_interactions_.get_bonds()[slot->second];
 			if (existing.function_name != bond.function_name) {
+				++conflicting_bonds_;
 				LOGWARN("BondConfigReader.h: duplicate bond ({}, {}) with conflicting "
 						"potential '{}' vs '{}' - keeping the latter",
 						bond.ind1,
