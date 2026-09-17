@@ -528,3 +528,99 @@ visible at LOGDEBUG without re-deriving it.
   the reorder cadence. This touches only which cells get scanned.
 
 Not yet measured — build and profile before trusting the table above.
+
+### Measured on branch `stencil`, nupod 20k steps (2026-09-16)
+
+All three on the same idle GPU, `m` pinned with `MARS_ZORDER_BITS` so the grid is the only
+difference. `s_m4` reproduces master's grid exactly (r=1,1,1 -> 27 slots).
+
+| m | cells | slots | build | force | GPU busy |
+| --: | --: | --: | --: | --: | --: |
+| 4 (master) | 4,096 | 27 | 30,113 us | 2,108.3 us | 49,794 ms |
+| **5 (auto)** | 32,768 | 45 | **23,617 us  -21.6%** | 2,105.0 us | **48,600 ms  -2.4%** |
+| 6 (forced) | 262,144 | 175 | 23,200 us | 2,198.9 us **+4.5%** | 50,717 ms **+1.9%** |
+
+The chooser picked m=5 on its own. First-build pair count identical across all three
+(61,745,536) — coverage is exact and nothing is double-emitted. Later medians drift by ~0.04%
+only because trajectories diverge once summation order changes.
+
+#### The volume model in the note above was wrong by 3x
+
+Subtracting the atomic (sec 6.1 of `cuda_warpnode.md`, unchanged since pair count is
+unchanged) to isolate the walk:
+
+| m | candidates/particle | reduction | walk speedup |
+| --: | --: | --: | --: |
+| 4 | 108,822 | 1.0x | 1.00x |
+| 5 | 22,671 | 4.8x | **1.54x** |
+| 6 | 11,004 | 9.9x | 1.60x |
+
+Predicted 4.8x on the walk, got 1.54x, and it **saturates** — m=6 halves candidates again for
+4%. The walk is not candidate-bound past m=5. Per-slot header loads (27 -> 45 -> 175) are the
+obvious suspect but were not measured. Do not trust scanned volume as a cost proxy here.
+
+#### m=6 loses on the force kernel, not the build
+
+m=6's build is marginally better than m=5's but its force kernel is 4.5% slower, so total GPU
+busy is worse than *master*. This is the sec 4.1 emission-order effect: the grid changes the
+order the walk visits cells, which changes what the emission race produces, which changes
+force-kernel atomic conflicts. **The build cannot be tuned in isolation from the force
+kernel** — always check the force median when changing the grid.
+
+#### The byte cap is load-bearing, and two errors are cancelling
+
+`density = num_particles / box_volume` is **253x too low** on nupod: 1893 neighbours within
+75 A implies local density 1.07e-3/A^3 against a box average of 4.23e-6/A^3, i.e. the pod
+fills ~0.4% of its bounding box. With the true local density the cost function prefers m=6,
+which the table shows is wrong. The 32 MB cap excludes m=6 (185 MB) regardless, so m=5 is
+selected either way.
+
+So the current selection is right but not for a principled reason — under-counting candidates
+happens to offset the walk's sub-linearity. Anyone raising `MARS_ZORDER_TABLE_MB` must
+re-measure, including the force kernel. A principled chooser would need the force-kernel
+coupling, which the pairlist builder cannot see.
+
+#### Is the build worth more work? No.
+
+Build is 9.7% of GPU time at `decompPeriod 125`. Even a v1-class build (4,338 us, another
+5.4x) would be worth **-8.3% of total**. Force is 85.6%. The build is done as a target.
+
+#### Acceptance: the 20% bar does not apply here
+
+Clarified 2026-09-16: the ~20% threshold was about whether a win justifies **forking the
+CUDA / SYCL / Metal paths**, not about raw speed. It is the price of permanent backend
+divergence plus the coupling hazard (layout and warp aggregation must never be changed
+independently). The warp-aggregate work on `pairlist_stride_build` is CUDA-only and measured
+~15%, so it has to argue past that bar.
+
+The stencil fix has no `#ifdef` and no warp intrinsics — every backend gets it. There is no
+bar to clear; it is taken on being faster. Do not compare its 2.4% against the 15% as if they
+were the same kind of number.
+
+#### Correction: where the 253x density error actually comes from (2026-09-16)
+
+The earlier entry said "the pod fills ~0.4% of its bounding box". Wrong. Measured from the
+written PDB, the 253x splits into two independent factors:
+
+| factor | cause | numbers |
+| --: | --- | --- |
+| 28.1x | structure occupies 3.55% of the periodic box | bbox 1155.6 x 412.6 x 1149.1 vs box 2748.7 x 2040 x 2748.7 |
+| 9.0x | **the pod is hollow** — voids inside it | particles fill only **11%** of their own bbox |
+| 253x | product | local 1.071e-3 vs box-average 4.233e-6 /A^3 |
+
+All three axes are periodic in this config (`min_extent = 2040`, `floor(log2(2040/75)) = 4`,
+matching the observed 4,096 cells), so `last_box_extent_` is the **simulation box** and
+`BoundingBoxKernel`'s per-build reduction is discarded on every axis. The chooser therefore
+never sees even the 28x, let alone the voids.
+
+Using the pair count to recover true local density is cheap and available after the first
+build (`nbr = 2*num_pairs_/N`, `local = nbr / (4/3 pi cutoff^3)`). **Do not do it without
+recalibrating the slots weight.** All three density estimates -- box 4.2e-6, bbox 1.2e-4,
+local 1.1e-3 -- still select m=5, because the 32 MB cap excludes m=6 (185 MB) in every case.
+Improving the density alone would only matter if the cap were raised, and then it would push
+toward m=6, which is measurably worse.
+
+The measured walk scaling is roughly `candidates^0.28` (4.8x fewer candidates -> 1.54x
+faster), so the candidate term wants a strongly sublinear weight, not a linear one. Three
+points on one system is not enough to fit that, and the cap makes it moot. Left as is,
+deliberately.
