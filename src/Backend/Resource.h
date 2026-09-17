@@ -194,6 +194,15 @@ class Resource {
 	}
 
 	/**
+	 * @brief Total device memory in bytes.
+	 *
+	 * Intended for sizing device-side structures as a fraction of capacity rather
+	 * than against a hardcoded budget. On a CPU resource, or a backend that cannot
+	 * report it, warns and returns half the host's physical memory.
+	 */
+	size_t get_device_memory() const;
+
+	/**
 	 * @brief Get a human-readable string for the resource type.
 	 */
 	HOST DEVICE constexpr const char* getTypeString() const {

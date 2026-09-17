@@ -6,7 +6,6 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
-#include <cstdlib>
 #include <limits>
 
 namespace MARS {
@@ -20,19 +19,10 @@ constexpr int kMortonBits = []() constexpr {
 	return b;
 }();
 
-int env_int(const char* name, int fallback) {
-	const char* raw = std::getenv(name);
-	if (!raw || !*raw)
-		return fallback;
-	char* end = nullptr;
-	const long v = std::strtol(raw, &end, 10);
-	return (end && *end == '\0') ? static_cast<int>(v) : fallback;
-}
-
 } // namespace
 
-void ZOrderPairlist::select_coarse_grid(float cutoff, size_t num_particles) {
-	coarse_bits_ = 0;
+void ZOrderPairlist::select_cell_grid(float cutoff, size_t num_particles) {
+	cell_grid_bits_ = 0;
 	cell_radii_ = int3(1, 1, 1);
 	neighbors_per_cell_ = 1;
 
@@ -43,20 +33,13 @@ void ZOrderPairlist::select_coarse_grid(float cutoff, size_t num_particles) {
 		num_particles == 0)
 		return;
 
-	const size_t byte_cap =
-		static_cast<size_t>(std::max(
-			1, env_int("MARS_ZORDER_TABLE_MB", static_cast<int>(kCellNeighborBytesCap >> 20))))
-		<< 20;
-	const int forced_bits = env_int("MARS_ZORDER_BITS", -1);
-	const double density = static_cast<double>(num_particles) / (extent[0] * extent[1] * extent[2]);
-
 	int best_m = 0;
 	int best_r[3] = {1, 1, 1};
 	long long best_slots = 1;
 	double best_cost = 0.0;
 	bool have_best = false;
 
-	for (int m = 0; m <= std::min(kMortonBits, kMaxCoarseBits); ++m) {
+	for (int m = 0; m <= kMortonBits; ++m) {
 		const long long n = 1LL << m;
 		const size_t num_cells = static_cast<size_t>(1) << (3 * m);
 
@@ -71,14 +54,17 @@ void ZOrderPairlist::select_coarse_grid(float cutoff, size_t num_particles) {
 		}
 		const long long slots = span[0] * span[1] * span[2];
 
+		// More cells than particles means paying per-slot cost to scan empty cells.
+		if (m > 0 && num_cells > num_particles)
+			break;
+
 		const size_t bytes =
 			num_cells * (static_cast<size_t>(slots) * sizeof(uint32_t) + 2 * sizeof(uint32_t));
-		const bool over_cap = (m > 0 && bytes > byte_cap);
+		if (m > 0 && bytes > max_pairs_ * sizeof(int2))
+			break;
 
-		const double cost = static_cast<double>(slots) + volume * density;
-		const bool take = (forced_bits >= 0) ? (m == forced_bits)
-											 : (!over_cap && (!have_best || cost < best_cost));
-		if (take) {
+		const double cost = volume * static_cast<double>(slots);
+		if (!have_best || cost < best_cost) {
 			have_best = true;
 			best_cost = cost;
 			best_m = m;
@@ -87,11 +73,9 @@ void ZOrderPairlist::select_coarse_grid(float cutoff, size_t num_particles) {
 			best_r[2] = r[2];
 			best_slots = slots;
 		}
-		if (forced_bits >= 0 ? (m >= forced_bits) : over_cap)
-			break;
 	}
 
-	coarse_bits_ = best_m;
+	cell_grid_bits_ = best_m;
 	cell_radii_ = int3(best_r[0], best_r[1], best_r[2]);
 	neighbors_per_cell_ = static_cast<int>(best_slots);
 }
@@ -100,9 +84,9 @@ ZOrderPairlist::ZOrderPairlist(const Resource& resource, size_t max_particles, s
 	: Pairlist(resource, max_particles, max_pairs),
 	  sorter_(resource, max_particles, ZOrderOptimizationMode::Pairlist), // Use Pairlist mode
 	  sorted_positions_(max_particles, resource), persistent_bbox_min_(1, resource),
-	  persistent_bbox_max_(1, resource), cell_begin_(kInitialCoarseCells, resource),
-	  cell_end_(kInitialCoarseCells, resource),
-	  cell_neighbors_(kInitialCoarseCells * MAX_NEIGHBORS, resource), last_build_time_ms_(0.0),
+	  persistent_bbox_max_(1, resource), cell_begin_(kInitialCellGridCells, resource),
+	  cell_end_(kInitialCellGridCells, resource),
+	  cell_neighbors_(kInitialCellGridCells * MAX_NEIGHBORS, resource), last_build_time_ms_(0.0),
 	  last_max_neighbors_(0) {
 
 	// Configure smart updates for Pairlist mode
@@ -230,8 +214,8 @@ void ZOrderPairlist::find_neighbors_zorder(size_t num_particles) {
 	// Cells are sized against the encoded extent, not the box. See dev_notes.md.
 	const float cutoff = std::sqrt(cutoff_squared_);
 	constexpr int max_bits = kMortonBits;
-	select_coarse_grid(cutoff, num_particles);
-	const int m = coarse_bits_;
+	select_cell_grid(cutoff, num_particles);
+	const int m = cell_grid_bits_;
 
 	const size_t num_cells = static_cast<size_t>(1) << (3 * m);
 	if (cell_begin_.size() < num_cells) {
@@ -281,6 +265,8 @@ void ZOrderPairlist::find_neighbors_zorder(size_t num_particles) {
 
 	const PeriodicBox& box = box_;
 
+	const int threads_per_particle = std::clamp(kThreadsPerParticle, 1, std::max(1, neighbors_per_cell_));
+
 	ZOrderCellNeighborKernel kernel{sorted_positions_.data(),
 									sorter_.get_morton_codes().data(),
 									sorter_.get_sorted_indices().data(),
@@ -293,11 +279,14 @@ void ZOrderPairlist::find_neighbors_zorder(size_t num_particles) {
 									num_particles,
 									max_pairs_,
 									neighbors_per_cell_,
+									threads_per_particle,
 									shift,
 									box,
 									exclusions_};
 
-	Event launch_event = launch_kernel(resource_, config, kernel);
+	KernelConfig neighbor_config =
+		KernelConfig::for_1d(num_particles * static_cast<size_t>(threads_per_particle), resource_);
+	Event launch_event = launch_kernel(resource_, neighbor_config, kernel);
 	launch_event.wait();
 
 	// Overflow is fatal: kept pairs are a nondeterministic subset. See dev_notes.md.
@@ -306,9 +295,10 @@ void ZOrderPairlist::find_neighbors_zorder(size_t num_particles) {
 	if (num_pairs > max_pairs_) {
 		MARS_Exception(ExceptionType::ValueError,
 					   "Pairlist capacity exceeded: %u pairs found for %zu particles (%.1f per "
-					   "particle) but the device-memory budget holds only %u. Raise GPU_MEM in "
-					   "CMake or shorten the pairlist cutoff; continuing would silently simulate "
-					   "a different system.",
+					   "particle) but the buffer holds only %u, which is "
+					   "kPairlistMemoryPercent of this device's memory. Shorten the pairlist "
+					   "cutoff, use a larger device, or raise kPairlistMemoryPercent; "
+					   "continuing would silently simulate a different system.",
 					   num_pairs,
 					   num_particles,
 					   num_particles ? static_cast<double>(num_pairs) / num_particles : 0.0,
@@ -316,7 +306,7 @@ void ZOrderPairlist::find_neighbors_zorder(size_t num_particles) {
 	}
 	num_pairs_ = num_pairs;
 	LOGDEBUG("pair_count AFTER kernel: {}", num_pairs);
-	LOGDEBUG("PLDIAG n={} cut={:.1f} m={} cells={} stencil=({},{},{})x{} "
+	LOGDEBUG("PLDIAG n={} cut={:.1f} m={} cells={} stencil=({},{},{})x{} split={} "
 			 "cell=({:.1f},{:.1f},{:.1f}) extent=({:.1f},{:.1f},{:.1f}) "
 			 "per=({},{},{}) boxsz=({:.1f},{:.1f},{:.1f}) org=({:.1f},{:.1f},{:.1f}) pairs={}",
 			 num_particles,
@@ -327,6 +317,7 @@ void ZOrderPairlist::find_neighbors_zorder(size_t num_particles) {
 			 cell_radii_.y,
 			 cell_radii_.z,
 			 neighbors_per_cell_,
+			 threads_per_particle,
 			 last_box_extent_.x / (1 << m),
 			 last_box_extent_.y / (1 << m),
 			 last_box_extent_.z / (1 << m),

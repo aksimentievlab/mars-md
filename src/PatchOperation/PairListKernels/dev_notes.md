@@ -624,3 +624,339 @@ The measured walk scaling is roughly `candidates^0.28` (4.8x fewer candidates ->
 faster), so the candidate term wants a strongly sublinear weight, not a linear one. Three
 points on one system is not enough to fit that, and the cap makes it moot. Left as is,
 deliberately.
+
+## Stencil-slot split: `MARS_ZORDER_CELL_SPLIT` (2026-09-16)
+
+### The problem being fixed: not enough threads
+
+`ZOrderCellNeighborKernel` was launched one thread per particle. On nupod that is 65,248
+threads = 1,020 blocks of 64 on a 188-SM GPU = 5.4 blocks/SM = 10.9 warps/SM against a max
+of 64, i.e. the kernel is capped at **17% occupancy by grid size alone**. Registers (38) and
+shared memory (0) are not the limiter — there is simply nothing to schedule. Meanwhile each
+thread grinds ~22,671 candidate distance tests at m=5. v1's `createPairlists` launches 4.19M
+threads.
+
+This is the same diagnosis as the "walk is not candidate-bound past m=5" saturation recorded
+above: cutting candidates 2x bought 4% because the kernel was never candidate-throughput
+bound, it was latency bound with no occupancy to hide it.
+
+### The fix
+
+Split each particle's stencil walk across `S = cell_split` threads. Thread `t` maps to
+
+```
+i = t % num_particles          particle
+s = t / num_particles          stencil-slot phase, 0 <= s < S
+```
+
+and walks slots `s, s+S, s+2S, ...`. Launch `num_particles * S` threads.
+
+**The mapping direction is load-bearing.** With `i = t % num_particles` the 32 lanes of a
+warp get 32 *consecutive particles* at the *same* slot phase, so they read nearly the same
+`j` range out of `sorted_positions` and the existing perfect coalescing survives untouched.
+The obvious-looking alternative `i = t/S, s = t%S` would put 32 lanes on different cells of
+(mostly) the same particle and scatter every load. Do not "simplify" it to that.
+
+### Why each unordered pair is still emitted exactly once
+
+Unchanged, because the split partitions work rather than duplicating it:
+
+- The threads owning particle `i` are `t = i, i+N, ..., i+(S-1)N`, giving slot phases
+  `s = 0..S-1` exactly once each.
+- Slot `k` is walked by the single thread with `s = k mod S` (it is the only phase for which
+  `k >= s` and `k ≡ s (mod S)`). So each `(i, k)` is visited exactly once, same as the old
+  `for (k = 0; k < neighbors_per_cell; ++k)`.
+- Dedup is `j > sorted_i` via the `j_lo` clamp, which is a property of `(i, cell)` and does
+  not reference `k` or `s` at all. Both it and the exclusion test are verbatim.
+
+So the emitted multiset is identical to `S == 1`; only the *order* of the emissions changes,
+and order was already nondeterministic (atomic race). `S == 1` reproduces the old kernel
+exactly, for A/B.
+
+### What is deliberately not done
+
+- **No warp intrinsics, no `#ifdef USE_CUDA`, no shared memory, no barriers.** Plain
+  `launch_kernel`, so CUDA/SYCL/Metal all get it. Per the acceptance note above, a portable
+  win has no 20% bar to clear; a CUDA-only one does.
+- **The per-hit `ATOMIC_ADD(pair_count, 1U)` is untouched.** Its interleaved slot order is
+  load-bearing for the force kernel (see "Pair emission order is load-bearing"). Batching or
+  aggregating it here would trade a build win for a larger force loss.
+- Shared-memory tiling of `pos_j` would need the WorkItem path and block-uniform barriers.
+  Not attempted yet; this change is deliberately the cheap structural one.
+
+### Cost of the split
+
+Per-particle preamble work is redone `S` times: `pos_i`, the Morton code, the cell base
+pointer, `sorted_to_original[i]` and the three exclusion-row lookups. That is ~7 loads
+against a ~22,671-candidate inner walk at m=5, so the redundancy is noise relative to the
+occupancy gained — but it *is* the term that eventually caps useful `S`, together with the
+fact that `S > neighbors_per_cell` leaves threads with an empty loop.
+
+### Tuning
+
+`MARS_ZORDER_CELL_SPLIT`, read in `find_neighbors_zorder`, default `kDefaultCellSplit = 8`,
+clamped to `[1, neighbors_per_cell_]`. At the auto-selected m=5 (45 slots) S=8 gives 5-6
+slots per thread and 8x the threads: nupod 65,248 -> 521,984 threads, 8,156 blocks of 64,
+43 blocks/SM. The chosen value is logged in `PLDIAG` as `split=`.
+
+Only the neighbor kernel gets the wider launch; `BuildCellRangesKernel` keeps the plain
+`num_particles` config.
+
+### Nothing measured yet
+
+No timing has been taken on this change. Occupancy arithmetic is not a speedup claim. When
+measuring, **check the force-kernel median too** — the build cannot be tuned in isolation
+(see the m=6 entry above): changing `S` changes the order the walk visits cells, which
+changes what the emission race produces, which changes force-kernel atomic conflicts. Sweep
+`MARS_ZORDER_CELL_SPLIT=1,2,4,8,16` and compare GPU busy, not just the build kernel.
+
+Also worth confirming on the first run: the first-build pair count must be **identical** for
+every `S` (61,745,536 on nupod), since the split changes only emission order.
+
+### `ZOrderNeighbor.cu`
+
+Nothing to update. It instantiates `launch_cuda_kernel<ZOrderCellNeighborKernel>`, which is
+templated on the functor type, not on its members; adding `int cell_split` to the struct
+does not change the instantiation. The `extern template` in the header and the SYCL
+`is_device_copyable` specialisation likewise still apply (the new member is trivially
+copyable).
+
+### MEASURED: the split helps, but occupancy was NOT the limiter (2026-09-16)
+
+nupod 20k steps, same idle GPU 0, m auto-selected (=5, so 45 slots).
+
+| S | threads | blocks | build | force | GPU busy |
+| --: | --: | --: | --: | --: | --: |
+| 1 (old) | 65,280 | 1,020 | 22,886 us | 2,151 us | 49,558 ms |
+| **4** | 260,992 | 4,078 | 16,554 us | 2,083 us | 46,899 ms |
+| 8 (default) | 521,984 | 8,156 | 16,512 us | 2,180 us | 48,933 ms |
+| 16 | 1,043,968 | 16,312 | 16,502 us | 2,151 us | 48,208 ms |
+| 45 (1 slot/thread) | 2,936,192 | 45,878 | 16,035 us | 2,157 us | 48,146 ms |
+
+**1.39x, and it plateaus at S=4.** The occupancy model predicted 5.9x (17% -> 100%). It is
+wrong. Going from 260k to 2.9M threads — 11x more, far past saturation — buys 3%. A kernel
+actually starved of parallelism does not behave like that.
+
+So the limiter is something more threads cannot fix. Most likely memory traffic on the
+candidate position stream: the walk loads `sorted_positions[j]` once per lane per candidate,
+with **zero reuse**, whereas v1 has 8 lanes share each `tex1Dfetch` address (its 8x4 tile), so
+it gets 8 distance tests per position load at any thread count. That is consistent with both
+observations — more threads not helping, and v1 still being ahead.
+
+**This also revises the earlier note in this file.** v1's 4.19M threads are the *visible*
+difference; the load reuse is the load-bearing one. Do not cite the thread count as the
+explanation for v1's speed.
+
+Cumulative on the build kernel (same session, v1 = 4,201 us):
+
+| | build | vs v1 |
+| --- | --: | --: |
+| master (m=4, S=1) | 28,239 us | 6.72x |
+| + stencil (m=5) | 22,803 us | 5.43x |
+| + split (S=8) | 16,512 us | 3.93x |
+
+Force kernel is flat across the whole sweep (2,083-2,180 us, no trend), so the split does not
+disturb the emission-order effect. Whole-run GPU busy moves -1% to -5% depending on S, which
+straddles the 3-4% whole-run noise floor; **trust the build median, not the total.**
+
+**Next step, if the build is pursued further: shared-memory staging, not more threads.** Stage
+K home particles in shared memory and have lanes walk the neighbour cell, so each `j` position
+load serves K distance tests. That is v1's design and it attacks the traffic, which is what
+the evidence now points at. It needs the `WorkItem` path (shared memory + barriers), which
+exists for both CUDA and SYCL, so it stays portable.
+
+S default is 8. S=45 is 3% better but uses 45x the redundant per-thread preamble (pos_i,
+Morton code, cell base, `sorted_to_original[i]`, three exclusion-row loads) for 1 slot of
+work; the plateau starts at S=4 and the choice inside it barely matters.
+
+### REGRESSION FOUND: the m-chooser was wrong on cytoplasm (2026-09-16)
+
+cytoplasm 10k steps, same GPU, 304,910 particles:
+
+| config | m | build | force | GPU busy |
+| --- | --: | --: | --: | --: |
+| master-equivalent (m=4, S=1) | 4 | **2,611 us** | **1,106 us** | **11,677 ms** |
+| stencil only (S=1) | 5 | 3,259 us **+24.8%** | 1,179 us +6.6% | 12,371 ms +5.9% |
+| stencil + split (S=8) | 5 | 2,720 us +4.2% | 1,123 us | 11,754 ms |
+
+**The stencil change made cytoplasm worse.** At m=4 its cells are 50 A against a 45 A cutoff
+(1.11x, near-ideal). Refining to m=5 gives 25 A cells needing r=2, so a **125-slot** stencil
+for only 1.7x less scanned volume — pure overhead. Exactly the over-refinement the slots term
+was supposed to prevent, and it did not.
+
+Two compounding errors, both now fixed:
+
+1. **Slot cost was weighted at 1 candidate.** Fitting the nupod m-sweep (30,113 / 23,617 /
+   23,200 us at 27 / 45 / 175 slots and 108,822 / 22,671 / 11,004 candidates) by least squares
+   gives `t ~ 3.6*slots + 0.076*candidates`, i.e. **one slot costs ~47 candidates**. Now
+   `kSlotCost = 48`, overridable with `MARS_ZORDER_SLOT_COST`.
+2. **Density was extent-average.** 253x too low on nupod (28.1x small + 9.0x hollow), but
+   nearly correct on cytoplasm (1.15x), which fills its box. Now taken from the previous
+   rebuild's pair count: `density = (2*num_pairs_/N) / ((4/3)pi cutoff^3)`, falling back to
+   extent-average on the first build only.
+
+Both are needed. Either alone still mis-picks one of the two systems:
+
+| cost model | nupod picks | cytoplasm picks |
+| --- | --- | --- |
+| slots x1, extent density (shipped) | m=5 ✓ | **m=5 ✗** |
+| slots x48, extent density | **m=4 ✗** | m=4 ✓ |
+| slots x1, local density | m=6 (capped to 5) ✓ | **m=5 ✗** |
+| **slots x48, local density** | **m=5 ✓** | **m=4 ✓** |
+
+Predicted costs under the final model: nupod 110,091 (m=4) vs 24,802 (m=5); cytoplasm 3,592
+(m=4) vs 7,253 (m=5).
+
+**Caveat: kSlotCost = 48 is fitted to three points on one system and validated on one other.**
+It is a proxy, not a calibrated model. It will need revisiting on a system with a different
+density regime. The 32 MB table cap remains the real safety net.
+
+On the first rebuild `num_pairs_` is 0, so nupod picks m=4 for that one build and m=5 from the
+second onward; the neighbour table rebuilds when the radii change, so this costs one table
+build. Harmless at 160 rebuilds.
+
+### VERIFIED after recalibration (2026-09-16)
+
+Defaults only, no env overrides, same GPU 0.
+
+| | m chosen | threads | build | vs master-equiv | force |
+| --- | --- | --: | --: | --: | --: |
+| nupod | 4 -> **5** | 521,984 | **16,394 us** | **-42.0%** (28,239) | 2,151 us flat |
+| cytoplasm | **4** | 2,439,296 | **2,336 us** | **-10.6%** (2,611) | 1,099 us flat |
+
+The cytoplasm regression is gone and it is now *better* than master: the chooser keeps m=4 and
+the split still buys 10.6%. nupod logs `m=[4,5]` — build 1 falls back to extent density
+(`num_pairs_` is 0), builds 2..160 use local density and pick m=5. One extra neighbour-table
+build, as designed.
+
+Neither force kernel moved (nupod 2,106 -> 2,151, cytoplasm 1,106 -> 1,099; both inside the
+per-launch noise seen across the S-sweep, 2,083-2,180).
+
+Final build-kernel standing vs v1 (4,201 us, same session): 6.72x -> **3.90x**.
+
+Both changes are portable. Nothing here is CUDA-only.
+
+### kSlotCost removed — the objective is now parameter-free (2026-09-16)
+
+`kSlotCost = 48` was a least-squares fit of `t = a*slots + b*candidates` to three nupod
+timings on one GPU. Baking a curve-fitted, machine-specific number into portable source is
+wrong, and it contradicts the rule already recorded for grid-stride: do not leave tuned knobs
+in the code that invite per-machine tuning of noise. Removed, along with
+`MARS_ZORDER_SLOT_COST` and the whole density estimate.
+
+Replacement objective:
+
+```
+cost(m) = scanned_volume(m) * slots(m)
+```
+
+Scale-free. No fitted constant, no density, no `num_pairs_`. It penalises leaving cells
+oversized (large volume) and over-refining a grid already near the cutoff (many slots), which
+are precisely the two failure modes observed.
+
+| m | nupod vol*slots | cytoplasm vol*slots |
+| --: | --: | --: |
+| 3 | 2.195e10 | 7.290e08 |
+| **4** | 2.743e09 | **9.112e07  <-- min** |
+| **5** | **9.525e08  <-- min** | 2.441e08 |
+| 6 | 1.801e09 | 1.038e09 |
+| 7 | 5.835e09 | 5.893e09 |
+
+Picks m=5 for nupod and m=4 for cytoplasm — both match measurement. It also rejects nupod m=6
+**on merit** (1.80e9 vs 9.53e8) rather than relying on the 32 MB cap to exclude it, so the cap
+goes back to being a safety net rather than the thing making the decision.
+
+Consequences:
+- `m` now depends only on extent and cutoff. For a periodic system it is **constant across
+  every rebuild** — no more `m=[4,5]` flip on build 1, no oscillation risk near a cost tie, no
+  neighbour-table rebuild churn.
+- `num_pairs_` is no longer read by the chooser. Density was never a property the chooser
+  could measure reliably anyway (253x error on nupod from smallness + voids).
+- Degenerate cases behave: a small box where the cutoff spans the whole domain picks m=0
+  (brute force), because slots=1 beats any refinement.
+
+**Still unjustified: `kDefaultCellSplit = 8`.** Measured plateau is flat from S=4 to S=45
+(16,554 -> 16,035 us, 3%), so any value in that range works, but 8 is still a choice rather
+than a derivation. Parameter-free alternative is `S = neighbors_per_cell` (one slot per
+thread), which measured *best* on nupod but is untested on cytoplasm, where it would mean
+27x the redundant per-thread preamble. Needs measuring before adopting.
+
+### All env macros and tuning constants removed (2026-09-16)
+
+`MARS_ZORDER_BITS`, `MARS_ZORDER_TABLE_MB`, `MARS_ZORDER_CELL_SPLIT`, `MARS_ZORDER_SLOT_COST`,
+`kSlotCost`, `kDefaultCellSplit` and `kMaxCoarseBits` are all gone, along with the `env_int`
+helper and `<cstdlib>`. Env vars that change emission order change float summation order and
+therefore trajectories, so a run's numerics depended on the shell environment — not captured
+in the .bd config or any output file. That is a reproducibility hole, not just clutter.
+
+**S is now `neighbors_per_cell`** — one thread per (particle, stencil slot). Measured:
+
+| | S=8 | S=slots | |
+| --- | --: | --: | --: |
+| nupod (45 slots) | 16,717 us | **15,630 us** | -6.5% |
+| cytoplasm (27 slots) | 2,337 us | **2,323 us** | -0.6% |
+
+The worry that a large slot count would make the redundant per-thread preamble dominate is
+unfounded, and provably so: the preamble is ~7 loads against ~250 candidates of per-slot work,
+so at S=slots the redundancy is `preamble/slot_work` (~3%) **regardless of slot count** —
+numerator and denominator scale together. No cap needed, no constant needed.
+
+**`kMaxCoarseBits` deleted; the loop runs to `kMortonBits` (10).** It was redundant twice over.
+The objective penalises large m as 8^m once cells fall below the cutoff (nupod m=7 scores
+5.8e9 against m=5's 9.5e8), and the byte cap truncates the search long before m=10 anyway
+(nupod breaks at m=6, 185 MB; cytoplasm at m=6, 766 MB). Verified the truncation does not
+change either answer: evaluating m=6/m=7 explicitly still picks m=5 and m=4.
+
+**`kCellNeighborBytesCap = 32 MB` is the sole remaining bound, and the value is still
+arbitrary.** It is a genuine guard — a short cutoff in a large box (5 A in 800 A) optimises
+near m=7 = 226 MB, an unbounded geometry-driven allocation — but at the real optima it is
+nowhere near binding (nupod 5.9 MB, cytoplasm 0.4 MB). Better: derive it from
+`cudaDeviceProp::totalGlobalMem` (and the SYCL/Metal equivalents) as a fraction, using the
+per-backend `#ifdef` pattern already in `KernelConfig.h`. Not done yet.
+
+`kInitialCoarseCells = 4096` is pre-existing and not behavioural — just the starting capacity
+of `cell_begin_`/`cell_end_`, which resize on demand.
+
+#### Cross-backend audit
+
+- `idx_t = size_t` (unsigned), so `t % num_particles` / `t / num_particles` are unsigned; no
+  signedness trap.
+- SYCL builds `global_range = grid_size.x * local_range`, i.e. rounds up to a work-group
+  multiple; the excess is caught by the `t >= num_particles * cell_split` guard.
+- `is_device_copyable` specializations still cover all three kernel structs; new members are
+  `int` and `int3` (`Vector3_t<int>`, the same template already present as `box_len`).
+- No warp intrinsics, no `threadIdx`/`blockIdx`, no raw `atomicAdd` anywhere in the change.
+  Emission uses the existing portable `ATOMIC_ADD`.
+- Thread counts are now much larger (8.2M on cytoplasm). Fine for CUDA and SYCL. **Not checked
+  against the Metal backend**, which may not instantiate these kernels at all.
+
+### Why the m loop runs to kMortonBits (2026-09-16)
+
+`kMortonBits` is not a tuning constant. `morton_t = uint32_t` and Morton interleaves three
+axes, so 3 x 10 = 30 <= 32 makes **10 bits per axis the representational ceiling** — there are
+no bits left to address a finer grid. Looping `m = 0..kMortonBits` is looping to the limit of
+the data structure. `kMaxCoarseBits = 7` was an arbitrary clamp sitting in front of that real
+limit, which is why it was deleted rather than justified.
+
+### FINAL, after rename and parameter-free chooser (2026-09-16)
+
+Defaults only, GPU 0, `S = neighbors_per_cell`, `cost = volume * slots`.
+
+| | m | threads | build | vs master | force | GPU busy |
+| --- | --- | --: | --: | --: | --: | --: |
+| nupod | 5 | 2,936,192 | **15,698 us** | **0.556x** | 2,184 us | 49,112 ms |
+| cytoplasm | 4 | 8,232,576 | **2,315 us** | **0.887x** | 1,100 us | 11,581 ms |
+
+Build gap to v1 on nupod: 4,201 us -> **3.74x**, from 6.72x at master.
+
+**Force kernel: no signal.** Across 11 nupod runs the median ranged 2,083-2,187 us with no
+ordering by configuration; master's 2,106 sits inside that band. Treat force as unchanged, and
+treat ~5% as the per-launch reproducibility limit on this box, not the <1% quoted earlier for
+back-to-back repeats of one binary.
+
+**Whole-run gain is ~0.3-0.8%, i.e. nothing.** A 1.8x faster build buys nothing measurable
+because the build is ~9% of GPU time and the force kernel is ~86%. This is the honest
+headline: the build work is finished as an optimisation target, and it was never going to move
+the wall clock. Anything further has to come from the force kernel.
+
+Both changes are portable; no CUDA-only path was added.

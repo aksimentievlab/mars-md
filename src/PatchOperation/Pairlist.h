@@ -18,13 +18,19 @@
 
 namespace MARS {
 
-#ifndef GPU_MEM
-#define GPU_MEM 10 // GiB; worst-case RTX 3080. Override via CMake (-DGPU_MEM=...).
-#endif
+/// Share of device memory the pairlist buffer may occupy, in percent.
+inline constexpr size_t kPairlistMemoryPercent = 30;
 
-/// Global pairlist buffer capacity in pairs: ~30% of device memory, int2 = 8 B/pair.
-inline constexpr size_t kPairlistMaxPairs =
-	(static_cast<size_t>(GPU_MEM) * (size_t{1} << 30) * 3 / 10) / sizeof(int2);
+/**
+ * @brief Pairlist buffer capacity in pairs for a given device (int2 = 8 B/pair).
+ *
+ * Queried from the device at runtime rather than fixed at compile time, so a
+ * larger card is actually used. Resource::get_device_memory() warns and falls
+ * back to half the host's RAM if the backend cannot report it.
+ */
+inline size_t pairlist_max_pairs(const Resource& resource) {
+	return (resource.get_device_memory() / 100 * kPairlistMemoryPercent) / sizeof(int2);
+}
 
 /**
  * @brief Enumeration of available pairlist strategies

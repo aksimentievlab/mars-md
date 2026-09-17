@@ -63,7 +63,7 @@ class Patch {
 		  pair_tag_(capacity, resource), device_bonded_(resource) {
 		// Must follow create_pairlist: set_periodic_box forwards the box to the
 		// pairlist, and a null pairlist_ would silently drop it.
-		pairlist_ = create_pairlist(pairlist_type, resource, capacity, kPairlistMaxPairs);
+		pairlist_ = create_pairlist(pairlist_type, resource, capacity, pairlist_max_pairs(resource));
 		set_periodic_box(periodic_box);
 		initialize_spatial_structures();
 	}

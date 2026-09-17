@@ -37,6 +37,8 @@ class Manager {
 	static sycl::device get_device_by_id(size_t device_id);
 	static std::vector<sycl::device> get_all_devices();
 	static size_t device_count();
+	/// Total global memory of a device, in bytes.
+	static size_t get_device_memory(size_t device_id);
 	static void init_for_rank(int local_rank = 0,
 							  int ranks_per_node = 1,
 							  int threads_per_rank = -1,

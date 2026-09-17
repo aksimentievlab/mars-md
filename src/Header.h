@@ -247,6 +247,13 @@ using threadgroup_ptr = threadgroup T*;
 constexpr inline short NUM_QUEUES = 4;
 inline constexpr int MAX_NEIGHBORS = 27;
 inline constexpr uint32_t kInvalidCell = 0xFFFFFFFFu; // Z-order neighbor-cell padding sentinel
+/// Magic number. Threads sharing one particle's stencil walk in the Z-order pairlist build.
+/// Empirical, not derived: total GPU time has a broad minimum over 2..6 (all within
+/// 0.8%) and degrades ~3% at 1, 8 and 45. Not an occupancy effect — 4 runs at ~68%
+/// occupancy and beats 8 at 100%. It acts by moving the pairlist emission order,
+/// which the force kernel's same-address atomics are sensitive to. Measured on one
+/// GPU model; re-check on new hardware. See PairListKernels/dev_notes.md.
+inline constexpr int kThreadsPerParticle = 4;
 
 using idx_t = size_t;
 using patch_t = size_t;

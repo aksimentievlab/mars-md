@@ -1,5 +1,8 @@
 // src/Backend/Resource.cpp - New implementation
 #include "Resource.h"
+#include "MARSLogger.h"
+
+#include <unistd.h>
 
 #ifdef USE_CUDA
 #include "CUDA/CUDAManager.h"
@@ -8,6 +11,39 @@
 #endif
 
 namespace MARS {
+
+namespace {
+
+size_t host_physical_memory() {
+	const long pages = sysconf(_SC_PHYS_PAGES);
+	const long page_size = sysconf(_SC_PAGE_SIZE);
+	if (pages <= 0 || page_size <= 0)
+		return 0;
+	return static_cast<size_t>(pages) * static_cast<size_t>(page_size);
+}
+
+} // namespace
+
+size_t Resource::get_device_memory() const {
+#ifdef USE_CUDA
+	if (type_ == ResourceType::CUDA) {
+		return CUDA::Manager::get_device_properties(id_).totalGlobalMem;
+	}
+#endif
+
+#ifdef USE_SYCL
+	if (type_ == ResourceType::SYCL) {
+		return SYCL::Manager::get_device_memory(static_cast<size_t>(id_));
+	}
+#endif
+
+	const size_t fallback = host_physical_memory() / 2;
+	LOGWARN("{}: device memory unavailable, assuming half of host RAM ({:.1f} GB). Structures "
+			"sized from this may be wrong for this device.",
+			toString(),
+			static_cast<double>(fallback) / (1024.0 * 1024.0 * 1024.0));
+	return fallback;
+}
 
 // ============================================================================
 // Device Context Management

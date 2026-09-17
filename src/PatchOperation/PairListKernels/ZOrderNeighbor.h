@@ -4,7 +4,7 @@
  *
  * @brief Exact neighbor enumeration over Morton-sorted particles.
  *
- * BuildCellRangesKernel indexes the sorted array by coarse cell, and
+ * BuildCellRangesKernel indexes the sorted array by cell, and
  * ZOrderCellNeighborKernel walks the per-axis stencil around each particle.
  *********************************************************************/
 
@@ -20,7 +20,7 @@ namespace MARS {
 /**
  * @brief Build per-cell [begin,end) ranges over the Morton-sorted particle array.
  *
- * Top `3*m` bits of a Morton code index a coarse cell; particles in a cell form
+ * Top `3*m` bits of a Morton code index a cell; particles in a cell form
  * a contiguous run of the sorted array, so a linear scan finds the boundaries.
  * Zero-fill `cell_begin`/`cell_end` before launch (empty cells -> empty range).
  */
@@ -29,7 +29,7 @@ struct BuildCellRangesKernel {
 	uint32_t* cell_begin;
 	uint32_t* cell_end;
 	size_t num_particles;
-	int shift; ///< 3 * (bits_per_dim - coarse_bits)
+	int shift; ///< 3 * (bits_per_dim - cell_grid_bits)
 
 	DEVICE void operator()(idx_t i) const {
 		if (i >= num_particles)
@@ -43,19 +43,19 @@ struct BuildCellRangesKernel {
 };
 
 /**
- * @brief Precompute each coarse cell's neighbor cell indices.
+ * @brief Precompute each cell's neighbor cell indices.
  *
  * Morton splits every axis into the same 2^m cells, so on an anisotropic box the
  * cells are anisotropic too and a fixed +-1 stencil would force the coarsest axis
  * on all three. Each axis therefore carries its own radius. The topology depends
- * only on the grid (coarse_bits, radii, per-axis periodicity), not on particle
+ * only on the grid (cell_grid_bits, radii, per-axis periodicity), not on particle
  * positions, so it is built once per grid and reused across rebuilds. Rows are
  * padded to neighbors_per_cell with kInvalidCell. See dev_notes.md.
  */
 struct BuildCellNeighborsKernel {
 	uint32_t* cell_neighbors; ///< [num_cells * neighbors_per_cell] output
 	size_t num_cells;
-	int coarse_bits; ///< m: coarse cells per dim = 2^m
+	int cell_grid_bits; ///< m: cells per dim = 2^m
 	int3 z_order_raddi;
 	int neighbors_per_cell;
 	Vector3 box_len; ///< per-axis periodic length; <= 0 marks an open axis
@@ -96,7 +96,7 @@ struct BuildCellNeighborsKernel {
 		const uint32_t cy = compact_by3(cell >> 1);
 		const uint32_t cz = compact_by3(cell);
 
-		const int n = 1 << coarse_bits;
+		const int n = 1 << cell_grid_bits;
 		const uint32_t mask = static_cast<uint32_t>(n - 1);
 		const bool per_x = box_len.x > 0.0f;
 		const bool per_y = box_len.y > 0.0f;
@@ -145,7 +145,12 @@ struct BuildCellNeighborsKernel {
  * cells BuildCellNeighborsKernel listed for each particle's own cell, whose radii
  * cover the cutoff sphere on every axis independently. Periodicity is per axis
  * via `box_len` (positive wraps with minimum image, zero is open). Excluded pairs
- * are dropped here rather than downstream. See dev_notes.md.
+ * are dropped here rather than downstream.
+ *
+ * Launched with `num_particles * threads_per_particle` threads: thread `t` handles
+ * particle `t % num_particles` and stencil slots `t / num_particles` strided by
+ * `threads_per_particle`. A value of 1 is the one-thread-per-particle walk.
+ * See dev_notes.md.
  */
 struct ZOrderCellNeighborKernel {
 	const Vector3* __restrict__ sorted_positions;
@@ -161,13 +166,17 @@ struct ZOrderCellNeighborKernel {
 	size_t num_particles;
 	size_t max_pairs;
 	int neighbors_per_cell;
+	int threads_per_particle; ///< threads sharing one particle's stencil walk; >= 1
 	int shift;				  ///< 3 * (bits_per_dim - m); recovers a cell index from a Morton code
 	PeriodicBox box;		  ///< minimum-image periodic box; open axes left unwrapped
 	ExclusionView exclusions; ///< excluded pairs are dropped before emission
 
-	DEVICE void operator()(idx_t i) const {
-		if (i >= num_particles)
+	DEVICE void operator()(idx_t t) const {
+		if (t >= num_particles * static_cast<idx_t>(threads_per_particle))
 			return;
+
+		const idx_t i = t % num_particles;
+		const int slot_phase = static_cast<int>(t / num_particles);
 
 		const Vector3 pos_i = sorted_positions[i];
 		const uint32_t sorted_i = static_cast<uint32_t>(i);
@@ -181,7 +190,7 @@ struct ZOrderCellNeighborKernel {
 		const int excl_end = exclusions.row_end(a);
 		const int excl_body = exclusions.body_of(a);
 
-		for (int k = 0; k < neighbors_per_cell; ++k) {
+		for (int k = slot_phase; k < neighbors_per_cell; k += threads_per_particle) {
 			const uint32_t ncell = nbrs[k];
 			if (ncell == kInvalidCell)
 				continue;

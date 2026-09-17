@@ -157,6 +157,10 @@ std::vector<sycl::device> Manager::get_all_devices() {
 	return all_devices_;
 }
 
+size_t Manager::get_device_memory(size_t device_id) {
+	return get_device_by_id(device_id).get_info<sycl::info::device::global_mem_size>();
+}
+
 size_t Manager::device_count() {
 	if (!initialized_) {
 		return 0;
