@@ -6,6 +6,7 @@ punchy one-liners; the "why" lives here.
 ## ZOrderPairlist
 
 ### build_pairlist — periodic-axis Morton box
+
 On a periodic axis the Morton encoding box must be the **simulation** box, not
 the particle bounding box. Two things depend on it:
 
@@ -23,12 +24,14 @@ Open axes keep the bounding box: nothing to wrap, and a tight box gives finer
 cells for the same `m`.
 
 ### build_pairlist — position snapshot
+
 `sorter_.update_positions_incremental()` snapshots the positions this list was
 built from, so `needs_update()` can later measure drift. Nothing else called it,
 which left the reference buffer at its uninitialised construction value and made
 `needs_update()` report a meaningless displacement.
 
 ### find_neighbors_zorder — coarse-cell resolution
+
 Cells must be at least the pairlist cutoff wide in every dimension, otherwise a
 27-cell stencil would not cover the cutoff sphere and pairs would be missed.
 Morton codes carry `MortonCode::max_coord_bits` per dimension, so the coarse
@@ -48,6 +51,7 @@ by a 27-cell stencil, so pairs are missed. `build_pairlist` forces the two to
 agree on periodic axes; this keeps them agreeing on open ones.
 
 ### find_neighbors_zorder — overflow is fatal
+
 The kernel refuses to write past `max_pairs_`, but the atomic counter keeps
 climbing, so the raw value reports how many pairs *would* have been stored.
 Overflow is fatal, not a warning: the pairs that fit are whichever ones won the
@@ -59,6 +63,7 @@ from `Pairlist::ensure_pair_capacity`, so overflow means that density estimate w
 too tight — raise its safety factor or shorten the pairlist cutoff.
 
 ### set_periodic_box (header)
+
 On a periodic axis the 27-cell stencil wraps at the grid edges and displacements
 use the minimum image convention, so pairs spanning that boundary are enumerated.
 Without this, such pairs are silently absent from the pairlist even though the
@@ -74,12 +79,14 @@ box, because wrapping a cell index modulo the grid is only geometrically correct
 when the encoded extent *is* the periodic extent.
 
 ### kMaxCoarseBits (header)
+
 Largest coarse-cell resolution used by the neighbor search, as bits per
 dimension. Capping this bounds the cell arrays at `8^7 = 2M` entries; exceeding
 the cap only makes cells wider than the cutoff, which costs extra candidates to
 scan but never misses a pair.
 
 ## ZOrderNeighbor — BuildCellNeighborsKernel (27-cell cache)
+
 Each coarse cell's up-to-27 neighbor cell indices are precomputed into
 `cell_neighbors_` ([num_cells * MAX_NEIGHBORS], padded with `kInvalidCell`) and
 the neighbor kernel just walks that table instead of recomputing `compact_by3` /
@@ -92,6 +99,7 @@ at realistic `m`; only near `kMaxCoarseBits = 7` (2M cells → 216 MB) is it lar
 ## ZOrderNeighbor — ZOrderCellNeighborKernel
 
 ### overview
+
 Particles stay Morton-sorted (that is what gives the force kernel its memory
 locality), but neighbors are enumerated by visiting the 27 coarse cells around
 each particle, exactly as a conventional cell list does. The coarse cell side is
@@ -108,6 +116,7 @@ cell `n-1` is adjacent to cell `0`, which only holds when the encoded extent is
 the periodic extent.
 
 ### periodic offset range
+
 With fewer than three cells along a periodic axis the wrapped offsets -1/0/+1
 alias onto the same cell (all three when `n == 1`, and -1 with +1 when `n == 2`),
 so the naive -1..1 loop visits that cell repeatedly and emits each pair in it up
@@ -118,6 +127,7 @@ indices are skipped rather than wrapped, so they cannot alias — and keep the f
 range to reach the cell below.
 
 ### emit each pair once
+
 Keyed on the *sorted* index. Because a cell occupies a contiguous run of the
 sorted array, a whole cell lying before this particle collapses to an empty loop,
 and the particle's own cell is entered at `i+1` — so roughly half the stencil is
@@ -128,6 +138,7 @@ the other particle's thread.
 ## Pairlist
 
 ### max_pairs is a device-memory budget, not a per-config estimate
+
 `kPairlistMaxPairs` (Pairlist.h) is a single global buffer sized to ~30% of device
 memory (`GPU_MEM` GiB from CMake, int2 = 8 B/pair) — e.g. 3 GiB / 402M pairs on a
 10 GiB RTX 3080. It does *not* depend on particle count or configuration.
@@ -144,6 +155,7 @@ threw on a legitimate overlapping start; a global memory budget does not.
 ## ZOrderCellNeighborKernel — tiled block-per-cell rewrite (2026-08-20)
 
 ### Why the per-particle version was slow (profile: 391 us, stddev <0.3%)
+
 One thread per particle, no shared-memory staging: every candidate `pos_j` was
 fetched from *global* memory once per home particle, and every accepted pair did
 its own global `atomicAdd`. Dead-constant timing => global-load-bound serial scan.
@@ -155,6 +167,7 @@ budget caps cells/dim < 1024 (patch/pairlist_cutoff). Finer cells overflow the
 code, so the fix is kernel shape, not granularity.
 
 ### New shape
+
 - **Block per coarse cell**, grid-strided over `num_cells` (`num_blocks` = grid.x,
   capped at 65535). Sparse grids stay cheap; dense ones loop.
 - **Shared-memory staging**: for each of the 27 neighbor cells, stage its particles
@@ -171,6 +184,7 @@ code, so the fix is kernel shape, not granularity.
   `base + scan[tid]`. Collapses N global atomics into one per (block, neighbor-tile).
 
 ### Invariants preserved
+
 - Dedup by sorted index (`sj > si`): each unordered pair is seen from both cells;
   only `sj > si` passes. Emitted int2 is ordered on *original* indices (`a<b?..`),
   the x<y invariant the sorted key drops.
@@ -178,6 +192,7 @@ code, so the fix is kernel shape, not granularity.
   writes guarded by `out < max_pairs`; host checks and throws.
 
 ### Correctness gotchas baked in
+
 - Every barrier is block-uniform: cell/neighbor `continue`s depend only on
   block-wide ranges, so all threads skip together — no half-block barrier hang.
 - Tail threads (`validI == false`, or `tid >= tile_n`) still hit every barrier;
@@ -186,6 +201,7 @@ code, so the fix is kernel shape, not granularity.
   `pos_j` from shared memory, and the win was removing the *global* re-fetch.
 
 ### Still TODO / verify before trusting
+
 - Compile (CUDA): forces `launch_cuda_kernel_with_workitem<ZOrderCellNeighborKernel>`
   via ZOrderNeighbor.cu; host .cpp must see the `extern template` (KernelHelper.cuh).
 - **Validate pair count matches the old kernel** on a known system before profiling.
@@ -196,6 +212,7 @@ code, so the fix is kernel shape, not granularity.
 Grid was fine (4096 blocks, saturated). The slowness was overhead, two parts:
 
 ### 1. BoundingBoxKernel was 6 ms/rebuild of pure waste -> removed
+
 For a periodic box the computed bbox was immediately overwritten by the sim box,
 so the O(N) reduction ran for nothing. Deeper: the Morton domain IS the box.
 ZOrderPairlist now stores a `PeriodicBox box_` (set from Patch's system box, which
@@ -206,6 +223,7 @@ re-read each build (multi-GPU: a patch's box may change). Every system defines a
 so there is no particle-extent fallback.
 
 ### 2. Two-pass emit -> single-pass warp-aggregated atomic
+
 The block-aggregation (count -> prefix-sum -> reserve -> rewrite) computed wrap_diff
 twice and serialized a per-tile prefix sum in thread 0. That was ~27% over v1.
 Replaced with v1's atomicAggInc idea: single pass, `__ballot_sync`+`__popc` give one
@@ -225,7 +243,7 @@ Dedup (sorted_j>sorted_i) and original-index ordering unchanged.
 on `mpipi_rna_arbd1.bd`, v2 on the matching `_arbd2.bd`.
 
 | kernel | v1 | v2 | ratio |
-|---|--:|--:|--:|
+| --- | --: | --: | --: |
 | force, median | 1524 us | 1767 us | 1.16x slower |
 | force, total | 508.6 ms | 643.5 ms | |
 | **pairlist build, 1 launch** | **2.32 ms** | **707 ms** | **305x slower** |
@@ -580,7 +598,7 @@ happens to offset the walk's sub-linearity. Anyone raising `MARS_ZORDER_TABLE_MB
 re-measure, including the force kernel. A principled chooser would need the force-kernel
 coupling, which the pairlist builder cannot see.
 
-#### Is the build worth more work? No.
+#### Is the build worth more work? No
 
 Build is 9.7% of GPU time at `decompPeriod 125`. Even a v1-class build (4,338 us, another
 5.4x) would be worth **-8.3% of total**. Force is 85.6%. The build is done as a target.
@@ -759,11 +777,12 @@ Force kernel is flat across the whole sweep (2,083-2,180 us, no trend), so the s
 disturb the emission-order effect. Whole-run GPU busy moves -1% to -5% depending on S, which
 straddles the 3-4% whole-run noise floor; **trust the build median, not the total.**
 
-**Next step, if the build is pursued further: shared-memory staging, not more threads.** Stage
-K home particles in shared memory and have lanes walk the neighbour cell, so each `j` position
-load serves K distance tests. That is v1's design and it attacks the traffic, which is what
-the evidence now points at. It needs the `WorkItem` path (shared memory + barriers), which
-exists for both CUDA and SYCL, so it stays portable.
+**Next step, if the build is pursued further: DO NOT use shared-memory staging.**
+A previous version of these notes suggested staging $K$ home particles in shared memory to reuse each `j` position load against $K$ distance tests (like v1). **This is a trap.** It was implemented and measured: `tiled 6.938 ms/step vs walk 2.543 ms/step — 2.7x slower`.
+
+Why it fails: Reuse requires the $K$ home particles in a tile to share candidate cells. Morton sort *does* group consecutive particles in the same cell, but only while cells hold $\ge K$ particles. On sparse systems like nupod (averaging ~2 particles/cell at m=5), a $K=64$ tile spans ~32 different cells with 32 different 45-slot stencils. The union of their neighbor cells is huge, and the intersection is tiny. Loading a `j` candidate into shared memory only serves the ~2 home particles near it; the other 62 lanes do useless distance tests or sit idle.
+
+The "naive" walk is 2.7x faster because, despite relying on global memory reads, it strictly chases only the candidate cells relevant to each specific particle. It never wastes time loading and syncing a tile that 95% of the block doesn't care about.
 
 S default is 8. S=45 is 3% better but uses 45x the redundant per-thread preamble (pos_i,
 Morton code, cell base, `sorted_to_original[i]`, three exclusion-row loads) for 1 slot of
@@ -867,6 +886,7 @@ Picks m=5 for nupod and m=4 for cytoplasm — both match measurement. It also re
 goes back to being a safety net rather than the thing making the decision.
 
 Consequences:
+
 - `m` now depends only on extent and cutoff. For a periodic system it is **constant across
   every rebuild** — no more `m=[4,5]` flip on build 1, no oscillation risk near a cost tie, no
   neighbour-table rebuild churn.
@@ -960,3 +980,140 @@ headline: the build work is finished as an optimisation target, and it was never
 the wall clock. Anything further has to come from the force kernel.
 
 Both changes are portable; no CUDA-only path was added.
+
+---
+
+## ZOrderTiledNeighborKernel (shared-memory tiling) — 2026-09-17
+
+Additive side version, selected by `MARS_ZORDER_TILED=1` or
+`ZOrderPairlist::use_tiled_kernel(true)`. `ZOrderCellNeighborKernel` is untouched and
+remains the default. Both emit the same pair set. Old code in git branch shared_cell
+
+### Why it exists
+
+Hypothesis under test: the per-particle walk reads `sorted_positions[j]` once per lane per
+candidate with zero reuse, so the candidate stream is the bottleneck. Tiling stages each
+neighbour cell in shared memory once and reuses it against every home lane.
+
+### Structure
+
+One work group per **cell**, not per particle. This is what makes reuse possible: a cell is a
+Morton **prefix**, so its particles are a contiguous run of the sorted array and every home
+lane in the group shares one stencil. Loop order is home chunk -> neighbour cell -> tile.
+
+Reuse is therefore bounded by **cell occupancy**, not by group width. That is the whole risk:
+
+| grid | cells | particles/cell | reuse ceiling |
+| --- | --: | --: | --: |
+| nupod m=5 (current) | 32,768 | 2.0 | 2 |
+| nupod m=4 | 4,096 | 15.9 | 16 |
+| cytoplasm m=4 (current) | 4,096 | 74.4 | 32 (group width) |
+
+At nupod's current m=5 the tile is reused ~2x and 30 of 32 lanes idle during the compute
+phase, so this is *expected* to lose there. It only has a chance on a coarser grid — which is
+the combination worth measuring, not tiling alone. Averages include empty cells, so occupied
+cells run denser than the table shows; the real distribution is unmeasured.
+
+### Correctness details
+
+- **Barrier safety.** Every loop bound (`home_begin/end`, `nbegin/nend`, `tbase`, the
+  `kInvalidCell` skip) is group-uniform, so all lanes execute the same barrier count. The
+  per-lane `active` flag gates only non-barrier work. The empty-cell early return is
+  group-uniform (taken by the whole group or none of it) so it cannot strand a barrier.
+- **Each pair once.** The walk kernel gets this from `j_lo = max(begin, sorted_i+1)`; the
+  tiled kernel cannot hoist that (the tile is shared across lanes with different `h`), so it
+  masks per lane with `tbase + s <= h`. Same result, but the lower half of the self-cell tile
+  is loaded and discarded — part of tiling's overhead.
+- **Shared layout is four 4-byte lanes** (`float x|y|z`, `uint32_t orig`), deliberately *not*
+  `Vector3`. `Vector3_t` is `alignas(4*sizeof(T))` = 16 B, while SYCL dispatches
+  `launch_sycl_kernel_with_workitem<int>` giving a 4-byte-aligned `local_accessor<int>`.
+  Reinterpreting that to a 16-byte-aligned type is UB. All-4-byte sidesteps it and avoids
+  bank conflicts.
+- **Group size is `SG_SIZE`** (`ZOrderKernels/DeviceRadix.h`), not a new constant: it is
+  already vendor-aware (32 NVIDIA/Intel, 64 AMD Wave64), it is <= 64 so
+  `KernelConfig::validate_block_size` never silently clamps it — the clamp bug documented in
+  KernelConfig.h would otherwise desynchronise the kernel's `block_size` member from the real
+  launched block and corrupt lane indexing — and a one-subgroup group keeps `barrier()` a
+  subgroup sync. `tile_size = block_size` makes each staging round exactly one coalesced pass
+  per lane.
+
+### How to measure it
+
+`MARS_ZORDER_TILED=1` flips it without a rebuild; `PLDIAG tiled=` in the debug log confirms
+which ran. **Select on total GPU busy, never on the build kernel** — tiling changes emission
+order wholesale, and emission order drives the force kernel's atomic conflicts (see the
+`threads_per_particle` sweep above, where the best build was nearly the worst total). Verify
+the pair set with the *first* build's count from the force kernel's `gridX * blockX`.
+
+### Status
+
+Written, not yet compiled or measured.
+
+### Pairlist buffer sizing bug — 2026-09-17
+
+`pairlist_max_pairs()` originally sized the buffer from **device capacity alone**
+(`kPairlistMemoryPercent` of `Resource::get_device_memory()`). On a 96 GB card that is
+~28.8 GB *per patch*, handed out regardless of system size, so a 200-particle unit test
+allocated 28.8 GB and `Unit_test/System/SinglePatchSimulation.cpp` died with a sticky
+`out of memory` surfacing at the next `cudaGetLastError()` (KernelHelper.cuh:170).
+
+Fixed by capping at the exact maximum number of distinct pairs, `N choose 2`:
+
+    min(device_share, max_particles * (max_particles - 1) / 2)
+
+Exact, not tuned — a patch of N particles cannot produce more than N(N-1)/2 pairs, so this
+can never under-allocate. 200 particles: 28.8 GB -> 159 KB. nupod (65,248): 28.8 GB -> 17.0 GB,
+still a safe bound, so production behaviour is unchanged.
+
+Lesson: a device-relative budget is not a size. It needs a problem-relative bound next to it,
+or it scales with the hardware instead of with the work.
+
+### Tiled kernel: measured, and it loses badly — 2026-09-17
+
+Four-arm matched set, all arms **concurrent** on four idle GPUs, assignment rotated between
+two batches. Same binary, `MARS_ZORDER_TILED` the only difference. Both batches agree to
+within a few percent on every figure, so these are signal, not noise.
+
+| | build us | force us | GPU busy ms |
+| --- | --: | --: | --: |
+| nupod walk | 16,719 | 2,073 | 47,324 |
+| nupod tiled | 369,510 | 3,551 | 132,262 |
+| **ratio** | **22.10x** | **1.71x** | **2.80x** |
+| cytoplasm walk | 2,496 | 1,121 | 11,804 |
+| cytoplasm tiled | 5,047 | 1,296 | 13,551 |
+| **ratio** | **2.02x** | **1.16x** | **1.15x** |
+
+**Correctness confirmed.** Pair counts are identical between arms on both systems
+(61,745,536 nupod / 55,929,856 cytoplasm), so the kernel is right — just slow.
+
+#### Why the build is 22x slower on nupod
+
+Not lane idling alone. Tiled does *fewer* cell visits than the walk (32,768 groups x 45 slots
+= 1.47M, versus 65,248 particles x 45 = 2.94M), but each visit costs a **two-barrier round
+that serialises the whole group**, and at ~2 particles per cell only ~2 of 32 lanes have any
+work to do when the barrier lifts. The walk has no barriers at all: its threads are fully
+independent. Trading independent threads for barrier-synchronised ones is only worth it if
+the shared tile is reused many times, and cell occupancy is what caps reuse. Cytoplasm has
+74 particles/cell and loses by 2.02x; nupod has 2.0 and loses by 22x. The ratio tracks
+occupancy, which is the mechanism predicted before the run.
+
+#### The force kernel got much worse, and that is the more useful finding
+
+**nupod's force kernel slowed 71%** (2,073 -> 3,551 us) with an identical pair set. Only the
+*order* pairs sit in the buffer changed. Tiling emits cell-by-cell, so all pairs touching one
+cell's particles land contiguously and the force kernel's warps then collide on the same atom
+addresses; the walk's per-hit atomic interleaves across the whole system and spreads them.
+
+This dwarfs the `threads_per_particle` sweep, where emission order moved force by 3-5%. Same
+coupling, an order of magnitude larger. **Cell-contiguous pair ordering is actively bad for
+the force kernel** - worth remembering for any future build rewrite, and it means a build
+rewrite can lose on the force kernel alone even if its own time improved.
+
+#### Verdict
+
+Hypothesis rejected. The candidate stream was not the bottleneck in a way tiling can exploit.
+Kept in-tree (off by default, `MARS_ZORDER_TILED=1`) because it is a correct reference
+implementation and cheap to re-test if the grid ever coarsens. The tiled + coarse-grid
+combination is the only version still worth a run: at nupod m=4, occupancy would be 15.9 and
+the predicted build ratio drops toward cytoplasm's 2x - still a loss, so it needs the force
+kernel to *also* improve, which this run says it will not.
