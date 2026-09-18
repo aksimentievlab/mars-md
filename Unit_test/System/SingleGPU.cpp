@@ -4,11 +4,13 @@
 #include "System/SystemState.h"
 #include <vector>
 short single_resource_id = Global::single_resource_id;
+auto device_array = Global::device_ids;
 using namespace MARS;
 using namespace Tests;
 
-std::vector<Resource> device_resources = {Resource(0), Resource(1)};
+std::vector<Resource> device_resources(device_array.begin(), device_array.end());
 std::vector<Resource> single_resource_list = {Resource(single_resource_id)};
+
 /**
  * @brief Test suite for single resource optimization in SimSystem
  *

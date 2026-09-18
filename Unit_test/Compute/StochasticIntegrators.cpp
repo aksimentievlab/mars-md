@@ -62,9 +62,21 @@ HostParticleData run_baoab(const Resource& res, uint64_t seed, int steps) {
 	auto view = particles.view();
 	auto tview = device_types.view();
 	for (int s = 0; s < steps; ++s) {
-		launch_BAOAB<float>(res, view, tview, box, kDt, s, kT(), kN, seed, 0,
-							nullptr, Vector3{0.0f, 0.0f, 0.0f},
-							1);
+		// Wait per step, mirroring production; async launches race on mom/pos in release.
+		launch_BAOAB<float>(res,
+							view,
+							tview,
+							box,
+							kDt,
+							s,
+							kT(),
+							kN,
+							seed,
+							0,
+							nullptr,
+							Vector3{0.0f, 0.0f, 0.0f},
+							1)
+			.wait();
 	}
 	HostParticleData out;
 	particles.copy_to_host(out, kN);
@@ -82,9 +94,22 @@ HostParticleData run_bd(const Resource& res, uint64_t seed, int steps) {
 	auto view = particles.view();
 	auto tview = device_types.view();
 	for (int s = 0; s < steps; ++s) {
-		launch_BD<float>(res, view, tview, kDt, s, kT(), kN, box, seed, /*base_ctr=*/0,
-						 /*grid_configs=*/nullptr, /*electric_field=*/Vector3{0.0f, 0.0f, 0.0f},
-						 /*interpolation_scheme=*/1);
+		// Wait per step, mirroring production (SimManager integrate_motion + evt.wait()).
+		// Async launches would overlap and race on pos in release builds.
+		launch_BD<float>(res,
+						 view,
+						 tview,
+						 kDt,
+						 s,
+						 kT(),
+						 kN,
+						 box,
+						 seed,
+						 /*base_ctr=*/0,
+						 /*grid_configs=*/nullptr,
+						 /*electric_field=*/Vector3{0.0f, 0.0f, 0.0f},
+						 /*interpolation_scheme=*/1)
+			.wait();
 	}
 	HostParticleData out;
 	particles.copy_to_host(out, kN);

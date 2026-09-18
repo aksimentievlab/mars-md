@@ -18,10 +18,10 @@
 #include "../extern/Catch2/extras/catch_amalgamated.hpp"
 
 // Common MARS includes
-#include "MARSLogger.h"
 #include "Backend/Buffer.h"
 #include "Backend/Events.h"
 #include "Backend/Resource.h"
+#include "MARSLogger.h"
 
 // MPI support
 #ifdef USE_MPI

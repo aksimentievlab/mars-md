@@ -145,6 +145,7 @@ TEST_CASE("IntegratorTest", "[free][bd]") {
 		particles.copy_from_host(init, 100); // reset positions/force for this seed
 
 		for (int step = 0; step < num_steps; step++) {
+			// Wait per step, mirroring production; async launches race on pos in release.
 			launch_BD<float>(res,
 							 particle_view,
 							 type_view,
@@ -157,7 +158,8 @@ TEST_CASE("IntegratorTest", "[free][bd]") {
 							 step,
 							 /*grid_configs=*/nullptr,
 							 /*electric_field=*/Vector3{0.0f, 0.0f, 0.0f},
-							 /*interpolation_scheme=*/1);
+							 /*interpolation_scheme=*/1)
+				.wait();
 		}
 
 		HostParticleData final;
