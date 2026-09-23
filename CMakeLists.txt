@@ -26,7 +26,7 @@ option(USE_PYTHON "Build Python bindings" OFF)
 option(USE_METAL "Use Apple Silicon Metal" OFF)
 option(USE_MPI "Use MPI for distributed computing" OFF)
 
-set(SYCL_DEVICE_TYPE 0 CACHE INTEGER "Device type for SYCL builds, can be Nvidia (0), AMD (1) or Intel (2). Default is 0 (Nvidia)." 0)
+set(SYCL_DEVICE_TYPE 0 CACHE STRING "Device type for SYCL builds, can be Nvidia (0), AMD (1) or Intel (2). Default is 0 (Nvidia).")
 set(SYCL_NVIDIA_GPU_ARCH "sm_80" CACHE STRING "NVIDIA GPU architecture for icpx SYCL (e.g. sm_80, sm_86, sm_89, sm_90). Used when SYCL_DEVICE_TYPE=0.")
 set(SYCL_AMD_ARCH "gfx906" CACHE STRING "AMD GPU architecture for icpx SYCL (e.g. gfx906, gfx908, gfx90a). Used when SYCL_DEVICE_TYPE=1.")
 set(SYCL_INTEL_GPU_DEVICE "pvc" CACHE STRING "Intel GPU device for icpx SYCL AOT (e.g. pvc, mtl-h, skl). Used when SYCL_DEVICE_TYPE=2. Empty = spir64_gen generic.")
@@ -209,6 +209,7 @@ endif()
 if(USE_SYCL_ACPP OR USE_SYCL_ICPX)
     message(STATUS "SYCL support is requested.")
     add_definitions(-DUSE_SYCL) # Generic definition for SYCL API usage in C++
+    add_definitions(-DSYCL_DEVICE_TYPE=${SYCL_DEVICE_TYPE})
 
     if(NOT CMAKE_CXX_COMPILER)
         message(FATAL_ERROR "A SYCL option (USE_SYCL_ACPP or USE_SYCL_ICPX) is ON, but CMAKE_CXX_COMPILER is not set.

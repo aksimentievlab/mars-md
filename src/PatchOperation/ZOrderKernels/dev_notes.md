@@ -137,3 +137,45 @@ Effect of the fix on the 305k cytoplasm case:
 The pair count now matches a scipy cKDTree count at the 45 A cutoff exactly
 (56,231,831 rounded up to a 256-thread block). The 305x pairlist-build gap
 against v1 was entirely this bug; the kernel shape was never the problem.
+
+## oneapiSort.h — oneDPL will silently give you a merge sort (2026-09-22)
+
+`sort_morton_codes_oneapi` on PVC, 1G uint32 key/payload pairs:
+
+| implementation | time |
+|---|--:|
+| `device_radix_sort_pairs_usm` (ours) | **299 ms** |
+| `oneapi::dpl::stable_sort_by_key` | 499 ms |
+| `oneapi::dpl::sort` on a zip_iterator + comparator lambda | 995 ms |
+
+**The zip+comparator form never reaches a radix sort.**
+`__is_radix_sort_usable_for_type` (`parallel_backend_sycl.h:2073`) requires both
+`std::is_arithmetic_v<_T>` *and* a comparator that is literally `std::less` or
+`__pstl_less` (`__is_comp_ascending`, `parallel_backend_sycl_utils.h:336-349`).
+Zipping makes `_T` a `tuple<uint32_t,uint32_t>`, and a lambda is not `std::less`,
+so both fail, SFINAE takes the `!usable` overload at line 2103, and you get
+`__parallel_sort_impl` — a comparison merge sort. No warning, no diagnostic.
+
+The library's own `__pattern_sort_by_key` (`algorithm_impl_hetero.h:1287`) zips
+identically but passes `std::get<0>` as the **projection**, not the comparator:
+`__key_t = invoke_result_t<_Proj&, __value_t<_R>>` then resolves to `uint32_t`
+and the comparator stays `std::less`, so both conditions hold. Use
+`stable_sort_by_key`; never hand-roll the zip.
+
+**We keep our own sort.** oneDPL hardcodes `constexpr __radix_bits = 4`
+(`parallel_backend_sycl_radix_sort.h:889`) = 8 passes over 32-bit keys, against
+`DRS_RADIX_LOG = 8` = 4 passes for ours. Twice the memory traffic, and it is a
+constexpr inside the header, not a policy knob.
+
+Two things seen in the AOT log that are *not* problems for us:
+
+- `__subgroup_radix_sort` kernels spilling (~94 regs on the block-32 variant).
+  Those are only dispatched for `__n <= min(16384, __max_wg_size*32)`
+  (`parallel_backend_sycl_radix_sort.h:907-921`); 1G takes the `else` branch,
+  `__parallel_multi_group_radix_sort`. AOT compiles every instantiation
+  regardless of which one launches.
+- `<oneapi/dpl/experimental/kernel_templates>` does **not** compile here. It
+  pulls in ESIMD -> oneAPI's `std/experimental/simd.hpp`, which redefines
+  `scalar`, `fixed_size` and `max_fixed_size` against gcc 16.1.0's
+  `<experimental/bits/simd.h>`. This blocks `kt::gpu::esimd::radix_sort_by_key`,
+  which is the one path that might actually beat our 299 ms. Unresolved.

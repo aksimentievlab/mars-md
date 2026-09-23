@@ -113,6 +113,7 @@ TEST_CASE("IntegratorTest", "[free][bd]") {
 		init.force[i] = Vector3(0, 0, 0); // Zero force
 	}
 	particles.copy_from_host(init, 100);
+	particles.clear_forces(); // ForceEnergy is not populated by copy_from_host
 
 	// Simulation parameters
 	float dt = 2e-5f; // 20 fs in ns
@@ -140,9 +141,13 @@ TEST_CASE("IntegratorTest", "[free][bd]") {
 
 	double total_msd = 0.0;
 	const int total_samples = static_cast<int>(seeds.size()) * 100;
+	double dbg_sum_x = 0, dbg_sum_y = 0, dbg_sum_z = 0;
+	double dbg_sq_x = 0, dbg_sq_y = 0, dbg_sq_z = 0;
+	int dbg_zero = 0;
 
 	for (int seed : seeds) {
 		particles.copy_from_host(init, 100); // reset positions/force for this seed
+		particles.clear_forces(); // ForceEnergy is not populated by copy_from_host
 
 		for (int step = 0; step < num_steps; step++) {
 			launch_BD<float>(res,
@@ -156,8 +161,9 @@ TEST_CASE("IntegratorTest", "[free][bd]") {
 							 seed,
 							 step,
 							 /*grid_configs=*/nullptr,
-							 /*electric_field=*/Vector3{0.0f, 0.0f, 0.0f},
-							 /*interpolation_scheme=*/1);
+							 /*electric_field=*/Vector3{0.0, 0.0, 0.0},
+							 /*interpolation_scheme=*/1)
+				.wait();
 		}
 
 		HostParticleData final;
@@ -172,7 +178,24 @@ TEST_CASE("IntegratorTest", "[free][bd]") {
 			disp.z -= box_size.z * roundf(disp.z / box_size.z); // ✓
 
 			total_msd += disp.length2();
+			dbg_sum_x += disp.x; dbg_sum_y += disp.y; dbg_sum_z += disp.z;
+			dbg_sq_x += (double)disp.x*disp.x; dbg_sq_y += (double)disp.y*disp.y;
+			dbg_sq_z += (double)disp.z*disp.z;
+			if (disp.length2() == 0.0f) dbg_zero++;
 		}
+	}
+
+	{
+		double n = total_samples;
+		double mx = dbg_sum_x / n, my = dbg_sum_y / n, mz = dbg_sum_z / n;
+		LOGDEBUG("zero-displacement particles: {}/{}", dbg_zero, total_samples);
+		LOGDEBUG("mean disp (drift) = {}, {}, {}  |drift|^2 = {}",
+				 mx, my, mz, mx * mx + my * my + mz * mz);
+		LOGDEBUG("var per comp = {}, {}, {}  (expected {} each)",
+				 dbg_sq_x / n - mx * mx,
+				 dbg_sq_y / n - my * my,
+				 dbg_sq_z / n - mz * mz,
+				 2.0 * D * total_time);
 	}
 
 	float msd = static_cast<float>(total_msd / total_samples);

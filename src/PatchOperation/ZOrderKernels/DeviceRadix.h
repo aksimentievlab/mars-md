@@ -81,4 +81,5 @@ void device_radix_sort_pairs_cub(int device_id,
 								 uint32_t* alt_payloads,
 								 uint32_t size);
 
+
 } // namespace MARS

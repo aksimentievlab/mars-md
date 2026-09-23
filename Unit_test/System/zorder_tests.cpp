@@ -1,6 +1,10 @@
 #include "../catch_boiler.h"
 #include "PatchOperation/Random/Random.h"
 #include "PatchOperation/ZOrderKernels/DeviceRadix.h"
+#if defined(PROJECT_USES_SYCL_ICPX) && SYCL_DEVICE_TYPE == 2
+#include "PatchOperation/ZOrderKernels/oneapiSort.h"
+#define MARS_HAVE_ONEDPL_SORT 1
+#endif
 #include <numeric>
 #include <vector>
 
@@ -161,3 +165,41 @@ TEST_CASE("DeviceRadixSort Key-Value Pairs", "[deviceradix][sort][pairs][medium]
 		}
 	}
 }
+
+#ifdef MARS_HAVE_ONEDPL_SORT
+TEST_CASE("oneapi sort Key-Value Pairs", "[deviceradix][sort][pairs][intel]") {
+	initialize_backend_once();
+	Resource device = single_resource;
+	const size_t size = 1024 * 1024 * 1024; // 1G elements
+
+	SECTION("Sort 1G elements") {
+		std::vector<uint32_t> h_keys(size);
+		std::vector<uint32_t> h_payloads(size);
+		generate_random_data_drs(device, h_keys, 54321);
+		std::iota(h_payloads.begin(), h_payloads.end(), 0);
+
+		DeviceBuffer<uint32_t> d_keys(size, device.id());
+		DeviceBuffer<uint32_t> d_payloads(size, device.id());
+		d_keys.copy_from_host(h_keys.data(), size);
+		d_payloads.copy_from_host(h_payloads.data(), size);
+
+		auto start = std::chrono::high_resolution_clock::now();
+
+		sort_morton_codes_oneapi(device, d_keys.data(), d_payloads.data(), size);
+
+		auto end = std::chrono::high_resolution_clock::now();
+		auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+
+		std::cout << "Sorted " << size / (1024 * 1024 * 1024) << "G elements in "
+				  << duration.count() << " ms on Device " << device.id() << std::endl;
+
+		std::vector<uint32_t> h_sorted_keys(size);
+		d_keys.copy_to_host(h_sorted_keys.data(), size);
+
+		// Verify keys are sorted
+		for (uint32_t i = 1; i < size; ++i) {
+			REQUIRE(h_sorted_keys[i - 1] <= h_sorted_keys[i]);
+		}
+	}
+}
+#endif
