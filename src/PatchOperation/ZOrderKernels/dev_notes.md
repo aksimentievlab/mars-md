@@ -178,4 +178,56 @@ Two things seen in the AOT log that are *not* problems for us:
   pulls in ESIMD -> oneAPI's `std/experimental/simd.hpp`, which redefines
   `scalar`, `fixed_size` and `max_fixed_size` against gcc 16.1.0's
   `<experimental/bits/simd.h>`. This blocks `kt::gpu::esimd::radix_sort_by_key`,
-  which is the one path that might actually beat our 299 ms. Unresolved.
+  which is the one path that might actually beat ours. Unresolved.
+
+## SG_SIZE on PVC: 16 was wrong, 32 is right (2026-09-22)
+
+`build_intel.sh` was passing `-DSG_SIZE=16`, overriding the value
+`DeviceRadix.h:20` already documents as correct for PVC. Fixed to 32.
+
+1G uint32 key/payload pairs, one tile of a Max 1550:
+
+| | SG_SIZE=16 | SG_SIZE=32 | delta |
+|---|--:|--:|--:|
+| oneDPL `stable_sort_by_key` (control) | 502 ms | 499 ms | 0.6% |
+| `device_radix_sort_pairs_usm` | 342 ms | **276 ms** | **19%** |
+| ours, effective bandwidth | 200.9 GB/s | 249.0 GB/s | +24% |
+
+**Use oneDPL as the control when tuning `DRS_*`.** `SG_SIZE` feeds only
+`DeviceRadix.h`; oneDPL never sees it, so it reruns under identical node, tile,
+build and queue conditions. It moved 0.6% while ours moved 19%, which is what
+makes the result attributable. Without that control the change was
+indistinguishable from noise -- earlier single cold samples of our kernel
+scattered 299/342 ms, a 14% spread, and the first reading of 299 ms now looks
+like the outlier. Effect size is still only bracketed at 8-19%; direction is
+solid.
+
+Mechanism, all of which follows from the constants:
+
+| @ 1G | SG_SIZE=16 | SG_SIZE=32 |
+|---|--:|--:|
+| `DRS_BIN_THREADS` | 256 | 512 |
+| `DRS_BIN_PART_SIZE` | 4096 | 8192 |
+| thread blocks | 262,144 | 131,072 |
+| `d_passHistogram` | 268 MB | 134 MB |
+| `DRS_BIN_HISTS_SIZE` (SLM) | 16 KB | 16 KB |
+
+The SLM histogram is 16 KB regardless of `SG_SIZE`, so at 16 you paid the same
+shared memory for half the elements per block and launched twice the blocks. The
+pass histogram is written by upsweep and read twice more per pass; at 268 MB
+that is roughly 3.2 GB of traffic across 4 passes that the GB/s figures below do
+*not* count, so our real per-pass efficiency is slightly better than printed.
+
+Per-pass efficiency vs oneDPL closed from 36% behind to 10.6% behind (249.0 vs
+275.4 GB/s). We still win on wall clock purely on pass count: `DRS_RADIX_LOG=8`
+gives 4 passes against oneDPL's hardcoded `__radix_bits = 4` = 8 passes.
+
+**Still ~15% of one tile's ~1.6 TB/s. Not bandwidth bound.** Next suspects, in
+order: whether the binning kernel lands in 256-GRF mode and spills (the AOT log
+prints this per kernel -- oneDPL's small-N kernels do), and
+`DRS_BIN_KEYS_PER_THREAD = 16`, which holds 16 keys *plus* 16 payloads live per
+work-item and is a CUB constant tuned for NVIDIA's register file, not PVC's.
+
+Benchmark hygiene: `zorder_tests.cpp` now does one discarded warm-up plus
+`MARS_SORT_BENCH_REPS` (default 5) timed reps, reports the median, and prints
+min/max/spread. Each rep re-uploads the inputs, since the sort is in place.
