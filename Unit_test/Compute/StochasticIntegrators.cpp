@@ -63,19 +63,8 @@ HostParticleData run_baoab(const Resource& res, uint64_t seed, int steps) {
 	auto tview = device_types.view();
 	for (int s = 0; s < steps; ++s) {
 		// Wait per step, mirroring production; async launches race on mom/pos in release.
-		launch_BAOAB<float>(res,
-							view,
-							tview,
-							box,
-							kDt,
-							s,
-							kT(),
-							kN,
-							seed,
-							0,
-							nullptr,
-							Vector3{0.0f, 0.0f, 0.0f},
-							1)
+		launch_BAOAB<
+			float>(res, view, tview, box, kDt, s, kT(), kN, seed, 0, nullptr, Vector3(0, 0, 0), 1)
 			.wait();
 	}
 	HostParticleData out;
@@ -107,7 +96,7 @@ HostParticleData run_bd(const Resource& res, uint64_t seed, int steps) {
 						 seed,
 						 /*base_ctr=*/0,
 						 /*grid_configs=*/nullptr,
-						 /*electric_field=*/Vector3{0.0f, 0.0f, 0.0f},
+						 /*electric_field=*/Vector3(0, 0, 0),
 						 /*interpolation_scheme=*/1)
 			.wait();
 	}
