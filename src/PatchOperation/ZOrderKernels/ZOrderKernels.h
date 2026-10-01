@@ -35,10 +35,8 @@ struct MortonEncodeKernel {
 	KERNEL_FUNC void operator()(idx_t idx) const {
 		if (idx >= num_particles)
 			return;
-
 		// Encode position to Morton code
 		morton_codes[idx] = MortonCode::encode(positions[idx], box_min, box_max);
-
 		// Store original particle index
 		original_indices[idx] = static_cast<uint32_t>(idx);
 	}

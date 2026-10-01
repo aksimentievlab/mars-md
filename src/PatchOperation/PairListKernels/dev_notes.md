@@ -1117,3 +1117,34 @@ implementation and cheap to re-test if the grid ever coarsens. The tiled + coars
 combination is the only version still worth a run: at nupod m=4, occupancy would be 15.9 and
 the predicted build ratio drops toward cytoplasm's 2x - still a loss, so it needs the force
 kernel to *also* improve, which this run says it will not.
+
+## Pair-buffer sizing — grow on demand, cap at device fraction (2026-09-19)
+
+`pairlist_max_pairs(resource)` = `kPairlistMemoryPercent` (30%) of device memory is
+now a **ceiling**, not the allocation size. It used to be allocated up front:
+`DeviceBuffer<int2> neighbor_pairs_(max_pairs)` eagerly `cudaMalloc`s the whole
+fraction. On a 24 GB RTX 4090 that is ~7.7 GB per Patch, independent of the actual
+particle count — a 200-particle test reserved 7.7 GB. A few coexisting Patches (e.g.
+multi-system decompose) exhaust the card → `cudaMalloc`/kernel-launch **out of
+memory**. SYCL survived only because its device/allocator did not eagerly commit the
+oversized-but-untouched buffer.
+
+Fix (Pairlist base + ZOrderPairlist):
+- ctor arg `max_pairs_ceiling` is stored in `max_pairs_ceiling_`; the buffer is
+  seeded at `initial_pair_capacity(max_particles)` = `max(max_particles, 1)`
+  (one slot per particle — proportional to system size, no fudge factor).
+- `find_neighbors_zorder`: the neighbor kernel already counts **every** qualifying
+  pair via the atomic and stores only those below `max_pairs_`, so the read-back
+  count is the exact true total even on overflow. On overflow we `grow_pair_capacity`
+  to that count and rebuild the neighbor pass **once**, verbatim (same grid, table,
+  `threads_per_particle`, config) so the emission order the force kernel's
+  same-address atomics depend on is unchanged.
+- `grow_pair_capacity` overallocates by 1/4 so step-to-step neighbor drift does not
+  reallocate every step (amortized growth, same rationale as `std::vector`). It
+  returns false — fatal — only when the true count exceeds the ceiling.
+- First build of a real system overflows the seed once and grows to the true size;
+  steady state is one pass per build. Buffer converges to ~true pairs (tens of KB for
+  the smoke tests) instead of gigabytes.
+
+Latent, out of scope: `max_pairs_`/`num_pairs_` are `uint32_t`; the ceiling is
+`size_t`. Fine up to ~4.29e9 pairs (>500 GB device at 30%). Widen if that ever binds.

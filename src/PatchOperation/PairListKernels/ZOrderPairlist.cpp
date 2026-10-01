@@ -289,20 +289,49 @@ void ZOrderPairlist::find_neighbors_zorder(size_t num_particles) {
 	Event launch_event = launch_kernel(resource_, neighbor_config, kernel);
 	launch_event.wait();
 
-	// Overflow is fatal: kept pairs are a nondeterministic subset. See dev_notes.md.
+	// Grow to the true count and rebuild once; fatal only past the cap. See dev_notes.md.
 	uint32_t num_pairs;
 	pair_count_.copy_to_host(&num_pairs, 1, true);
 	if (num_pairs > max_pairs_) {
-		MARS_Exception(ExceptionType::ValueError,
-					   "Pairlist capacity exceeded: %u pairs found for %zu particles (%.1f per "
-					   "particle) but the buffer holds only %u, which is "
-					   "kPairlistMemoryPercent of this device's memory. Shorten the pairlist "
-					   "cutoff, use a larger device, or raise kPairlistMemoryPercent; "
-					   "continuing would silently simulate a different system.",
-					   num_pairs,
-					   num_particles,
-					   num_particles ? static_cast<double>(num_pairs) / num_particles : 0.0,
-					   max_pairs_);
+		if (!grow_pair_capacity(num_pairs)) {
+			MARS_Exception(ExceptionType::ValueError,
+						   "Pairlist capacity exceeded: %u pairs for %zu particles (%.1f per "
+						   "particle) but the cap holds only %zu (kPairlistMemoryPercent of device "
+						   "memory). Shorten the pairlist cutoff, use a larger device, or raise "
+						   "kPairlistMemoryPercent; continuing would simulate a different system.",
+						   num_pairs,
+						   num_particles,
+						   num_particles ? static_cast<double>(num_pairs) / num_particles : 0.0,
+						   max_pairs_ceiling_);
+		}
+		// Rebuild verbatim into the grown buffer: same config keeps the emission
+		// order the force kernel's atomics depend on. See dev_notes.md.
+		reset_pair_count();
+		resource_.synchronize_streams();
+		ZOrderCellNeighborKernel retry_kernel{sorted_positions_.data(),
+											  sorter_.get_morton_codes().data(),
+											  sorter_.get_sorted_indices().data(),
+											  cell_begin_.data(),
+											  cell_end_.data(),
+											  cell_neighbors_.data(),
+											  neighbor_pairs_.data(),
+											  pair_count_.data(),
+											  cutoff_squared_,
+											  num_particles,
+											  max_pairs_,
+											  neighbors_per_cell_,
+											  threads_per_particle,
+											  shift,
+											  box,
+											  exclusions_};
+		launch_kernel(resource_, neighbor_config, retry_kernel).wait();
+		pair_count_.copy_to_host(&num_pairs, 1, true);
+		if (num_pairs > max_pairs_) {
+			MARS_Exception(ExceptionType::ValueError,
+						   "Pairlist count grew during rebuild: %u > %u; static config should not.",
+						   num_pairs,
+						   max_pairs_);
+		}
 	}
 	num_pairs_ = num_pairs;
 	LOGDEBUG("pair_count AFTER kernel: {}", num_pairs);

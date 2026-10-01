@@ -16,10 +16,12 @@
 #include "Types/Types.h"
 #include "Types/Vector3.h"
 
+#include <algorithm>
+
 namespace MARS {
 
 /// Share of device memory the pairlist buffer may occupy, in percent.
-inline constexpr size_t kPairlistMemoryPercent = 30;
+inline constexpr size_t kPairlistMemoryPercent = 50;
 
 /**
  * @brief Pairlist buffer capacity in pairs for a given device (int2 = 8 B/pair).
@@ -57,12 +59,14 @@ class Pairlist {
 	 * @brief Constructor
 	 * @param resource Computing resource for this pairlist
 	 * @param max_particles Maximum number of particles to handle
-	 * @param max_pairs Maximum number of particle pairs
+	 * @param max_pairs_ceiling Hard upper bound on the pair buffer (device-memory
+	 *        budget). The buffer is seeded small and grows toward this on demand.
 	 */
-	Pairlist(const Resource& resource, size_t max_particles, size_t max_pairs)
-		: resource_(resource), max_particles_(max_particles), max_pairs_(max_pairs),
+	Pairlist(const Resource& resource, size_t max_particles, size_t max_pairs_ceiling)
+		: resource_(resource), max_particles_(max_particles), max_pairs_ceiling_(max_pairs_ceiling),
+		  max_pairs_(std::min<size_t>(max_pairs_ceiling, initial_pair_capacity(max_particles))),
 		  num_particles_(0), num_pairs_(0), cutoff_(0.0f), cutoff_squared_(0.0f),
-		  neighbor_pairs_(max_pairs, resource), pair_count_(1, resource) {
+		  neighbor_pairs_(max_pairs_, resource), pair_count_(1, resource) {
 		uint32_t zero = 0;
 		pair_count_.copy_from_host(&zero, 1, true);
 	}
@@ -197,7 +201,8 @@ class Pairlist {
   protected:
 	Resource resource_;
 	uint32_t max_particles_;
-	uint32_t max_pairs_;
+	size_t max_pairs_ceiling_; ///< Pair-buffer hard cap (device-memory budget).
+	uint32_t max_pairs_;	   ///< Current pair-buffer capacity; grows to the cap.
 	uint32_t num_particles_;
 	uint32_t num_pairs_;
 	float cutoff_;
@@ -228,6 +233,21 @@ class Pairlist {
 	void reset_pair_count() {
 		uint32_t zero = 0;
 		pair_count_.copy_from_host(&zero, 1, true);
+	}
+
+	/// Buffer seed, grown to the true pair count on first build. See dev_notes.md.
+	static size_t initial_pair_capacity(size_t max_particles) {
+		return std::max<size_t>(max_particles, 1);
+	}
+
+	/// Grow the pair buffer toward the cap. False if @p needed exceeds the cap.
+	bool grow_pair_capacity(size_t needed) {
+		if (needed <= max_pairs_)
+			return true;
+		if (needed > max_pairs_ceiling_)
+			return false;
+		resize(max_particles_, std::min<size_t>(max_pairs_ceiling_, needed + needed / 4));
+		return true;
 	}
 };
 

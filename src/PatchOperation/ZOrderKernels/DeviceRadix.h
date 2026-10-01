@@ -63,7 +63,7 @@ constexpr uint32_t DRS_SCAN_THREADS = 128;
 constexpr uint32_t DRS_UPSWEEP_THREADS = 512;
 
 #endif
-// DeviceRadixSort using SYCL USM - simpler and more direct implementation
+// DeviceRadixSort using SYCL USM
 
 void device_radix_sort_pairs_usm(const Resource& device,
 								 uint32_t* keys,
@@ -80,6 +80,5 @@ void device_radix_sort_pairs_cub(int device_id,
 								 uint32_t* alt_keys,
 								 uint32_t* alt_payloads,
 								 uint32_t size);
-
 
 } // namespace MARS
