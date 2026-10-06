@@ -1,11 +1,6 @@
 /**
  * @file RigidBodyGridBatch.cpp
- * @brief Phase 4.1 test for batched RB grid-grid dispatch
- * (Interactions/Nonbonded/RigidBodyGridBatch.h): cull -> prefix sum ->
- * batched force, cross-checked against Phase 1's per-pair device kernel
- * (GridGridKernels.h) on the identical two-body configuration used by
- * Unit_test/Interactions/GridGrid.cpp, plus a deliberately undersized
- * worklist to exercise the overflow flag.
+ * @brief Test for batched RB grid-grid dispatch
  */
 
 #include "Interactions/Nonbonded/RigidBodyGridBatch.h"

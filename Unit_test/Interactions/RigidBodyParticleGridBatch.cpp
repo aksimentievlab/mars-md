@@ -1,19 +1,13 @@
 /**
  * @file RigidBodyParticleGridBatch.cpp
- * @brief Phase 4.3 test for batched particle-RB grid dispatch
- * (Interactions/Nonbonded/RigidBodyParticleGridBatch.h): a single particle
- * sampling a single RB's potential grid, checked against closed-form
- * analytic values (the same quadratic-bowl construction used by
- * GridGrid.cpp/RigidBodyGridBatch.cpp, so cubic interpolation reproduces it
- * exactly).
  */
 
-#include "../catch_boiler.h"
-#include "Backend/Kernels.h"
 #include "Interactions/Nonbonded/RigidBodyParticleGridBatch.h"
+#include "../catch_boiler.h"
+#include "Backend/Events.h"
+#include "Backend/Kernels.h"
 #include "Objects/DeviceParticleManager.h"
 #include "Objects/DeviceRigidBodyManager.h"
-#include "Backend/Events.h"
 #include "Types/BaseGrid.h"
 #include <utility>
 
@@ -127,7 +121,7 @@ TEST_CASE("RBParticleGridBatch: single particle sampling a single RB's potential
 	force_config.problem_size = kerneldim3{blocks_per_candidate * threads_per_block, 1, 1};
 	force_config.shared_memory = 2 * threads_per_block * sizeof(Vector3);
 	force_config.sync = true;
-	Event evt=launch_kernel_with_workitem(res, force_config, force);
+	Event evt = launch_kernel_with_workitem(res, force_config, force);
 	evt.wait();
 
 	HostParticleData particle_result;

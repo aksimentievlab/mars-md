@@ -2,19 +2,6 @@
  * @file Pmf.cpp
  * @brief Tests for the flattened per-type PMF grid table consumed by
  * compute_position_dependent_force (Interactions/Nonbonded/Pmf.h).
- *
- * A particle type may reference any number of PMF grids - legacy MARS's
- * `gridFile` takes a whitespace-separated list, each entry with its own scale -
- * so ParticleTypeView carries an offset+count range per type into one flat
- * GridTerm table. These tests pin down that wiring: that a type sums every one
- * of its terms, that each term's own scale applies, that one type's terms don't
- * leak into another's, and that a type with no terms is unaffected.
- *
- * Host-side only: compute_position_dependent_force is HOST DEVICE, so no GPU
- * or kernel launch is needed. The interpolation math itself is covered by
- * Types/basegrid_device_tests.cpp; here the grids carry exactly linear fields
- * (V = x and V = y in grid units), which nearest-index central differences
- * reproduce exactly, so expected forces are exact rather than approximate.
  */
 
 #include "Interactions/Nonbonded/Pmf.h"
@@ -29,8 +16,7 @@ namespace {
 
 constexpr idx_t N = 8;
 constexpr float DX = 1.0f;
-// Sampled well inside the grid: compute_gradient zeroes out within one cell of
-// the boundary, and interpolate_grid_point's i0+1 tap needs room too.
+// Sampled well inside the grid so the i0+1 tap is in range.
 constexpr float SAMPLE = 3.5f;
 
 /// V(ix,iy,iz) = ix in grid units, so grad V = (1/DX, 0, 0) in world units.

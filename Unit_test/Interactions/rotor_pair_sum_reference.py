@@ -1,13 +1,4 @@
 """Direct CPU pair sum reference for a tabulated-nonbonded MARS config.
-
-Independent check on mars2's reported nonbonded (and tabulated-bond) energy:
-reproduces TabulatedPotential::compute's linear interpolation, including the
-past-the-end rule, in double precision, and rebuilds mars2's exclusion set
-from the EXCLUDE lines plus bond pairs.
-
-Takes the config path as an argument and reads the fixture in place - it
-copies nothing and hardcodes no path.
-
 Usage:
     python3 rotor_pair_sum_reference.py <config.bd> [--cutoff 50]
                                         [--no-bond-exclusions] [--no-exclusions]

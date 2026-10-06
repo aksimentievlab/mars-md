@@ -6,7 +6,7 @@ cmake_minimum_required(VERSION 3.20)
 include(CTest)
 enable_testing()
 set(LIB_SOURCES "")
-# Single unified test binary using Catch2 amalgamated
+
 add_executable(mars_unit_tests
     ${CMAKE_SOURCE_DIR}/extern/Catch2/extras/catch_amalgamated.cpp
     ${CMAKE_CURRENT_LIST_DIR}/Backend/backend_buffer_tests.cpp
