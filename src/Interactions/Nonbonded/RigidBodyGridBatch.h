@@ -24,7 +24,7 @@ struct RBGridWork {
 	int u_grid_id;
 	int rb_i;
 	int rb_j;
-	int scheme;
+	InterpolationOrder scheme;
 	idx_t num_blocks;
 	idx_t block_offset;
 };
@@ -46,7 +46,7 @@ struct RBGridCullKernel {
 	float cutoff_squared;
 	idx_t step;
 	idx_t threads_per_block;
-	int scheme;
+	InterpolationOrder scheme;
 
 	RBGridWork* __restrict__ work_out;
 	unsigned int* __restrict__ work_count; // atomic counter, caller resets to 0 before launch

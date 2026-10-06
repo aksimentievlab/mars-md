@@ -99,7 +99,7 @@ TEST_CASE("RBParticleGridBatch: single particle sampling a single RB's potential
 									scales.data(),
 									/*num_candidates=*/1,
 									grid_views.data(),
-									/*scheme=*/1,
+									InterpolationOrder::Cubic,
 									work.data()};
 	KernelConfig build_config = KernelConfig::for_1d(1, res);
 	build_config.sync = true;

@@ -163,7 +163,7 @@ TEST_CASE("IntegratorTest", "[free][bd]") {
 							 step,
 							 /*grid_configs=*/nullptr,
 							 /*electric_field=*/Vector3{0.0, 0.0, 0.0},
-							 /*interpolation_scheme=*/1)
+							 InterpolationOrder::Cubic)
 				.wait();
 		}
 

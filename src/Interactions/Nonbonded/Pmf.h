@@ -8,8 +8,8 @@ namespace MARS {
 namespace pmf_detail {
 
 HOST DEVICE inline GridSample<mars_real>
-sample_pmf_grid(const BaseGridView<mars_real>& grid, const Vector3& pos, int scheme) {
-	if (scheme == 0) {
+sample_pmf_grid(const BaseGridView<mars_real>& grid, const Vector3& pos, InterpolationOrder scheme) {
+	if (scheme == InterpolationOrder::Linear) {
 		return sample_grid_linear(grid.data,
 								  pos,
 								  grid.origin,
@@ -28,8 +28,10 @@ sample_pmf_grid(const BaseGridView<mars_real>& grid, const Vector3& pos, int sch
 }
 
 HOST DEVICE inline float
-sample_force_grid_value(const BaseGridView<mars_real>& grid, const Vector3& pos, int scheme) {
-	if (scheme == 0) {
+sample_force_grid_value(const BaseGridView<mars_real>& grid,
+						const Vector3& pos,
+						InterpolationOrder scheme) {
+	if (scheme == InterpolationOrder::Linear) {
 		return interpolate_grid_point(grid.data,
 									  pos,
 									  grid.origin,
@@ -60,7 +62,7 @@ sample_force_grid_value(const BaseGridView<mars_real>& grid, const Vector3& pos,
  * @param types: particle type view
  * @param grid_configs: grid configurations
  * @param electric_field: electric field
- * @param scheme: 0 = linear interpolation, 1 = cubic (legacy: !scheme vs scheme)
+ * @param scheme: interpolation order (Linear or Cubic)
  * @param get_energy: whether to get the energy
  */
 HOST DEVICE inline Vector3
@@ -69,7 +71,7 @@ compute_position_dependent_force(const Vector3& pos,
 								 const ParticleTypeView types,
 								 const BaseGridView<mars_real>* grid_configs,
 								 const Vector3& electric_field,
-								 int scheme,
+								 InterpolationOrder scheme,
 								 bool get_energy = false) {
 	const float charge = types.charge[type_id];
 	Vector3 force(charge * electric_field.x, charge * electric_field.y, charge * electric_field.z);
@@ -125,7 +127,7 @@ compute_position_dependent_force(const Vector3& pos,
 
 struct ComputePMFKernel {
 	Vector3 electric_field{0.0f, 0.0f, 0.0f};
-	int scheme = 0;
+	InterpolationOrder scheme = InterpolationOrder::Linear;
 	bool get_energy = false;
 
 	KERNEL_FUNC void operator()(size_t i,

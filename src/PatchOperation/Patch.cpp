@@ -51,7 +51,7 @@ Event Patch::calculate_nonbonded_forces(const NonBondedInteractions& interaction
 										size_t step,
 										size_t rebuild_period,
 										const Vector3& electric_field,
-										int interpolation_scheme,
+										InterpolationOrder interpolation_scheme,
 										bool compute_energy) {
 	particles_.clear_forces();
 
@@ -84,7 +84,7 @@ Event Patch::calculate_nonbonded_forces(const NonBondedInteractions& interaction
 
 	// Rebuild the neighbor list every rebuild_period steps
 	const bool at_period = (rebuild_period == 0 || (step - 1) % rebuild_period == 0);
-	bool rebuild = at_period;
+	bool rebuild = at_period || !pairlist_built_; // first call may be off-period (firstStep)
 #ifdef ENABLE_ZORDER_REORDER
 	// A reorder invalidates the old-order pairlist; force a full rebuild and skip
 	// the displacement shortcut (the sorter's reference positions are now stale).

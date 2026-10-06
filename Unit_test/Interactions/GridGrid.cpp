@@ -34,6 +34,8 @@ namespace {
 constexpr idx_t N = 8;
 constexpr float DX = 1.0f;
 constexpr float C = 3.0f; // bowl/voxel center index
+constexpr InterpolationOrder LINEAR = InterpolationOrder::Linear;
+constexpr InterpolationOrder CUBIC = InterpolationOrder::Cubic;
 
 BaseGrid<float> make_rho() {
 	BaseGrid<float> g(Matrix3(DX), Vector3(0.0f), N, N, N);
@@ -83,7 +85,7 @@ Totals host_grid_grid_totals(const BaseGridView<float>& rho,
 							 const Matrix3& basis_rho,
 							 const Matrix3& basis_u_inv,
 							 const Vector3& origin_offset,
-							 int scheme) {
+							 InterpolationOrder scheme) {
 	Totals t{Vector3(0.0f), Vector3(0.0f)};
 	for (idx_t r_id = 0; r_id < rho.size(); ++r_id) {
 		Vector3 fe, tq;
@@ -109,7 +111,7 @@ Totals evaluate(const BaseGrid<float>& rho_grid,
 				const Matrix3& R1,
 				const Vector3& P2,
 				const Matrix3& R2,
-				int scheme) {
+				InterpolationOrder scheme) {
 	const BaseGridView<float> rho = host_view(rho_grid);
 	const BaseGridView<float> u = host_view(u_grid);
 	// grid_basis = DX*Identity here, and a rotation composed with a uniform
@@ -145,11 +147,11 @@ TEST_CASE("Grid-grid force matches finite-difference energy gradient", "[gridgri
 	const Vector3 P2(-0.3f, -0.2f, -0.15f);
 	const Matrix3 I(1.0f);
 
-	const Totals at_p0 = evaluate(rho_grid, u_grid, Vector3(0.0f), I, P2, I, 1);
+	const Totals at_p0 = evaluate(rho_grid, u_grid, Vector3(0.0f), I, P2, I, CUBIC);
 
 	const float eps = 1e-3f;
-	const Totals at_plus = evaluate(rho_grid, u_grid, Vector3(eps, 0.0f, 0.0f), I, P2, I, 1);
-	const Totals at_minus = evaluate(rho_grid, u_grid, Vector3(-eps, 0.0f, 0.0f), I, P2, I, 1);
+	const Totals at_plus = evaluate(rho_grid, u_grid, Vector3(eps, 0.0f, 0.0f), I, P2, I, CUBIC);
+	const Totals at_minus = evaluate(rho_grid, u_grid, Vector3(-eps, 0.0f, 0.0f), I, P2, I, CUBIC);
 
 	const float fd_force_x = -(at_plus.force_energy.t - at_minus.force_energy.t) / (2.0f * eps);
 
@@ -174,14 +176,50 @@ TEST_CASE("Grid-grid torque matches finite-difference energy gradient over rotat
 	const Vector3 P2(-0.3f, -0.2f, -0.15f);
 	const Matrix3 I(1.0f);
 
-	const Totals at_p0 = evaluate(rho_grid, u_grid, Vector3(0.0f), I, P2, I, 1);
+	const Totals at_p0 = evaluate(rho_grid, u_grid, Vector3(0.0f), I, P2, I, CUBIC);
 
 	const float delta = 1e-3f;
-	const Totals at_plus = evaluate(rho_grid, u_grid, Vector3(0.0f), rotate_z(delta), P2, I, 1);
-	const Totals at_minus = evaluate(rho_grid, u_grid, Vector3(0.0f), rotate_z(-delta), P2, I, 1);
+	const Totals at_plus = evaluate(rho_grid, u_grid, Vector3(0.0f), rotate_z(delta), P2, I, CUBIC);
+	const Totals at_minus = evaluate(rho_grid, u_grid, Vector3(0.0f), rotate_z(-delta), P2, I, CUBIC);
 
 	const float fd_torque_z = -(at_plus.force_energy.t - at_minus.force_energy.t) / (2.0f * delta);
 
+	REQUIRE(at_p0.torque.z == Approx(fd_torque_z).epsilon(0.02f));
+}
+
+TEST_CASE("Grid-grid linear force/torque match finite-difference energy gradient",
+		  "[gridgrid][force][gradient]") {
+	// Same bowl, linear scheme. The sample (3.3, 3.2, 3.15) sits in the cell whose
+	// lower node is the bowl's center, so a node-centered stencil would give zero
+	// while the trilinear energy has slope u(4)-u(3) = -1 on each axis.
+	BaseGrid<float> rho_grid = make_rho();
+	BaseGrid<float> u_grid = make_u();
+	const Vector3 P2(-0.3f, -0.2f, -0.15f);
+	const Matrix3 I(1.0f);
+
+	const Totals at_p0 = evaluate(rho_grid, u_grid, Vector3(0.0f), I, P2, I, LINEAR);
+
+	const float eps = 1e-3f;
+	const Vector3 axes[] = {Vector3(eps, 0, 0), Vector3(0, eps, 0), Vector3(0, 0, eps)};
+	float fd[3];
+	for (int a = 0; a < 3; ++a) {
+		const Totals plus = evaluate(rho_grid, u_grid, axes[a], I, P2, I, LINEAR);
+		const Totals minus = evaluate(rho_grid, u_grid, -axes[a], I, P2, I, LINEAR);
+		fd[a] = -(plus.force_energy.t - minus.force_energy.t) / (2.0f * eps);
+	}
+	REQUIRE(at_p0.force_energy.x == Approx(fd[0]).epsilon(0.01f));
+	REQUIRE(at_p0.force_energy.y == Approx(fd[1]).epsilon(0.01f));
+	REQUIRE(at_p0.force_energy.z == Approx(fd[2]).epsilon(0.01f));
+
+	// Exact: separable bowl -> trilinear slope is -1 per axis, force = +1.
+	REQUIRE(at_p0.force_energy.x == Approx(1.0f).epsilon(1e-4f));
+	REQUIRE(at_p0.force_energy.y == Approx(1.0f).epsilon(1e-4f));
+	REQUIRE(at_p0.force_energy.z == Approx(1.0f).epsilon(1e-4f));
+
+	const Totals rot_plus = evaluate(rho_grid, u_grid, Vector3(0.0f), rotate_z(eps), P2, I, LINEAR);
+	const Totals rot_minus =
+		evaluate(rho_grid, u_grid, Vector3(0.0f), rotate_z(-eps), P2, I, LINEAR);
+	const float fd_torque_z = -(rot_plus.force_energy.t - rot_minus.force_energy.t) / (2.0f * eps);
 	REQUIRE(at_p0.torque.z == Approx(fd_torque_z).epsilon(0.02f));
 }
 
@@ -197,7 +235,7 @@ TEST_CASE("Grid-grid energy is symmetric under swapping which grid is rho vs u",
 	// rho/u swapped and the relative pose negated - both describe the same
 	// physical configuration (a single mass point in the bowl's field) so
 	// the total interaction energy should match.
-	const Totals forward = evaluate(rho_grid, u_grid, Vector3(0.0f), I, P2, I, 1);
+	const Totals forward = evaluate(rho_grid, u_grid, Vector3(0.0f), I, P2, I, CUBIC);
 
 	// Swapped: now u_grid plays rho's role (density) and rho_grid plays u's
 	// role (potential) - but rho_grid is all zero except one voxel, so this
@@ -207,7 +245,7 @@ TEST_CASE("Grid-grid energy is symmetric under swapping which grid is rho vs u",
 	// (translation invariance of a two-body interaction), which is the
 	// meaningful symmetry to test here without needing a second density grid.
 	const Vector3 shift(5.0f, -3.0f, 2.0f);
-	const Totals shifted = evaluate(rho_grid, u_grid, shift, I, P2 + shift, I, 1);
+	const Totals shifted = evaluate(rho_grid, u_grid, shift, I, P2 + shift, I, CUBIC);
 
 	REQUIRE(forward.force_energy.t == Approx(shifted.force_energy.t).epsilon(1e-4f));
 	REQUIRE(forward.force_energy.x == Approx(shifted.force_energy.x).epsilon(1e-4f));
@@ -228,7 +266,11 @@ TEST_CASE("Grid-grid device kernel matches host loop", "[gridgrid][device]") {
 	const Vector3 P2(-0.3f, -0.2f, -0.15f);
 	const Matrix3 I(1.0f);
 
-	const Totals host_totals = evaluate(rho_grid, u_grid, Vector3(0.0f), I, P2, I, 1);
+	// Both device samplers must agree with the host loop.
+	const InterpolationOrder scheme = GENERATE(LINEAR, CUBIC);
+	INFO("scheme=" << static_cast<int>(scheme));
+
+	const Totals host_totals = evaluate(rho_grid, u_grid, Vector3(0.0f), I, P2, I, scheme);
 
 	BaseGridView<float> rho_view = rho_grid.get_device_view(res);
 	BaseGridView<float> u_view = u_grid.get_device_view(res);
@@ -243,7 +285,7 @@ TEST_CASE("Grid-grid device kernel matches host loop", "[gridgrid][device]") {
 	kernel.basis_rho = DX * I;
 	kernel.basis_u_inv = (DX * I).inverse();
 	kernel.origin_offset = Vector3(0.0f) - P2;
-	kernel.scheme = 1;
+	kernel.scheme = scheme;
 	kernel.block_size = 128;
 
 	KernelConfig config = KernelConfig::for_1d(rho_grid.size(), res);

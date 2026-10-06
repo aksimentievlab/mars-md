@@ -578,9 +578,9 @@ HOST DEVICE GridSample<T> sample_grid(CONSTANT_PTR(T) __restrict__ grid_values,
 									  const Matrix3_t<T>& basis_inv,
 									  const Vector3_t<idx_t>& dimensions,
 									  int boundary_condition,
-									  int scheme) {
+									  InterpolationOrder scheme) {
 	if constexpr (F == GridFormat::Dense) {
-		if (scheme == static_cast<int>(InterpolationOrder::Linear)) {
+		if (scheme == InterpolationOrder::Linear) {
 			return sample_grid_linear(grid_values,
 									  world_pos,
 									  origin,

@@ -105,7 +105,7 @@ TEST_CASE("BAOAB holds equipartition on a harmonic oscillator",
 										 base_ctr,
 										 nullptr,
 										 Vector3(0.0f),
-										 0);
+										 InterpolationOrder::Linear);
 			for (int i = 0; i < N; ++i)
 				last(static_cast<idx_t>(i));
 		}
@@ -122,7 +122,7 @@ TEST_CASE("BAOAB holds equipartition on a harmonic oscillator",
 								   base_ctr,
 								   nullptr,
 								   Vector3(0.0f),
-								   0);
+								   InterpolationOrder::Linear);
 		for (int i = 0; i < N; ++i)
 			step(static_cast<idx_t>(i));
 		deferred_pending = true;

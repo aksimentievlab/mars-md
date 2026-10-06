@@ -454,7 +454,7 @@ PatchManager::compute_nonbonded_forces(const NonBondedInteractions& interactions
 									   size_t step,
 									   size_t rebuild_period,
 									   const Vector3& electric_field,
-									   int interpolation_scheme) {
+									   InterpolationOrder interpolation_scheme) {
 	std::vector<Event> events;
 	events.reserve(patches_.size());
 

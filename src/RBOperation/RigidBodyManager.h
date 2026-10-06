@@ -262,13 +262,13 @@ class RigidBodyManager {
 	 * @param cutoff RB-RB distance cutoff for the broad-phase cull (not
 	 *        applied to type-PMF terms, which always evaluate - an external
 	 *        field has no "distance" to the body it acts on).
-	 * @param scheme Interpolation order (1=Linear, 3=Cubic; InterpolationOrder).
+	 * @param scheme Interpolation order (legacy default: Linear).
 	 */
 	Event compute_grid_grid_forces(const GridManager& grid_manager,
 								   size_t grid_resource_idx,
 								   size_t step,
 								   float cutoff,
-								   int scheme = 1) {
+								   InterpolationOrder scheme = InterpolationOrder::Linear) {
 		ensure_initialized();
 		if (!grid_grid_dispatch_ready_) {
 			throw Exception(ExceptionType::RuntimeError,
@@ -423,12 +423,12 @@ class RigidBodyManager {
 	 *        kernel atomically accumulates into its ForceEnergy buffer, so it
 	 *        must not be cleared or read again until the returned Event
 	 *        completes (see todo.md Phase 4.2's correctness constraint).
-	 * @param scheme Interpolation order (1=Linear, 3=Cubic; InterpolationOrder).
+	 * @param scheme Interpolation order (legacy default: Linear).
 	 */
 	Event compute_particle_rb_forces(const GridManager& grid_manager,
 									 size_t grid_resource_idx,
 									 ParticleView particles,
-									 int scheme = 1) {
+									 InterpolationOrder scheme = InterpolationOrder::Linear) {
 		ensure_initialized();
 		if (!particle_grid_dispatch_ready_) {
 			throw Exception(ExceptionType::RuntimeError,

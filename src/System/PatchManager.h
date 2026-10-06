@@ -273,7 +273,7 @@ class PatchManager {
 							 size_t step,
 							 size_t rebuild_period,
 							 const Vector3& electric_field = Vector3{0.0f, 0.0f, 0.0f},
-							 int interpolation_scheme = 0);
+							 InterpolationOrder interpolation_scheme = InterpolationOrder::Linear);
 
 	/**
 	 * @brief Compute bonded forces across all patches

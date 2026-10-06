@@ -21,7 +21,7 @@ struct BDIntegrate {
 	size_t current_step;
 	const BaseGridView<mars_real>* grid_configs; ///< PMF/force grids (nullptr = none); fused per v1
 	Vector3 electric_field;						 ///< Uniform global E field applied here
-	int interpolation_scheme;					 ///< 0=linear, 1=cubic
+	InterpolationOrder interpolation_scheme;	 ///< Linear or Cubic
 	constexpr static uint32_t rng_stream = 0x5324120u; // Arbitrary stream ID for Philox RNG
 
 	// Constructor for proper initialization
@@ -36,7 +36,7 @@ struct BDIntegrate {
 				uint32_t ctr,
 				const BaseGridView<mars_real>* grids,
 				const Vector3& efield,
-				int scheme)
+				InterpolationOrder scheme)
 		: particle_view(pv), particle_types(pt), sim_box(box), timestep(dt), kT(temp),
 		  num_particles(n), base_seed(seed), base_ctr(ctr), current_step(current_step),
 		  grid_configs(grids), electric_field(efield), interpolation_scheme(scheme) {}

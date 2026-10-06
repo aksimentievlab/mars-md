@@ -45,7 +45,7 @@ HOST DEVICE inline void grid_grid_voxel_force_torque(const BaseGridView<mars_rea
 													 const Matrix3& basis_u_inv,
 													 const Vector3& origin_offset,
 													 idx_t r_id,
-													 int scheme,
+													 InterpolationOrder scheme,
 													 Vector3& force_energy_out,
 													 Vector3& torque_out) {
 	const idx_t nz = rho.nz();
@@ -58,7 +58,8 @@ HOST DEVICE inline void grid_grid_voxel_force_torque(const BaseGridView<mars_rea
 	const Vector3 u_local = basis_u_inv.transform(r_pos + origin_offset);
 
 	const Matrix3 identity(1.0f);
-	const GridSample<mars_real> sample = (scheme == 0) ? sample_grid_linear(u.data,
+	const GridSample<mars_real> sample = (scheme == InterpolationOrder::Linear)
+											 ? sample_grid_linear(u.data,
 																		u_local,
 																		Vector3(0.0f),
 																		identity,
@@ -102,7 +103,7 @@ struct ComputeGridGridForceKernel {
 	Matrix3 basis_rho;
 	Matrix3 basis_u_inv;
 	Vector3 origin_offset; // origin_rho_minus_origin_u, lab frame
-	int scheme = 1;
+	InterpolationOrder scheme = InterpolationOrder::Linear;
 	idx_t block_size = 128; // legacy used 128
 
 	template<typename WorkItemT>

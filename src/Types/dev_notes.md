@@ -135,3 +135,34 @@ GridGridKernels.h (scheme 0), host BaseGrid::compute_gradient. Cubic unaffected.
 
 Follow-up (perf only): `sample_grid_linear` fetches the 8 taps twice
 (value + gradient); could merge like the NanoVDB version.
+
+Verified 2026-10-06: mars_unit_tests pass in build/tbgl-cuda-release (incl. new off-grid FD + flat-cell gradient tests).
+
+### Linear-gradient test coverage + scheme-convention mismatch (2026-10-06)
+
+Added: Pmf.cpp off-grid FD test (curved field, linear, all 3 BCs, edge cells);
+GridGrid.cpp linear FD force/torque test; GridGrid device test now GENERATEs
+scheme {0,1}. RB batch tests (RigidBody*GridBatch.cpp) still cubic-only.
+
+Scheme convention is split:
+- Pmf.h / BD / BAOAB / GridGridKernels / RigidBodyParticleGridBatch: 0=linear, else cubic.
+- InterpolationOrder enum (GridTerm.h): Linear=1, Cubic=3; sample_grid<Dense> uses it
+  (no callers). RigidBodyManager docs say "1=Linear, 3=Cubic", default scheme=1.
+- SimManager never passes scheme to RB calls -> RB grid-grid / particle-RB always
+  run cubic in production. So the linear-gradient bug hit PMF only, not RB paths.
+- Passing InterpolationOrder::Linear (1) to any 0/1 kernel silently selects cubic.
+
+Resolved (2026-10-06): RB grid paths default to linear (scheme=0), matching v1
+ComputeGridGrid.cu (interpolateForceDLinearly). Changed: ComputeGridGridForceKernel
+::scheme, RigidBodyManager::compute_grid_grid_forces / compute_particle_rb_forces
+defaults 1 -> 0, docs now "0 = linear, 1 = cubic". RigidBodyManager.cpp tests pass
+scheme=1 explicitly (their analytic values are cubic-exact). sample_grid<Dense>
+still uses InterpolationOrder::Linear (=1) as linear; no callers, left as-is.
+
+Scheme is now typed (2026-10-06): every `int scheme` / `int interpolation_scheme`
+(Pmf.h, BD.h, BAOAB.h, Integrator.h, Patch, PatchManager, GridGridKernels,
+RigidBody*GridBatch, RigidBodyManager, sample_grid<>) is `InterpolationOrder`,
+default `Linear`. The 0/1 vs 1/3 split is gone; int literals no longer compile.
+Tests that passed `1` (meaning cubic) now pass `InterpolationOrder::Cubic`.
+
+Verified 2026-10-06: full build + mars_unit_tests pass in build/tbgl-icpx-sycl-release after InterpolationOrder refactor.

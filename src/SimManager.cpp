@@ -235,11 +235,17 @@ void SimManager::run() {
 	LOGINFO("SimManager: Starting simulation loop");
 
 	const size_t num_steps = sys_.get_num_steps();
+	const size_t first_step = sys_.get_first_step();
+	const size_t last_step = first_step + num_steps;
 	const size_t output_period = static_cast<size_t>(sys_.get_output_period());
 	const size_t energy_output_period = static_cast<size_t>(sys_.get_energy_output_period());
 	const auto& resources = sys_.get_resources();
 
-	LOGINFO("SimManager: Running {} steps with {} resources", num_steps, resources.size());
+	LOGINFO("SimManager: Running {} steps (absolute steps {}..{}) with {} resources",
+			num_steps,
+			first_step + 1,
+			last_step,
+			resources.size());
 
 	const size_t progress_period = energy_output_period > 0 ? energy_output_period : 1000;
 	const int num_replicas = 1;
@@ -258,10 +264,10 @@ void SimManager::run() {
 	const float dt = sys_.get_timestep();
 
 	if (split_dlm) {
-		execute_force_calculation(0);
+		execute_force_calculation(first_step);
 	}
 
-	for (size_t step = 1; step <= num_steps; ++step) {
+	for (size_t step = first_step + 1; step <= last_step; ++step) {
 		if (split_dlm) {
 			rigid_body_manager_->integrate_drift(dt, sim_box).wait();
 			sys_state_.invalidate_rigid_bodies();
@@ -298,8 +304,9 @@ void SimManager::run() {
 	const float elapsed = wkf_timer_time(timer0_.timer);
 
 	report_performance(elapsed, num_steps);
-	settle_momenta_for_output(num_steps);
+	settle_momenta_for_output(last_step);
 	write_final_restart();
+	LOGINFO("SimManager: Last step {}; continue with 'firstStep {}'", last_step, last_step);
 
 	if (imd_on_ && clientsock_) {
 	}
@@ -404,7 +411,7 @@ void SimManager::execute_force_calculation(size_t step) {
 			step,
 			static_cast<size_t>(sys_.get_neighbor_list_rebuild_period()),
 			Vector3{0.0, 0.0, 0.0},
-			0,
+			InterpolationOrder::Linear,
 			compute_energy);
 
 		Event bonded_evt = patch->calculate_bonded_forces(sys_state_.get_bonded_interactions(),
@@ -455,7 +462,7 @@ void SimManager::execute_force_calculation(size_t step) {
 		}
 	}
 
-	if (step == 1) {
+	if (step == sys_.get_first_step() + 1) {
 		LOGINFO("SimManager: PMF/grid and pairwise nonbonded force kernels launched");
 	}
 }
@@ -862,8 +869,8 @@ void SimManager::report_progress(size_t current_step, size_t total_steps, size_t
 	const float interval_elapsed = static_cast<float>(wkf_timer_time(timerP_.timer));
 	wkf_timer_start(timerP_.timer);
 
-	const float percent =
-		(100.0f * static_cast<float>(current_step)) / static_cast<float>(total_steps);
+	const float percent = (100.0f * static_cast<float>(current_step - sys_.get_first_step())) /
+						  static_cast<float>(total_steps);
 	const float ms_per_step = interval_elapsed * 1000.0f / static_cast<float>(report_period);
 	const int num_replicas = 1; // TODO: expose replicas from SimSystem config
 	const float ns_per_day =

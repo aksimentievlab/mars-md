@@ -230,7 +230,7 @@ class Patch {
 									 size_t step,
 									 size_t rebuild_period,
 									 const Vector3& electric_field = Vector3{0.0f, 0.0f, 0.0f},
-									 int interpolation_scheme = 0,
+									 InterpolationOrder interpolation_scheme = InterpolationOrder::Linear,
 									 bool compute_energy = false);
 
 	/**
@@ -633,7 +633,7 @@ class Patch {
 	//================================================================================
 	const BaseGridView<mars_real>* pmf_grid_configs_{nullptr}; ///< PMF/force grids, nullptr = none
 	Vector3 electric_field_{0.0f, 0.0f, 0.0f};				   ///< Uniform global E field
-	int interpolation_scheme_{0};							   ///< 0=linear, 1=cubic
+	InterpolationOrder interpolation_scheme_{InterpolationOrder::Linear};
 
 	DeviceBondedInteractions device_bonded_;
 	bool bonded_device_data_prepared_{false};

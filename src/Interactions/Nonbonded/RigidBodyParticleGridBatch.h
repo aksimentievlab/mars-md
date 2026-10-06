@@ -23,7 +23,7 @@ struct RBParticleGridWork {
 	float scale;		// GridTerm::scale for this candidate's grid term
 	int grid_id;
 	int rb_id;
-	int scheme;
+	InterpolationOrder scheme;
 };
 
 /**
@@ -49,7 +49,7 @@ struct RBParticleGridBuildKernel {
 	const float* __restrict__ candidate_scale;
 	idx_t num_candidates;
 	const BaseGridView<mars_real>* __restrict__ grid_views;
-	int scheme;
+	InterpolationOrder scheme;
 
 	RBParticleGridWork* __restrict__ work_out;
 
@@ -122,7 +122,7 @@ struct RBParticleGridForceKernel {
 			const Vector3 pos = particles.pos[p];
 			const Vector3 local = w.basis_inv.transform(pos - w.origin_lab);
 			const Matrix3 identity(1.0f);
-			const GridSample<mars_real> sample = (w.scheme == 0)
+			const GridSample<mars_real> sample = (w.scheme == InterpolationOrder::Linear)
 													 ? sample_grid_linear(grid.data,
 																		  local,
 																		  Vector3(0.0f),

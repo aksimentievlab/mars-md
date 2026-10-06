@@ -244,7 +244,8 @@ TEST_CASE("RigidBodyManager: prepare_grid_grid_dispatch + compute_grid_grid_forc
 	mgr.compute_grid_grid_forces(grid_manager,
 								 /*grid_resource_idx=*/0,
 								 /*step=*/0,
-								 /*cutoff=*/1000.0f)
+								 /*cutoff=*/1000.0f,
+								 InterpolationOrder::Cubic) // reproduces the bowl exactly
 		.wait();
 
 	REQUIRE_FALSE(mgr.grid_grid_worklist_overflowed());
@@ -325,7 +326,11 @@ TEST_CASE("RigidBodyManager: prepare_particle_grid_dispatch + compute_particle_r
 	particles.clear_forces();
 
 	mgr.prepare_particle_grid_dispatch(types, /*num_particles=*/1);
-	mgr.compute_particle_rb_forces(grid_manager, /*grid_resource_idx=*/0, particles.view()).wait();
+	mgr.compute_particle_rb_forces(grid_manager,
+								   /*grid_resource_idx=*/0,
+								   particles.view(),
+								   InterpolationOrder::Cubic) // reproduces the bowl exactly
+		.wait();
 
 	HostParticleData particle_result;
 	particles.copy_to_host(particle_result, 1, /*need_energy=*/true);

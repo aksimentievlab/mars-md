@@ -35,7 +35,7 @@ Event launch_BD(const Resource& resource,
 				uint32_t base_ctr,
 				const BaseGridView<mars_real>* grid_configs,
 				const Vector3& electric_field,
-				int interpolation_scheme) {
+				InterpolationOrder interpolation_scheme) {
 	KernelConfig config = KernelConfig::for_1d(num_particles, resource);
 	BDIntegrate<T> bd_integrate(particle_view,
 								particle_types,
@@ -66,7 +66,7 @@ Event launch_BAOAB(const Resource& resource,
 				   uint32_t base_ctr,
 				   const BaseGridView<mars_real>* grid_configs,
 				   const Vector3& electric_field,
-				   int interpolation_scheme) {
+				   InterpolationOrder interpolation_scheme) {
 	KernelConfig config = KernelConfig::for_1d(num_particles, resource);
 	BAOABIntegrate<T> baoab_integrate(particle_view,
 									  particle_types,
@@ -106,7 +106,7 @@ Event launch_BAOAB_LastUpdate(const Resource& resource,
 							  uint32_t base_ctr,
 							  const BaseGridView<mars_real>* grid_configs,
 							  const Vector3& electric_field,
-							  int interpolation_scheme) {
+							  InterpolationOrder interpolation_scheme) {
 	KernelConfig config = KernelConfig::for_1d(num_particles, resource);
 	BAOAB_LastUpdate<T> baoab_last(particle_view,
 								   particle_types,
@@ -130,7 +130,7 @@ inline Event launch_PMF(const Resource& resource,
 				 idx_t num_particles,
 				 const BaseGridView<mars_real>* grid_configs,
 				 const Vector3& electric_field,
-				 int interpolation_scheme) {
+				 InterpolationOrder interpolation_scheme) {
 	const KernelConfig config = KernelConfig::for_1d(num_particles, resource);
 
 	const ComputePMFKernel kernel{electric_field, interpolation_scheme};

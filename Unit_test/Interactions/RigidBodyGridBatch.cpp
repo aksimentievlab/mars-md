@@ -93,7 +93,7 @@ TEST_CASE("RBGridBatch: batched kernel matches Phase 1's per-pair kernel for the
 	ref_kernel.basis_rho = DX * Matrix3(1.0f);
 	ref_kernel.basis_u_inv = (DX * Matrix3(1.0f)).inverse();
 	ref_kernel.origin_offset = P0 - P1;
-	ref_kernel.scheme = 1;
+	ref_kernel.scheme = InterpolationOrder::Cubic;
 	ref_kernel.block_size = 128;
 
 	KernelConfig ref_config = KernelConfig::for_1d(rho_grid.size(), res);
@@ -162,7 +162,7 @@ TEST_CASE("RBGridBatch: batched kernel matches Phase 1's per-pair kernel for the
 						  1000.0f * 1000.0f, // cutoff: generous, both bodies must pass
 						  /*step=*/0,
 						  threads_per_block,
-						  /*scheme=*/1,
+						  InterpolationOrder::Cubic,
 						  work.data(),
 						  work_count.data(),
 						  /*capacity=*/1,
@@ -300,7 +300,7 @@ TEST_CASE("RBGridBatch: cull kernel sets the overflow flag on an undersized work
 						  1000.0f * 1000.0f,
 						  /*step=*/0,
 						  /*threads_per_block=*/128,
-						  /*scheme=*/1,
+						  InterpolationOrder::Cubic,
 						  work.data(),
 						  work_count.data(),
 						  /*capacity=*/0,

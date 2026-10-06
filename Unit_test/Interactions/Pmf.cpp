@@ -100,7 +100,7 @@ GridTerm term(int grid_id, float scale) {
 	return t;
 }
 
-constexpr int SCHEME_LINEAR = 0;
+constexpr InterpolationOrder SCHEME_LINEAR = InterpolationOrder::Linear;
 
 } // namespace
 
@@ -214,6 +214,63 @@ TEST_CASE("PMF grid table: per-type offset/count ranges", "[pmf][grids]") {
 	}
 }
 
+TEST_CASE("PMF linear force is -dE/dx of the sampled energy off-grid", "[pmf][grids][gradient]") {
+	// Curved, non-separable field: any stencil other than the trilinear derivative
+	// disagrees with the energy slope here (a ramp would hide it).
+	BaseGrid<float> g(Matrix3(DX), Vector3(0.0f), N, N, N);
+	for (idx_t ix = 0; ix < N; ++ix)
+		for (idx_t iy = 0; iy < N; ++iy)
+			for (idx_t iz = 0; iz < N; ++iz) {
+				const float x = static_cast<float>(ix) - 3.0f;
+				g[iz + iy * N + ix * N * N] = x * x - 0.5f * float(iy * iz) + 0.25f * float(ix * iy);
+			}
+	const std::vector<BaseGridView<float>> grids{host_view(g, 0)};
+
+	// Interior, first cell, and last cell (whose +1 tap is resolved by the BC).
+	const Vector3 probes[] = {Vector3(3.3f, 2.6f, 4.2f),
+							  Vector3(0.3f, 3.4f, 3.6f),
+							  Vector3(7.4f, 3.4f, 3.6f)};
+	const float h = 1e-2f; // keeps every probe +-h inside its cell
+	const float scale = 2.0f;
+
+	for (int bc : {0, 1, 2}) {
+		GridTerm t = term(0, scale);
+		t.boundary_condition = bc;
+		HostTypes types;
+		const int type_id = types.add(0.0f, {t});
+		const ParticleTypeView view = types.view();
+
+		auto energy = [&](const Vector3& p) {
+			return compute_position_dependent_force(p,
+													type_id,
+													view,
+													grids.data(),
+													Vector3{0.0f, 0.0f, 0.0f},
+													SCHEME_LINEAR,
+													/*get_energy=*/true)
+				.t;
+		};
+
+		for (const Vector3& p : probes) {
+			const Vector3 f = compute_position_dependent_force(p,
+															   type_id,
+															   view,
+															   grids.data(),
+															   Vector3{0.0f, 0.0f, 0.0f},
+															   SCHEME_LINEAR);
+			const Vector3 ex(h, 0.0f, 0.0f), ey(0.0f, h, 0.0f), ez(0.0f, 0.0f, h);
+			const float fd_x = -(energy(p + ex) - energy(p - ex)) / (2.0f * h);
+			const float fd_y = -(energy(p + ey) - energy(p - ey)) / (2.0f * h);
+			const float fd_z = -(energy(p + ez) - energy(p - ez)) / (2.0f * h);
+
+			INFO("bc=" << bc << " probe=(" << p.x << "," << p.y << "," << p.z << ")");
+			CHECK(f.x == Approx(fd_x).epsilon(1e-3f).margin(2e-3f));
+			CHECK(f.y == Approx(fd_y).epsilon(1e-3f).margin(2e-3f));
+			CHECK(f.z == Approx(fd_z).epsilon(1e-3f).margin(2e-3f));
+		}
+	}
+}
+
 TEST_CASE("PMF grid table: cubic scheme walks the same term range", "[pmf][grids]") {
 	// Catmull-Rom reproduces a linear field exactly too, so the same expected
 	// values hold - this checks the scheme flag doesn't bypass the loop.
@@ -229,7 +286,7 @@ TEST_CASE("PMF grid table: cubic scheme walks the same term range", "[pmf][grids
 													   types.view(),
 													   grids.data(),
 													   Vector3{0.0f, 0.0f, 0.0f},
-													   /*scheme=*/1);
+													   InterpolationOrder::Cubic);
 	CHECK(f.x == Approx(-2.0f));
 	CHECK(f.y == Approx(3.0f));
 }

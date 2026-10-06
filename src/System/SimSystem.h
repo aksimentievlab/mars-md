@@ -84,6 +84,10 @@ class SimSystem {
 	void set_num_steps(int n) {
 		steps_.steps = n;
 	}
+	/// @brief Absolute step this run continues from (restart); loop runs first+1..first+steps.
+	void set_first_step(size_t step) {
+		first_step_ = step;
+	}
 
 	void set_salt_concentration(float salt_concentration) {
 		this->salt_concentration_ = salt_concentration;
@@ -278,6 +282,11 @@ class SimSystem {
 	 */
 	int get_num_steps() const {
 		return steps_.steps;
+	}
+
+	/// @brief Absolute step this run continues from (0 = fresh start).
+	size_t get_first_step() const {
+		return first_step_;
 	}
 
 	/**
@@ -675,6 +684,7 @@ class SimSystem {
 	int rb_update_period_{1};				// rigid body update period in steps
 
 	size_t global_seed_{214};
+	size_t first_step_{0};
 	std::string output_name{"out"};
 	OutputFormat output_format_{OutputFormat::DCD};
 

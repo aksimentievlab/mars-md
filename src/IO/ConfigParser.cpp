@@ -165,15 +165,18 @@ void ConfigParser::parse_parameters(const Reader& reader) {
 		sim_system_ref_->set_cutoff(Length(reader.parseValue<float>(key)));
 	}
 
-	// pairlistDistance is a skin/padding distance added to the interaction
-	// cutoff to get the actual neighbor-list (pairlist) cutoff. Always set
-	// pairlist_cutoff_ here (using a zero skin if unspecified) so it tracks
-	// the configured cutoff rather than leaving SimSystem's hardcoded default.
 	{
 		float pairlist_distance = 0.0f;
 		if (hasParameterVariant(reader, "pairlistDistance", "pairlist_distance")) {
 			std::string key = findParameterVariant(reader, "pairlistDistance", "pairlist_distance");
 			pairlist_distance = reader.parseValue<float>(key);
+		}
+		// pairlistDistance is the skin added to cutoff (0 = no skin).
+		if (pairlist_distance < 0.0f) {
+			throw Exception(ExceptionType::ValueError,
+							SourceLocation(),
+							"pairlistDistance (pairlist skin) must be >= 0, got {}",
+							pairlist_distance);
 		}
 		sim_system_ref_->set_pairlist_cutoff(
 			Length(static_cast<float>(sim_system_ref_->get_cutoff()) + pairlist_distance));
@@ -187,6 +190,18 @@ void ConfigParser::parse_parameters(const Reader& reader) {
 	if (hasParameterVariant(reader, "steps", "steps")) {
 		std::string key = findParameterVariant(reader, "steps", "steps");
 		sim_system_ref_->set_num_steps(reader.parseValue<int>(key));
+	}
+
+	if (hasParameterVariant(reader, "firstStep", "first_step")) {
+		std::string key = findParameterVariant(reader, "firstStep", "first_step");
+		const long long first_step = reader.parseValue<long long>(key);
+		if (first_step < 0) {
+			throw Exception(ExceptionType::ValueError,
+							SourceLocation(),
+							"firstStep must be >= 0, got {}",
+							first_step);
+		}
+		sim_system_ref_->set_first_step(static_cast<size_t>(first_step));
 	}
 
 	if (hasParameterVariant(reader, "decompPeriod", "pairlist_rebuild_period")) {

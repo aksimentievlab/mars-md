@@ -39,6 +39,7 @@ add_executable(mars_unit_tests
     ${CMAKE_CURRENT_LIST_DIR}/System/SinglePatchSimulation.cpp
     ${CMAKE_CURRENT_LIST_DIR}/System/BoltzmannMomentumInit.cpp
     ${CMAKE_CURRENT_LIST_DIR}/System/SinglePatchRigidBodySimulation.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/System/RestartContinuation.cpp
 )
 # Includes
 target_include_directories(mars_unit_tests PRIVATE

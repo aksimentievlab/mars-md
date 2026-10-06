@@ -231,3 +231,27 @@ strings -a <bundle.bin> | grep -oE "_ZTSZZN4MARS21launch_sycl_kernel_[123]dINS_[
 ```
 
 Anything in the first list but not the second will fail at launch.
+
+## firstStep + pairlist skin assertion (2026-10-06)
+
+Restart noise bug: Philox keys on absolute step; loop always started at 1 and
+seed defaults to 214, so every restarted segment replayed the previous segment's
+noise (same kicks at step k). Not float rounding: restart text uses to_chars
+(shortest round-trip), positions are bit-exact.
+
+`firstStep N` (.bd, alias first_step) -> SimSystem::first_step_. Loop runs absolute
+steps N+1..N+steps; noise, output/energy periods, RB update_period all keyed on
+absolute step. Final log prints the value for the next segment. Default 0 = old
+behavior.
+
+Patch::calculate_nonbonded_forces: rebuild = at_period || !pairlist_built_.
+Grid stays (step-1)%period; the forced first build covers an off-grid firstStep
+(e.g. firstStep 1500, period 1000 -> builds 1501, 2001, ...). Also covers split-DLM
+initial force call at step first_step (old step 0 hit size_t wrap in (step-1)).
+
+ConfigParser: pairlistDistance is the skin; must be >= 0 (0 = no skin, valid), negative -> ValueError.
+
+TODO: Python path (marsmd/bd: model default pairlist_distance=0.0, apply.py sets
+pairlist cutoff directly, no firstStep key) and ConfigParser nanobind dict path.
+
+Verified 2026-10-06: [restart] (Unit_test/System/RestartContinuation.cpp) and [gradient] pass in build/tbgl-icpx-sycl-release.
