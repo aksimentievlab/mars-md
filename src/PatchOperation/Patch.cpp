@@ -86,8 +86,6 @@ Event Patch::calculate_nonbonded_forces(const NonBondedInteractions& interaction
 	const bool at_period = (rebuild_period == 0 || (step - 1) % rebuild_period == 0);
 	bool rebuild = at_period || !pairlist_built_; // first call may be off-period (firstStep)
 #ifdef ENABLE_ZORDER_REORDER
-	// A reorder invalidates the old-order pairlist; force a full rebuild and skip
-	// the displacement shortcut (the sorter's reference positions are now stale).
 	const bool forced_rebuild = force_rebuild_;
 	force_rebuild_ = false;
 	rebuild = rebuild || forced_rebuild;

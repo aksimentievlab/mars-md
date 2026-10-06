@@ -142,18 +142,22 @@ struct ComputePMFKernel {
 
 		const int type_id = particles.type_id[idx];
 		const Vector3 pos = particles.pos[idx];
-
-		particles.ForceEnergy[idx] += compute_position_dependent_force(pos,
-																	   type_id,
-																	   types,
-																	   grid_configs,
-																	   electric_field,
-																	   scheme,
-																	   get_energy);
+		const Vector3 force = compute_position_dependent_force(pos,
+															 type_id,
+															 types,
+															 grid_configs,
+															 electric_field,
+															 scheme,
+															 get_energy);
+		particles.ForceEnergy[idx] += force;
+		if (get_energy){
+		particles.ForceEnergy[idx].t +=force.t;
+	}
 	}
 };
 
-} // namespace MARS
+} 
+
 #ifdef USE_CUDA
 #include "Backend/CUDA/KernelHelper.cuh"
 namespace MARS {
