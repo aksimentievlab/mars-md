@@ -149,9 +149,8 @@ HOST DEVICE inline Vector3_t<T> apply_inverse_jacobi_transpose(pnanovdb_buf_t bu
  * @details Ported from nanovdb::math::BoxStencil::interpolation()/gradient()
  *          (extern/openvdb/nanovdb/nanovdb/math/Stencils.h), rewritten
  *          against PNanoVDB's accessor instead of GridT::AccessorType. This
- *          is the *analytic* derivative of the trilinear interpolant, unlike
- *          BaseGridDevice.h's compute_gradient (finite-difference) - the two
- *          are not bit-identical, though they agree in the smooth limit.
+ *          is the analytic derivative of the trilinear interpolant, same as
+ *          BaseGridDevice.h's compute_gradient.
  */
 template<typename T>
 HOST DEVICE GridSample<T> sample_grid_linear(NanoGridContext& ctx, const Vector3_t<T>& world_pos) {

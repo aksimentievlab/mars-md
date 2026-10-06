@@ -115,3 +115,23 @@ and locks there, with step-1 |dtheta| equal to v1's to three significant figures
 and opposite in sign. Reconstructing the applied body-frame rotation from
 consecutive frames and dotting it against the analytic restraint torque gives
 cos = +0.9995 for v1 and -0.9996 for v2.
+
+## Linear grid force: analytic trilinear gradient (2026-10-06)
+
+Bug: `compute_gradient` (BaseGridDevice.h) took central differences
+`(v[i+1]-v[i-1])/2` at the floored node, ignoring fx/fy/fz, while energy used
+trilinear `interpolate_grid_point`. Force was piecewise-constant per cell and
+read the outside tap i-1, so a cell with 8 equal corners (flat energy) still got
+force from its neighbor. Dirichlet guard also zeroed force within one cell of
+the edge where energy was nonzero.
+
+Fix: analytic derivative of the same 8-tap trilinear blend, same
+`fetch_grid_value` BC handling -> force is exactly -dE/dx of the sampled energy,
+including at boundaries (Dirichlet padding = 0 in both). Matches legacy v1
+`BaseGrid::interpolateForceDLinearly` and the NanoVDB `sample_grid_linear`.
+
+Affects every dense linear path: Pmf.h, RigidBodyParticleGridBatch.h,
+GridGridKernels.h (scheme 0), host BaseGrid::compute_gradient. Cubic unaffected.
+
+Follow-up (perf only): `sample_grid_linear` fetches the 8 taps twice
+(value + gradient); could merge like the NanoVDB version.

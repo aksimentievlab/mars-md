@@ -13,8 +13,8 @@ class DeviceParticle {
 	DeviceParticle(idx_t capacity, const Resource& resource)
 		: capacity_(capacity), count_(0), resource_(resource), id_(capacity, resource),
 		  type_id_(capacity, resource), pos_(capacity, resource), mom_(capacity, resource),
-		  ForceEnergy_(capacity, resource), orient_(capacity, resource),
-		  flags_(capacity, resource), attached_rigid_body_id_(capacity, resource)
+		  ForceEnergy_(capacity, resource), orient_(capacity, resource), flags_(capacity, resource),
+		  attached_rigid_body_id_(capacity, resource)
 #ifdef ENABLE_ZORDER_REORDER
 		  ,
 		  reorder_scratch_vec3_(capacity, resource), reorder_scratch_int_(capacity, resource),
@@ -118,9 +118,11 @@ class DeviceParticle {
 		pos_.copy_from_host(host.pos.data(), count);
 		mom_.copy_from_host(host.mom.data(), count);
 
-		// ForceEnergy is usually computed on device, but we copy for restart/debug
-		// Assuming host.force maps to Force part of ForceEnergy, need careful handling if
-		// packed For now assuming direct mapping or skipping force copy if not needed for init
+		// Force absent from host means "start from zero"; never read a stale buffer.
+		if (host.force.size() >= static_cast<size_t>(count))
+			ForceEnergy_.copy_from_host(host.force.data(), count);
+		else
+			ForceEnergy_.fill(Vector3(0.0f, 0.0f, 0.0f), true);
 
 		// Orient
 		if (!host.orient.empty())
@@ -268,7 +270,7 @@ class DeviceParticle {
 	DeviceBuffer<Vector3> mom_;
 	DeviceBuffer<Vector3> ForceEnergy_;
 	DeviceBuffer<Vector3> orient_;
-	DeviceBuffer<uint32_t> flags_; // Replaces 3 bool arrays
+	DeviceBuffer<uint32_t> flags_;			   // Replaces 3 bool arrays
 	DeviceBuffer<int> attached_rigid_body_id_; // -1 when unattached
 
 #ifdef ENABLE_ZORDER_REORDER

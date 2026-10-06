@@ -847,7 +847,7 @@ class BaseGrid {
 	}
 
 	/**
-	 * @brief Compute gradient at world position using finite differences (host-only)
+	 * @brief Analytic trilinear gradient at world position (host-only)
 	 * @param world_pos World position to compute gradient at
 	 * @return Gradient vector
 	 */

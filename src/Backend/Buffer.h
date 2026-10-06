@@ -21,9 +21,9 @@
 #include "METAL/METALManager.h"
 #endif
 
-#include "MARSLogger.h"
 #include "Events.h"
 #include "Header.h"
+#include "MARSLogger.h"
 #include "Resource.h"
 
 namespace MARS {

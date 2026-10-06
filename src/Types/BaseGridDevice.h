@@ -144,7 +144,7 @@ struct BaseGridView : GridGeometry<T> {
 									this->boundary_condition);
 	}
 
-	/// @brief Gradient at world position (central differences)
+	/// @brief Gradient at world position (analytic trilinear derivative)
 	HOST DEVICE Vector3_t<T> gradient(const Vector3_t<T>& world_pos) const noexcept {
 		return compute_gradient<T>(data,
 								   world_pos,
@@ -319,7 +319,9 @@ HOST DEVICE T get_value_nearest(CONSTANT_PTR(T) __restrict__ grid_values,
 }
 
 /**
- * @brief Compute gradient at a point using finite differences (device-safe)
+ * @brief Analytic gradient of the trilinear interpolant (device-safe)
+ * @details Same 8 taps and BC handling as interpolate_grid_point, so -gradient
+ *          is the exact force of the sampled energy.
  */
 template<typename T>
 HOST DEVICE Vector3_t<T> compute_gradient(CONSTANT_PTR(T) __restrict__ grid_values,
@@ -331,35 +333,35 @@ HOST DEVICE Vector3_t<T> compute_gradient(CONSTANT_PTR(T) __restrict__ grid_valu
 										  int boundary_condition) {
 	const Vector3_t<T> grid_pos = basis_inv.transform(world_pos - origin);
 
-	const idx_t nx = dimensions.x;
-	const idx_t ny = dimensions.y;
-	const idx_t nz = dimensions.z;
+	const int i0 = static_cast<int>(math::floor(grid_pos.x));
+	const int j0 = static_cast<int>(math::floor(grid_pos.y));
+	const int k0 = static_cast<int>(math::floor(grid_pos.z));
 
-	// Dirichlet: no real neighbors at the edge, so keep the legacy zero.
-	if (boundary_condition == static_cast<int>(GridBoundaryCondition::Dirichlet) &&
-		(grid_pos.x < 1 || grid_pos.x >= nx - 1 || grid_pos.y < 1 || grid_pos.y >= ny - 1 ||
-		 grid_pos.z < 1 || grid_pos.z >= nz - 1)) {
-		return Vector3_t<T>{T{0}, T{0}, T{0}};
-	}
+	const T fx = grid_pos.x - static_cast<T>(i0);
+	const T fy = grid_pos.y - static_cast<T>(j0);
+	const T fz = grid_pos.z - static_cast<T>(k0);
 
-	const int i = static_cast<int>(math::floor(grid_pos.x));
-	const int j = static_cast<int>(math::floor(grid_pos.y));
-	const int k = static_cast<int>(math::floor(grid_pos.z));
+	const T v000 = fetch_grid_value(grid_values, i0, j0, k0, dimensions, boundary_condition);
+	const T v001 = fetch_grid_value(grid_values, i0, j0, k0 + 1, dimensions, boundary_condition);
+	const T v010 = fetch_grid_value(grid_values, i0, j0 + 1, k0, dimensions, boundary_condition);
+	const T v011 =
+		fetch_grid_value(grid_values, i0, j0 + 1, k0 + 1, dimensions, boundary_condition);
+	const T v100 = fetch_grid_value(grid_values, i0 + 1, j0, k0, dimensions, boundary_condition);
+	const T v101 =
+		fetch_grid_value(grid_values, i0 + 1, j0, k0 + 1, dimensions, boundary_condition);
+	const T v110 =
+		fetch_grid_value(grid_values, i0 + 1, j0 + 1, k0, dimensions, boundary_condition);
+	const T v111 =
+		fetch_grid_value(grid_values, i0 + 1, j0 + 1, k0 + 1, dimensions, boundary_condition);
 
-	// Central differences
-	const T dx_grid = (fetch_grid_value(grid_values, i + 1, j, k, dimensions, boundary_condition) -
-					   fetch_grid_value(grid_values, i - 1, j, k, dimensions, boundary_condition)) /
-					  T{2};
-	const T dy_grid = (fetch_grid_value(grid_values, i, j + 1, k, dimensions, boundary_condition) -
-					   fetch_grid_value(grid_values, i, j - 1, k, dimensions, boundary_condition)) /
-					  T{2};
-	const T dz_grid = (fetch_grid_value(grid_values, i, j, k + 1, dimensions, boundary_condition) -
-					   fetch_grid_value(grid_values, i, j, k - 1, dimensions, boundary_condition)) /
-					  T{2};
+	const T gx = (T{1} - fy) * (T{1} - fz) * (v100 - v000) + fy * (T{1} - fz) * (v110 - v010) +
+				 (T{1} - fy) * fz * (v101 - v001) + fy * fz * (v111 - v011);
+	const T gy = (T{1} - fx) * (T{1} - fz) * (v010 - v000) + fx * (T{1} - fz) * (v110 - v100) +
+				 (T{1} - fx) * fz * (v011 - v001) + fx * fz * (v111 - v101);
+	const T gz = (T{1} - fx) * (T{1} - fy) * (v001 - v000) + fx * (T{1} - fy) * (v101 - v100) +
+				 (T{1} - fx) * fy * (v011 - v010) + fx * fy * (v111 - v110);
 
-	// Transform gradient from grid space to world space
-	const Vector3_t<T> grad_grid(dx_grid, dy_grid, dz_grid);
-	return basis_inv.transpose().transform(grad_grid);
+	return basis_inv.transpose().transform(Vector3_t<T>(gx, gy, gz));
 }
 
 /*=========================================*\
