@@ -15,8 +15,7 @@ namespace gridgrid_detail {
  * unlike legacy's separate local-frame-only RigidBodyGrid, no extra grid type
  * is needed here. The lab-frame transform (rigid body orientation/position
  * combined with each grid's own static local origin/basis) is computed once
- * per pair per step by the caller (see architecture decision #1 in
- * arbd2v/plan.md) and passed in as basis_rho/basis_u_inv/origin_offset, so
+ * per pair per step by the caller and passed in as basis_rho/basis_u_inv/origin_offset, so
  * this function only needs rho/u's raw data+dimensions - not their own
  * origin/basis fields, which are folded into those precomputed arguments.
  *
@@ -60,19 +59,19 @@ HOST DEVICE inline void grid_grid_voxel_force_torque(const BaseGridView<mars_rea
 	const Matrix3 identity(1.0f);
 	const GridSample<mars_real> sample = (scheme == InterpolationOrder::Linear)
 											 ? sample_grid_linear(u.data,
-																		u_local,
-																		Vector3(0.0f),
-																		identity,
-																		identity,
-																		u.dimensions,
-																		u.boundary_condition)
-												   : sample_grid_cubic(u.data,
-																	   u_local,
-																	   Vector3(0.0f),
-																	   identity,
-																	   identity,
-																	   u.dimensions,
-																	   u.boundary_condition);
+																  u_local,
+																  Vector3(0.0f),
+																  identity,
+																  identity,
+																  u.dimensions,
+																  u.boundary_condition)
+											 : sample_grid_cubic(u.data,
+																 u_local,
+																 Vector3(0.0f),
+																 identity,
+																 identity,
+																 u.dimensions,
+																 u.boundary_condition);
 
 	const float r_val = rho.data[r_id];
 	// sample.gradient is raw (∂V/∂x); force = -gradient, then transform from
@@ -140,7 +139,6 @@ struct ComputeGridGridForceKernel {
 				force[tid] += force[tid + offset];
 				force[tid].t += force[tid + offset].t; // energy
 				torque[tid] += torque[tid + offset];
-				torque[tid].t += torque[tid + offset].t; // torque energy
 			}
 			item.barrier();
 		}

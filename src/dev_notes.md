@@ -255,3 +255,6 @@ TODO: Python path (marsmd/bd: model default pairlist_distance=0.0, apply.py sets
 pairlist cutoff directly, no firstStep key) and ConfigParser nanobind dict path.
 
 Verified 2026-10-06: [restart] (Unit_test/System/RestartContinuation.cpp) and [gradient] pass in build/tbgl-icpx-sycl-release.
+
+Verified 2026-10-06: full mars_unit_tests suite passes on SYCL (build/tbgl-icpx-sycl-release) incl. firstStep, pairlist first-build, pairlistDistance>=0 check, PMF .t accumulation.
+Verified 2026-10-06: full mars_unit_tests suite also passes on CUDA.

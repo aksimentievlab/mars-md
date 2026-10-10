@@ -64,28 +64,10 @@ struct RBSyncAttachedPositionsKernel {
 /**
  * @brief Reduce attached-particle forces into their parent bodies.
  *
- * One block per rigid-body instance that has attached particles, striding that
- * instance's contiguous range: `force += F_i` and
- * `torque += (orientation * body_offset_i) x F_i`, block-reduced in shared
- * memory then atomically added into the body. Direct port of legacy
- * apply_attached_particle_forces, which sums exactly these two quantities.
- *
- * The torque arm is the lab-frame offset from the body's own origin, so the
- * body's `position` must be the same physical point its grids are built about
- * (see the `referencePoint` config key).
- *
- * Energy is not reduced: legacy's apply_attached_particle_forces takes only
- * forces, and RigidBodyView has no energy accumulator (same reason
- * RBParticleGridForceKernel drops its energy term on the RB side). The
- * particle keeps its own energy, which the existing output already reports.
- *
- * Must run after all particle forces are complete (nonbonded *and* bonded) and
- * before the rigid-body integration that consumes force/torque.
- *
- * The particle's own force is left in place rather than zeroed: nothing reads
- * it afterwards (the integrators skip these particles, and the next step's
- * nonbonded pass clears the whole force array), and leaving it keeps the
- * force/energy output honest about what actually acted on the particle.
+ * One block per body: `force += F_i`, `torque += (R * body_offset_i) x F_i`.
+ * Port of legacy apply_attached_particle_forces. Energy stays on the particle.
+ * @pre All particle forces (nonbonded + bonded) done; runs before RB integration.
+ * @note Body `position` must be the grids' reference point (`referencePoint`).
  */
 struct RBReduceAttachedForcesKernel {
 	RigidBodyView rb;
@@ -118,13 +100,9 @@ struct RBReduceAttachedForcesKernel {
 		Vector3 t_acc(0.0f);
 		for (idx_t i = tid; i < static_cast<idx_t>(count); i += block_size) {
 			const RBAttachedParticle a = attached[start + i];
-			// ForceEnergy packs energy into Vector3's 4th component, which
-			// operator+ would otherwise accumulate into the force total - take
-			// the vector part only.
 			const Vector3 fe = particles.ForceEnergy[a.particle_index];
-			const Vector3 f(fe.x, fe.y, fe.z);
-			f_acc += f;
-			t_acc += (orientation * a.body_offset).cross(f);
+			f_acc += fe;
+			t_acc += (orientation * a.body_offset).cross(fe);
 		}
 		f_shared[tid] = f_acc;
 		t_shared[tid] = t_acc;

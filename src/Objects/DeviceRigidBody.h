@@ -11,7 +11,7 @@ struct RigidBodyView {
 	DEVICE_PTR(Matrix3) __restrict__ orientation;
 	DEVICE_PTR(Vector3) __restrict__ momentum;
 	DEVICE_PTR(Vector3) __restrict__ angular_momentum;
-	DEVICE_PTR(Vector3) __restrict__ force;
+	DEVICE_PTR(Vector3) __restrict__ force;	 ///< .t: grid potential energy
 	DEVICE_PTR(Vector3) __restrict__ torque;
 	DEVICE_PTR(Vector3) __restrict__ external_force;
 	DEVICE_PTR(Vector3) __restrict__ external_torque;

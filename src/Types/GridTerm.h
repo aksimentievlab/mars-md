@@ -55,7 +55,7 @@ enum class InterpolationOrder : uint8_t { Linear = 1, Cubic = 3 };
 struct GridTerm {
 	int grid_id = -1;		  ///< Index into GridManager's grid views; <0 = unused slot
 	float scale = 1.0f;		  ///< legacy: gridFileScale
-	float scale_slope = 0.0f; ///< legacy: gridFileScaleSlope
+	float scale_slope = 0.0f; ///< legacy: gridFileScaleSlope, smd
 	/// legacy: gridFileBoundaryConditions; <0 = use the grid's own.
 	/// Recorded per (type, grid) because that's how the config keys it, but not
 	/// yet observable: BaseGridDevice.h's samplers take a boundary_condition

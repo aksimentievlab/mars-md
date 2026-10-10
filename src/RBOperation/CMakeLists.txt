@@ -23,6 +23,7 @@ option(USE_SCUFF "Build the scuff-em plasmonic rigid-body coupling (GPL; interna
 # on USE_SCUFF.
 list(APPEND HOST_DEVICE_HEADERS
     RBOperation/ApplyHostForce.h
+    RBOperation/RBEnergyKernels.h
 )
 list(APPEND HOST_ONLY_HEADERS
     RBOperation/RBHostFTManager.h

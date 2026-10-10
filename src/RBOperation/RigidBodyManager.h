@@ -15,6 +15,7 @@
 #include "Objects/RigidBodyForcePairs.h"
 #include "PatchOperation/Integrator/RBBD.h"
 #include "PatchOperation/Integrator/RBDLM.h"
+#include "RBOperation/RBEnergyKernels.h"
 #include "RBOperation/RBHostFTManager.h"
 #include "System/PeriodicBox.h"
 #include <algorithm>
@@ -354,6 +355,8 @@ class RigidBodyManager {
 	 *        re-passed here rather than cached, since RigidBodyManager has
 	 *        no other need for host-side RigidBodyType data once initialize()
 	 *        uploads it to device buffers.
+	 * @param particle_types Particle types; a type samples a potential grid
+	 *        only if its rigidBodyPotential keys name that grid's key.
 	 * @param num_particles Total particle count sampling these grids. RBs
 	 *        don't own particles (architecture decision #4 - particles stay
 	 *        in Patch/DeviceParticle), so this comes from whichever Patch(es)
@@ -361,6 +364,7 @@ class RigidBodyManager {
 	 *        codebase today.
 	 */
 	void prepare_particle_grid_dispatch(const std::vector<RigidBodyType>& types,
+										const std::vector<ParticleType>& particle_types,
 										idx_t num_particles,
 										idx_t threads_per_block = 128) {
 		ensure_initialized();
@@ -368,6 +372,7 @@ class RigidBodyManager {
 		particle_grid_num_particles_ = num_particles;
 		particle_grid_blocks_per_candidate_ =
 			(num_particles + threads_per_block - 1) / threads_per_block;
+		particle_grid_num_particle_types_ = static_cast<idx_t>(particle_types.size());
 
 		std::unordered_map<int, std::vector<int>> instances_by_type;
 		for (size_t i = 0; i < host_type_id_.size(); ++i) {
@@ -377,13 +382,32 @@ class RigidBodyManager {
 		std::vector<int> cand_rb_id;
 		std::vector<int> cand_grid_id;
 		std::vector<float> cand_scale;
+		std::vector<uint8_t> cand_type_mask; // [candidate][particle type]
+		std::vector<uint8_t> grid_type_mask(particle_types.size());
 		for (size_t t = 0; t < types.size(); ++t) {
 			const auto& instances = instances_by_type[static_cast<int>(t)];
-			for (const GridTerm& term : types[t].potential_grids) {
+			const auto& grids = types[t].potential_grids;
+			const auto& keys = types[t].potential_grid_keys;
+			for (size_t g = 0; g < grids.size(); ++g) {
+				bool any_type = false;
+				for (size_t p = 0; p < particle_types.size(); ++p) {
+					const auto& rb_keys = particle_types[p].rigid_body_potential_keys;
+					const bool uses = g < keys.size() &&
+									  std::find(rb_keys.begin(), rb_keys.end(), keys[g]) !=
+										  rb_keys.end();
+					grid_type_mask[p] = uses ? 1 : 0;
+					any_type |= uses;
+				}
+				if (!any_type) {
+					continue;
+				}
 				for (int rb_id : instances) {
 					cand_rb_id.push_back(rb_id);
-					cand_grid_id.push_back(term.grid_id);
-					cand_scale.push_back(term.scale);
+					cand_grid_id.push_back(grids[g].grid_id);
+					cand_scale.push_back(grids[g].scale);
+					cand_type_mask.insert(cand_type_mask.end(),
+										  grid_type_mask.begin(),
+										  grid_type_mask.end());
 				}
 			}
 		}
@@ -396,7 +420,12 @@ class RigidBodyManager {
 		particle_grid_candidate_grid_id_ = DeviceBuffer<int>(capacity, compute_resource());
 		particle_grid_candidate_scale_ = DeviceBuffer<mars_real>(capacity, compute_resource());
 		particle_grid_work_ = DeviceBuffer<RBParticleGridWork>(capacity, compute_resource());
+		particle_grid_type_mask_ = DeviceBuffer<uint8_t>(
+			std::max<size_t>(cand_type_mask.size(), 1), compute_resource());
 		if (!cand_rb_id.empty()) {
+			particle_grid_type_mask_.copy_from_host(cand_type_mask.data(),
+													cand_type_mask.size(),
+													true);
 			particle_grid_candidate_rb_id_.copy_from_host(cand_rb_id.data(),
 														  cand_rb_id.size(),
 														  true);
@@ -463,7 +492,9 @@ class RigidBodyManager {
 										grid_views,
 										particle_grid_num_particles_,
 										particle_grid_blocks_per_candidate_,
-										particle_grid_threads_per_block_};
+										particle_grid_threads_per_block_,
+										particle_grid_type_mask_.data(),
+										particle_grid_num_particle_types_};
 		const idx_t total_blocks =
 			particle_grid_num_candidates_ * particle_grid_blocks_per_candidate_;
 		KernelConfig force_config;
@@ -720,6 +751,45 @@ class RigidBodyManager {
 	}
 
 	/**
+	 * @brief Reduce rigid-body energies on device; copies one RB_Energy back.
+	 * @param particles Patch particles, for attached-particle energy.
+	 * @return KE in raw momentum units, PE in kcal/mol (see RB_Energy).
+	 * @pre Forces for this step computed with energy on.
+	 */
+	RB_Energy compute_energy(ConstParticleView particles) {
+		ensure_initialized();
+		RB_Energy result(0.0f);
+		const idx_t n = std::max<idx_t>(bodies_->size(), num_attached_);
+		if (n == 0) {
+			return result;
+		}
+		if (rb_energy_.empty()) {
+			rb_energy_ = DeviceBuffer<RB_Energy>(1, compute_resource());
+		}
+		rb_energy_.fill(RB_Energy(0.0f), true);
+
+		RBEnergyReduceKernel kernel{std::as_const(*bodies_).view(),
+									types_->view(),
+									particles,
+									attached_.data(),
+									rb_energy_.data(),
+									bodies_->size(),
+									num_attached_,
+									rb_energy_threads_per_block_};
+		const idx_t blocks = (n + rb_energy_threads_per_block_ - 1) / rb_energy_threads_per_block_;
+		KernelConfig config;
+		config.dim = 1;
+		config.block_size = {rb_energy_threads_per_block_, 1, 1};
+		config.grid_size = {blocks, 1, 1};
+		config.problem_size = {blocks * rb_energy_threads_per_block_, 1, 1};
+		config.shared_memory = rb_energy_threads_per_block_ * sizeof(RB_Energy);
+		launch_kernel_with_workitem(compute_resource(), config, kernel).wait();
+
+		rb_energy_.copy_to_host(&result, 1, true);
+		return result;
+	}
+
+	/**
 	 * @brief Broadcast RB position/orientation to non-compute resources.
 	 *
 	 * No-op while resources_.size() == 1 (architecture decision #3) - real
@@ -825,6 +895,11 @@ class RigidBodyManager {
 	DeviceBuffer<int> particle_grid_candidate_grid_id_;
 	DeviceBuffer<mars_real> particle_grid_candidate_scale_;
 	DeviceBuffer<RBParticleGridWork> particle_grid_work_;
+	idx_t particle_grid_num_particle_types_{0};
+	DeviceBuffer<uint8_t> particle_grid_type_mask_; ///< [candidate][particle type]
+	// Energy reduction (see compute_energy). Power of two for the tree reduction.
+	idx_t rb_energy_threads_per_block_{128};
+	DeviceBuffer<RB_Energy> rb_energy_;
 };
 
 } // namespace MARS

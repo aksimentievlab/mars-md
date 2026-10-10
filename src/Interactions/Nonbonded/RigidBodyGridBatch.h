@@ -20,6 +20,8 @@ struct RBGridWork {
 	Matrix3 basis_rho;
 	Matrix3 basis_u_inv;
 	Vector3 origin_offset; // origin_rho_minus_origin_u, lab frame
+	Vector3 rho_shift;	   ///< R_i * rho.origin: rb_i position -> rho origin, lab frame
+	Vector3 u_shift;	   ///< R_j * u.origin: rb_j position -> u origin (0 for PMF)
 	int rho_grid_id;
 	int u_grid_id;
 	int rb_i;
@@ -82,17 +84,19 @@ struct RBGridCullKernel {
 		w.scheme = scheme;
 		w.rb_i = rb_a;
 		w.basis_rho = R_a * rho_grid.basis;
+		w.rho_shift = R_a * rho_grid.origin;
 
 		if (gp.is_pmf) {
 			// External field: fixed in the lab frame, no second body.
 			w.basis_u_inv = u_grid.basis_inv;
-			w.origin_offset = (R_a * rho_grid.origin + pos_a) - u_grid.origin;
+			w.origin_offset = (w.rho_shift + pos_a) - u_grid.origin;
+			w.u_shift = Vector3(0.0f);
 			w.rb_j = -1;
 		} else {
 			const Matrix3 R_b = rb.orientation[rb_b];
 			w.basis_u_inv = (R_b * u_grid.basis).inverse();
-			w.origin_offset =
-				(R_a * rho_grid.origin + pos_a) - (R_b * u_grid.origin + rb.position[rb_b]);
+			w.u_shift = R_b * u_grid.origin;
+			w.origin_offset = (w.rho_shift + pos_a) - (w.u_shift + rb.position[rb_b]);
 			w.rb_j = rb_b;
 		}
 
@@ -151,25 +155,10 @@ rb_grid_locate_work_item(const RBGridWork* __restrict__ work, unsigned int count
 }
 
 /**
- * @brief Batched grid-grid force kernel: gridDim.x == total_blocks (device-
- *        resident, read without a host round-trip - see
- *        RigidBodyManager::compute_grid_grid_forces for why the launch grid
- *        is sized to the worklist *capacity* instead, with blocks beyond the
- *        real total_blocks doing an early-return no-op).
- *
- * Each work item's rho-grid voxels are striped across its num_blocks blocks
- * (grid-stride within the item), reusing Phase 1's per-voxel math
- * (gridgrid_detail::grid_grid_voxel_force_torque) and block-reduction idiom.
- *
- * Only rb_i's translational force is reduced per-voxel; the per-voxel energy
- * (grid_grid_voxel_force_torque's force.t) is intentionally dropped - there
- * is no per-RB energy accumulator yet (RigidBodyView::force is a plain
- * Vector3, unlike ParticleView::ForceEnergy). rb_j's contribution (when not
- * an external PMF) is the exact Newton's-third-law reaction, computed in
- * closed form from rb_i's totals rather than a second grid pass:
- * force_j = -force_i, torque_j = -(torque_i + origin_offset x force_i) -
- * standard rigid-body torque transfer to a different reference point, valid
- * because the reaction acts at the same world-space point as the action.
+ * @brief Batched grid-grid force/torque on rb_i; rb_j gets the exact reaction.
+ * Torques are about each body's position (shifted from the grid origins).
+ * Launch sized to worklist capacity; blocks past *total_blocks no-op.
+ * Pair energy split half/half into force.t; external PMF (rb_j < 0) all to rb_i.
  */
 struct RBGridBatchedForceKernel {
 	RigidBodyView rb;
@@ -212,10 +201,8 @@ struct RBGridBatchedForceKernel {
 															  w.scheme,
 															  f,
 															  t);
-				// Energy (f.t) intentionally dropped - see class doc.
-				f_acc.x += f.x;
-				f_acc.y += f.y;
-				f_acc.z += f.z;
+				f_acc += f;
+				f_acc.t += f.t;
 				t_acc += t;
 			}
 		}
@@ -226,17 +213,25 @@ struct RBGridBatchedForceKernel {
 		for (idx_t offset = block_size / 2; offset > 0; offset >>= 1) {
 			if (tid < offset) {
 				force[tid] += force[tid + offset];
+				force[tid].t += force[tid + offset].t;
 				torque[tid] += torque[tid + offset];
 			}
 			item.barrier();
 		}
 
 		if (tid == 0 && active) {
-			atomic_add(&rb.force[w.rb_i], force[0]);
-			atomic_add(&rb.torque[w.rb_i], torque[0]);
+			Vector3 force_i = force[0];
+			if (w.rb_j >= 0)
+				force_i.t *= 0.5f;
+			// Torques are reduced about the grid origins; shift to body positions.
+			const Vector3 torque_i = torque[0] + w.rho_shift.cross(force[0]);
+			atomic_add(&rb.force[w.rb_i], force_i);
+			atomic_add(&rb.torque[w.rb_i], torque_i);
 			if (w.rb_j >= 0) {
-				const Vector3 reaction_force = -force[0];
-				const Vector3 reaction_torque = -(torque[0] + w.origin_offset.cross(force[0]));
+				Vector3 reaction_force = -force[0];
+				reaction_force.t = force_i.t;
+				const Vector3 reaction_torque = -(torque[0] + w.origin_offset.cross(force[0])) +
+												w.u_shift.cross(reaction_force);
 				atomic_add(&rb.force[w.rb_j], reaction_force);
 				atomic_add(&rb.torque[w.rb_j], reaction_torque);
 			}

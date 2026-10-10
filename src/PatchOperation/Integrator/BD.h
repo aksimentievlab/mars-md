@@ -54,8 +54,10 @@ struct BDIntegrate {
 		int type = particle_view.type_id[idx];
 
 		// Position-dependent force (PMF/force grid + uniform E) fused here per v1.
-		force += compute_position_dependent_force(pos, type, particle_types, grid_configs,
-												  electric_field, interpolation_scheme);
+		const Vector3 pmf = compute_position_dependent_force(pos, type, particle_types, grid_configs,
+															 electric_field, interpolation_scheme);
+		force += pmf;
+		particle_view.ForceEnergy[idx].t += pmf.t;
 
 		// Get particle type properties
 		float mass = particle_types.mass[type];

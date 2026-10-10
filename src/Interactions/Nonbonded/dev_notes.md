@@ -186,3 +186,124 @@ plus full L2 latency exposed in a register dependency.
 to remove atomics; remove *redundant* ones. This is also why the per-particle
 full neighbour list is not obviously a win: it would double the distance and
 table work to eliminate atomics that are individually cheap.
+
+# Rigid-body kernels — energy on the RB side (2026-10-10)
+
+`RigidBodyView::force` is a 4-component `Vector3` (`// force_energy`), so
+`rb.force[i].t` **is** an energy slot; `atomic_add` adds all four components.
+Earlier comments claiming "no per-RB energy accumulator" were wrong. Phase-1
+`ComputeGridGridForceKernel` (GridGridKernels.h) also reduces `.t`.
+
+`rb.force[].t` = the body's **grid potential**: grid-grid (pair split
+half/half) + particle-in-RB-grid. Zero automatically for a body with no grids.
+`rb.torque[].t` is unused — don't put energy there.
+
+Lifetime per step: `clear_forces()` zeroes all four components → grid-grid
+and particle-grid kernels write it (every step) → RB Langevin uses `+=`
+(keeps `.t`) → integrators only read → `RBEnergyReduceKernel`
+(RBOperation/RBEnergyKernels.h) reduces it on device at energy-output steps.
+
+Reminder: `Vector3::operator+=` and binary `operator+` skip `.t` (by design);
+any reduction that wants energy must add `.t` explicitly.
+
+## RBReduceAttachedForcesKernel (RigidBodyAttachedParticles.h)
+
+- Energy not reduced into `rb.force[].t`: it stays in the particle's
+  `ForceEnergy.t`. Legacy `apply_attached_particle_forces` also sums forces
+  only. `rb_energy.dat` reports it as a separate "Attached" term, read
+  straight from `ForceEnergy.t` by `RBEnergyReduceKernel`.
+- `f_acc += fe` is safe: `+=` drops `fe.t`; `cross` uses x/y/z only.
+- Torque arm = lab-frame offset from the body origin, so `position` must be the
+  point its grids are built about (`referencePoint` config key).
+- Particle force is left in place, not zeroed: integrators skip attached
+  particles and the next nonbonded pass clears the array, and keeping it makes
+  the force/energy output honest about what acted on the particle.
+
+## RBParticleGridForceKernel (RigidBodyParticleGridBatch.h)
+
+- Particle side: atomic scatter into `ForceEnergy` (Pmf.h packing:
+  force = -scale*grad, energy = scale*value). Atomic, not plain RMW, because
+  several RB/grid candidates can hit the same particle.
+- RB side: Newton's-third-law reaction, torque block-reduced about the grid's
+  lab-frame origin `O = R_rb*grid.origin + rb.position`, then shifted to the
+  body position before the atomic: `τ(r) = τ(O) + grid_shift × F`,
+  `grid_shift = R_rb*grid.origin` (2026-10-10). Port of legacy
+  `RigidBody.cu:369`. Before this the torque was added about `O` — correct
+  only for grids with origin 0, which is why the unit tests (origin 0) never
+  caught it.
+- Energy (2026-10-10): **half/half** — `fe.t = 0.5 * scale * u` on the
+  particle, same half block-reduced into `rb.force[].t` (explicit `.t` add in
+  the force reduction). Same convention as every other two-partner term
+  (pairwise 0.5, bonds 0.5, RB-RB grid pairs 0.5), so `energy.dat` +
+  `rb_energy.dat` counts the pair energy exactly once.
+  **Diverges from legacy**: `computePartGridForce` gave the full `fe.e` to the
+  particle *and* to the RB (double count). v1 particle PE and v1 RB PE will
+  each be higher by half this term.
+  Not mass-weighted: potential energy belongs to the pair; mass only governs
+  how kinetic energy partitions.
+- Particle-type filter (2026-10-10): a particle type samples an RB potential
+  grid only if its `rigidBodyPotential` keys name that grid's key
+  (`RigidBodyType::potential_grid_keys`). Port of legacy
+  `RigidBodyType.cu:192-241` (`partRigidBodyGrid`). Before this, the key was
+  parsed into `ParticleType::rigid_body_potential_keys` but never used, so
+  every particle felt every RB potential grid.
+  - Host (`prepare_particle_grid_dispatch`): a candidate is emitted only if
+    ≥1 type uses its grid (legacy: `numParticles[i] == 0` → skip); each
+    candidate carries a `[particle type]` row of `uint8_t` flags.
+  - Device: `if (!mask[type_id[p]]) continue;` — one byte read per particle,
+    no atomics for skipped ones.
+  - Mask by type, not legacy's per-grid particle-index lists: index lists
+    would need remapping on every Z-order reorder (as
+    `remap_attached_particle_indices` does); a type mask is reorder-proof.
+- `GridTerm::scale_slope` (SMD) not applied on this path yet — planned.
+- Launch = num_candidates * blocks_per_candidate exactly: every candidate has
+  the same num_particles, so block→item is div/mod, no prefix sum / search.
+
+## RBGridBatchedForceKernel (RigidBodyGridBatch.h)
+
+- Launch sized to worklist *capacity*; `total_blocks` is device-resident (no
+  host round-trip), blocks past it early-return. See
+  `RigidBodyManager::compute_grid_grid_forces`.
+- Each item's rho voxels grid-stride over its `num_blocks`; reuses
+  `gridgrid_detail::grid_grid_voxel_force_torque` + Phase-1 block reduction.
+- rb_j (when not an external PMF) = closed-form reaction from rb_i's totals,
+  no second grid pass: `F_j = -F_i`, `T_j(O_u) = -(T_i(O_rho) + origin_offset x F_i)` —
+  torque transfer to a new reference point, valid since the reaction acts at
+  the same world point.
+- Reference-point shift (2026-10-10): the voxel loop reduces torque about the
+  grid origins; the integrators want it about body positions. So
+  `T_i(r_i) = T_i(O_rho) + rho_shift × F_i` and
+  `T_j(r_j) = T_j(O_u) + u_shift × F_j`, with `rho_shift = R_i*rho.origin`,
+  `u_shift = R_j*u.origin` (0 for PMF) precomputed in `RBGridCullKernel`.
+  Expands to legacy's `-T_i(r_i) + (r_j - r_i) × F` (`RigidBodyController.cu`
+  `processGPUForces`) without reading positions, and stays consistent with the
+  unwrapped `origin_offset` the force uses. Before this, torque was about the
+  grid corner: wrong by `(R·o)×F` for any grid with nonzero origin.
+- Energy (2026-10-10): reduced **unconditionally**. `f.t` is computed by the
+  voxel helper anyway, and `atomic_add` already issues the `.t` atomic (adding
+  0 when unused) — one atomic per block, not per pair, so gating saves ~nothing
+  (contrast Pairwise.h, where `.t` atomics are per pair and gating paid). Only
+  the D2H readback + host sum is tied to energy output (`write_energy_output`).
+  `f_acc.t += f.t` in the voxel loop, explicit `.t` add in the tree reduction
+  (`+=` skips it).
+- Pair split: RB-RB pair energy goes half to rb_i, half to rb_j (`reaction.t`
+  set explicitly, since unary `operator-` drops `.t`). External PMF
+  (`rb_j < 0`) puts all of it on rb_i. Sum over bodies = total pair energy.
+  Unlike the two kernels above, this energy is recorded nowhere else.
+- `t.t` from `grid_grid_voxel_force_torque` is always 0 (`cross` returns
+  x/y/z only); there is no torque energy.
+- Values won't match v1 `rb_energy.dat` — v1's grid-grid energy is wrong (see
+  GridGridKernels.h section above).
+
+# Pmf.h — particle PMF energy (2026-10-10)
+
+Particle PMF energy never reached `energy.dat`: `launch_PMF` built
+`ComputePMFKernel` without `get_energy`, and the BD-fused path's `+=` dropped
+`.t`. Now unconditional (no atomics on this path, so gating saves nothing):
+- `compute_position_dependent_force` always fills `.t = Σ scale·u`;
+  `get_energy` param kept for old call sites, `[[maybe_unused]]`.
+- `ComputePMFKernel` uses `accumulate()` (adds `.t`); its `get_energy` member
+  is kept, unused.
+- Uniform E-field force has no energy term (−qE·x is not defined under PBC).
+
+Full energy to the particle: an external field has no partner to split with.

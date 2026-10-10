@@ -20,6 +20,7 @@ namespace MARS {
 struct RBParticleGridWork {
 	Matrix3 basis_inv;	// (R_rb * grid.basis).inverse() - lab-frame, world->grid-local
 	Vector3 origin_lab; // R_rb * grid.origin + rb.position
+	Vector3 grid_shift; ///< R_rb * grid.origin: rb position -> grid origin, lab frame
 	float scale;		// GridTerm::scale for this candidate's grid term
 	int grid_id;
 	int rb_id;
@@ -64,7 +65,8 @@ struct RBParticleGridBuildKernel {
 
 		RBParticleGridWork w;
 		w.basis_inv = (R * grid.basis).inverse();
-		w.origin_lab = R * grid.origin + rb.position[rb_id];
+		w.grid_shift = R * grid.origin;
+		w.origin_lab = w.grid_shift + rb.position[rb_id];
 		w.scale = candidate_scale[idx];
 		w.grid_id = grid_id;
 		w.rb_id = rb_id;
@@ -74,25 +76,11 @@ struct RBParticleGridBuildKernel {
 };
 
 /**
- * @brief Batched particle-RB force kernel: gridDim.x == num_candidates *
- *        blocks_per_candidate exactly (no over-provisioning needed, unlike
- *        the grid-grid batched kernel - since every candidate here shares
- *        the same num_particles, block counts are uniform across
- *        candidates, so block-to-work-item mapping is plain div/mod instead
- *        of a prefix-sum + binary search).
- *
- * Force on each particle is scattered atomically into
- * ParticleView::ForceEnergy (matching Pmf.h's force+energy packing,
- * force = -scale*gradient, energy = scale*value) - unlike Pmf.h's
- * single-pass one-thread-per-particle kernel, multiple work items (distinct
- * RB/grid candidates) can touch the same particle here, so the write can't
- * be a plain read-modify-write. The RB's Newton's-third-law reaction
- * (force = -force_on_particle, torque about the grid's own lab-frame
- * origin, i.e. R_rb*grid.origin+rb.position - matching
- * RigidBodyGridBatch.h's torque reference-point convention) is block-reduced
- * then atomically added into RigidBodyView's force/torque. No per-RB energy
- * accumulator exists yet (RigidBodyGridBatch.h), so that component is
- * dropped on the RB side but kept on the particle side.
+ * @brief Batched particle-in-RB-grid force; RB gets the reaction force/torque.
+ * gridDim.x == num_candidates * blocks_per_candidate.
+ * Particle gets force + half the energy; RB gets force/torque + the other half in force.t.
+ * Only particle types whose rigidBodyPotential names the grid's key take part.
+ * RB torque is about the body position (shifted from the grid origin).
  */
 struct RBParticleGridForceKernel {
 	RigidBodyView rb;
@@ -102,6 +90,9 @@ struct RBParticleGridForceKernel {
 	idx_t num_particles;
 	idx_t blocks_per_candidate;
 	idx_t block_size;
+	/// [candidate][particle type] -> 1 if that type samples the candidate's grid.
+	const uint8_t* __restrict__ type_mask;
+	idx_t num_particle_types;
 
 	template<typename WorkItemT>
 	KERNEL_FUNC void operator()(size_t, WorkItemT& item) const {
@@ -114,11 +105,14 @@ struct RBParticleGridForceKernel {
 		const idx_t slice = block_id % blocks_per_candidate;
 		const RBParticleGridWork w = work[item_idx];
 		const BaseGridView<mars_real> grid = grid_views[w.grid_id];
+		const uint8_t* mask = type_mask + item_idx * num_particle_types;
 
 		Vector3 f_acc(0.0f);
 		Vector3 t_acc(0.0f);
 		const idx_t stride = block_size * blocks_per_candidate;
 		for (idx_t p = slice * block_size + tid; p < num_particles; p += stride) {
+			if (!mask[particles.type_id[p]])
+				continue;
 			const Vector3 pos = particles.pos[p];
 			const Vector3 local = w.basis_inv.transform(pos - w.origin_lab);
 			const Matrix3 identity(1.0f);
@@ -141,12 +135,11 @@ struct RBParticleGridForceKernel {
 			const Vector3 force_lab =
 				w.basis_inv.transpose().transform(sample.gradient * (-w.scale));
 			Vector3 fe = force_lab;
-			fe.t = w.scale * sample.value;
+			fe.t = 0.5f * w.scale * sample.value;
 			atomic_add(&particles.ForceEnergy[p], fe);
 
-			f_acc.x -= force_lab.x;
-			f_acc.y -= force_lab.y;
-			f_acc.z -= force_lab.z;
+			f_acc -= force_lab;
+			f_acc.t += fe.t;
 			t_acc += (pos - w.origin_lab).cross(-force_lab);
 		}
 		force[tid] = f_acc;
@@ -156,14 +149,16 @@ struct RBParticleGridForceKernel {
 		for (idx_t offset = block_size / 2; offset > 0; offset >>= 1) {
 			if (tid < offset) {
 				force[tid] += force[tid + offset];
+				force[tid].t += force[tid + offset].t;
 				torque[tid] += torque[tid + offset];
 			}
 			item.barrier();
 		}
 
 		if (tid == 0) {
+			// Torque is reduced about the grid origin; shift to the body position.
 			atomic_add(&rb.force[w.rb_id], force[0]);
-			atomic_add(&rb.torque[w.rb_id], torque[0]);
+			atomic_add(&rb.torque[w.rb_id], torque[0] + w.grid_shift.cross(force[0]));
 		}
 	}
 };

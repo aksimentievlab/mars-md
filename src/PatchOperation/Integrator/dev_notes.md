@@ -145,3 +145,16 @@ constants stay where "RNG stream separation" above put them, in `ctr1`.
 
 This changes every stochastic trajectory, so every saved reference needs a
 re-baseline.
+
+# BD.h — fused PMF energy (2026-10-10)
+
+`BDIntegrate` fuses the PMF / force-grid / E-field term per v1. The local
+`force += pmf` drops `.t` (`+=` is xyz only), so the PMF energy is written
+back explicitly: `particle_view.ForceEnergy[idx].t += pmf.t`. Every step, not
+gated: plain per-thread store to a line the kernel already loaded. Valid at
+output time because `write_energy_output` runs after integration and
+`clear_forces()` zeroes `.t` at the start of the next force pass. Before this,
+particle PMF energy never reached `energy.dat` on the BD path.
+
+BAOAB's fused calls are commented out; Langevin uses the separate
+`launch_PMF` → `ComputePMFKernel`, which now `accumulate()`s `.t` too.

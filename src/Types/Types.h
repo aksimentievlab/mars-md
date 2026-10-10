@@ -158,7 +158,7 @@ HOST DEVICE inline void atomic_add(Vector3_t<T>* ptr, const Vector3_t<T>& value)
 	atomicAdd(&(ptr->z), value.z);
 	atomicAdd(&(ptr->t), value.t);
 #else
-	*ptr += value;
+	ptr->accumulate(value);
 #endif
 #elif defined(USE_SYCL)
 	atomic_add(&(ptr->x), value.x);
@@ -171,7 +171,7 @@ HOST DEVICE inline void atomic_add(Vector3_t<T>* ptr, const Vector3_t<T>& value)
 	atomic_add(&(ptr->z), value.z);
 	atomic_add(&(ptr->t), value.t);
 #else
-	*ptr += value;
+	ptr->accumulate(value);
 #endif
 }
 

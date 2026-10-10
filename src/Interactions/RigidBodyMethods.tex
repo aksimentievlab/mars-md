@@ -1,0 +1,343 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,bm}
+\usepackage{booktabs}
+\usepackage{hyperref}
+
+\newcommand{\vb}[1]{\bm{#1}}
+\newcommand{\code}[1]{\texttt{#1}}
+
+\title{Rigid Bodies in MARS:\\Grid Interactions, Equations of Motion, and Energy Bookkeeping}
+\date{October 2026}
+
+\begin{document}
+\maketitle
+
+\section{Notation and frames}
+
+A rigid body $b$ has lab-frame position $\vb r_b$, orientation
+$\mathsf R_b\in SO(3)$ (columns are the body axes in the lab frame), linear
+momentum $\vb p_b$ (lab frame), and angular momentum $\vb L_b$ stored in the
+\emph{body} frame. Its type supplies a mass $m_b$ and principal moments
+$\vb I_b=(I_x,I_y,I_z)$; the body frame is assumed principal.
+
+A grid $G$ attached to a body has an origin $\vb o_G$ and a basis matrix
+$\mathsf B_G$ (columns are the voxel step vectors), both in the body frame. The
+voxel with integer index $\vb n=(n_x,n_y,n_z)$ sits at
+\begin{equation}
+  \vb x_{\vb n} \;=\; \mathsf R_b\left(\mathsf B_G\,\vb n + \vb o_G\right) + \vb r_b
+  \;=\; \mathsf A_G\,\vb n + \vb O_G,
+  \qquad
+  \mathsf A_G \equiv \mathsf R_b\mathsf B_G,\quad
+  \vb O_G \equiv \mathsf R_b\vb o_G + \vb r_b ,
+  \label{eq:voxel}
+\end{equation}
+where $\mathsf A_G$ and $\vb O_G$ are the grid's lab-frame basis and origin.
+A lab point $\vb x$ maps to continuous index coordinates
+$\vb s = \mathsf A_G^{-1}(\vb x-\vb O_G)$. A grid owned by no body (an external
+PMF) uses $\mathsf R=\mathsf 1$, $\vb r=\vb 0$.
+
+Grid values are interpolated in index space (linear or cubic), giving
+$\tilde u(\vb s)$ and $\nabla_{\vb s}\tilde u$. By the chain rule the
+lab-frame gradient is
+\begin{equation}
+  \nabla_{\vb x} u = \mathsf A_G^{-\mathsf T}\,\nabla_{\vb s}\tilde u .
+  \label{eq:chain}
+\end{equation}
+
+Every grid enters with a scale factor $\lambda$ (\code{GridTerm::scale},
+config \code{gridFileScale}).
+
+\paragraph{Reference point.} All torques on body $b$ are taken about
+$\vb r_b$, because the integrators (Section~\ref{sec:eom}) apply
+$\mathsf R_b^{\mathsf T}\vb\tau_b$ to the body-frame angular momentum. If a
+torque $\vb\tau(\vb c)$ is computed about a point $\vb c$ for forces with sum
+$\vb F$, then
+\begin{equation}
+  \vb\tau(\vb r_b) \;=\; \vb\tau(\vb c) + (\vb c-\vb r_b)\times\vb F .
+  \label{eq:shift}
+\end{equation}
+
+\section{Grid--grid interaction between two bodies}
+\label{sec:gridgrid}
+
+\subsection{Energy}
+
+Body $A$ carries a \emph{density} grid $\rho$ and body $B$ a \emph{potential}
+grid $u$. Grid pairs are matched by key name: a density grid of type $t_i$
+pairs with a potential grid of type $t_j$ with the same key, for $t_i\le t_j$
+(the legacy one-direction rule, kept on purpose; \code{RigidBodyForcePairList}).
+The interaction energy is the overlap integral, discretized over $\rho$'s
+voxels:
+\begin{equation}
+  E_{AB} \;=\; \lambda\int \rho(\vb x)\,u(\vb x)\,d^3x
+  \;\approx\; \lambda\sum_{\vb n}\rho_{\vb n}\,
+  \tilde u\!\left(\vb s_{\vb n}\right),
+  \qquad
+  \vb s_{\vb n} = \mathsf A_u^{-1}\!\left(\vb x_{\vb n}-\vb O_u\right),
+  \label{eq:Egg}
+\end{equation}
+with $\vb x_{\vb n}$ from Eq.~\eqref{eq:voxel} for grid $\rho$ on body $A$. In
+the kernel the index map is
+$\vb s_{\vb n} = \mathsf A_u^{-1}\left(\mathsf A_\rho\vb n + \vb\Delta\right)$
+with $\vb\Delta=\vb O_\rho-\vb O_u$ (\code{origin\_offset}).
+
+\emph{Note.} v1 stored $\sum_{\vb n}\rho_{\vb n}$ as the energy, which does
+not depend on the bodies' relative pose. MARS uses Eq.~\eqref{eq:Egg}, the only
+energy whose negative gradient is the force both codes compute.
+
+\subsection{\texorpdfstring{Force and torque on $A$}{Force and torque on A}}
+
+Each voxel is a point load. Its force is
+\begin{equation}
+  \vb f_{\vb n} \;=\; -\lambda\,\rho_{\vb n}\,\nabla_{\vb x}u(\vb x_{\vb n})
+  \;=\; -\lambda\,\rho_{\vb n}\,\mathsf A_u^{-\mathsf T}\nabla_{\vb s}\tilde u(\vb s_{\vb n}),
+\end{equation}
+and
+\begin{equation}
+  \begin{aligned}
+  \vb F_A&=\sum_{\vb n}\vb f_{\vb n},\qquad
+  \vb\tau_A(\vb O_\rho)=\sum_{\vb n}\left(\mathsf A_\rho\vb n\right)\times\vb f_{\vb n},\\
+  \vb\tau_A(\vb r_A)&=\vb\tau_A(\vb O_\rho)+(\vb O_\rho-\vb r_A)\times\vb F_A .
+  \end{aligned}
+  \label{eq:FA}
+\end{equation}
+The kernel accumulates $\vb\tau_A$ about $\vb O_\rho$ (the lever arm
+$\mathsf A_\rho\vb n$ is the voxel's offset from the density grid's origin),
+then applies the shift~\eqref{eq:shift} once per block with
+$\vb O_\rho-\vb r_A=\mathsf R_A\vb o_\rho$ (\code{rho\_shift}).
+
+\subsection{\texorpdfstring{Reaction on $B$}{Reaction on B}}
+
+$E_{AB}$ is unchanged when both bodies are translated or rotated together, so
+the discretized sum conserves total linear and angular momentum exactly. The
+force and torque on $B$ therefore follow in closed form, with no second grid
+pass:
+\begin{equation}
+  \vb F_B=-\vb F_A,\qquad
+  \vb\tau_B(\vb r_B)=-\vb\tau_A(\vb r_A)+(\vb r_B-\vb r_A)\times\vb F_A .
+  \label{eq:reaction}
+\end{equation}
+The kernel uses the equivalent form
+$\vb\tau_B(\vb O_u)=-\left[\vb\tau_A(\vb O_\rho)+\vb\Delta\times\vb F_A\right]$,
+shifted to $\vb r_B$ with $\vb O_u-\vb r_B=\mathsf R_B\vb o_u$
+(\code{u\_shift}). Expanding $\vb\Delta$ shows it equals
+Eq.~\eqref{eq:reaction}. It needs no body positions, and it uses the same
+(unwrapped) $\vb\Delta$ as the force.
+
+\subsection{External PMF grids}
+
+A density grid can also be matched against one of its own type's PMF grids.
+The PMF is fixed in the lab frame ($\mathsf A_u=\mathsf B_u$,
+$\vb O_u=\vb o_u$). There is no second body, so Eq.~\eqref{eq:reaction} does
+not apply and $A$ keeps all of $E$.
+
+\subsection{Update period}
+
+A pair may be evaluated only every $P$ steps (\code{rigidBodyGridGridPeriod}).
+For the time-averaged impulse to be the same as evaluating every step, the
+force and torque applied on an evaluation step should be multiplied by $P$, as
+v1 does.
+
+\subsection{Kernels}
+
+\code{RBGridCullKernel} keeps (instance pair, grid pair) candidates within the
+cutoff, or always keeps them for a PMF, and precomputes
+$\mathsf A_\rho$, $\mathsf A_u^{-1}$ and $\vb\Delta$.
+\code{RBGridPrefixSumKernel} assigns block ranges.
+\code{RBGridBatchedForceKernel} splits each item's $\rho$ voxels over its
+blocks, evaluates \code{grid\_grid\_voxel\_force\_torque}, block-reduces
+$(\vb F,E)$ and $\vb\tau$, and atomically adds the results into the bodies
+(\code{RigidBodyGridBatch.h}, \code{GridGridKernels.h}).
+
+\section{Particles in a body's potential grid}
+\label{sec:pgrid}
+
+\subsection{Selection}
+
+A particle type samples body potential grid $u$ only if its \code{particle}
+block lists the grid's key with \code{rigidBodyPotential}. At dispatch time
+one candidate is made per (body instance, potential grid) for which at least
+one particle type matches, along with a per-type flag row; the kernel skips
+particles whose type flag is 0. This is v1's \code{partRigidBodyGrid} rule.
+A type mask is used instead of per-grid particle-index lists because it stays
+valid when particles are reordered.
+
+\subsection{Force, torque, energy}
+
+For a selected particle $k$ at $\vb x_k$,
+with $\vb s_k=\mathsf A_u^{-1}(\vb x_k-\vb O_u)$:
+\begin{align}
+  U_k &= \lambda\,\tilde u(\vb s_k), &
+  \vb f_k &= -\lambda\,\mathsf A_u^{-\mathsf T}\nabla_{\vb s}\tilde u(\vb s_k),\\
+  \vb F_b &= -\sum_k\vb f_k, &
+  \vb\tau_b(\vb O_u) &= \sum_k(\vb x_k-\vb O_u)\times(-\vb f_k),
+\end{align}
+and $\vb\tau_b(\vb r_b)=\vb\tau_b(\vb O_u)+(\vb O_u-\vb r_b)\times\vb F_b$ by
+Eq.~\eqref{eq:shift}, with $\vb O_u-\vb r_b=\mathsf R_b\vb o_u$
+(\code{grid\_shift}). Each particle receives $\vb f_k$ by atomic scatter,
+because several candidates can act on the same particle. The body's totals are
+block-reduced, then added atomically
+(\code{RBParticleGridForceKernel}, \code{RigidBodyParticleGridBatch.h}).
+
+\section{Attached particles}
+\label{sec:attached}
+
+An attached particle $k$ is an ordinary particle held at a fixed body-frame
+offset $\vb d_k$:
+\begin{equation}
+  \vb x_k=\mathsf R_b\vb d_k+\vb r_b .
+\end{equation}
+Its position is rewritten from the body each step
+(\code{RBSyncAttachedPositionsKernel}) and is not integrated. Every force path
+(pairwise, bonded, PMF, body grids) acts on it as on any other particle. The
+total force on it is then transferred to the body
+(\code{RBReduceAttachedForcesKernel}):
+\begin{equation}
+  \vb F_b \mathrel{+}= \sum_k\vb f_k,\qquad
+  \vb\tau_b(\vb r_b) \mathrel{+}= \sum_k(\mathsf R_b\vb d_k)\times\vb f_k .
+\end{equation}
+The lever arm is measured from $\vb r_b$, so $\vb r_b$ must be the point the
+attached template is built about (\code{referencePoint}). The particle's own
+force is left in place; nothing reads it afterwards, and the force output then
+still shows what acted on the particle.
+
+\section{Equations of motion}
+\label{sec:eom}
+
+Let $\vb F_b$ and $\vb\tau_b$ (about $\vb r_b$, lab frame) be the totals from
+Sections~\ref{sec:gridgrid}--\ref{sec:attached}, plus any host-set external
+load. The body-frame torque is $\mathsf R_b^{\mathsf T}\vb\tau_b$.
+
+\paragraph{Langevin / DLM (\code{RBDLM.h}).}
+Langevin forces are added first (\code{RBLangevinForceKernel}). In the body
+frame, per axis $\alpha$,
+\begin{equation}
+  f_\alpha = \sqrt{\frac{2k_BT\,m\,\gamma_\alpha}{\Delta t}}\,\xi_\alpha
+  - \gamma_\alpha\left(\mathsf R^{\mathsf T}\vb p\right)_\alpha ,
+  \qquad
+  \tau_\alpha = \sqrt{\frac{2k_BT\,I_\alpha\,\Gamma_\alpha}{\Delta t}}\,\eta_\alpha
+  - \Gamma_\alpha L_\alpha ,
+\end{equation}
+with $\xi,\eta\sim\mathcal N(0,1)$ and translational and rotational damping
+$\gamma,\Gamma$. These are rotated to the lab frame and added to
+$\vb F_b,\vb\tau_b$. The dissipative term carries legacy unit factors
+(\code{langevin\_damping\_unit}, \code{langevin\_damp\_scale}). The step is
+split DLM (Dullweber--Leimkuhler--McLachlan): half kick
+$\vb p\mathrel{+}=\tfrac{\Delta t}{2}\vb F$,
+$\vb L\mathrel{+}=\tfrac{\Delta t}{2}\mathsf R^{\mathsf T}\vb\tau$; drift
+$\vb r\mathrel{+}=\Delta t\,\vb p/m$; free rotation by the symmetric splitting
+$x(\tfrac{\Delta t}{2})\,y(\tfrac{\Delta t}{2})\,z(\Delta t)\,y(\tfrac{\Delta t}{2})\,x(\tfrac{\Delta t}{2})$,
+each factor being the exact rotation about one body axis with rate
+$L_\alpha/I_\alpha$; then the second half kick after the next force
+evaluation.
+
+\paragraph{Brownian (\code{RBBD.h}).}
+Overdamped, with no momenta. With mobilities $\mu_\alpha=1/(\gamma_\alpha m)$
+and $\mu^{r}_\alpha=1/(\Gamma_\alpha I_\alpha)$ in the body frame,
+\begin{equation}
+  \begin{aligned}
+  \delta\vb r_{\mathrm{body}} &= \mu\odot\mathsf R^{\mathsf T}\vb F\,\Delta t
+  + \sqrt{2k_BT\mu\,\Delta t}\odot\vb\xi,\\
+  \delta\vb\theta &= \mu^{r}\odot\mathsf R^{\mathsf T}\vb\tau\,\Delta t
+  + \sqrt{2k_BT\mu^{r}\Delta t}\odot\vb\eta ,
+  \end{aligned}
+\end{equation}
+then $\vb r\mathrel{+}=\mathsf R\,\delta\vb r_{\mathrm{body}}$ and
+$\mathsf R\leftarrow\mathsf R\,\mathcal R(\delta\vb\theta)$, where
+$\mathcal R$ is the symmetric $z\,y\,x\,y\,z$ splitting.
+
+\paragraph{Units.} Lengths are \AA, time ns, mass amu, energy kcal/mol. Force
+times time becomes momentum through \code{impulse\_to\_momentum}
+($=4.1868\times10^4$), and $\vb p/m$ becomes \AA/ns through
+\code{velocity\_scale} ($=10^4$). The stored momentum is therefore in units
+where $\vb p/m$ is measured in $10^4$\,\AA/ns $=1$\,km/s.
+
+\section{Energy}
+\label{sec:energy}
+
+\subsection{Potential energy: shares}
+
+Every interaction energy is divided once among its partners, so the shares add
+up to the total with nothing counted twice. Each particle stores its share in
+the fourth component of its force (\code{ForceEnergy.t}); each body stores its
+share in \code{rb.force[b].t}.
+
+\begin{center}
+\begin{tabular}{@{}lll@{}}
+\toprule
+Interaction & Particle share & Body share\\
+\midrule
+Nonbonded pair, bond & $\tfrac12$ each & ---\\
+Angle / dihedral & $\tfrac13$ / $\tfrac14$ each & ---\\
+Restraint, particle PMF & all & ---\\
+Particle in body potential grid & $\tfrac12$ & $\tfrac12$\\
+Body--body grid pair & --- & $\tfrac12$ each\\
+Body density in external PMF & --- & all\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The split is by partner count, not by mass. Potential energy belongs to the
+interaction rather than to either partner, and mass only determines how
+\emph{kinetic} energy is shared.
+
+Writing $U^{\mathrm{grid}}_b=$ \code{rb.force[b].t}, the system potential
+energy is
+\begin{equation}
+  U_{\mathrm{total}}=\sum_{k\in\text{particles}}U_k+\sum_b U^{\mathrm{grid}}_b .
+\end{equation}
+A body whose type has no grids has $U^{\mathrm{grid}}_b=0$.
+
+Attached particles are ordinary particles, so their energy is already in
+$\sum_k U_k$. It is also reported for each body as
+\begin{equation}
+  U^{\mathrm{att}}=\sum_{k\in\text{attached}}U_k ,
+\end{equation}
+because for a body that is just a collection of particles this, not
+$U^{\mathrm{grid}}$, is the body's interaction energy. Which term is
+meaningful depends on the model, so both are reported and neither is assumed.
+
+\subsection{Kinetic energy}
+
+\begin{equation}
+  K_t=\frac{\vb p^2}{2m},\qquad
+  K_r=\sum_{\alpha}\frac{L_\alpha^2}{2I_\alpha}\quad(\text{body frame}).
+\end{equation}
+In stored units $\vb p^2/m$ is in amu\,(km/s)$^2=1$\,kJ/mol, so
+\begin{equation}
+  K\,[k_BT]=\frac{K_{\mathrm{raw}}}{4.1868\;k_BT[\mathrm{kcal/mol}]},
+  \qquad 4.1868=\code{SQRT\_CAL\_TO\_JOULE}^2 ,
+\end{equation}
+which reproduces v1's factor $2.388458509\times10^{-1}=1/4.1868$ and matches
+the particle kinetic energy.
+
+\subsection{Reduction and output}
+
+\code{RBEnergyReduceKernel} (\code{RBOperation/RBEnergyKernels.h}) has thread
+$i$ handle body $i$ and attached particle $i$. It block-reduces one
+\code{RB\_Energy} $=(K_t,K_r,U^{\mathrm{grid}},U^{\mathrm{att}})$ and
+atomically adds it into a single device value, so one 16-byte copy reaches the
+host on each energy-output step. \code{rb\_energy.dat}:
+\begin{verbatim}
+Kinetic Energy <Kt+Kr> (kT)
+  Translational <Kt>  Rotational <Kr> (kT)
+Potential Energy <Ugrid+Uatt> (kcal/mol)
+  Grid <Ugrid>  Attached <Uatt> (kcal/mol)
+\end{verbatim}
+The first and third lines keep the v1 format.
+
+\section{Implementation status}
+\label{sec:status}
+
+The code departs from the equations above in these places:
+\begin{enumerate}
+  \item \textbf{Update period.} Forces and torques from pairs with $P>1$ are
+    not multiplied by $P$.
+  \item \textbf{SMD scale slope.} \code{gridFileScaleSlope} is not applied to
+    body potential grids.
+  \item \textbf{Periodicity.} Grid--grid offsets are not wrapped; periodic
+    body--body pairs are future work.
+\end{enumerate}
+
+\end{document}

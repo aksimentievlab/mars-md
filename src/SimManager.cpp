@@ -199,6 +199,7 @@ void SimManager::init() {
 		}
 		rigid_body_manager_->prepare_grid_grid_dispatch(sys_.get_grid_manager(), 0);
 		rigid_body_manager_->prepare_particle_grid_dispatch(sys_.get_rigid_body_types(),
+															sys_.get_particle_types(),
 															sys_state_.get_num_particles());
 		rigid_body_manager_->prepare_attached_particles(
 			sys_.get_rigid_body_types(),
@@ -1036,15 +1037,30 @@ void SimManager::write_energy_output(size_t step) {
 	}
 
 	if (has_rigid_bodies_) {
-		// TODO: rigid-body kinetic/potential energy is not yet computed by
-		// SimManager; write zeros so downstream tooling still gets the file,
-		// matching legacy MARS's rb_energy.dat format.
+		RB_Energy rb_energy(0.0f);
+		PatchManager* patch_mgr = sys_.get_patch_manager();
+		if (rigid_body_manager_ && patch_mgr && !patch_mgr->get_patches().empty()) {
+			rb_energy = rigid_body_manager_->compute_energy(
+				std::as_const(patch_mgr->get_patches().front()->get_particles()).view());
+		}
+		// Momentum units -> kcal/mol, same factor as particle KE above.
+		const double kinetic_to_kT =
+			kT > 0.0f ? 1.0 / (constants::SQRT_CAL_TO_JOULE * constants::SQRT_CAL_TO_JOULE * kT)
+					  : 0.0;
+		const double rb_kinetic_trans_kT = rb_energy.x * kinetic_to_kT;
+		const double rb_kinetic_rot_kT = rb_energy.y * kinetic_to_kT;
 		if (!rb_energy_file_.is_open()) {
 			rb_energy_file_.open(sys_.get_output_name() + ".rb_energy.dat");
 		}
 		if (rb_energy_file_.is_open()) {
-			rb_energy_file_ << "Kinetic Energy 0 (kT)" << std::endl;
-			rb_energy_file_ << "Potential Energy 0 (kcal/mol)" << std::endl;
+			rb_energy_file_ << "Kinetic Energy " << rb_kinetic_trans_kT + rb_kinetic_rot_kT
+							<< " (kT)" << std::endl;
+			rb_energy_file_ << "  Translational " << rb_kinetic_trans_kT << "  Rotational "
+							<< rb_kinetic_rot_kT << " (kT)" << std::endl;
+			rb_energy_file_ << "Potential Energy " << rb_energy.z + rb_energy.t << " (kcal/mol)"
+							<< std::endl;
+			rb_energy_file_ << "  Grid " << rb_energy.z << "  Attached " << rb_energy.t
+							<< " (kcal/mol)" << std::endl;
 		} else {
 			LOGWARN("SimManager: Failed to open '{}' for rigid body energy output",
 					sys_.get_output_name() + ".rb_energy.dat");

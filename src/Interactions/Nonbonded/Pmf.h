@@ -63,7 +63,7 @@ sample_force_grid_value(const BaseGridView<mars_real>& grid,
  * @param grid_configs: grid configurations
  * @param electric_field: electric field
  * @param scheme: interpolation order (Linear or Cubic)
- * @param get_energy: whether to get the energy
+ * @param get_energy: unused; energy is always returned in .t
  */
 HOST DEVICE inline Vector3
 compute_position_dependent_force(const Vector3& pos,
@@ -72,7 +72,7 @@ compute_position_dependent_force(const Vector3& pos,
 								 const BaseGridView<mars_real>* grid_configs,
 								 const Vector3& electric_field,
 								 InterpolationOrder scheme,
-								 bool get_energy = false) {
+								 [[maybe_unused]] bool get_energy = false) {
 	const float charge = types.charge[type_id];
 	Vector3 force(charge * electric_field.x, charge * electric_field.y, charge * electric_field.z);
 
@@ -90,9 +90,7 @@ compute_position_dependent_force(const Vector3& pos,
 				pmf_grid.boundary_condition = term.boundary_condition;
 			const GridSample<mars_real> sample = pmf_detail::sample_pmf_grid(pmf_grid, pos, scheme);
 			force += sample.gradient * (-term.scale);
-			if (get_energy) {
-				force.t += term.scale * sample.value;
-			}
+			force.t += term.scale * sample.value;
 		}
 	}
 
@@ -149,10 +147,7 @@ struct ComputePMFKernel {
 															 electric_field,
 															 scheme,
 															 get_energy);
-		particles.ForceEnergy[idx] += force;
-		if (get_energy){
-		particles.ForceEnergy[idx].t +=force.t;
-	}
+		particles.ForceEnergy[idx].accumulate(force);
 	}
 };
 
